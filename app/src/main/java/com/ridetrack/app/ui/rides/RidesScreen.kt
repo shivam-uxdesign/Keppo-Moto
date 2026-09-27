@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -47,7 +48,7 @@ import com.ridetrack.app.ui.theme.RtDimens
 import com.ridetrack.app.ui.theme.RtType
 
 @Composable
-fun RidesScreen(onOpenRide: (String) -> Unit, onStartRide: () -> Unit) {
+fun RidesScreen(onOpenRide: (String) -> Unit, onStartRide: () -> Unit, onOpenMap: () -> Unit) {
     val vm = appViewModel { RidesViewModel(it) }
     val s by vm.state.collectAsStateWithLifecycle()
     var showFilters by remember { mutableStateOf(false) }
@@ -60,6 +61,9 @@ fun RidesScreen(onOpenRide: (String) -> Unit, onStartRide: () -> Unit) {
     ) {
         ScreenHeader("Rides", Modifier.padding(horizontal = RtDimens.screenPadding)) {
             if (s.totalRides > 0) {
+                IconButton(onClick = onOpenMap) {
+                    Icon(Icons.Outlined.Map, contentDescription = "Map of all rides", tint = RtColors.TextPrimary)
+                }
                 IconButton(onClick = { showFilters = true }) {
                     BadgedBox(badge = { if (s.filter.activeCount > 0) Badge(containerColor = RtColors.Primary) { Text("${s.filter.activeCount}") } }) {
                         Icon(Icons.Outlined.FilterList, contentDescription = "Filter rides", tint = RtColors.TextPrimary)
@@ -91,7 +95,7 @@ fun RidesScreen(onOpenRide: (String) -> Unit, onStartRide: () -> Unit) {
                 s.groups.forEach { (group, rides) ->
                     item(key = "header-${group.name}") { SectionHeader(group.label) }
                     items(rides, key = { it.id }) { ride ->
-                        RideRow(ride, bikeNames[ride.bikeId], onClick = { onOpenRide(ride.id) })
+                        RideRow(ride, bikeNames[ride.bikeId], onClick = { onOpenRide(ride.id) }, route = s.routes[ride.id])
                     }
                 }
             }

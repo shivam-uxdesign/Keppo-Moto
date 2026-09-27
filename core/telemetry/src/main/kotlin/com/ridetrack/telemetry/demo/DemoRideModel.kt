@@ -5,6 +5,7 @@ import com.ridetrack.telemetry.math.Units
 import com.ridetrack.telemetry.math.Vec3
 import com.ridetrack.telemetry.model.MountCalibration
 import com.ridetrack.telemetry.source.AccelReading
+import com.ridetrack.telemetry.source.EngineReading
 import com.ridetrack.telemetry.source.GyroReading
 import com.ridetrack.telemetry.source.LocationReading
 import com.ridetrack.telemetry.source.RawReading
@@ -20,12 +21,16 @@ import kotlin.random.Random
  *
  * The script loops: pull away, cruise, right sweeper, left sweeper, hard brake to a stop,
  * wait, pull away, a sharp right, cruise.
+ *
+ * With [simulateEngine] it also acts as a simulated OBD link: RPM and gear from a
+ * six-speed gearbox, upshifting under acceleration and dropping to neutral at stops.
  */
 class DemoRideModel(
     private val startLatitude: Double = 12.9716,
     private val startLongitude: Double = 77.5946,
     private val startHeadingDeg: Double = 20.0,
     seed: Int = 7,
+    private val simulateEngine: Boolean = false,
 ) {
     private data class Segment(val seconds: Double, val accelMps2: Double, val yawRateDegPerSec: Double)
 
@@ -62,6 +67,10 @@ class DemoRideModel(
     private var altitude = 912.0
     private var leanRad = 0.0
     private var nextGpsAt = 0.0
+    private var nextEngineAt = 0.0
+    private var gear = 0
+    private var stoppedFor = 0.0
+    private var rpm = IDLE_RPM
 
     /** Advances the simulation by one 20 ms step and returns the readings produced. */
     fun step(timeNanos: Long): List<RawReading> {
@@ -101,8 +110,31 @@ class DemoRideModel(
                 horizontalAccuracyM = 4.0,
             )
         }
+        if (simulateEngine) {
+            updateEngine(seg.accelMps2)
+            if (t >= nextEngineAt) {
+                nextEngineAt += 0.1 // 10 Hz, typical for a fast OBD PID poll
+                out += EngineReading(timeNanos, rpm + random.nextDouble(-40.0, 40.0), gear)
+            }
+        }
         t += dt
         return out
+    }
+
+    private fun updateEngine(accel: Double) {
+        val kmh = speed * 3.6
+        stoppedFor = if (speed < 0.5) stoppedFor + dt else 0.0
+        when {
+            stoppedFor > 2.0 -> gear = 0
+            gear == 0 && (accel > 0 || speed > 0.5) -> gear = 1
+            gear in 1 until RPM_PER_KMH.size -> {
+                val shiftAt = if (accel > 1.0) 8_200.0 else 5_200.0
+                if (kmh * RPM_PER_KMH[gear - 1] > shiftAt) gear++
+            }
+        }
+        while (gear > 1 && kmh * RPM_PER_KMH[gear - 1] < 2_600.0) gear--
+        val target = if (gear == 0) IDLE_RPM else (kmh * RPM_PER_KMH[gear - 1]).coerceAtLeast(if (accel > 0) 2_800.0 else IDLE_RPM)
+        rpm += (target - rpm) * (1.0 - kotlin.math.exp(-dt / 0.15))
     }
 
     val stepNanos: Long = (dt * 1e9).toLong()
@@ -123,4 +155,12 @@ class DemoRideModel(
     )
 
     private fun Double?.orZero() = this ?: 0.0
+
+    companion object {
+        /** Engine RPM per km/h in gears 1..6 (roughly a 400 cc single). */
+        private val RPM_PER_KMH = doubleArrayOf(260.0, 180.0, 140.0, 117.0, 101.0, 90.0)
+        private const val IDLE_RPM = 1_350.0
+        /** Redline used by demo mode's rev meter. */
+        const val DEMO_REDLINE_RPM = 9_500
+    }
 }

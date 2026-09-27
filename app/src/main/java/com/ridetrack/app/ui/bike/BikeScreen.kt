@@ -27,6 +27,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import com.ridetrack.app.ui.components.BikeImage
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -108,7 +113,8 @@ fun BikeScreen(onAddBike: () -> Unit, onEditBike: (String) -> Unit, onCalibrate:
             }
             Spacer(Modifier.height(RtDimens.sm))
             Text(
-                "Bluetooth OBD support (RPM, temperatures, fuel, fault codes) is planned. Until then all telemetry comes from your phone's sensors.",
+                "Bluetooth OBD support is planned: RPM and gear (rev meter), temperatures, fuel, fault codes. " +
+                    "The rev meter and gear readout appear automatically once an adapter reports them. Try it now with Demo mode in Profile.",
                 style = RtType.caption,
                 color = RtColors.TextSecondary,
             )
@@ -139,15 +145,28 @@ fun BikeScreen(onAddBike: () -> Unit, onEditBike: (String) -> Unit, onCalibrate:
 @Composable
 private fun BikeCard(bike: Bike, selected: Boolean, onSelect: () -> Unit, onEdit: () -> Unit, onCalibrate: () -> Unit, onDelete: () -> Unit) {
     RtCard(onClick = onSelect) {
+        if (bike.photoFile != null) {
+            BikeImage(
+                bike.photoFile,
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(14.dp)),
+            )
+            Spacer(Modifier.height(RtDimens.md))
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.TwoWheeler, contentDescription = null, tint = if (selected) RtColors.Primary else RtColors.TextSecondary)
-            Spacer(Modifier.width(RtDimens.sm))
+            if (bike.photoFile == null) {
+                Icon(Icons.Outlined.TwoWheeler, contentDescription = null, tint = if (selected) RtColors.Primary else RtColors.TextSecondary)
+                Spacer(Modifier.width(RtDimens.sm))
+            }
             Column(Modifier.weight(1f)) {
                 Text(bike.displayName, style = RtType.headline, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val details = listOfNotNull(
                     bike.year?.toString(),
                     bike.displacementCc?.let { "$it cc" },
                     bike.weightKg?.let { "$it kg" },
+                    bike.redlineRpm?.let { "redline ${Format.rpm(it.toDouble())}" },
                     bike.fuelType.name.lowercase().replaceFirstChar { it.titlecase(Locale.getDefault()) },
                 ).joinToString(" · ")
                 Text(details, style = RtType.caption, color = RtColors.TextSecondary)
@@ -160,12 +179,12 @@ private fun BikeCard(bike: Bike, selected: Boolean, onSelect: () -> Unit, onEdit
         InfoRow("Phone mount", bike.mountOrientation.name.lowercase().replaceFirstChar { it.titlecase(Locale.getDefault()) })
         InfoRow(
             "Calibration",
-            bike.calibration?.let { "Calibrated · ${Format.rideDate(it.createdAtMillis)}" } ?: "Not calibrated",
-            valueColor = if (bike.calibration == null) RtColors.Warning else RtColors.TextPrimary,
+            bike.calibration?.let { "Calibrated · ${Format.rideDate(it.createdAtMillis)}" } ?: "Automatic on your next ride",
+            valueColor = if (bike.calibration == null) RtColors.TextSecondary else RtColors.TextPrimary,
         )
         Spacer(Modifier.height(RtDimens.sm))
         Row {
-            TextButton(onClick = onCalibrate) { Text(if (bike.calibration == null) "Calibrate phone" else "Recalibrate", color = RtColors.Primary) }
+            TextButton(onClick = onCalibrate) { Text(if (bike.calibration == null) "Calibrate manually" else "Recalibrate", color = RtColors.Primary) }
             TextButton(onClick = onEdit) { Text("Edit", color = RtColors.TextPrimary) }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onDelete) { Text("Delete", color = RtColors.TextSecondary) }

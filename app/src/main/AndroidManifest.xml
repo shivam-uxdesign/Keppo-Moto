@@ -40,7 +40,7 @@
             </intent-filter>
         </activity>
 
-        <!-- BETA TOOL: shares ride export ZIPs (see data/export). -->
+        <!-- Shares ride graphics, and (BETA) ride export ZIPs. Keep when removing the export tool. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.exports"

@@ -2,7 +2,9 @@ package com.ridetrack.app.ui.bike
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
 import com.ridetrack.app.AppContainer
+import com.ridetrack.app.data.BikePhotos
 import com.ridetrack.telemetry.model.Bike
 import com.ridetrack.telemetry.model.FuelType
 import com.ridetrack.telemetry.model.MountOrientation
@@ -66,11 +68,15 @@ data class BikeForm(
     val weightKg: String = "",
     val fuelType: FuelType = FuelType.PETROL,
     val mountOrientation: MountOrientation = MountOrientation.PORTRAIT,
+    val redlineRpm: String = "",
+    val photoFile: String? = null,
+    val photoBusy: Boolean = false,
 ) {
+    val redlineError: Boolean get() = redlineRpm.isNotBlank() && (redlineRpm.toIntOrNull() ?: 0) !in 2_000..25_000
     val yearError: Boolean get() = year.isNotBlank() && (year.toIntOrNull() ?: 0) !in 1900..2100
     val ccError: Boolean get() = displacementCc.isNotBlank() && (displacementCc.toIntOrNull() ?: 0) !in 1..5000
     val weightError: Boolean get() = weightKg.isNotBlank() && (weightKg.toIntOrNull() ?: 0) !in 1..2000
-    val isValid: Boolean get() = (make.isNotBlank() || model.isNotBlank()) && !yearError && !ccError && !weightError
+    val isValid: Boolean get() = (make.isNotBlank() || model.isNotBlank()) && !yearError && !ccError && !weightError && !redlineError && !photoBusy
 }
 
 class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?) : ViewModel() {
@@ -78,6 +84,10 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
     val form: StateFlow<BikeForm> = _form.asStateFlow()
     private var existing: Bike? = null
     val isNew: Boolean = bikeId == null
+    private val id = bikeId ?: UUID.randomUUID().toString()
+    /** Photos imported in this session; unsaved ones are cleaned up. */
+    private val imported = mutableListOf<String>()
+    private var saved = false
 
     init {
         if (bikeId != null) {
@@ -92,6 +102,8 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
                         weightKg = b.weightKg?.toString().orEmpty(),
                         fuelType = b.fuelType,
                         mountOrientation = b.mountOrientation,
+                        redlineRpm = b.redlineRpm?.toString().orEmpty(),
+                        photoFile = b.photoFile,
                     )
                 }
             }
@@ -100,13 +112,33 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
 
     fun update(f: (BikeForm) -> BikeForm) = _form.update(f)
 
+    fun pickPhoto(uri: Uri) {
+        _form.update { it.copy(photoBusy = true) }
+        viewModelScope.launch {
+            val name = BikePhotos.import(c.appContext, uri, id)
+            if (name != null) imported += name
+            _form.update { it.copy(photoFile = name ?: it.photoFile, photoBusy = false) }
+        }
+    }
+
+    fun removePhoto() = _form.update { it.copy(photoFile = null) }
+
+    override fun onCleared() {
+        // Drop photos that were picked but never saved (or replaced before saving).
+        val keep = if (saved) _form.value.photoFile else existing?.photoFile
+        val orphans = imported.filter { it != keep }
+        if (orphans.isNotEmpty()) {
+            c.appScope.launch { orphans.forEach { BikePhotos.delete(c.appContext, it) } }
+        }
+    }
+
     /** Saves and returns the bike id, or null if the form is invalid. */
     fun save(onSaved: (String) -> Unit) {
         val f = _form.value
         if (!f.isValid) return
         val prev = existing
         val bike = Bike(
-            id = prev?.id ?: UUID.randomUUID().toString(),
+            id = prev?.id ?: id,
             make = f.make.trim(),
             model = f.model.trim(),
             year = f.year.toIntOrNull(),
@@ -116,9 +148,13 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
             mountOrientation = f.mountOrientation,
             calibration = prev?.calibration.takeIf { prev?.mountOrientation == f.mountOrientation },
             createdAtMillis = prev?.createdAtMillis ?: System.currentTimeMillis(),
+            redlineRpm = f.redlineRpm.toIntOrNull(),
+            photoFile = f.photoFile,
         )
         viewModelScope.launch {
             c.bikes.save(bike)
+            saved = true
+            if (prev?.photoFile != null && prev.photoFile != bike.photoFile) BikePhotos.delete(c.appContext, prev.photoFile)
             val selected = c.settings.settings.first().selectedBikeId
             if (selected == null || prev == null) c.settings.setSelectedBike(bike.id)
             onSaved(bike.id)

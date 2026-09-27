@@ -6,6 +6,10 @@ import com.ridetrack.app.AppContainer
 import com.ridetrack.app.data.LiveMetric
 import com.ridetrack.app.ride.ActiveRide
 import com.ridetrack.app.sensors.BatteryState
+import com.ridetrack.app.sensors.Permissions
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
 import com.ridetrack.telemetry.model.TelemetryFrame
 import com.ridetrack.telemetry.state.RideState
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,16 +27,23 @@ data class LiveChrome(
     val battery: BatteryState? = null,
     val hudEnabled: Boolean = false,
     val hudPromptDismissed: Boolean = true,
+    val location: LocationEnv = LocationEnv(),
 )
+
+/** Whether the phone can deliver GPS at all right now (independent of signal). */
+data class LocationEnv(val permission: Boolean = true, val enabled: Boolean = true)
 
 class LiveRideViewModel(private val c: AppContainer) : ViewModel() {
     /** Changes rarely: state machine, settings, battery. */
+    private val location = MutableStateFlow(readLocation())
+
     val chrome: StateFlow<LiveChrome> = combine(
         c.session.state,
         c.session.active,
         c.settings.settings,
         c.battery.observe(),
-    ) { state, active, settings, battery ->
+        location,
+    ) { state, active, settings, battery, loc ->
         LiveChrome(
             rideState = state,
             active = active,
@@ -42,11 +53,43 @@ class LiveRideViewModel(private val c: AppContainer) : ViewModel() {
             battery = battery,
             hudEnabled = settings.hud.enabled,
             hudPromptDismissed = settings.hud.promptDismissed,
+            location = loc,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LiveChrome(rideState = c.session.state.value, active = c.session.active.value))
 
     /** 5 Hz telemetry snapshot. */
     val frame: StateFlow<TelemetryFrame?> = c.session.frame
+
+    init {
+        // Location can be switched off/on from quick settings mid-ride; notice it promptly.
+        viewModelScope.launch {
+            while (isActive) {
+                refreshLocation()
+                delay(3_000)
+            }
+        }
+    }
+
+    private fun readLocation() = LocationEnv(
+        permission = Permissions.hasFineLocation(c.appContext),
+        enabled = c.sensorInventory.isGpsEnabled(),
+    )
+
+    /** Re-reads location state; restarts GPS automatically when it just became usable. */
+    fun refreshLocation() {
+        val before = location.value
+        val now = readLocation()
+        location.value = now
+        val usable = now.permission && now.enabled
+        if (usable && !(before.permission && before.enabled)) c.session.retryGps()
+    }
+
+    fun retryGps() {
+        refreshLocation()
+        c.session.retryGps()
+    }
+
+    fun calibrateNow() = c.session.calibrateNow()
 
     fun requestEnd() = c.session.requestEnd()
     fun cancelEnd() = c.session.cancelEnd()

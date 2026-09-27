@@ -52,4 +52,13 @@ class FormatTest {
         val mondayMorning = LocalDateTime.of(2026, 9, 28, 7, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
         assertEquals("Monday Morning Ride", RideNames.forStart(mondayMorning, ZoneOffset.UTC, Locale.US))
     }
+
+    @Test
+    fun `rpm and gear read cleanly and unknown stays a dash`() {
+        assertEquals("6,240", Format.rpm(6_238.0))
+        assertEquals(Format.DASH, Format.rpm(null))
+        assertEquals("N", Format.gear(0))
+        assertEquals("4", Format.gear(4))
+        assertEquals(Format.DASH, Format.gear(null))
+    }
 }

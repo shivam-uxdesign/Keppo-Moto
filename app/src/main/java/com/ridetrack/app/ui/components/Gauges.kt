@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
@@ -102,5 +103,93 @@ fun GForceIndicator(longitudinalG: Double?, lateralG: Double?, modifier: Modifie
         }
         Text("BRAKE", style = RtType.label, color = RtColors.TextTertiary, modifier = Modifier.align(Alignment.TopCenter))
         Text("ACCEL", style = RtType.label, color = RtColors.TextTertiary, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+/** Top of the tach scale: a little headroom above the redline, else a generic 12k. */
+fun tachMaxRpm(redlineRpm: Int?): Double =
+    redlineRpm?.let { kotlin.math.ceil(it * 1.12 / 1000.0) * 1000.0 } ?: 12_000.0
+
+/** Rev colour: calm → warm near the redline → red past it (unknown redline stays calm). */
+fun rpmColor(rpm: Double?, redlineRpm: Int?): androidx.compose.ui.graphics.Color {
+    val red = redlineRpm ?: return RtColors.Primary
+    return when {
+        rpm == null -> RtColors.TextTertiary
+        rpm >= red -> RtColors.Error
+        rpm >= red * 0.85 -> RtColors.Warning
+        else -> RtColors.Primary
+    }
+}
+
+/**
+ * Tachometer arc wrapped around [content] (the speed readout). 240° sweep, a faint tick
+ * every 1,000 rpm, the redline band drawn on the track when the redline is known.
+ * Only shown when an engine link actually reports RPM.
+ */
+@Composable
+fun RevMeter(
+    rpm: Double?,
+    redlineRpm: Int?,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val max = tachMaxRpm(redlineRpm)
+    val fraction by animateFloatAsState(
+        targetValue = ((rpm ?: 0.0) / max).toFloat().coerceIn(0f, 1f),
+        animationSpec = tween(120),
+        label = "rpm",
+    )
+    val color = rpmColor(rpm, redlineRpm)
+    Box(
+        modifier
+            .aspectRatio(1.18f)
+            .semantics { contentDescription = "Engine ${Format.rpm(rpm)} rpm" }
+            .drawBehind {
+                val stroke = 5.dp.toPx()
+                val radius = minOf(size.width, size.height * 1.18f) / 2f - stroke
+                val center = Offset(size.width / 2f, radius + stroke)
+                val topLeft = Offset(center.x - radius, center.y - radius)
+                val arcSize = Size(radius * 2, radius * 2)
+                val start = 150f
+                val sweep = 240f
+                drawArc(RtColors.Outline, start, sweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+                redlineRpm?.let { red ->
+                    val from = (red / max).toFloat().coerceIn(0f, 1f)
+                    drawArc(RtColors.Error.copy(alpha = 0.35f), start + sweep * from, sweep * (1f - from), false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
+                }
+                val thousands = (max / 1000).toInt()
+                for (k in 1 until thousands) {
+                    val a = Math.toRadians((start + sweep * (k * 1000 / max)).toDouble())
+                    val outer = radius - stroke * 1.4f
+                    val inner = outer - (if (k % 5 == 0) 9.dp.toPx() else 5.dp.toPx())
+                    drawLine(
+                        RtColors.TextTertiary,
+                        Offset(center.x + inner * cos(a).toFloat(), center.y + inner * sin(a).toFloat()),
+                        Offset(center.x + outer * cos(a).toFloat(), center.y + outer * sin(a).toFloat()),
+                        strokeWidth = 1.dp.toPx(),
+                    )
+                }
+                if (rpm != null && fraction > 0f) {
+                    drawArc(color, start, sweep * fraction, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) { content() }
+}
+
+/** Compact horizontal rev bar (pop-up HUD): segmented, coloured by zone. */
+@Composable
+fun RevBar(rpm: Double?, redlineRpm: Int?, modifier: Modifier = Modifier, segments: Int = 24) {
+    val max = tachMaxRpm(redlineRpm)
+    Canvas(modifier.fillMaxWidth().aspectRatio(18f)) {
+        val gap = 2.dp.toPx()
+        val w = (size.width - gap * (segments - 1)) / segments
+        val lit = (((rpm ?: 0.0) / max) * segments).toInt()
+        for (i in 0 until segments) {
+            val segRpm = (i + 1) * max / segments
+            val on = rpm != null && i < lit
+            val c = if (on) rpmColor(segRpm, redlineRpm) else if (redlineRpm != null && segRpm > redlineRpm) RtColors.Error.copy(alpha = 0.25f) else RtColors.Outline
+            drawRoundRect(c, Offset(i * (w + gap), 0f), Size(w, size.height), androidx.compose.ui.geometry.CornerRadius(1.5.dp.toPx()))
+        }
     }
 }

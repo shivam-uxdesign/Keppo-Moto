@@ -37,6 +37,7 @@ import com.ridetrack.app.data.HudSettings
 import com.ridetrack.app.data.HudTheme
 import com.ridetrack.app.hud.HudData
 import com.ridetrack.app.hud.HudStatus
+import com.ridetrack.app.ui.components.RevBar
 import com.ridetrack.app.ui.components.leanColor
 import com.ridetrack.app.ui.format.Format
 import com.ridetrack.app.ui.theme.RtColors
@@ -89,6 +90,23 @@ fun HudCard(data: HudData, settings: HudSettings, modifier: Modifier = Modifier)
             )
             Spacer(Modifier.width(4.dp))
             Text("km/h", fontSize = 12.sp, color = c.muted, modifier = Modifier.padding(bottom = 8.dp))
+            if (data.gear != null) {
+                Spacer(Modifier.weight(1f))
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("GEAR", style = hudLabel, color = c.muted)
+                    Text(
+                        Format.gear(data.gear),
+                        style = hudNumber.copy(fontSize = 30.sp, lineHeight = 32.sp),
+                        color = if (data.gear == 0) RtColors.Ok else c.text,
+                    )
+                }
+            }
+        }
+        if (data.rpm != null) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                RevBar(data.rpm, data.redlineRpm)
+                Text(Format.rpm(data.rpm) + " rpm", fontSize = 11.sp, color = c.muted, style = hudNumber)
+            }
         }
         if (settings.layout != HudLayout.TOURING) LeanBlock(data, c, settings.theme)
         when (settings.layout) {

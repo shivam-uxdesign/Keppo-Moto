@@ -1,5 +1,8 @@
 package com.ridetrack.telemetry.processing
 
+import com.ridetrack.telemetry.model.CalibrationInfo
+import com.ridetrack.telemetry.model.CalibrationStatus
+import com.ridetrack.telemetry.model.CaptureOutcome
 import com.ridetrack.telemetry.model.DataSourceKind
 import com.ridetrack.telemetry.model.GpsQuality
 import com.ridetrack.telemetry.model.LeanConfidence
@@ -11,6 +14,7 @@ import com.ridetrack.telemetry.model.SensorAvailability
 import com.ridetrack.telemetry.model.TelemetryFrame
 import com.ridetrack.telemetry.model.TelemetrySample
 import com.ridetrack.telemetry.source.AccelReading
+import com.ridetrack.telemetry.source.EngineReading
 import com.ridetrack.telemetry.source.GyroReading
 import com.ridetrack.telemetry.source.LocationReading
 import com.ridetrack.telemetry.source.RawReading
@@ -37,6 +41,16 @@ class TelemetryPipeline(
     private val autoPause = AutoPauseDetector()
     private val detector = EventDetector(thresholds)
     private val accumulator = RideStatsAccumulator()
+    private val autoCal = AutoCalibrator()
+
+    private var calibrationStatus = if (calibration != null) CalibrationStatus.SAVED else CalibrationStatus.NONE
+    private var capture: CalibrationCollector? = null
+    private var lastCapture: CaptureOutcome? = null
+    private var pendingCalibration: MountCalibration? = null
+
+    private var rpm: Double? = null
+    private var gear: Int? = null
+    private var lastEngineNanos: Long? = null
 
     private var lastAccountedNanos = startNanos
     private var lastGpsNanos: Long? = null
@@ -64,9 +78,70 @@ class TelemetryPipeline(
         is AccelReading -> onAccel(reading)
         is GyroReading -> {
             lean.onGyro(reading)
+            autoCal.onGyro(reading)
+            capture?.onGyro(reading)
             emptyList()
         }
         is SourceStatusReading -> onStatus(reading)
+        is EngineReading -> {
+            rpm = reading.rpm
+            gear = reading.gear
+            lastEngineNanos = reading.timeNanos
+            emptyList()
+        }
+    }
+
+    /**
+     * Starts a "Calibrate now" capture: the bike must be upright and still for ~3 s.
+     * A captured mount takes priority over auto-calibration for the rest of the ride.
+     */
+    fun beginCalibrationCapture() {
+        capture = CalibrationCollector()
+        lastCapture = null
+    }
+
+    fun cancelCalibrationCapture() {
+        capture = null
+    }
+
+    /**
+     * A calibration learned or captured during the ride that hasn't been handed out yet
+     * (so the caller can save it to the bike). Returns each one once.
+     */
+    fun takeNewCalibration(): MountCalibration? = pendingCalibration.also { pendingCalibration = null }
+
+    private fun applyCalibration(cal: MountCalibration, status: CalibrationStatus) {
+        lean.calibration = cal
+        dynamics.calibration = cal
+        calibrationStatus = status
+        pendingCalibration = cal
+    }
+
+    private fun onCaptureAccel(r: AccelReading) {
+        val c = capture ?: return
+        c.onAccel(r)
+        if (!c.isComplete) return
+        capture = null
+        lastCapture = when (val result = c.result(wallMillis(r.timeNanos))) {
+            is CalibrationResult.Success -> {
+                applyCalibration(result.calibration, CalibrationStatus.MANUAL)
+                CaptureOutcome.SUCCESS
+            }
+            CalibrationResult.TooMuchMotion, CalibrationResult.NotEnoughData -> CaptureOutcome.TOO_MUCH_MOTION
+            CalibrationResult.ImplausibleGravity -> CaptureOutcome.IMPLAUSIBLE
+        }
+    }
+
+    private fun onAutoCalAccel(r: AccelReading) {
+        if (calibrationStatus == CalibrationStatus.MANUAL) return
+        val learned = autoCal.onAccel(r, wallMillis(r.timeNanos)) ?: return
+        val current = lean.calibration
+        // Only swap axes when the mount really differs; tiny refinements aren't worth a lean reset.
+        if (current == null || calibrationStatus != CalibrationStatus.AUTO ||
+            AutoCalibrator.differenceDeg(current, learned) > 1.5
+        ) {
+            applyCalibration(learned, CalibrationStatus.AUTO)
+        }
     }
 
     private fun onLocation(r: LocationReading): List<RideEvent> {
@@ -84,9 +159,15 @@ class TelemetryPipeline(
         val dt = lastGpsNanos?.let { (r.timeNanos - it) / 1e9 } ?: 1.0
         lastGpsNanos = r.timeNanos
         dynamics.onGpsAccel(gps.accelMps2, dt)
-        if (speed != null && (gps.quality == GpsQuality.GOOD || gps.quality == GpsQuality.EXCELLENT)) {
+        val goodFix = gps.quality == GpsQuality.GOOD || gps.quality == GpsQuality.EXCELLENT
+        if (speed != null && goodFix) {
             accumulator.onReliableSpeed(speed)
         }
+        val accel = gps.accelMps2
+        val headingRate = gps.headingRateDegPerSec
+        autoCal.steady = goodFix && speed != null && speed >= AUTO_CAL_MIN_SPEED_MPS &&
+            accel != null && kotlin.math.abs(accel) < 0.5 &&
+            headingRate != null && kotlin.math.abs(headingRate) < 2.5
 
         when (autoPause.update(r.timeNanos, speed)) {
             AutoPauseDetector.Transition.STOPPED -> {
@@ -102,6 +183,8 @@ class TelemetryPipeline(
     }
 
     private fun onAccel(r: AccelReading): List<RideEvent> {
+        onCaptureAccel(r)
+        onAutoCalAccel(r)
         lean.onAccel(r)
         dynamics.onAccel(r)
         val speed = gps.speedMps
@@ -121,6 +204,7 @@ class TelemetryPipeline(
             SourceSignal.GPS_PROVIDER_DISABLED -> {
                 gps.onProviderDisabled()
                 lean.speedMps = null
+                autoCal.steady = false
                 reportGpsLost(ctx)
             }
             SourceSignal.GPS_PROVIDER_ENABLED -> emptyList()
@@ -152,6 +236,7 @@ class TelemetryPipeline(
         val events = ArrayList<RideEvent>()
         if (gps.checkTimeout(nowNanos)) {
             lean.speedMps = null
+            autoCal.steady = false
             events += reportGpsLost(context(nowNanos)).map(::record)
         }
         accountTime(nowNanos)
@@ -172,6 +257,9 @@ class TelemetryPipeline(
             latitude = gps.latitude.takeIf { gps.quality.hasFix },
             longitude = gps.longitude.takeIf { gps.quality.hasFix },
             source = sourceKind,
+            rpm = engineRpm(nowNanos),
+            gear = engineGear(nowNanos),
+            calibration = CalibrationInfo(calibrationStatus, capture?.progress, lastCapture),
         )
         return frame to events
     }
@@ -190,8 +278,17 @@ class TelemetryPipeline(
             lateralG = lateralG(),
             leanDeg = leanDeg,
             gpsAccuracyM = gps.accuracyM.takeIf { fix },
+            rpm = engineRpm(nowNanos),
+            gear = engineGear(nowNanos),
         )
     }
+
+    private fun engineFresh(nowNanos: Long): Boolean =
+        lastEngineNanos?.let { nowNanos - it <= ENGINE_STALE_NANOS } == true
+
+    private fun engineRpm(nowNanos: Long): Double? = rpm.takeIf { engineFresh(nowNanos) }
+
+    private fun engineGear(nowNanos: Long): Int? = gear.takeIf { engineFresh(nowNanos) }
 
     private fun accountTime(nowNanos: Long) {
         val dtMillis = (nowNanos - lastAccountedNanos) / 1_000_000L
@@ -221,5 +318,11 @@ class TelemetryPipeline(
     private fun record(e: RideEvent): RideEvent {
         accumulator.onEvent(e)
         return e
+    }
+
+    companion object {
+        /** ~22 km/h: slow enough for town riding, fast enough that the bike is self-upright. */
+        const val AUTO_CAL_MIN_SPEED_MPS = 6.0
+        private const val ENGINE_STALE_NANOS = 3_000_000_000L
     }
 }

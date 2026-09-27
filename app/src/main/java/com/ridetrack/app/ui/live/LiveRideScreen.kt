@@ -122,6 +122,7 @@ fun LiveRideScreen(onRideSaved: (String) -> Unit, onExit: () -> Unit) {
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
                 Column(Modifier.weight(1f).fillMaxSize()) {
                     TopBar(chrome, frame)
+                    Banners(chrome, frame, vm)
                     Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center) { SpeedAndLean(frame, chrome) }
                 }
                 Column(Modifier.weight(1f).fillMaxSize(), verticalArrangement = Arrangement.Center) {
@@ -133,6 +134,7 @@ fun LiveRideScreen(onRideSaved: (String) -> Unit, onExit: () -> Unit) {
         } else {
             Column(Modifier.fillMaxSize()) {
                 TopBar(chrome, frame)
+                Banners(chrome, frame, vm)
                 Column(
                     Modifier
                         .weight(1f)
@@ -172,6 +174,14 @@ fun LiveRideScreen(onRideSaved: (String) -> Unit, onExit: () -> Unit) {
     if ((state is RideState.Recording || state is RideState.Paused) && chrome.hudEnabled && !chrome.hudPromptDismissed && !overlayGranted) {
         HudPermissionSheet(onContinue = { OverlayPermission.request(context) }, onNotNow = vm::dismissHudPrompt)
     }
+}
+
+@Composable
+private fun Banners(chrome: LiveChrome, frame: TelemetryFrame?, vm: LiveRideViewModel) {
+    GpsWarning(chrome, frame, onRetry = vm::retryGps)
+    val canCalibrate = chrome.active?.sensors?.canEstimateLean == true &&
+        (chrome.rideState is RideState.Recording || chrome.rideState is RideState.Paused)
+    if (canCalibrate) CalibrateOffer(frame, onCalibrate = vm::calibrateNow)
 }
 
 @Composable
@@ -267,14 +277,18 @@ private fun RecordingPill(paused: Boolean, elapsedMillis: Long) {
 private fun SpeedAndLean(frame: TelemetryFrame?, chrome: LiveChrome) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         val speed = frame?.speedMps
-        Text(
-            Format.speedKmh(speed),
-            style = RtType.speedHero,
-            color = if (speed == null) RtColors.TextTertiary else RtColors.TextPrimary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.semantics { contentDescription = "Speed ${Format.speedWithUnit(speed)}" },
-        )
-        Text("km/h", style = RtType.body, color = RtColors.TextSecondary)
+        if (frame?.rpm != null) {
+            SpeedWithRevs(frame, chrome.active?.redlineRpm)
+        } else {
+            Text(
+                Format.speedKmh(speed),
+                style = RtType.speedHero,
+                color = if (speed == null) RtColors.TextTertiary else RtColors.TextPrimary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.semantics { contentDescription = "Speed ${Format.speedWithUnit(speed)}" },
+            )
+            Text("km/h", style = RtType.body, color = RtColors.TextSecondary)
+        }
         if (speed == null) {
             val msg = when (frame?.gpsQuality) {
                 GpsQuality.LOST -> "GPS signal lost"
@@ -295,8 +309,8 @@ private fun SpeedAndLean(frame: TelemetryFrame?, chrome: LiveChrome) {
         )
         Label("Lean")
         val note = when {
-            chrome.active?.calibrated == false -> "Unavailable · phone mount not calibrated"
             chrome.active?.sensors?.canEstimateLean == false -> "Unavailable · no gyroscope"
+            frame?.leanDeg == null -> calibrationNote(frame, chrome.active?.source)
             frame?.leanConfidence == LeanConfidence.LOW -> "Estimate may be inaccurate"
             else -> null
         }

@@ -27,10 +27,18 @@ import kotlin.math.sin
  *  - when speed is unknown: the gravity direction with a long time constant, flagged LOW.
  */
 class LeanEstimator(
-    private val calibration: MountCalibration?,
-    sensors: SensorAvailability,
+    calibration: MountCalibration?,
+    private val sensors: SensorAvailability,
 ) {
-    private val enabled = calibration != null && sensors.canEstimateLean
+    /** Can change mid-ride (auto-calibration / "Calibrate now"); the estimate restarts. */
+    var calibration: MountCalibration? = calibration
+        set(value) {
+            field = value
+            leanRad = null
+            lastGyroNanos = null
+        }
+
+    private val enabled get() = calibration != null && sensors.canEstimateLean
 
     private var leanRad: Double? = null
     private var lastGyroNanos: Long? = null

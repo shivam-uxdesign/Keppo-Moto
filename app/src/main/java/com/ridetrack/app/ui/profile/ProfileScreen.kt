@@ -166,6 +166,15 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit) {
                 vm::setDemoMode,
                 enabled = !s.rideActive,
             )
+            if (s.settings.demoMode) {
+                ToggleRow(
+                    "Simulated OBD",
+                    "Demo rides also send engine RPM and gear, so you can try the rev meter on the ride screen and pop-up.",
+                    s.settings.demoObd,
+                    vm::setDemoObd,
+                    enabled = !s.rideActive,
+                )
+            }
         }
 
         if (BuildConfig.DEBUG) BetaExportSection()

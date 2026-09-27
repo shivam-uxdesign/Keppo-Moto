@@ -20,6 +20,8 @@ data class BikeEntity(
     val calibUpZ: Double?,
     val calibratedAtMillis: Long?,
     val createdAtMillis: Long,
+    val redlineRpm: Int? = null,
+    val photoFile: String? = null,
 )
 
 @Entity(
@@ -72,6 +74,8 @@ data class SampleEntity(
     val lateralG: Double?,
     val leanDeg: Double?,
     val gpsAccuracyM: Double?,
+    val rpm: Double? = null,
+    val gear: Int? = null,
 )
 
 @Entity(

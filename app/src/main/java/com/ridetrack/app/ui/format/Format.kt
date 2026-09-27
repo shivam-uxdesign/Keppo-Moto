@@ -85,6 +85,16 @@ object Format {
         return "${deg.roundToInt()}° ${dirs[idx]}"
     }
 
+    /** "6,240" — thousands grouped so it reads at a glance. */
+    fun rpm(rpm: Double?): String = rpm?.let { String.format(Locale.US, "%,d", (it / 10).roundToInt() * 10) } ?: DASH
+
+    /** Gear 0 is neutral. */
+    fun gear(gear: Int?): String = when (gear) {
+        null -> DASH
+        0 -> "N"
+        else -> gear.toString()
+    }
+
     fun altitude(m: Double?): String = m?.let { "${it.roundToInt()} m" } ?: DASH
 
     fun accuracy(m: Double?): String = m?.let { "±${it.roundToInt()} m" } ?: "Accuracy unavailable"

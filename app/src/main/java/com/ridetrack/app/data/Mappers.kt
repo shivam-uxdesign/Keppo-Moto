@@ -41,6 +41,8 @@ fun BikeEntity.toModel(): Bike {
         mountOrientation = enumOr(mountOrientation, MountOrientation.PORTRAIT),
         calibration = calibration,
         createdAtMillis = createdAtMillis,
+        redlineRpm = redlineRpm,
+        photoFile = photoFile,
     )
 }
 
@@ -58,6 +60,8 @@ fun Bike.toEntity() = BikeEntity(
     calibUpZ = calibration?.up?.z,
     calibratedAtMillis = calibration?.createdAtMillis,
     createdAtMillis = createdAtMillis,
+    redlineRpm = redlineRpm,
+    photoFile = photoFile,
 )
 
 fun RideEntity.toModel() = Ride(
@@ -127,6 +131,8 @@ fun TelemetrySample.toEntity(rideId: String) = SampleEntity(
     lateralG = lateralG,
     leanDeg = leanDeg,
     gpsAccuracyM = gpsAccuracyM,
+    rpm = rpm,
+    gear = gear,
 )
 
 fun SampleEntity.toModel() = TelemetrySample(
@@ -140,6 +146,8 @@ fun SampleEntity.toModel() = TelemetrySample(
     lateralG = lateralG,
     leanDeg = leanDeg,
     gpsAccuracyM = gpsAccuracyM,
+    rpm = rpm,
+    gear = gear,
 )
 
 fun RideEvent.toEntity(rideId: String) = EventEntity(

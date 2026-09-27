@@ -65,6 +65,8 @@ data class HudSettings(
 data class Settings(
     val autoPause: Boolean = true,
     val demoMode: Boolean = false,
+    /** Demo rides also simulate an OBD link (RPM + gear) to exercise the rev meter. */
+    val demoObd: Boolean = true,
     val liveMetrics: Set<LiveMetric> = LiveMetric.DEFAULT,
     val showGForceIndicator: Boolean = false,
     val selectedBikeId: String? = null,
@@ -78,6 +80,7 @@ class SettingsRepository(private val context: Context) {
     private object Keys {
         val autoPause = booleanPreferencesKey("auto_pause")
         val demoMode = booleanPreferencesKey("demo_mode")
+        val demoObd = booleanPreferencesKey("demo_obd")
         val liveMetrics = stringSetPreferencesKey("live_metrics")
         val gIndicator = booleanPreferencesKey("g_indicator")
         val selectedBike = stringPreferencesKey("selected_bike")
@@ -99,6 +102,7 @@ class SettingsRepository(private val context: Context) {
         Settings(
             autoPause = p[Keys.autoPause] ?: true,
             demoMode = p[Keys.demoMode] ?: false,
+            demoObd = p[Keys.demoObd] ?: true,
             liveMetrics = p[Keys.liveMetrics]
                 ?.mapNotNull { name -> LiveMetric.entries.firstOrNull { it.name == name } }
                 ?.toSet()
@@ -121,6 +125,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setAutoPause(enabled: Boolean) = context.dataStore.edit { it[Keys.autoPause] = enabled }
     suspend fun setDemoMode(enabled: Boolean) = context.dataStore.edit { it[Keys.demoMode] = enabled }
+    suspend fun setDemoObd(enabled: Boolean) = context.dataStore.edit { it[Keys.demoObd] = enabled }
     suspend fun setGForceIndicator(enabled: Boolean) = context.dataStore.edit { it[Keys.gIndicator] = enabled }
     suspend fun setSelectedBike(id: String) = context.dataStore.edit { it[Keys.selectedBike] = id }
     suspend fun setLiveMetrics(metrics: Set<LiveMetric>) =

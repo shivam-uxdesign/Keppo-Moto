@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -81,7 +82,7 @@ import com.ridetrack.telemetry.model.DataSourceKind
 import kotlin.math.roundToInt
 
 @Composable
-fun RideDetailScreen(rideId: String, onBack: () -> Unit, onReplay: () -> Unit) {
+fun RideDetailScreen(rideId: String, onBack: () -> Unit, onReplay: () -> Unit, onShare: () -> Unit) {
     val vm = appViewModel(key = "detail-$rideId") { RideDetailViewModel(it, rideId) }
     val s by vm.state.collectAsStateWithLifecycle()
     val scrub by vm.scrub.collectAsStateWithLifecycle()
@@ -110,6 +111,9 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onReplay: () -> Unit) {
         ) {
             if (ride?.source == DataSourceKind.DEMO) DemoBadge()
             if (ride != null) {
+                IconButton(onClick = onShare) {
+                    Icon(Icons.Outlined.IosShare, contentDescription = "Share ride", tint = RtColors.TextPrimary)
+                }
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(Icons.Outlined.MoreVert, contentDescription = "Ride options", tint = RtColors.TextPrimary)
                 }

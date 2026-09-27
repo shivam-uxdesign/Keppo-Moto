@@ -1,6 +1,8 @@
 package com.ridetrack.telemetry
 
 import com.ridetrack.telemetry.demo.DemoRideModel
+import com.ridetrack.telemetry.model.CalibrationStatus
+import com.ridetrack.telemetry.model.CaptureOutcome
 import com.ridetrack.telemetry.model.DataSourceKind
 import com.ridetrack.telemetry.model.LeanConfidence
 import com.ridetrack.telemetry.model.RideEvent
@@ -91,12 +93,71 @@ class PipelineDemoTest {
 
     @Test
     fun `lean is unavailable without calibration or gyroscope`() {
-        val uncalibrated = simulate(40.0, calibrated = false)
+        // Before any straight, steady riding there's nothing to learn the mount from.
+        val uncalibrated = simulate(14.0, calibrated = false)
         assertTrue(uncalibrated.frames.all { it.second.leanDeg == null && it.second.leanConfidence == LeanConfidence.UNAVAILABLE })
         assertNull(uncalibrated.pipeline.stats.maxRightLeanDeg)
 
         val noGyro = simulate(40.0, sensors = allSensors.copy(gyroscope = false))
         assertTrue(noGyro.frames.all { it.second.leanDeg == null })
+    }
+
+    @Test
+    fun `mount is learned while riding straight and lean works after`() {
+        val run = simulate(40.0, calibrated = false)
+        val learnedAt = run.frames.first { it.second.calibration.status == CalibrationStatus.AUTO }.first
+        assertTrue(learnedAt in 14.0..24.0, "learned at $learnedAt s")
+        assertNotNull(run.pipeline.takeNewCalibration())
+        // Middle of the right sweeper, as in the calibrated test.
+        val frame = run.frames.first { it.first >= 31.0 }.second
+        val expected = Math.toDegrees(kotlin.math.atan(frame.speedMps!! * Math.toRadians(12.0) / 9.80665))
+        assertTrue(abs(frame.leanDeg!! - expected) < 4.0, "lean ${frame.leanDeg} vs $expected")
+    }
+
+    @Test
+    fun `calibrate now captures while stopped and reports progress`() {
+        val model = DemoRideModel()
+        val p = TelemetryPipeline(DataSourceKind.DEMO, null, allSensors, 0, 0)
+        p.beginCalibrationCapture()
+        var t = 0L
+        var sawProgress = false
+        while (t < 4_000_000_000L) { // standing still at the start of the script
+            model.step(t).forEach { p.process(it) }
+            val progress = p.frame(t).first.calibration.captureProgress
+            if (progress != null && progress > 0.3) sawProgress = true
+            t += model.stepNanos
+        }
+        val info = p.frame(t).first.calibration
+        assertTrue(sawProgress)
+        assertEquals(CaptureOutcome.SUCCESS, info.lastCapture)
+        assertEquals(CalibrationStatus.MANUAL, info.status)
+        assertNull(info.captureProgress)
+    }
+
+    @Test
+    fun `simulated obd reports rpm and gear, and nothing without it`() {
+        val model = DemoRideModel(simulateEngine = true)
+        val p = TelemetryPipeline(DataSourceKind.DEMO, model.calibration, allSensors, 0, 0)
+        var t = 0L
+        val gears = mutableSetOf<Int>()
+        var maxRpm = 0.0
+        while (t < 40_000_000_000L) {
+            model.step(t).forEach { p.process(it) }
+            val f = p.frame(t).first
+            if (t > 1_000_000_000L) {
+                assertNotNull(f.rpm)
+                gears += f.gear!!
+                maxRpm = maxOf(maxRpm, f.rpm!!)
+            }
+            t += model.stepNanos
+        }
+        assertTrue(0 in gears && 4 in gears, "gears $gears")
+        assertTrue(maxRpm in 6_000.0..9_500.0, "max rpm $maxRpm")
+        // Engine data goes stale (and back to unknown) when the link stops reporting.
+        assertNull(p.frame(t + 5_000_000_000L).first.rpm)
+
+        val plain = simulate(10.0)
+        assertTrue(plain.frames.all { it.second.rpm == null && it.second.gear == null })
     }
 
     @Test

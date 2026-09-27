@@ -14,7 +14,8 @@ import kotlinx.coroutines.flow.flow
  */
 class DemoTelemetrySource(
     private val clockNanos: () -> Long,
-    private val model: DemoRideModel = DemoRideModel(),
+    simulateEngine: Boolean = false,
+    private val model: DemoRideModel = DemoRideModel(simulateEngine = simulateEngine),
 ) : TelemetrySource {
     override val kind = DataSourceKind.DEMO
     override val sensors = SensorAvailability(accelerometer = true, gyroscope = true, magnetometer = false)

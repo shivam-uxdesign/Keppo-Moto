@@ -24,6 +24,12 @@ data class AccelReading(override val timeNanos: Long, val x: Double, val y: Doub
 /** Angular velocity in rad/s in the phone frame. */
 data class GyroReading(override val timeNanos: Long, val x: Double, val y: Double, val z: Double) : RawReading
 
+/**
+ * Engine data from a vehicle link (Bluetooth OBD). [rpm] and [gear] are independently
+ * optional: many bikes report RPM but not the gear. Gear 0 = neutral.
+ */
+data class EngineReading(override val timeNanos: Long, val rpm: Double?, val gear: Int?) : RawReading
+
 enum class SourceSignal {
     GPS_PROVIDER_DISABLED,
     GPS_PROVIDER_ENABLED,

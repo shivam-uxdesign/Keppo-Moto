@@ -1,7 +1,5 @@
 package com.ridetrack.app.ui.summary
 
-import android.content.Context
-import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,7 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -64,10 +61,9 @@ import com.ridetrack.telemetry.model.DataSourceKind
 import com.ridetrack.telemetry.model.Ride
 
 @Composable
-fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Unit) {
+fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Unit, onShare: () -> Unit) {
     val vm = appViewModel(key = "summary-$rideId") { RideSummaryViewModel(it, rideId) }
     val s by vm.state.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     BackHandler(onBack = onDone)
 
     Column(
@@ -176,7 +172,7 @@ fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Un
                     .clip(CircleShape)
                     .background(RtColors.Surface)
                     .border(1.dp, RtColors.Hairline, CircleShape)
-                    .clickable(interactionSource = interaction, indication = null, role = Role.Button) { shareRide(context, ride) }
+                    .clickable(interactionSource = interaction, indication = null, role = Role.Button) { onShare() }
                     .semantics { contentDescription = "Share ride" },
                 contentAlignment = Alignment.Center,
             ) {
@@ -213,18 +209,4 @@ private fun timeRange(ride: Ride): String {
     val end = ride.endTimeMillis
     val start = Format.rideDate(ride.startTimeMillis)
     return if (end != null) "$start – ${Format.timeOfDay(end)}" else start
-}
-
-private fun shareRide(context: Context, ride: Ride) {
-    val s = ride.stats
-    val text = buildString {
-        append("${ride.name}: ${Format.distance(s.distanceM)} in ${Format.duration(ride.durationMillis)}")
-        s.maxSpeedMps?.let { append(" · top ${Format.speedWithUnit(it)}") }
-        val lean = listOfNotNull(s.maxLeftLeanDeg, s.maxRightLeanDeg).maxOrNull()
-        if (lean != null) append(" · max lean ${lean.toInt()}°")
-        if (ride.source == DataSourceKind.DEMO) append(" (demo ride)")
-        append(" — recorded with Ride Track")
-    }
-    val intent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
-    runCatching { context.startActivity(Intent.createChooser(intent, "Share ride")) }
 }

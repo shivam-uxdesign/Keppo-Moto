@@ -38,6 +38,10 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
         viewModelScope.launch { if (!state.value.rideActive) c.settings.setDemoMode(v) }
     }
 
+    fun setDemoObd(v: Boolean) {
+        viewModelScope.launch { if (!state.value.rideActive) c.settings.setDemoObd(v) }
+    }
+
     fun setGIndicator(v: Boolean) {
         viewModelScope.launch { c.settings.setGForceIndicator(v) }
     }

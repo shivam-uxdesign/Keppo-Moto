@@ -47,9 +47,21 @@ class HudDataTest {
     fun `lean unavailable explains why`() {
         val d = HudData.from(frame(lean = null), active(calibrated = false), paused = false, stoppedForMillis = null)
         assertNull(d.leanDeg)
-        assertEquals("Mount not calibrated", d.leanNote)
+        // The mount is learned during the ride, so "not calibrated" is a transient state.
+        assertEquals("Learning mount…", d.leanNote)
         val noGyro = HudData.from(frame(lean = null), active(s = sensors.copy(gyroscope = false)), paused = false, stoppedForMillis = null)
         assertEquals("No gyroscope", noGyro.leanNote)
+    }
+
+    @Test
+    fun `engine data passes through only when present`() {
+        val none = HudData.from(frame(), active(), false, null)
+        assertNull(none.rpm)
+        assertNull(none.gear)
+        val obd = HudData.from(frame().copy(rpm = 6_200.0, gear = 3), active().copy(redlineRpm = 9_500), false, null)
+        assertEquals(6_200.0, obd.rpm)
+        assertEquals(3, obd.gear)
+        assertEquals(9_500, obd.redlineRpm)
     }
 
     @Test

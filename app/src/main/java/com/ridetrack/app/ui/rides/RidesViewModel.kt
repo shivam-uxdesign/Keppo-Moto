@@ -3,6 +3,8 @@ package com.ridetrack.app.ui.rides
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ridetrack.app.AppContainer
+import com.ridetrack.app.ui.components.GeoPoint
+import kotlinx.coroutines.launch
 import com.ridetrack.telemetry.model.Bike
 import com.ridetrack.telemetry.model.Ride
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,18 +51,32 @@ data class RidesUiState(
     val groups: List<Pair<RideGroup, List<Ride>>> = emptyList(),
     val bikes: List<Bike> = emptyList(),
     val filter: RideFilter = RideFilter(),
+    val routes: Map<String, List<GeoPoint>> = emptyMap(),
 )
 
-class RidesViewModel(c: AppContainer) : ViewModel() {
+class RidesViewModel(private val c: AppContainer) : ViewModel() {
     private val filter = MutableStateFlow(RideFilter())
+    private val routes = MutableStateFlow<Map<String, List<GeoPoint>>>(emptyMap())
+    private val requested = mutableSetOf<String>()
 
-    val state: StateFlow<RidesUiState> = combine(c.rides.observeCompleted(), c.bikes.observeBikes(), filter) { rides, bikes, f ->
+    /** Loads route sketches newest-first, in the background. */
+    private fun requestRoutes(ids: List<String>) {
+        val missing = ids.filter { requested.add(it) }
+        if (missing.isEmpty()) return
+        viewModelScope.launch {
+            missing.forEach { id -> routes.update { it + (id to c.routes.route(id)) } }
+        }
+    }
+
+    val state: StateFlow<RidesUiState> = combine(c.rides.observeCompleted(), c.bikes.observeBikes(), filter, routes) { rides, bikes, f, r ->
+        requestRoutes(rides.map { it.id })
         RidesUiState(
             loading = false,
             totalRides = rides.size,
             groups = group(rides.filter { matches(it, f) }),
             bikes = bikes,
             filter = f,
+            routes = r,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RidesUiState())
 

@@ -25,6 +25,10 @@ data class HudData(
     val maxLeanDeg: Double?,
     val headingDeg: Double?,
     val demo: Boolean,
+    /** From OBD; the rev bar only appears when this is known. */
+    val rpm: Double? = null,
+    val gear: Int? = null,
+    val redlineRpm: Int? = null,
 ) {
     companion object {
         fun from(frame: TelemetryFrame?, active: ActiveRide?, paused: Boolean, stoppedForMillis: Long?): HudData {
@@ -48,8 +52,8 @@ data class HudData(
                 speedMps = frame?.speedMps,
                 leanDeg = frame?.leanDeg,
                 leanNote = when {
-                    active?.calibrated == false -> "Mount not calibrated"
                     active?.sensors?.canEstimateLean == false -> "No gyroscope"
+                    frame?.leanDeg == null && active?.calibrated == false -> "Learning mount…"
                     else -> null
                 },
                 distanceM = stats?.distanceM,
@@ -61,6 +65,9 @@ data class HudData(
                 maxLeanDeg = maxLean,
                 headingDeg = frame?.headingDeg,
                 demo = active?.source == DataSourceKind.DEMO,
+                rpm = frame?.rpm,
+                gear = frame?.gear,
+                redlineRpm = active?.redlineRpm,
             )
         }
     }

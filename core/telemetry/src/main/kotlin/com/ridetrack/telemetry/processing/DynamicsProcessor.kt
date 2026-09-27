@@ -16,10 +16,20 @@ import com.ridetrack.telemetry.source.AccelReading
  * Lateral G is the ground-frame cornering acceleration `v·ω_yaw / g` (+ = right turn).
  */
 class DynamicsProcessor(
-    private val calibration: MountCalibration?,
-    sensors: SensorAvailability,
+    calibration: MountCalibration?,
+    private val sensors: SensorAvailability,
 ) {
-    private val useSensor = calibration != null && sensors.accelerometer
+    /** Can change mid-ride; the bias estimate restarts with the new axes. */
+    var calibration: MountCalibration? = calibration
+        set(value) {
+            field = value
+            bias = 0.0
+            sumSinceFix = 0.0
+            countSinceFix = 0
+            lastAccelNanos = null
+        }
+
+    private val useSensor get() = calibration != null && sensors.accelerometer
 
     private val longEma = Ema(0.3)
     private val gpsLongEma = Ema(0.5)

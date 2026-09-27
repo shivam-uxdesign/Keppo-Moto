@@ -12,6 +12,8 @@ data class TelemetrySample(
     val lateralG: Double?,
     val leanDeg: Double?,
     val gpsAccuracyM: Double?,
+    val rpm: Double? = null,
+    val gear: Int? = null,
 ) {
     val combinedG: Double?
         get() = if (longitudinalG != null && lateralG != null) {

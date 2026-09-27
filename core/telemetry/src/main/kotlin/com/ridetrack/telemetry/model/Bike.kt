@@ -16,6 +16,10 @@ data class Bike(
     val mountOrientation: MountOrientation,
     val calibration: MountCalibration?,
     val createdAtMillis: Long,
+    /** Engine redline for the rev meter; null = unknown (no redline band is drawn). */
+    val redlineRpm: Int? = null,
+    /** File name of the bike's photo in app storage, if the rider added one. */
+    val photoFile: String? = null,
 ) {
     val displayName: String get() = listOf(make, model).filter { it.isNotBlank() }.joinToString(" ")
 }

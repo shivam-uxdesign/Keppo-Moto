@@ -49,8 +49,9 @@ import com.ridetrack.app.ui.detail.RideDetailScreen
 import com.ridetrack.app.ui.home.HomeScreen
 import com.ridetrack.app.ui.hud.HudSettingsScreen
 import com.ridetrack.app.ui.live.LiveRideScreen
-import com.ridetrack.app.ui.preride.PreRideScreen
 import com.ridetrack.app.ui.profile.ProfileScreen
+import com.ridetrack.app.share.ShareRideScreen
+import com.ridetrack.app.ui.rides.RidesMapScreen
 import com.ridetrack.app.ui.rides.RidesScreen
 import com.ridetrack.app.ui.summary.RideSummaryScreen
 import com.ridetrack.app.ui.theme.RtColors
@@ -61,7 +62,6 @@ object Routes {
     const val RIDES = "rides"
     const val BIKE = "bike"
     const val PROFILE = "profile"
-    const val PRE_RIDE = "preride"
     const val LIVE = "live"
     const val SUMMARY = "summary/{rideId}"
     const val DETAIL = "ride/{rideId}"
@@ -69,6 +69,9 @@ object Routes {
     const val BIKE_EDIT = "bike/edit?bikeId={bikeId}"
     const val CALIBRATE = "calibrate/{bikeId}"
     const val HUD_SETTINGS = "hud-settings"
+    const val RIDES_MAP = "rides-map"
+    const val SHARE = "share/{rideId}"
+    fun share(id: String) = "share/$id"
 
     fun summary(id: String) = "summary/$id"
     fun detail(id: String) = "ride/$id"
@@ -118,17 +121,22 @@ fun RideTrackNavHost() {
             ) {
                 composable(Routes.HOME) {
                     HomeScreen(
-                        onStartRide = { nav.navigate(Routes.PRE_RIDE) { launchSingleTop = true } },
+                        onRideStarted = { nav.navigate(Routes.LIVE) { launchSingleTop = true } },
                         onReturnToRide = { nav.navigate(Routes.LIVE) { launchSingleTop = true } },
-                        onOpenRide = { nav.navigate(Routes.detail(it)) },
                         onOpenProfile = { nav.switchTab(Routes.PROFILE) },
                         onOpenBikes = { nav.switchTab(Routes.BIKE) },
                         onAddBike = { nav.navigate(Routes.bikeEdit()) },
-                        onSeeAllRides = { nav.switchTab(Routes.RIDES) },
                     )
                 }
                 composable(Routes.RIDES) {
-                    RidesScreen(onOpenRide = { nav.navigate(Routes.detail(it)) }, onStartRide = { nav.switchTab(Routes.HOME) })
+                    RidesScreen(
+                        onOpenRide = { nav.navigate(Routes.detail(it)) },
+                        onStartRide = { nav.switchTab(Routes.HOME) },
+                        onOpenMap = { nav.navigate(Routes.RIDES_MAP) },
+                    )
+                }
+                composable(Routes.RIDES_MAP) {
+                    RidesMapScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) })
                 }
                 composable(Routes.BIKE) {
                     BikeScreen(
@@ -139,16 +147,6 @@ fun RideTrackNavHost() {
                 }
                 composable(Routes.PROFILE) { ProfileScreen(onOpenHudSettings = { nav.navigate(Routes.HUD_SETTINGS) }) }
                 composable(Routes.HUD_SETTINGS) { HudSettingsScreen(onBack = { nav.popBackStack() }) }
-                composable(Routes.PRE_RIDE) {
-                    PreRideScreen(
-                        onBack = { nav.popBackStack() },
-                        onStarted = {
-                            nav.navigate(Routes.LIVE) { popUpTo(Routes.HOME) }
-                        },
-                        onAddBike = { nav.navigate(Routes.bikeEdit()) },
-                        onCalibrate = { nav.navigate(Routes.calibrate(it)) },
-                    )
-                }
                 composable(
                     Routes.LIVE,
                     // The start button "opens up" into the live screen.
@@ -174,6 +172,7 @@ fun RideTrackNavHost() {
                         rideId = id,
                         onDone = { nav.navigate(Routes.HOME) { popUpTo(Routes.HOME) { inclusive = true } } },
                         onOpenDetail = { nav.navigate(Routes.detail(id)) { popUpTo(Routes.HOME) } },
+                        onShare = { nav.navigate(Routes.share(id)) },
                     )
                 }
                 composable(Routes.DETAIL, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
@@ -182,7 +181,11 @@ fun RideTrackNavHost() {
                         rideId = id,
                         onBack = { nav.popBackStack() },
                         onReplay = { nav.navigate(Routes.replay(id)) },
+                        onShare = { nav.navigate(Routes.share(id)) },
                     )
+                }
+                composable(Routes.SHARE, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
+                    ShareRideScreen(rideId = entry.arguments?.getString("rideId").orEmpty(), onBack = { nav.popBackStack() })
                 }
                 composable(Routes.REPLAY, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
                     ReplayScreen(rideId = entry.arguments?.getString("rideId").orEmpty(), onBack = { nav.popBackStack() })
@@ -195,7 +198,6 @@ fun RideTrackNavHost() {
                     BikeEditScreen(
                         bikeId = entry.arguments?.getString("bikeId"),
                         onDone = { nav.popBackStack() },
-                        onCalibrate = { id -> nav.navigate(Routes.calibrate(id)) { popUpTo(Routes.BIKE_EDIT) { inclusive = true } } },
                     )
                 }
                 composable(Routes.CALIBRATE, arguments = listOf(navArgument("bikeId") { type = NavType.StringType })) { entry ->

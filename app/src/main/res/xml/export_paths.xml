@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- BETA TOOL: ride data export (see data/export). -->
+<!-- FileProvider paths. "shares" = ride share graphics; "exports" = BETA ride data export (see data/export). -->
 <paths>
+    <cache-path name="shares" path="shares/" />
     <cache-path name="exports" path="exports/" />
 </paths>

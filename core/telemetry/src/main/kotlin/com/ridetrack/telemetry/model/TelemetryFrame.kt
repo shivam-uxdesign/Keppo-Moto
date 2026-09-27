@@ -18,6 +18,11 @@ data class TelemetryFrame(
     val latitude: Double?,
     val longitude: Double?,
     val source: DataSourceKind,
+    /** Engine speed from OBD; null when no engine link is connected or data is stale. */
+    val rpm: Double? = null,
+    /** Current gear from OBD (0 = neutral); null when the bike doesn't report it. */
+    val gear: Int? = null,
+    val calibration: CalibrationInfo = CalibrationInfo(),
 ) {
     val combinedG: Double?
         get() = if (longitudinalG != null && lateralG != null) kotlin.math.hypot(longitudinalG, lateralG) else null

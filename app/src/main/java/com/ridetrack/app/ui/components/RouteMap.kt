@@ -93,7 +93,7 @@ private val DARK_STYLE = """
 }
 """.trimIndent()
 
-private fun hex(c: androidx.compose.ui.graphics.Color): String {
+internal fun hex(c: androidx.compose.ui.graphics.Color): String {
     val argb = android.graphics.Color.argb((c.alpha * 255).toInt(), (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
     return String.format("#%06X", 0xFFFFFF and argb)
 }
@@ -250,7 +250,7 @@ fun RouteMap(
     }
 }
 
-private object MapTiler {
+internal object MapTiler {
     val available: Boolean get() = BuildConfig.MAPTILER_KEY.isNotBlank()
 
     fun styleUrl(style: MapStyle): String {
@@ -263,7 +263,7 @@ private object MapTiler {
 }
 
 /** MapTiler vector/satellite styles when a key is configured; otherwise a keyless dark basemap. */
-private fun styleBuilder(style: MapStyle): Style.Builder =
+internal fun styleBuilder(style: MapStyle): Style.Builder =
     if (MapTiler.available) Style.Builder().fromUri(MapTiler.styleUrl(style)) else Style.Builder().fromJson(DARK_STYLE)
 
 private fun addRouteLayers(s: Style) {
@@ -315,7 +315,7 @@ private fun addRouteLayers(s: Style) {
 }
 
 @Composable
-private fun MapStyleToggle(selected: MapStyle, onSelect: (MapStyle) -> Unit, modifier: Modifier = Modifier) {
+internal fun MapStyleToggle(selected: MapStyle, onSelect: (MapStyle) -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier
             .background(RtColors.Background.copy(alpha = 0.75f), RoundedCornerShape(50))

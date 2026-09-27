@@ -3,7 +3,10 @@ package com.ridetrack.app.ride
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
+import com.ridetrack.app.data.BikeRepository
 import com.ridetrack.app.data.RideRepository
+import com.ridetrack.app.sensors.PhoneTelemetrySource
+import com.ridetrack.telemetry.demo.DemoRideModel
 import com.ridetrack.app.data.SettingsRepository
 import com.ridetrack.telemetry.demo.DemoTelemetrySource
 import com.ridetrack.telemetry.model.Bike
@@ -52,6 +55,8 @@ data class ActiveRide(
     val startWallMillis: Long,
     val calibrated: Boolean,
     val sensors: SensorAvailability,
+    /** Engine redline for the rev meter; null = unknown. */
+    val redlineRpm: Int? = null,
     /** Set when recent writes failed; data is being held in memory and retried. */
     val storageProblem: Boolean = false,
 )
@@ -67,6 +72,7 @@ data class ActiveRide(
 class RideSessionManager(
     private val context: Context,
     private val rides: RideRepository,
+    private val bikes: BikeRepository,
     private val settings: SettingsRepository,
     private val phoneSource: () -> TelemetrySource,
     private val scope: CoroutineScope,
@@ -88,25 +94,29 @@ class RideSessionManager(
     private val lifecycleMutex = Mutex()
     private var recordingJob: Job? = null
     private var recorder: Recorder? = null
+    private var gpsJob: Job? = null
+    private var phone: PhoneTelemetrySource? = null
 
     private fun dispatch(action: RideAction): RideState = _state.updateAndGet { reduce(it, action) }
 
-    fun beginPreRideCheck() {
+    /**
+     * Starts a ride straight from Home: the pre-ride checks happen on the live screen
+     * (GPS status/warnings) instead of a separate screen. Returns the ride id.
+     */
+    suspend fun startNow(bike: Bike): String? {
+        if (_state.value.isActive) return null
         dispatch(RideAction.BeginCheck)
-    }
-
-    fun setChecksPassed(passed: Boolean) {
-        dispatch(if (passed) RideAction.ChecksPassed else RideAction.ChecksFailed)
-    }
-
-    fun cancelPreRideCheck() {
-        dispatch(RideAction.CancelCheck)
+        dispatch(RideAction.ChecksPassed)
+        val id = start(bike)
+        if (id == null && _state.value == RideState.Ready) dispatch(RideAction.CancelCheck)
+        return id
     }
 
     /** Starts recording. Only valid from [RideState.Ready]. Returns the ride id. */
     suspend fun start(bike: Bike): String? = lifecycleMutex.withLock {
         if (_state.value != RideState.Ready) return null
-        val demo = settings.settings.first().demoMode
+        val prefs = settings.settings.first()
+        val demo = prefs.demoMode
         val startNanos = SystemClock.elapsedRealtimeNanos()
         val startWall = System.currentTimeMillis()
         val rideId = UUID.randomUUID().toString()
@@ -114,9 +124,10 @@ class RideSessionManager(
         val source: TelemetrySource
         val calibration: MountCalibration?
         if (demo) {
-            val demoSource = DemoTelemetrySource(clockNanos = SystemClock::elapsedRealtimeNanos)
+            val demoSource = DemoTelemetrySource(clockNanos = SystemClock::elapsedRealtimeNanos, simulateEngine = prefs.demoObd)
             source = demoSource
-            calibration = demoSource.calibration
+            // Demo rides start uncalibrated so the in-ride auto-calibration can be tried out.
+            calibration = null
         } else {
             source = phoneSource()
             calibration = bike.calibration
@@ -141,26 +152,62 @@ class RideSessionManager(
             startWallMillis = startWall,
             calibrated = calibration != null,
             sensors = source.sensors,
+            redlineRpm = if (demo && prefs.demoObd) DemoRideModel.DEMO_REDLINE_RPM else bike.redlineRpm,
         )
         _frame.value = pipeline.frame(startNanos).first
         dispatch(RideAction.Start(rideId))
 
         recordingJob = scope.launch(recordingDispatcher) {
+            val phoneSource = source as? PhoneTelemetrySource
+            phone = phoneSource
             launch {
                 try {
-                    source.readings().collect { reading -> rec.pendingEvents += rec.pipeline.process(reading) }
+                    val readings = phoneSource?.motionReadings() ?: source.readings()
+                    readings.collect { reading -> rec.pendingEvents += rec.pipeline.process(reading) }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     Log.e(TAG, "Telemetry source failed", e)
                 }
             }
-            tickLoop(rec)
+            // GPS runs as its own job so the rider can retry it without touching the sensors.
+            if (phoneSource != null) gpsJob = launchGps(phoneSource, rec)
+            tickLoop(rec, bike.id, persistCalibration = !demo)
         }
         if (source.kind == DataSourceKind.PHONE) RideRecordingService.start(context)
         rideId
     }
 
-    private suspend fun CoroutineScope.tickLoop(rec: Recorder) {
+    private fun CoroutineScope.launchGps(source: PhoneTelemetrySource, rec: Recorder): Job = launch {
+        try {
+            source.locationReadings().collect { reading -> rec.pendingEvents += rec.pipeline.process(reading) }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.e(TAG, "GPS failed", e)
+        }
+    }
+
+    /** Restarts the location request (e.g. after turning location back on). */
+    fun retryGps() {
+        val rec = recorder ?: return
+        val source = phone ?: return
+        scope.launch(recordingDispatcher) {
+            gpsJob?.cancelAndJoin()
+            if (recorder === rec) gpsJob = launchGps(source, rec)
+        }
+    }
+
+    /** "Calibrate now": capture the mount over the next ~3 s while the bike is upright and still. */
+    fun calibrateNow() {
+        val rec = recorder ?: return
+        scope.launch(recordingDispatcher) { rec.pipeline.beginCalibrationCapture() }
+    }
+
+    fun cancelCalibration() {
+        val rec = recorder ?: return
+        scope.launch(recordingDispatcher) { rec.pipeline.cancelCalibrationCapture() }
+    }
+
+    private suspend fun CoroutineScope.tickLoop(rec: Recorder, bikeId: String, persistCalibration: Boolean) {
         var tick = 0L
         while (isActive) {
             delay(TICK_MILLIS)
@@ -170,6 +217,11 @@ class RideSessionManager(
             rec.pendingEvents += events
             _frame.value = frame
             syncAutoPause(rec)
+            rec.pipeline.takeNewCalibration()?.let { cal ->
+                _active.update { it?.copy(calibrated = true) }
+                // Next ride starts with this mount; it is re-learned every ride anyway.
+                if (persistCalibration) runCatching { bikes.setCalibration(bikeId, cal) }
+            }
             if (tick % SAMPLE_EVERY_TICKS == 0L) rec.pendingSamples += rec.pipeline.sample(now)
             if (tick % FLUSH_EVERY_TICKS == 0L) flush(rec)
         }
@@ -226,6 +278,9 @@ class RideSessionManager(
         withContext(NonCancellable) {
             recordingJob?.cancelAndJoin()
             recordingJob = null
+            gpsJob?.cancelAndJoin() // a retried GPS job isn't a child of the recording job
+            gpsJob = null
+            phone = null
             val ok = withContext(recordingDispatcher) {
                 val now = SystemClock.elapsedRealtimeNanos()
                 rec.pendingEvents += rec.pipeline.end(now)

@@ -49,14 +49,15 @@ object RideExporter {
                 .append(", \"speedMps\": ").append(num(p.speedMps)).append(", \"altitudeM\": ").append(num(p.altitudeM))
                 .append(", \"headingDeg\": ").append(num(p.headingDeg)).append(", \"longG\": ").append(num(p.longitudinalG))
                 .append(", \"latG\": ").append(num(p.lateralG)).append(", \"leanDeg\": ").append(num(p.leanDeg))
-                .append(", \"gpsAccuracyM\": ").append(num(p.gpsAccuracyM)).append("}")
+                .append(", \"gpsAccuracyM\": ").append(num(p.gpsAccuracyM))
+                .append(", \"rpm\": ").append(num(p.rpm)).append(", \"gear\": ").append(p.gear?.toString() ?: "null").append("}")
                 .append(if (i < track.samples.lastIndex) ",\n" else "\n")
         }
         sb.append("  ]\n}\n")
         return sb.toString()
     }
 
-    const val CSV_HEADER = "time_iso,t_s,lat,lon,speed_kmh,altitude_m,heading_deg,long_g,lat_g,lean_deg,gps_accuracy_m"
+    const val CSV_HEADER = "time_iso,t_s,lat,lon,speed_kmh,altitude_m,heading_deg,long_g,lat_g,lean_deg,gps_accuracy_m,rpm,gear"
 
     fun csv(ride: Ride, track: RideTrack): String {
         val sb = StringBuilder(CSV_HEADER).append('\n')
@@ -67,7 +68,8 @@ object RideExporter {
                 .append(fmt(p.speedMps?.times(3.6), 1)).append(',').append(fmt(p.altitudeM, 1)).append(',')
                 .append(fmt(p.headingDeg, 0)).append(',').append(fmt(p.longitudinalG, 3)).append(',')
                 .append(fmt(p.lateralG, 3)).append(',').append(fmt(p.leanDeg, 1)).append(',')
-                .append(fmt(p.gpsAccuracyM, 1)).append('\n')
+                .append(fmt(p.gpsAccuracyM, 1)).append(',')
+                .append(fmt(p.rpm, 0)).append(',').append(p.gear?.toString().orEmpty()).append('\n')
         }
         return sb.toString()
     }

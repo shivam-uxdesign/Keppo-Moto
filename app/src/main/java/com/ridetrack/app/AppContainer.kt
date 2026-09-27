@@ -3,6 +3,7 @@ package com.ridetrack.app
 import android.content.Context
 import com.ridetrack.app.data.BikeRepository
 import com.ridetrack.app.data.RideRepository
+import com.ridetrack.app.data.RouteCache
 import com.ridetrack.app.data.SettingsRepository
 import com.ridetrack.app.data.db.RideTrackDatabase
 import com.ridetrack.app.hud.HudController
@@ -22,6 +23,7 @@ class AppContainer(context: Context) {
     private val database = RideTrackDatabase.create(appContext)
     val bikes = BikeRepository(database.bikeDao())
     val rides = RideRepository(database.rideDao())
+    val routes = RouteCache(rides)
     val settings = SettingsRepository(appContext)
     val sensorInventory = SensorInventory(appContext)
     val battery = BatteryMonitor(appContext)
@@ -31,6 +33,7 @@ class AppContainer(context: Context) {
     val session = RideSessionManager(
         context = appContext,
         rides = rides,
+        bikes = bikes,
         settings = settings,
         phoneSource = { phoneSource() },
         scope = appScope,
