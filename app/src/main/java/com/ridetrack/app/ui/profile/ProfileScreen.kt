@@ -168,6 +168,8 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit) {
             )
         }
 
+        if (BuildConfig.DEBUG) BetaExportSection()
+
         SectionHeader("Privacy")
         RtCard {
             Text(

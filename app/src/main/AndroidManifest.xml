@@ -40,6 +40,17 @@
             </intent-filter>
         </activity>
 
+        <!-- BETA TOOL: shares ride export ZIPs (see data/export). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.exports"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/export_paths" />
+        </provider>
+
         <service
             android:name=".ride.RideRecordingService"
             android:exported="false"

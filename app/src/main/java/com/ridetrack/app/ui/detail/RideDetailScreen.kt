@@ -47,6 +47,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.ridetrack.app.BuildConfig
+import com.ridetrack.app.data.export.ExportShare
+import com.ridetrack.app.ui.appContainer
+import kotlinx.coroutines.launch
 import com.ridetrack.app.ui.appViewModel
 import com.ridetrack.app.ui.common.Maneuvers
 import com.ridetrack.app.ui.common.RideDynamics
@@ -81,6 +87,9 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onReplay: () -> Unit) {
     val scrub by vm.scrub.collectAsStateWithLifecycle()
     val chart by vm.chart.collectAsStateWithLifecycle()
     val haptics = rememberHaptics()
+    val context = LocalContext.current
+    val container = appContainer()
+    val scope = rememberCoroutineScope()
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -106,6 +115,16 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onReplay: () -> Unit) {
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, containerColor = RtColors.SurfaceRaised) {
                     DropdownMenuItem(text = { Text("Rename") }, onClick = { menuOpen = false; renaming = true })
+                    if (BuildConfig.DEBUG) {
+                        // BETA TOOL: remove together with data/export.
+                        DropdownMenuItem(
+                            text = { Text("Export ride (beta)") },
+                            onClick = {
+                                menuOpen = false
+                                scope.launch { runCatching { ExportShare.exportAndShare(context, container, listOf(ride.id)) } }
+                            },
+                        )
+                    }
                     DropdownMenuItem(text = { Text("Delete", color = RtColors.Error) }, onClick = { menuOpen = false; confirmDelete = true })
                 }
             }
