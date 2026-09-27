@@ -81,7 +81,7 @@ class PipelineDemoTest {
 
         assertTrue(stats.distanceM in 1_000.0..2_000.0, "distance ${stats.distanceM}")
         assertTrue(stats.maxSpeedMps!! in 18.0..22.0)
-        assertTrue(stats.maxBrakeG!! < -0.35)
+        assertTrue(stats.maxBrakeG!! < -0.5)
         assertTrue(stats.maxRightLeanDeg!! > 20.0 && stats.maxLeftLeanDeg!! > 15.0)
         assertTrue(stats.stoppedMillis in 5_000..20_000, "stopped ${stats.stoppedMillis}")
         assertTrue(abs(stats.movingMillis + stats.stoppedMillis - 108_000) < 100)

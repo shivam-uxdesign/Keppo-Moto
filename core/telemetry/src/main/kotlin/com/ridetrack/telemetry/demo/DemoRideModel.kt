@@ -42,7 +42,7 @@ class DemoRideModel(
         Segment(4.0, 0.0, 0.0),
         Segment(9.0, 0.0, -11.0), // left sweeper
         Segment(6.0, 0.3, 0.0),
-        Segment(4.0, -4.5, 0.0), // hard brake
+        Segment(4.0, -5.5, 0.0), // hard brake (~0.56 g)
         Segment(0.0, 0.0, 0.0), // snap to standstill (see below)
         Segment(9.0, 0.0, 0.0), // stopped
         Segment(7.0, 2.0, 0.0), // pull away

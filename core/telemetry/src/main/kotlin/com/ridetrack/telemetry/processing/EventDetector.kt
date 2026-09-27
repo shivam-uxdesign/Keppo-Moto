@@ -15,8 +15,9 @@ data class EventContext(
 )
 
 data class EventThresholds(
-    val hardBrakeG: Double = 0.35,
-    val hardBrakeReleaseG: Double = 0.15,
+    // 0.35 g flagged ordinary city braking (20–34 "hard" brakes per ride in real data).
+    val hardBrakeG: Double = 0.50,
+    val hardBrakeReleaseG: Double = 0.25,
     val strongAccelG: Double = 0.30,
     val strongAccelReleaseG: Double = 0.12,
     val minGDurationMillis: Long = 300,

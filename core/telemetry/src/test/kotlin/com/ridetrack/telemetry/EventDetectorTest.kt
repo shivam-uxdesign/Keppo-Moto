@@ -16,7 +16,7 @@ class EventDetectorTest {
         val events = buildList {
             for (i in 0 until 50) {
                 val g = when (i) {
-                    in 10..40 -> -0.5 - (if (i == 25) 0.2 else 0.0)
+                    in 10..40 -> -0.6 - (if (i == 25) 0.2 else 0.0)
                     else -> 0.0
                 }
                 addAll(d.onDynamics(ctx(i * 20L), g, 0.0))
@@ -24,8 +24,17 @@ class EventDetectorTest {
         }
         assertEquals(1, events.size)
         assertEquals(RideEventType.HARD_BRAKE, events[0].type)
-        assertEquals(-0.7, events[0].value!!, 1e-9)
+        assertEquals(-0.8, events[0].value!!, 1e-9)
         assertEquals(200L, events[0].timeMillis) // context from when braking began
+    }
+
+    @Test
+    fun `ordinary city braking is not a hard brake`() {
+        val d = EventDetector()
+        val events = buildList {
+            for (i in 0 until 60) addAll(d.onDynamics(ctx(i * 20L), if (i in 10..50) -0.4 else 0.0, 0.0))
+        }
+        assertTrue(events.none { it.type == RideEventType.HARD_BRAKE })
     }
 
     @Test
