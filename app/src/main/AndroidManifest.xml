@@ -8,6 +8,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Moments (opt-in): short rider-facing clips with sound around notable ride events. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Optional pop-up HUD over other apps during a ride; asked for with an explanation. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -19,6 +24,9 @@
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <application
         android:name=".RideTrackApp"
@@ -54,6 +62,6 @@
         <service
             android:name=".ride.RideRecordingService"
             android:exported="false"
-            android:foregroundServiceType="location" />
+            android:foregroundServiceType="location|camera|microphone" />
     </application>
 </manifest>

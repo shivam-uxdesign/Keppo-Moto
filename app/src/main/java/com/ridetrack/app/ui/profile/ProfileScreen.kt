@@ -156,6 +156,8 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit) {
             Spacer(Modifier.height(RtDimens.sm))
         }
 
+        MomentsSection(s, vm)
+
         SectionHeader("Developer")
         RtCard {
             ToggleRow(
@@ -204,7 +206,7 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit) {
 }
 
 @Composable
-private fun ToggleRow(title: String, description: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
+internal fun ToggleRow(title: String, description: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
     Row(
         Modifier
             .fillMaxWidth()

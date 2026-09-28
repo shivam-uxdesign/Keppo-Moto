@@ -1,11 +1,26 @@
 package com.ridetrack.app.hud
 
+import com.ridetrack.app.moments.MomentState
+import com.ridetrack.app.moments.MomentStatus
 import com.ridetrack.app.ride.ActiveRide
 import com.ridetrack.telemetry.model.DataSourceKind
 import com.ridetrack.telemetry.model.GpsQuality
 import com.ridetrack.telemetry.model.TelemetryFrame
 
 enum class HudStatus { RECORDING, STOPPED, GPS_LOST }
+
+/** The Moments camera, as the rider should see it: quiet while buffering, REC while saving. */
+enum class CameraIndicator {
+    OFF, ON, REC;
+
+    companion object {
+        fun from(s: MomentState): CameraIndicator = when {
+            s.status == MomentStatus.OFF || s.status == MomentStatus.PAUSED -> OFF
+            s.saving -> REC
+            else -> ON
+        }
+    }
+}
 
 /** Everything the pop-up shows, already reduced to what's known. Null = unknown. */
 data class HudData(
@@ -29,9 +44,16 @@ data class HudData(
     val rpm: Double? = null,
     val gear: Int? = null,
     val redlineRpm: Int? = null,
+    val camera: CameraIndicator = CameraIndicator.OFF,
 ) {
     companion object {
-        fun from(frame: TelemetryFrame?, active: ActiveRide?, paused: Boolean, stoppedForMillis: Long?): HudData {
+        fun from(
+            frame: TelemetryFrame?,
+            active: ActiveRide?,
+            paused: Boolean,
+            stoppedForMillis: Long?,
+            camera: CameraIndicator = CameraIndicator.OFF,
+        ): HudData {
             val stats = frame?.stats
             val left = stats?.maxLeftLeanDeg
             val right = stats?.maxRightLeanDeg
@@ -68,6 +90,7 @@ data class HudData(
                 rpm = frame?.rpm,
                 gear = frame?.gear,
                 redlineRpm = active?.redlineRpm,
+                camera = camera,
             )
         }
     }

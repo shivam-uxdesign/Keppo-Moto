@@ -8,20 +8,21 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [BikeEntity::class, RideEntity::class, SampleEntity::class, EventEntity::class],
-    version = 2,
+    entities = [BikeEntity::class, RideEntity::class, SampleEntity::class, EventEntity::class, MomentEntity::class],
+    version = 3,
     exportSchema = true,
 )
 abstract class RideTrackDatabase : RoomDatabase() {
     abstract fun bikeDao(): BikeDao
     abstract fun rideDao(): RideDao
+    abstract fun momentDao(): MomentDao
 
     companion object {
         fun create(context: Context): RideTrackDatabase =
             Room.databaseBuilder(context, RideTrackDatabase::class.java, "ridetrack.db")
                 // WAL keeps frequent small ride writes cheap and durable.
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
 
         /** Bike photo + redline, and OBD engine data per sample. Existing rows get NULL (unknown). */
@@ -33,5 +34,21 @@ abstract class RideTrackDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE samples ADD COLUMN gear INTEGER")
             }
         }
+
+        /** Moments (clips/photos). SQL matches schemas/3.json exactly. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(CREATE_MOMENTS)
+                db.execSQL(CREATE_MOMENTS_INDEX)
+            }
+        }
+
+        private const val CREATE_MOMENTS = "CREATE TABLE IF NOT EXISTS `moments` (`id` TEXT NOT NULL, `rideId` TEXT NOT NULL, " +
+            "`kind` TEXT NOT NULL, `types` TEXT NOT NULL, `timeMillis` INTEGER NOT NULL, `latitude` REAL, `longitude` REAL, " +
+            "`speedMps` REAL, `peakValue` REAL, `file` TEXT NOT NULL, `thumbFile` TEXT, `durationMillis` INTEGER, " +
+            "`starred` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`rideId`) REFERENCES `rides`(`id`) " +
+            "ON UPDATE NO ACTION ON DELETE CASCADE )"
+        private const val CREATE_MOMENTS_INDEX =
+            "CREATE INDEX IF NOT EXISTS `index_moments_rideId_timeMillis` ON `moments` (`rideId`, `timeMillis`)"
     }
 }

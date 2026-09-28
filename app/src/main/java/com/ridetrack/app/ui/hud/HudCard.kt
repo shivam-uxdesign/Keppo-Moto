@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.ridetrack.app.data.HudLayout
 import com.ridetrack.app.data.HudSettings
 import com.ridetrack.app.data.HudTheme
+import com.ridetrack.app.hud.CameraIndicator
 import com.ridetrack.app.hud.HudData
 import com.ridetrack.app.hud.HudStatus
 import com.ridetrack.app.ui.components.RevBar
@@ -168,6 +169,21 @@ private fun StatusRow(data: HudData, c: HudColors) {
             HudStatus.GPS_LOST -> "GPS LOST"
         }
         Text(text, style = hudLabel, color = if (data.status == HudStatus.RECORDING) c.muted else color, maxLines = 1)
+        if (data.camera != CameraIndicator.OFF) {
+            Spacer(Modifier.weight(1f))
+            CameraBadge(data.camera, c.muted)
+        }
+    }
+}
+
+/** Tiny camera state: a dim dot + CAM while buffering, red dot + REC while saving. */
+@Composable
+fun CameraBadge(state: CameraIndicator, muted: Color, modifier: Modifier = Modifier) {
+    val rec = state == CameraIndicator.REC
+    Row(modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(6.dp).background(if (rec) RtColors.Error else muted.copy(alpha = 0.6f), CircleShape))
+        Spacer(Modifier.width(4.dp))
+        Text(if (rec) "REC" else "CAM", style = hudLabel, color = if (rec) RtColors.Error else muted.copy(alpha = 0.8f), maxLines = 1)
     }
 }
 

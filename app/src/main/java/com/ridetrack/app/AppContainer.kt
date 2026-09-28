@@ -7,6 +7,8 @@ import com.ridetrack.app.data.RouteCache
 import com.ridetrack.app.data.SettingsRepository
 import com.ridetrack.app.data.db.RideTrackDatabase
 import com.ridetrack.app.hud.HudController
+import com.ridetrack.app.moments.MomentRepository
+import com.ridetrack.app.moments.MomentsHub
 import com.ridetrack.app.ride.RideSessionManager
 import com.ridetrack.app.sensors.BatteryMonitor
 import com.ridetrack.app.sensors.PhoneTelemetrySource
@@ -24,6 +26,8 @@ class AppContainer(context: Context) {
     val bikes = BikeRepository(database.bikeDao())
     val rides = RideRepository(database.rideDao())
     val routes = RouteCache(rides)
+    val moments = MomentRepository(appContext, database.momentDao())
+    val momentsHub = MomentsHub()
     val settings = SettingsRepository(appContext)
     val sensorInventory = SensorInventory(appContext)
     val battery = BatteryMonitor(appContext)
@@ -34,10 +38,11 @@ class AppContainer(context: Context) {
         context = appContext,
         rides = rides,
         bikes = bikes,
+        momentsHub = momentsHub,
         settings = settings,
         phoneSource = { phoneSource() },
         scope = appScope,
     )
 
-    val hud = HudController(appContext, session, settings)
+    val hud = HudController(appContext, session, settings, momentsHub)
 }

@@ -49,6 +49,10 @@ import com.ridetrack.app.ui.components.HairlineDivider
 import com.ridetrack.app.ui.components.Label
 import com.ridetrack.app.ui.components.PrimaryButton
 import com.ridetrack.app.ui.components.RouteMap
+import com.ridetrack.app.ui.components.MapPin
+import com.ridetrack.app.ui.moments.MomentStrip
+import com.ridetrack.app.ui.moments.momentColor
+import com.ridetrack.app.ui.moments.rememberMoments
 import com.ridetrack.app.ui.components.Stat
 import com.ridetrack.app.ui.components.StatRow
 import com.ridetrack.app.ui.components.riseIn
@@ -61,7 +65,8 @@ import com.ridetrack.telemetry.model.DataSourceKind
 import com.ridetrack.telemetry.model.Ride
 
 @Composable
-fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Unit, onShare: () -> Unit) {
+fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Unit, onShare: () -> Unit, onOpenMoment: (String) -> Unit) {
+    val moments = rememberMoments(rideId)
     val vm = appViewModel(key = "summary-$rideId") { RideSummaryViewModel(it, rideId) }
     val s by vm.state.collectAsStateWithLifecycle()
     BackHandler(onBack = onDone)
@@ -126,7 +131,13 @@ fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Un
                     .height(220.dp)
                     .riseIn(2),
                 animateDraw = true,
+                pins = moments.mapNotNull { m -> if (m.latitude != null && m.longitude != null) MapPin(m.id, m.latitude, m.longitude, m.thumb, momentColor(m)) else null },
+                onPinClick = onOpenMoment,
             )
+            if (moments.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                MomentStrip(moments, onOpen = onOpenMoment, modifier = Modifier.riseIn(3))
+            }
 
             Spacer(Modifier.height(26.dp))
             Column(Modifier.riseIn(3)) {

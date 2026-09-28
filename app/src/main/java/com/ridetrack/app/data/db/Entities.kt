@@ -93,3 +93,27 @@ data class EventEntity(
     val speedMps: Double?,
     val value: Double?,
 )
+
+@Entity(
+    tableName = "moments",
+    foreignKeys = [ForeignKey(entity = RideEntity::class, parentColumns = ["id"], childColumns = ["rideId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index(value = ["rideId", "timeMillis"])],
+)
+data class MomentEntity(
+    @PrimaryKey val id: String,
+    val rideId: String,
+    /** CLIP or PHOTO. */
+    val kind: String,
+    /** Comma-separated RideEventType names that triggered the clip; empty for photos. */
+    val types: String,
+    val timeMillis: Long,
+    val latitude: Double?,
+    val longitude: Double?,
+    val speedMps: Double?,
+    val peakValue: Double?,
+    /** File names relative to files/moments/<rideId>/. */
+    val file: String,
+    val thumbFile: String?,
+    val durationMillis: Long?,
+    val starred: Boolean,
+)

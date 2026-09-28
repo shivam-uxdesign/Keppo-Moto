@@ -1,6 +1,8 @@
 package com.ridetrack.telemetry.processing
 
 import com.ridetrack.telemetry.model.CalibrationInfo
+import com.ridetrack.telemetry.moments.MomentTrigger
+import com.ridetrack.telemetry.moments.MomentTriggers
 import com.ridetrack.telemetry.model.CalibrationStatus
 import com.ridetrack.telemetry.model.CaptureOutcome
 import com.ridetrack.telemetry.model.DataSourceKind
@@ -34,7 +36,15 @@ class TelemetryPipeline(
     private val startNanos: Long,
     private val startWallMillis: Long,
     thresholds: EventThresholds = EventThresholds(),
+    /** Enables moment detection (clips); null = off. */
+    momentTriggers: MomentTriggers? = null,
 ) {
+    private val moments = momentTriggers?.let { MomentTrigger(it) }
+    private val momentEvents = ArrayList<Pair<RideEvent, Long>>()
+
+    /** Moment events detected since the last call, each with the wall time it was reported. */
+    fun takeMomentEvents(): List<Pair<RideEvent, Long>> = momentEvents.toList().also { momentEvents.clear() }
+
     private val gps = GpsProcessor()
     private val lean = LeanEstimator(calibration, sensors)
     private val dynamics = DynamicsProcessor(calibration, sensors)
@@ -68,6 +78,7 @@ class TelemetryPipeline(
 
     fun end(nowNanos: Long): List<RideEvent> {
         accountTime(nowNanos)
+        moments?.flush()?.forEach { momentEvents += it to wallMillis(nowNanos) }
         val out = detector.flush().map(::record).toMutableList()
         out += record(RideEvent(RideEventType.END, wallMillis(nowNanos), gps.latitude, gps.longitude, currentSpeed()))
         return out
@@ -172,6 +183,7 @@ class TelemetryPipeline(
         when (autoPause.update(r.timeNanos, speed)) {
             AutoPauseDetector.Transition.STOPPED -> {
                 out += detector.flush()
+                moments?.flush()?.forEach { momentEvents += it to ctx.timeMillis }
                 if (autoPause.isCountedStop) {
                     out += RideEvent(RideEventType.STOP, ctx.timeMillis, ctx.latitude, ctx.longitude, speed)
                 }
@@ -195,7 +207,9 @@ class TelemetryPipeline(
         val longG = dynamics.longitudinalG
         accumulator.onDynamics(longG, lateralG())
         leanDeg?.let(accumulator::onLean)
-        return detector.onDynamics(context(r.timeNanos), longG, leanDeg).map(::record)
+        val ctx = context(r.timeNanos)
+        moments?.onDynamics(ctx, longG, leanDeg)?.forEach { momentEvents += it to ctx.timeMillis }
+        return detector.onDynamics(ctx, longG, leanDeg).map(::record)
     }
 
     private fun onStatus(r: SourceStatusReading): List<RideEvent> {

@@ -1,6 +1,16 @@
 package com.ridetrack.app.ride
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import com.ridetrack.app.data.MomentSettings
+import com.ridetrack.app.moments.MomentRequest
+import com.ridetrack.app.moments.MomentsHub
+import com.ridetrack.telemetry.model.MountOrientation
+import com.ridetrack.telemetry.moments.MomentPlanner
+import com.ridetrack.telemetry.moments.MomentTriggers
+import com.ridetrack.telemetry.moments.PhotoScheduler
 import android.os.SystemClock
 import android.util.Log
 import com.ridetrack.app.data.BikeRepository
@@ -55,6 +65,10 @@ data class ActiveRide(
     val startWallMillis: Long,
     val calibrated: Boolean,
     val sensors: SensorAvailability,
+    /** Moments capture was requested for this ride (enabled + camera permission). */
+    val moments: MomentSettings? = null,
+    /** Phone mounted sideways (landscape): orients clips and photos. */
+    val landscapeMount: Boolean = false,
     /** Engine redline for the rev meter; null = unknown. */
     val redlineRpm: Int? = null,
     /** Set when recent writes failed; data is being held in memory and retried. */
@@ -73,6 +87,7 @@ class RideSessionManager(
     private val context: Context,
     private val rides: RideRepository,
     private val bikes: BikeRepository,
+    private val momentsHub: MomentsHub,
     private val settings: SettingsRepository,
     private val phoneSource: () -> TelemetrySource,
     private val scope: CoroutineScope,
@@ -141,8 +156,16 @@ class RideSessionManager(
             return null
         }
 
-        val pipeline = TelemetryPipeline(source.kind, calibration, source.sensors, startNanos, startWall)
-        val rec = Recorder(rideId, pipeline).also { it.pendingEvents += pipeline.start() }
+        val m = prefs.moments.takeIf { it.enabled && hasCamera() }
+        val triggers = m?.takeIf { it.anyTrigger }?.let { MomentTriggers(it.braking, it.acceleration, it.lean) }
+        val pipeline = TelemetryPipeline(source.kind, calibration, source.sensors, startNanos, startWall, momentTriggers = triggers)
+        val rec = Recorder(
+            rideId,
+            pipeline,
+            planner = MomentPlanner().takeIf { triggers != null },
+            photos = m?.photos?.takeIf { it.minutes > 0 }?.let { PhotoScheduler(it.minutes * 60_000L) },
+        ).also { it.pendingEvents += pipeline.start() }
+        momentsHub.reset()
         recorder = rec
         _active.value = ActiveRide(
             rideId = rideId,
@@ -153,6 +176,8 @@ class RideSessionManager(
             calibrated = calibration != null,
             sensors = source.sensors,
             redlineRpm = if (demo && prefs.demoObd) DemoRideModel.DEMO_REDLINE_RPM else bike.redlineRpm,
+            moments = m,
+            landscapeMount = bike.mountOrientation == MountOrientation.LANDSCAPE,
         )
         _frame.value = pipeline.frame(startNanos).first
         dispatch(RideAction.Start(rideId))
@@ -173,7 +198,8 @@ class RideSessionManager(
             if (phoneSource != null) gpsJob = launchGps(phoneSource, rec)
             tickLoop(rec, bike.id, persistCalibration = !demo)
         }
-        if (source.kind == DataSourceKind.PHONE) RideRecordingService.start(context)
+        // Demo rides need the service only to film Moments.
+        if (source.kind == DataSourceKind.PHONE || m != null) RideRecordingService.start(context)
         rideId
     }
 
@@ -217,6 +243,7 @@ class RideSessionManager(
             rec.pendingEvents += events
             _frame.value = frame
             syncAutoPause(rec)
+            captureMoments(rec, frame)
             rec.pipeline.takeNewCalibration()?.let { cal ->
                 _active.update { it?.copy(calibrated = true) }
                 // Next ride starts with this mount; it is re-learned every ride anyway.
@@ -226,6 +253,23 @@ class RideSessionManager(
             if (tick % FLUSH_EVERY_TICKS == 0L) flush(rec)
         }
     }
+
+    /** Decides when to film; the recorder in the service does the filming. */
+    private fun captureMoments(rec: Recorder, frame: TelemetryFrame) {
+        rec.planner?.let { planner ->
+            rec.pipeline.takeMomentEvents().forEach { (event, at) -> planner.add(event, at) }
+            planner.due(frame.timeMillis).forEach { momentsHub.submit(MomentRequest.Clip(rec.rideId, it)) }
+            momentsHub.setEventPending(planner.hasPending)
+        }
+        rec.photos?.let { photos ->
+            if (photos.onTick(frame.timeMillis, frame.stats.movingMillis, frame.isStopped)) {
+                momentsHub.submit(MomentRequest.Photo(rec.rideId, frame.timeMillis, frame.latitude, frame.longitude, frame.speedMps))
+            }
+        }
+    }
+
+    private fun hasCamera() =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
     private fun syncAutoPause(rec: Recorder) {
         val shouldPause = autoPauseEnabled.value && rec.pipeline.isPausedStop
@@ -285,6 +329,12 @@ class RideSessionManager(
                 val now = SystemClock.elapsedRealtimeNanos()
                 rec.pendingEvents += rec.pipeline.end(now)
                 rec.pendingSamples += rec.pipeline.sample(now)
+                rec.planner?.let { planner ->
+                    val end = rec.pipeline.wallMillis(now)
+                    rec.pipeline.takeMomentEvents().forEach { (event, at) -> planner.add(event, at) }
+                    planner.flush(end).forEach { momentsHub.submit(MomentRequest.Clip(rec.rideId, it)) }
+                    momentsHub.setEventPending(false)
+                }
                 var saved = false
                 for (attempt in 1..3) {
                     if (flush(rec)) {
@@ -323,7 +373,12 @@ class RideSessionManager(
         dispatch(RideAction.Acknowledge)
     }
 
-    private class Recorder(val rideId: String, val pipeline: TelemetryPipeline) {
+    private class Recorder(
+        val rideId: String,
+        val pipeline: TelemetryPipeline,
+        val planner: MomentPlanner? = null,
+        val photos: PhotoScheduler? = null,
+    ) {
         val pendingSamples = ArrayList<TelemetrySample>()
         val pendingEvents = ArrayList<RideEvent>()
     }

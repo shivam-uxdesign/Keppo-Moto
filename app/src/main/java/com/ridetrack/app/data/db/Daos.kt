@@ -91,3 +91,27 @@ interface RideDao {
     @Query("SELECT MAX(timeMillis) FROM samples WHERE rideId = :rideId")
     suspend fun lastSampleTime(rideId: String): Long?
 }
+
+@Dao
+interface MomentDao {
+    @Query("SELECT * FROM moments WHERE rideId = :rideId ORDER BY timeMillis ASC")
+    fun observeForRide(rideId: String): Flow<List<MomentEntity>>
+
+    @Query("SELECT * FROM moments WHERE rideId = :rideId ORDER BY timeMillis ASC")
+    suspend fun forRide(rideId: String): List<MomentEntity>
+
+    @Query("SELECT * FROM moments")
+    suspend fun all(): List<MomentEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(m: MomentEntity)
+
+    @Query("UPDATE moments SET starred = :starred WHERE id = :id")
+    suspend fun setStarred(id: String, starred: Boolean)
+
+    @Query("DELETE FROM moments WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM moments")
+    suspend fun deleteAll()
+}

@@ -1,6 +1,9 @@
 package com.ridetrack.app.ride
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.content.pm.PackageManager
+import com.ridetrack.app.moments.MomentRecorder
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
@@ -37,11 +40,13 @@ class RideRecordingService : LifecycleService() {
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var started = false
+    private var recorder: MomentRecorder? = null
+    private var stopping = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACTION_STOP) {
-            shutdown()
+            stopGracefully()
             return START_NOT_STICKY
         }
         val session = (application as RideTrackApp).container.session
@@ -56,12 +61,56 @@ class RideRecordingService : LifecycleService() {
             }
             acquireWakeLock()
             observe(session)
+            startMoments(session)
         }
         return START_NOT_STICKY
     }
 
+    /** Filming Moments needs camera/microphone foreground types, declared only when granted. */
+    private fun startMoments(session: RideSessionManager) {
+        val active = session.active.value ?: return
+        val settings = active.moments ?: return
+        val c = (application as RideTrackApp).container
+        val r = MomentRecorder(this, this, c.moments, c.momentsHub, settings, active.landscapeMount, c.appScope)
+        recorder = r
+        r.start()
+        lifecycleScope.launch {
+            session.state.collectLatest { st -> r.setRidePaused(st is RideState.Paused) }
+        }
+    }
+
+    /** Lets Moments write its last clips (bounded) before leaving the foreground. */
+    private fun stopGracefully() {
+        if (stopping) return
+        stopping = true
+        val r = recorder
+        recorder = null
+        if (r == null) {
+            shutdown()
+            return
+        }
+        (application as RideTrackApp).container.appScope.launch {
+            runCatching { r.finish() }
+            launch(kotlinx.coroutines.Dispatchers.Main) { shutdown() }
+        }
+    }
+
+    private fun foregroundTypes(): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return 0
+        var type = 0
+        if (Permissions.hasFineLocation(this)) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        val moments = (application as RideTrackApp).container.session.active.value?.moments != null
+        if (moments && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (granted(Manifest.permission.CAMERA)) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            if (granted(Manifest.permission.RECORD_AUDIO)) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        }
+        return type
+    }
+
+    private fun granted(p: String) = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
+
     private fun enterForeground(): Boolean = try {
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
+        val type = foregroundTypes()
         ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(null), type)
         true
     } catch (e: Exception) {
@@ -75,7 +124,7 @@ class RideRecordingService : LifecycleService() {
     @SuppressLint("MissingPermission")
     private fun observe(session: RideSessionManager) {
         lifecycleScope.launch {
-            session.state.collectLatest { if (!it.isActive && it !is RideState.Saving) shutdown() }
+            session.state.collectLatest { if (!it.isActive && it !is RideState.Saving) stopGracefully() }
         }
         lifecycleScope.launch {
             session.frame.filterNotNull().sample(NOTIFICATION_UPDATE_MILLIS).collectLatest { frame ->
@@ -142,8 +191,9 @@ class RideRecordingService : LifecycleService() {
         private const val ACTION_STOP = "com.ridetrack.app.STOP_RECORDING"
 
         fun start(context: Context) {
-            // A location-type foreground service requires the location permission.
-            if (!Permissions.hasFineLocation(context)) return
+            // Each foreground type needs its permission: location for GPS, camera for Moments.
+            val camera = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            if (!Permissions.hasFineLocation(context) && !camera) return
             try {
                 ContextCompat.startForegroundService(context, Intent(context, RideRecordingService::class.java))
             } catch (e: Exception) {

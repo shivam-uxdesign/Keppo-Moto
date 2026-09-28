@@ -51,6 +51,13 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.expressions.Expression
+import androidx.compose.runtime.rememberUpdatedState
+import com.ridetrack.app.moments.ClipWriter
+import com.ridetrack.app.ui.moments.circlePin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
@@ -65,6 +72,11 @@ private const val ROUTE_SOURCE = "route-source"
 private const val ENDS_SOURCE = "ends-source"
 private const val MARKER_SOURCE = "marker-source"
 private const val PROGRESS_SOURCE = "progress-source"
+private const val PINS_SOURCE = "moment-pins"
+private const val PINS_LAYER = "moment-pins"
+
+/** A moment on the map. */
+data class MapPin(val id: String, val latitude: Double, val longitude: Double, val thumb: java.io.File?, val color: androidx.compose.ui.graphics.Color)
 
 /**
  * Fallback dark raster basemap (OpenStreetMap data, CARTO tiles) used when no MapTiler key
@@ -113,6 +125,9 @@ fun RouteMap(
     progress: Int? = null,
     /** Draw the route progressively once when it first appears (ride summary). */
     animateDraw: Boolean = false,
+    /** Round thumbnails where moments happened; tapping one calls [onPinClick]. */
+    pins: List<MapPin> = emptyList(),
+    onPinClick: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -220,6 +235,42 @@ fun RouteMap(
         }
     }
 
+    val pinClick by rememberUpdatedState(onPinClick)
+    LaunchedEffect(map) {
+        val m = map ?: return@LaunchedEffect
+        m.addOnMapClickListener { latLng ->
+            val px = m.projection.toScreenLocation(latLng)
+            val slop = 20f * context.resources.displayMetrics.density
+            val hit = m.queryRenderedFeatures(android.graphics.RectF(px.x - slop, px.y - slop, px.x + slop, px.y + slop), PINS_LAYER)
+                .firstOrNull()?.getStringProperty("id")
+            if (hit != null) pinClick(hit)
+            hit != null
+        }
+    }
+
+    LaunchedEffect(style, pins) {
+        val s = style ?: return@LaunchedEffect
+        val sizePx = (40 * context.resources.displayMetrics.density).toInt()
+        val ringPx = 2.5f * context.resources.displayMetrics.density
+        val images = withContext(Dispatchers.IO) {
+            pins.associate { pin ->
+                val thumb = pin.thumb?.let { runCatching { ClipWriter.load(it, 160) }.getOrNull() }
+                pin.id to circlePin(thumb, pin.color, sizePx, ringPx)
+            }
+        }
+        images.forEach { (id, bmp) -> s.addImage("pin-$id", bmp) }
+        s.getSourceAs<GeoJsonSource>(PINS_SOURCE)?.setGeoJson(
+            FeatureCollection.fromFeatures(
+                pins.map { pin ->
+                    Feature.fromGeometry(Point.fromLngLat(pin.longitude, pin.latitude)).apply {
+                        addStringProperty("id", pin.id)
+                        addStringProperty("icon", "pin-${pin.id}")
+                    }
+                },
+            ),
+        )
+    }
+
     Box(
         modifier
             .clip(RoundedCornerShape(RtDimens.cardRadius))
@@ -302,6 +353,14 @@ private fun addRouteLayers(s: Style) {
             PropertyFactory.circleColor(hex(RtColors.TextPrimary)),
             PropertyFactory.circleStrokeColor("#000000"),
             PropertyFactory.circleStrokeWidth(2f),
+        ),
+    )
+    s.addSource(GeoJsonSource(PINS_SOURCE))
+    s.addLayer(
+        SymbolLayer(PINS_LAYER, PINS_SOURCE).withProperties(
+            PropertyFactory.iconImage(Expression.get("icon")),
+            PropertyFactory.iconAllowOverlap(true),
+            PropertyFactory.iconIgnorePlacement(true),
         ),
     )
     s.addLayer(

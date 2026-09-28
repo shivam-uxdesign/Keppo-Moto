@@ -11,6 +11,7 @@ navigation = "2.8.5"
 room = "2.6.1"
 datastore = "1.1.1"
 maplibre = "11.8.0"
+camerax = "1.4.1"
 junit = "4.13.2"
 
 [libraries]
@@ -37,6 +38,9 @@ androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
 junit = { module = "junit:junit", version.ref = "junit" }
 

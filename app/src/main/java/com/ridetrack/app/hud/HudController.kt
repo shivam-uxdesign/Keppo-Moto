@@ -1,6 +1,7 @@
 package com.ridetrack.app.hud
 
 import android.content.Context
+import com.ridetrack.app.moments.MomentsHub
 import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.Lifecycle
@@ -27,6 +28,7 @@ class HudController(
     private val context: Context,
     private val session: RideSessionManager,
     private val settings: SettingsRepository,
+    private val moments: MomentsHub,
 ) {
     private val scope = MainScope()
     private val appVisible = MutableStateFlow(true)
@@ -76,7 +78,7 @@ class HudController(
         }
 
         scope.launch {
-            combine(session.frame, session.state, session.active) { _, _, _ -> Unit }.collect { refreshData() }
+            combine(session.frame, session.state, session.active, moments.state) { _, _, _, _ -> Unit }.collect { refreshData() }
         }
 
         scope.launch {
@@ -95,6 +97,7 @@ class HudController(
             active = session.active.value,
             paused = paused,
             stoppedForMillis = stoppedSinceMillis?.let { now - it },
+            camera = CameraIndicator.from(moments.state.value),
         )
     }
 

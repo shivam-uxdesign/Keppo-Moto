@@ -42,6 +42,25 @@ enum class HudTheme(val label: String) { DARK("Dark"), HIGH_CONTRAST("High contr
 
 enum class MapStyle(val label: String) { DARK("Dark"), SATELLITE("Satellite") }
 
+enum class PhotoInterval(val label: String, val minutes: Int) { OFF("Off", 0), TEN("Every 10 min", 10), FIFTEEN("Every 15 min", 15) }
+
+enum class VideoQuality(val label: String, val height: Int, val bitrate: Int) {
+    HD("720p", 720, 5_000_000),
+    FULL_HD("1080p", 1080, 8_000_000),
+}
+
+/** Moments: rider-facing clips around notable events, plus periodic photos. Opt-in. */
+data class MomentSettings(
+    val enabled: Boolean = false,
+    val braking: Boolean = true,
+    val acceleration: Boolean = true,
+    val lean: Boolean = true,
+    val photos: PhotoInterval = PhotoInterval.FIFTEEN,
+    val quality: VideoQuality = VideoQuality.HD,
+) {
+    val anyTrigger: Boolean get() = braking || acceleration || lean
+}
+
 /** Floating pop-up HUD shown over other apps during a ride. */
 data class HudSettings(
     val enabled: Boolean = true,
@@ -72,6 +91,7 @@ data class Settings(
     val selectedBikeId: String? = null,
     val hud: HudSettings = HudSettings(),
     val mapStyle: MapStyle = MapStyle.DARK,
+    val moments: MomentSettings = MomentSettings(),
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -93,6 +113,12 @@ class SettingsRepository(private val context: Context) {
         val hudY = intPreferencesKey("hud_y")
         val hudPromptDismissed = booleanPreferencesKey("hud_prompt_dismissed")
         val mapStyle = stringPreferencesKey("map_style")
+        val momentsEnabled = booleanPreferencesKey("moments_enabled")
+        val momentsBraking = booleanPreferencesKey("moments_braking")
+        val momentsAccel = booleanPreferencesKey("moments_accel")
+        val momentsLean = booleanPreferencesKey("moments_lean")
+        val momentsPhotos = stringPreferencesKey("moments_photos")
+        val momentsQuality = stringPreferencesKey("moments_quality")
     }
 
     private inline fun <reified T : Enum<T>> enumOf(name: String?, fallback: T): T =
@@ -120,6 +146,14 @@ class SettingsRepository(private val context: Context) {
                 promptDismissed = p[Keys.hudPromptDismissed] ?: false,
             ),
             mapStyle = enumOf(p[Keys.mapStyle], MapStyle.DARK),
+            moments = MomentSettings(
+                enabled = p[Keys.momentsEnabled] ?: false,
+                braking = p[Keys.momentsBraking] ?: true,
+                acceleration = p[Keys.momentsAccel] ?: true,
+                lean = p[Keys.momentsLean] ?: true,
+                photos = enumOf(p[Keys.momentsPhotos], PhotoInterval.FIFTEEN),
+                quality = enumOf(p[Keys.momentsQuality], VideoQuality.HD),
+            ),
         )
     }
 
@@ -143,4 +177,13 @@ class SettingsRepository(private val context: Context) {
     }
     suspend fun setHudPromptDismissed(dismissed: Boolean) = context.dataStore.edit { it[Keys.hudPromptDismissed] = dismissed }
     suspend fun setMapStyle(style: MapStyle) = context.dataStore.edit { it[Keys.mapStyle] = style.name }
+
+    suspend fun setMoments(m: MomentSettings) = context.dataStore.edit {
+        it[Keys.momentsEnabled] = m.enabled
+        it[Keys.momentsBraking] = m.braking
+        it[Keys.momentsAccel] = m.acceleration
+        it[Keys.momentsLean] = m.lean
+        it[Keys.momentsPhotos] = m.photos.name
+        it[Keys.momentsQuality] = m.quality.name
+    }
 }

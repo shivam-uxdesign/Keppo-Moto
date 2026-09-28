@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ridetrack.app.AppContainer
 import com.ridetrack.app.data.LiveMetric
 import com.ridetrack.app.ride.ActiveRide
+import com.ridetrack.app.moments.MomentState
 import com.ridetrack.app.sensors.BatteryState
 import com.ridetrack.app.sensors.Permissions
 import kotlinx.coroutines.delay
@@ -28,6 +29,7 @@ data class LiveChrome(
     val hudEnabled: Boolean = false,
     val hudPromptDismissed: Boolean = true,
     val location: LocationEnv = LocationEnv(),
+    val moments: MomentState = MomentState(),
 )
 
 /** Whether the phone can deliver GPS at all right now (independent of signal). */
@@ -43,7 +45,14 @@ class LiveRideViewModel(private val c: AppContainer) : ViewModel() {
         c.settings.settings,
         c.battery.observe(),
         location,
-    ) { state, active, settings, battery, loc ->
+        c.momentsHub.state,
+    ) { values ->
+        val state = values[0] as RideState
+        val active = values[1] as ActiveRide?
+        val settings = values[2] as com.ridetrack.app.data.Settings
+        val battery = values[3] as BatteryState?
+        val loc = values[4] as LocationEnv
+        val moments = values[5] as MomentState
         LiveChrome(
             rideState = state,
             active = active,
@@ -54,6 +63,7 @@ class LiveRideViewModel(private val c: AppContainer) : ViewModel() {
             hudEnabled = settings.hud.enabled,
             hudPromptDismissed = settings.hud.promptDismissed,
             location = loc,
+            moments = moments,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LiveChrome(rideState = c.session.state.value, active = c.session.active.value))
 

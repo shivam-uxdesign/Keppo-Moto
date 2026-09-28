@@ -66,6 +66,10 @@ import com.ridetrack.app.ui.components.EmptyState
 import com.ridetrack.app.ui.components.HairlineDivider
 import com.ridetrack.app.ui.components.LineChart
 import com.ridetrack.app.ui.components.RouteMap
+import com.ridetrack.app.ui.components.MapPin
+import com.ridetrack.app.ui.moments.MomentStrip
+import com.ridetrack.app.ui.moments.momentColor
+import com.ridetrack.app.ui.moments.rememberMoments
 import com.ridetrack.app.ui.components.ScreenHeader
 import com.ridetrack.app.ui.components.SecondaryButton
 import com.ridetrack.app.ui.components.SectionHeader
@@ -82,7 +86,8 @@ import com.ridetrack.telemetry.model.DataSourceKind
 import kotlin.math.roundToInt
 
 @Composable
-fun RideDetailScreen(rideId: String, onBack: () -> Unit, onReplay: () -> Unit, onShare: () -> Unit) {
+fun RideDetailScreen(rideId: String, onBack: () -> Unit, onReplay: () -> Unit, onShare: () -> Unit, onOpenMoment: (String) -> Unit) {
+    val moments = rememberMoments(rideId)
     val vm = appViewModel(key = "detail-$rideId") { RideDetailViewModel(it, rideId) }
     val s by vm.state.collectAsStateWithLifecycle()
     val scrub by vm.scrub.collectAsStateWithLifecycle()
@@ -154,6 +159,8 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onReplay: () -> Unit, o
                         route = data.route,
                         marker = sample?.let { samples.positionAt(it.timeMillis) },
                         progress = idx?.let { data.routeCountAt.getOrNull(it) },
+                        pins = moments.mapNotNull { m -> if (m.latitude != null && m.longitude != null) MapPin(m.id, m.latitude, m.longitude, m.thumb, momentColor(m)) else null },
+                        onPinClick = onOpenMoment,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(250.dp),
@@ -172,6 +179,10 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onReplay: () -> Unit, o
                 }
             }
 
+            if (moments.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                MomentStrip(moments, onOpen = onOpenMoment)
+            }
             Spacer(Modifier.height(20.dp))
             StatRow(
                 listOf(

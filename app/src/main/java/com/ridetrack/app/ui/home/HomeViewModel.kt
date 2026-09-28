@@ -96,6 +96,9 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
     }
 
     fun discardUnfinished(ride: Ride) {
-        viewModelScope.launch { c.rides.delete(ride.id) }
+        viewModelScope.launch {
+            c.rides.delete(ride.id)
+            c.moments.deleteFilesForRide(ride.id)
+        }
     }
 }

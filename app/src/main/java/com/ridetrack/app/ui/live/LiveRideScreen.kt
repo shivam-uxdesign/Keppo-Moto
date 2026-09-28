@@ -57,7 +57,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ridetrack.app.data.LiveMetric
+import com.ridetrack.app.hud.CameraIndicator
 import com.ridetrack.app.hud.OverlayPermission
+import com.ridetrack.app.moments.MomentStatus
+import com.ridetrack.app.moments.PauseReason
+import com.ridetrack.app.ui.hud.CameraBadge
 import com.ridetrack.app.ui.appViewModel
 import com.ridetrack.app.ui.components.Chip
 import com.ridetrack.app.ui.components.DemoBadge
@@ -227,9 +231,22 @@ private fun TopBar(chrome: LiveChrome, frame: TelemetryFrame?) {
             }
             Text(text, style = RtType.caption, color = color)
         }
+        CameraIndicator.from(chrome.moments).takeIf { it != CameraIndicator.OFF }?.let { cam ->
+            CameraBadge(cam, RtColors.TextSecondary)
+        }
         chrome.battery?.let { b ->
             Text("${b.percent}%", style = RtType.caption, color = if (b.isLow) RtColors.Warning else RtColors.TextSecondary)
         }
+    }
+    // Moments were requested but can't film right now: say why, once, quietly.
+    val m = chrome.moments
+    if (chrome.active?.moments != null && m.status == MomentStatus.PAUSED && m.reason != null && m.reason != PauseReason.RIDE_PAUSED) {
+        Text(
+            "Moments: ${m.reason.message.replaceFirstChar { it.lowercase() }}",
+            style = RtType.caption,
+            color = RtColors.TextSecondary,
+            modifier = Modifier.padding(top = RtDimens.xs),
+        )
     }
     if (chrome.active?.storageProblem == true) {
         Text(

@@ -51,6 +51,7 @@ import com.ridetrack.app.ui.hud.HudSettingsScreen
 import com.ridetrack.app.ui.live.LiveRideScreen
 import com.ridetrack.app.ui.profile.ProfileScreen
 import com.ridetrack.app.share.ShareRideScreen
+import com.ridetrack.app.ui.moments.MomentViewerScreen
 import com.ridetrack.app.ui.rides.RidesMapScreen
 import com.ridetrack.app.ui.rides.RidesScreen
 import com.ridetrack.app.ui.summary.RideSummaryScreen
@@ -72,6 +73,8 @@ object Routes {
     const val RIDES_MAP = "rides-map"
     const val SHARE = "share/{rideId}"
     fun share(id: String) = "share/$id"
+    const val MOMENTS = "moments/{rideId}/{momentId}"
+    fun moments(rideId: String, momentId: String) = "moments/$rideId/$momentId"
 
     fun summary(id: String) = "summary/$id"
     fun detail(id: String) = "ride/$id"
@@ -173,6 +176,7 @@ fun RideTrackNavHost() {
                         onDone = { nav.navigate(Routes.HOME) { popUpTo(Routes.HOME) { inclusive = true } } },
                         onOpenDetail = { nav.navigate(Routes.detail(id)) { popUpTo(Routes.HOME) } },
                         onShare = { nav.navigate(Routes.share(id)) },
+                        onOpenMoment = { nav.navigate(Routes.moments(id, it)) },
                     )
                 }
                 composable(Routes.DETAIL, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
@@ -182,6 +186,20 @@ fun RideTrackNavHost() {
                         onBack = { nav.popBackStack() },
                         onReplay = { nav.navigate(Routes.replay(id)) },
                         onShare = { nav.navigate(Routes.share(id)) },
+                        onOpenMoment = { nav.navigate(Routes.moments(id, it)) },
+                    )
+                }
+                composable(
+                    Routes.MOMENTS,
+                    arguments = listOf(
+                        navArgument("rideId") { type = NavType.StringType },
+                        navArgument("momentId") { type = NavType.StringType },
+                    ),
+                ) { entry ->
+                    MomentViewerScreen(
+                        rideId = entry.arguments?.getString("rideId").orEmpty(),
+                        startId = entry.arguments?.getString("momentId"),
+                        onBack = { nav.popBackStack() },
                     )
                 }
                 composable(Routes.SHARE, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
