@@ -43,6 +43,14 @@ android {
     }
 
     buildTypes {
+        // `-PshrinkDebug=true`: drop unused library code so the phone APK fits a chat
+        // upload. Our own classes are all kept and nothing is renamed or optimised.
+        if (providers.gradleProperty("shrinkDebug").orNull == "true") {
+            debug {
+                isMinifyEnabled = true
+                proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-debug-shrink.pro")
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
