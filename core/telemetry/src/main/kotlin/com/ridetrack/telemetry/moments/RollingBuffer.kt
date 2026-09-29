@@ -76,4 +76,33 @@ class RollingBuffer(private val capacityMicros: Long = 45_000_000L) {
         video.clear()
         audio.clear()
     }
+
+    /** Sample counts and the video time span, for diagnostics. */
+    @Synchronized
+    fun describe(): String {
+        val span = if (video.size > 1) (video.last().wallMicros - video.first().wallMicros) / 1_000_000.0 else 0.0
+        return "video=${video.size} audio=${audio.size} span=${"%.1f".format(java.util.Locale.US, span)}s " +
+            "bytes=${(video.sumOf { it.data.size.toLong() } + audio.sumOf { it.data.size.toLong() }) / 1024}KB"
+    }
+
+    companion object {
+        /**
+         * Video and audio merged in time order (video first on ties), which is how a muxer
+         * expects to receive them. true = video.
+         */
+        fun interleave(video: List<EncodedSample>, audio: List<EncodedSample>): List<Pair<Boolean, EncodedSample>> {
+            val out = ArrayList<Pair<Boolean, EncodedSample>>(video.size + audio.size)
+            var v = 0
+            var a = 0
+            while (v < video.size || a < audio.size) {
+                val takeVideo = a >= audio.size || (v < video.size && video[v].wallMicros <= audio[a].wallMicros)
+                out += if (takeVideo) true to video[v++] else false to audio[a++]
+            }
+            return out
+        }
+    }
 }
+
+/** One line of the Moments diagnostics log: UTC time, then the message. */
+fun momentLogLine(wallMillis: Long, message: String): String =
+    java.time.Instant.ofEpochMilli(wallMillis).toString().substring(11, 23) + "Z  " + message.replace('\n', ' ')

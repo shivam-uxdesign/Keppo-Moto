@@ -5,6 +5,8 @@ import android.content.Intent
 import androidx.core.content.FileProvider
 import com.ridetrack.app.AppContainer
 import com.ridetrack.app.BuildConfig
+import com.ridetrack.app.moments.Moment
+import com.ridetrack.app.moments.MomentLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -44,6 +46,11 @@ object ExportShare {
                     put("$folder$stem.json", RideExporter.json(ride, bike?.displayName, bike?.let { it.calibration != null }, track, BuildConfig.VERSION_NAME))
                     put("$folder$stem.csv", RideExporter.csv(ride, track))
                     put("$folder$stem.gpx", RideExporter.gpx(ride, track))
+                    // Moments diagnostics: the capture log and what was saved (files themselves are not included).
+                    val log = File(c.moments.dir(ride.id), MomentLog.FILE_NAME)
+                    if (log.exists()) put("${folder}moments-log.txt", log.readText())
+                    val moments = c.moments.forRide(ride.id)
+                    if (moments.isNotEmpty() || log.exists()) put("${folder}moments.json", momentsJson(moments))
                 }
                 put("rides_summary.csv", RideExporter.summaryCsv(rides.map { it to bikes[it.bikeId]?.displayName }))
             }
@@ -58,5 +65,11 @@ object ExportShare {
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         context.startActivity(Intent.createChooser(send, "Share ride data").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         return zip.second
+    }
+
+    private fun momentsJson(list: List<Moment>): String = list.joinToString(",\n", "[\n", "\n]\n") { m ->
+        "  {\"kind\": \"${m.kind}\", \"types\": \"${m.types.joinToString("+")}\", \"time\": \"${java.time.Instant.ofEpochMilli(m.timeMillis)}\", " +
+            "\"file\": \"${m.file.name}\", \"bytes\": ${m.file.length()}, \"durationMs\": ${m.durationMillis ?: "null"}, " +
+            "\"thumb\": ${m.thumb?.exists() == true}}"
     }
 }

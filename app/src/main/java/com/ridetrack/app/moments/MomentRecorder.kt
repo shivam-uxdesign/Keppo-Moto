@@ -3,10 +3,10 @@ package com.ridetrack.app.moments
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.MediaFormat
 import android.os.Build
 import android.os.PowerManager
 import android.os.StatFs
-import android.util.Log
 import android.util.Size
 import android.view.Surface
 import androidx.camera.core.Camera
@@ -45,7 +45,7 @@ import kotlin.coroutines.resume
  * into a [RollingBuffer] of the last ~45 s. Nothing touches storage until a request comes
  * in: a clip is cut from the buffer once its after-window has passed; a photo uses the
  * same camera session. The ride never depends on any of this. Every failure here only
- * pauses Moments.
+ * pauses Moments, and every step is written to the ride's [MomentLog].
  */
 class MomentRecorder(
     private val context: Context,
@@ -55,22 +55,30 @@ class MomentRecorder(
     private val settings: MomentSettings,
     private val landscapeMount: Boolean,
     private val scope: CoroutineScope,
+    rideId: String,
 ) {
     private val buffer = RollingBuffer()
     private val requests = Channel<MomentRequest>(Channel.UNLIMITED)
     private val main = ContextCompat.getMainExecutor(context)
+    private val log = MomentLog(File(repo.dir(rideId), MomentLog.FILE_NAME))
 
     private var provider: ProcessCameraProvider? = null
     private var camera: Camera? = null
-    private var preview: Preview? = null
     private var imageCapture: ImageCapture? = null
 
     @Volatile private var encoder: VideoEncoder? = null
     @Volatile private var rotationDegrees = 0
+    /** Formats of the stream that's in the buffer; outlive the encoder that made them. */
+    @Volatile private var videoFormat: MediaFormat? = null
     private var audio: AudioEncoder? = null
 
     private val reasons = linkedSetOf<PauseReason>()
     private var videoBound = false
+    /** Thermal SEVERE: keep filming, but smaller and lighter. */
+    private var lowPower = false
+    private var boundLowPower = false
+    private var bindAtMillis = 0L
+    private var watchdogRebinds = 0
     private var worker: Job? = null
     private var watcher: Job? = null
     private var idleJob: Job? = null
@@ -81,15 +89,28 @@ class MomentRecorder(
 
     fun start() {
         hub.setStatus(MomentStatus.STARTING)
+        log.log(
+            "start: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}); " +
+                "quality=${settings.quality} photos=${settings.photos} braking=${settings.braking} accel=${settings.acceleration} " +
+                "lean=${settings.lean}; camera=${granted(Manifest.permission.CAMERA)} mic=${granted(Manifest.permission.RECORD_AUDIO)}; " +
+                "free=${freeBytes() / 1_000_000}MB",
+        )
         if (!granted(Manifest.permission.CAMERA)) {
+            log.error("no camera permission; Moments off for this ride")
+            log.flush()
             hub.setStatus(MomentStatus.PAUSED, PauseReason.NO_PERMISSION)
             return
         }
         worker = scope.launch(Dispatchers.IO) { for (r in requests) handle(r) }
         watcher = scope.launch {
+            var tick = 0
             while (isActive) {
+                delay(10_000)
+                tick++
                 setReason(PauseReason.LOW_STORAGE, lowStorage())
-                delay(30_000)
+                withContext(Dispatchers.Main) { watchdog() }
+                if (tick % 6 == 0) log.log("status: ${hub.state.value.status} reasons=$reasons encoder=${encoderInfo()} ${buffer.describe()} thermal=${thermal()}")
+                log.flush()
             }
         }
         watchThermal()
@@ -100,7 +121,7 @@ class MomentRecorder(
                 provider = future.get()
                 bindCamera()
             } catch (e: ExecutionException) {
-                Log.e(TAG, "Camera provider unavailable", e)
+                log.error("camera provider unavailable", e)
                 setReason(PauseReason.FAILED, true)
             }
         }, main)
@@ -121,10 +142,11 @@ class MomentRecorder(
 
     /** Ride over: write what's queued (bounded), then release everything. */
     suspend fun finish() {
+        log.log("finish: ${buffer.describe()} saved=${hub.state.value.saved}")
         hub.detach()
         hub.drainQueued().forEach { requests.trySend(it) }
         requests.close()
-        withTimeoutOrNull(25_000) { worker?.join() }
+        if (withTimeoutOrNull(25_000) { worker?.join() } == null) log.error("finish: timed out writing queued moments")
         worker?.cancel()
         watcher?.cancel()
         idleJob?.cancel()
@@ -139,6 +161,8 @@ class MomentRecorder(
         encoder = null
         buffer.clear()
         hub.reset()
+        log.log("finished")
+        log.flush()
     }
 
     // ---- Camera -------------------------------------------------------------------------
@@ -149,10 +173,12 @@ class MomentRecorder(
     /** (Re)binds the use cases for the current state. Main thread. */
     private fun bindCamera() {
         val p = provider ?: return
+        val front = p.hasCameraSafe(CameraSelector.DEFAULT_FRONT_CAMERA)
         val selector = when {
-            p.hasCameraSafe(CameraSelector.DEFAULT_FRONT_CAMERA) -> CameraSelector.DEFAULT_FRONT_CAMERA
+            front -> CameraSelector.DEFAULT_FRONT_CAMERA
             p.hasCameraSafe(CameraSelector.DEFAULT_BACK_CAMERA) -> CameraSelector.DEFAULT_BACK_CAMERA
             else -> {
+                log.error("no camera found")
                 setReason(PauseReason.FAILED, true)
                 return
             }
@@ -172,18 +198,26 @@ class MomentRecorder(
             val cam = p.bindToLifecycle(owner, selector, *useCases.toTypedArray())
             camera = cam
             videoBound = withVideo
+            boundLowPower = lowPower
+            bindAtMillis = System.currentTimeMillis()
+            log.log("bound ${if (front) "front" else "back"} camera: photo${if (withVideo) " + video" + (if (lowPower) " (low power)" else "") else " only"}")
             cam.cameraInfo.cameraState.removeObservers(owner)
             cam.cameraInfo.cameraState.observe(owner) { st -> onCameraState(st) }
             if (withVideo) startAudio() else stopAudio()
         } catch (e: Exception) {
-            Log.e(TAG, "Camera bind failed", e)
+            log.error("camera bind failed", e)
             setReason(PauseReason.CAMERA_BUSY, true)
             scheduleRetry()
         }
     }
 
     private fun buildPreview(): Preview {
-        val size = if (settings.quality.height >= 1080) Size(1920, 1080) else Size(1280, 720)
+        val size = when {
+            lowPower -> Size(640, 480)
+            settings.quality.height >= 1080 -> Size(1920, 1080)
+            else -> Size(1280, 720)
+        }
+        val bitrate = if (lowPower) LOW_POWER_BITRATE else settings.quality.bitrate
         val pv = Preview.Builder()
             .setTargetRotation(targetRotation)
             .setResolutionSelector(
@@ -193,30 +227,67 @@ class MomentRecorder(
             )
             .build()
         pv.setSurfaceProvider(main) { request ->
+            log.log("surface requested: ${request.resolution.width}x${request.resolution.height}")
             val enc = try {
-                VideoEncoder(request.resolution, settings.quality.bitrate, buffer)
+                VideoEncoder(
+                    request.resolution, bitrate, buffer,
+                    onFormat = { f ->
+                        videoFormat = f
+                        log.log("video format: ${f.getString(MediaFormat.KEY_MIME)} ${f.getInteger(MediaFormat.KEY_WIDTH)}x${f.getInteger(MediaFormat.KEY_HEIGHT)}")
+                    },
+                    onFirstFrame = { log.log("first video frame encoded") },
+                )
             } catch (e: Exception) {
-                Log.e(TAG, "Video encoder unavailable", e)
+                log.error("video encoder unavailable", e)
                 request.willNotProvideSurface()
                 setReason(PauseReason.FAILED, true)
                 return@setSurfaceProvider
             }
             // A new encoder session: older samples came from a different stream.
-            encoder?.let { buffer.clear() }
+            if (encoder != null || videoFormat != null) buffer.clear()
             encoder = enc
             request.setTransformationInfoListener(main) { rotationDegrees = it.rotationDegrees }
-            request.provideSurface(enc.inputSurface, main) {
+            request.provideSurface(enc.inputSurface, main) { result ->
+                log.log("surface released (result ${result.resultCode}) after ${enc.frames} frames")
                 enc.release()
                 if (encoder === enc) encoder = null
             }
             refreshStatus()
         }
-        preview = pv
         return pv
     }
 
+    /**
+     * Video is wanted but frames aren't arriving: rebind (up to 3 times), then give up
+     * with a clear reason instead of silently producing no clips.
+     */
+    private fun watchdog() {
+        if (!videoBound || provider == null || PauseReason.FAILED in reasons || PauseReason.CAMERA_BUSY in reasons) return
+        val now = System.currentTimeMillis()
+        val enc = encoder
+        val stalled = when {
+            enc == null -> now - bindAtMillis > STALL_MILLIS
+            enc.frames == 0L -> now - bindAtMillis > STALL_MILLIS
+            else -> now - enc.lastFrameMillis > STALL_MILLIS
+        }
+        if (!stalled) {
+            if (enc != null && enc.frames > 0) watchdogRebinds = 0
+            return
+        }
+        watchdogRebinds++
+        log.error("watchdog: no video frames (encoder=${encoderInfo()}), rebind $watchdogRebinds/3")
+        if (watchdogRebinds > 3) {
+            setReason(PauseReason.FAILED, true)
+        } else {
+            bindCamera()
+        }
+    }
+
+    private fun encoderInfo(): String = encoder?.let { "${it.frames} frames" } ?: "none"
+
     private fun onCameraState(st: CameraState) {
         val err = st.error
+        log.log("camera ${st.type}" + (err?.let { " error ${it.code}" } ?: ""))
         if (err != null && (err.code == CameraState.ERROR_CAMERA_IN_USE || err.code == CameraState.ERROR_MAX_CAMERAS_IN_USE ||
                 err.code == CameraState.ERROR_CAMERA_DISABLED)
         ) {
@@ -236,11 +307,15 @@ class MomentRecorder(
     }
 
     private fun startAudio() {
-        if (audio != null || !granted(Manifest.permission.RECORD_AUDIO)) return
+        if (audio != null) return
+        if (!granted(Manifest.permission.RECORD_AUDIO)) {
+            log.log("no microphone permission: clips without sound")
+            return
+        }
         audio = try {
             AudioEncoder(buffer)
         } catch (e: Exception) {
-            Log.w(TAG, "No audio for moments", e)
+            log.error("audio unavailable, clips without sound", e)
             null
         }
     }
@@ -255,10 +330,15 @@ class MomentRecorder(
         scope.launch(Dispatchers.Main.immediate) {
             val changed = if (on) reasons.add(reason) else reasons.remove(reason)
             if (!changed) return@launch
-            // Video on/off depends on the reasons; rebind only when that actually changes.
-            if (provider != null && videoWanted != videoBound && PauseReason.FAILED !in reasons) bindCamera()
+            log.log(if (on) "paused: $reason" else "resumed: $reason cleared")
+            rebindIfNeeded()
             refreshStatus()
         }
+    }
+
+    private fun rebindIfNeeded() {
+        if (provider == null || PauseReason.FAILED in reasons) return
+        if (videoWanted != videoBound || (videoBound && lowPower != boundLowPower)) bindCamera()
     }
 
     private fun refreshStatus() {
@@ -270,18 +350,26 @@ class MomentRecorder(
         }
     }
 
+    /** SEVERE: film smaller (640×480, low bitrate). CRITICAL: stop filming. Photos continue. */
     private fun watchThermal() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         val pm = context.getSystemService<PowerManager>() ?: return
         val l = PowerManager.OnThermalStatusChangedListener { status ->
-            when {
-                status >= PowerManager.THERMAL_STATUS_SEVERE -> setReason(PauseReason.HOT, true)
-                status <= PowerManager.THERMAL_STATUS_MODERATE -> setReason(PauseReason.HOT, false)
+            log.log("thermal status $status")
+            val wasLow = lowPower
+            lowPower = status >= PowerManager.THERMAL_STATUS_SEVERE
+            setReason(PauseReason.HOT, status >= PowerManager.THERMAL_STATUS_CRITICAL)
+            if (wasLow != lowPower) {
+                log.log(if (lowPower) "phone hot: filming at low power" else "phone cooled: filming at full quality")
+                rebindIfNeeded()
             }
         }
         thermalListener = l
         pm.addThermalStatusListener(main, l)
     }
+
+    private fun thermal(): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) context.getSystemService<PowerManager>()?.currentThermalStatus?.toString() ?: "?" else "?"
 
     // ---- Requests -----------------------------------------------------------------------
 
@@ -292,29 +380,48 @@ class MomentRecorder(
                 is MomentRequest.Photo -> takePhoto(r)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Moment not saved", e)
+            log.error("moment not saved", e)
         } finally {
             hub.setWriting(false)
+            log.flush()
         }
     }
 
     private suspend fun writeClip(r: MomentRequest.Clip) {
         val w = r.window
+        val label = w.types.joinToString("+").ifEmpty { "test" }
+        log.log("clip requested: $label, window ${(w.endMillis - w.startMillis) / 1000}s")
         // Let the encoders catch up with the end of the window.
         val wait = w.endMillis + ENCODER_LATENCY_MILLIS - System.currentTimeMillis()
         if (wait > 0) delay(wait)
         if (lowStorage()) {
+            log.log("clip skipped: storage almost full (${freeBytes() / 1_000_000}MB free)")
             setReason(PauseReason.LOW_STORAGE, true)
             return
         }
         hub.setWriting(true)
-        val vFormat = encoder?.format ?: return
+        val vFormat = videoFormat
+        if (vFormat == null) {
+            log.log("clip skipped: no video yet (encoder=${encoderInfo()}, reasons=$reasons)")
+            return
+        }
         val (video, audioSamples) = buffer.extract(w.startMillis * 1000, w.endMillis * 1000)
-        if (video.isEmpty()) return
+        if (video.isEmpty()) {
+            log.log("clip skipped: buffer has no video for the window (${buffer.describe()}, reasons=$reasons)")
+            return
+        }
         val dir = repo.dir(r.rideId)
         val id = UUID.randomUUID().toString()
         val file = File(dir, "clip-${w.anchorMillis}-${id.take(6)}.mp4")
-        val length = ClipWriter.writeMp4(file, vFormat, audio?.format, video, audioSamples, rotationDegrees) ?: return
+        val aFormat = audio?.format
+        val length = try {
+            ClipWriter.writeMp4(file, vFormat, aFormat, video, audioSamples, rotationDegrees)
+        } catch (e: Exception) {
+            if (aFormat == null) throw e
+            // A bad audio track shouldn't cost the clip: retry with video only.
+            log.error("mp4 with audio failed, retrying video-only", e)
+            ClipWriter.writeMp4(file, vFormat, null, video, emptyList(), rotationDegrees)
+        } ?: return
         val clipStartMillis = video.first().wallMicros / 1000
         val thumb = File(dir, file.nameWithoutExtension + ".jpg")
         val hasThumb = ClipWriter.videoThumbnail(file, (w.anchorMillis - clipStartMillis).coerceAtLeast(0), thumb)
@@ -335,12 +442,20 @@ class MomentRecorder(
                 starred = false,
             ),
         )
+        log.log("clip saved: ${file.name} ${length / 1000}s ${file.length() / 1024}KB, ${video.size} frames, ${audioSamples.size} audio")
         hub.onSaved()
     }
 
     private suspend fun takePhoto(r: MomentRequest.Photo) {
-        val capture = imageCapture ?: return
-        if (lowStorage()) return
+        val capture = imageCapture
+        if (capture == null) {
+            log.log("photo skipped: camera not bound")
+            return
+        }
+        if (lowStorage()) {
+            log.log("photo skipped: storage almost full")
+            return
+        }
         val dir = repo.dir(r.rideId)
         val id = UUID.randomUUID().toString()
         val file = File(dir, "photo-${r.timeMillis}-${id.take(6)}.jpg")
@@ -352,7 +467,7 @@ class MomentRecorder(
                     object : ImageCapture.OnImageSavedCallback {
                         override fun onImageSaved(output: ImageCapture.OutputFileResults) = cont.resume(true)
                         override fun onError(exception: ImageCaptureException) {
-                            Log.w(TAG, "Photo failed", exception)
+                            log.error("photo failed", exception)
                             cont.resume(false)
                         }
                     },
@@ -379,11 +494,13 @@ class MomentRecorder(
                 starred = false,
             ),
         )
+        log.log("photo saved: ${file.name}")
         hub.onSaved()
     }
 
-    private fun lowStorage(): Boolean =
-        runCatching { StatFs(context.filesDir.path).availableBytes < MIN_FREE_BYTES }.getOrDefault(false)
+    private fun freeBytes(): Long = runCatching { StatFs(context.filesDir.path).availableBytes }.getOrDefault(-1)
+
+    private fun lowStorage(): Boolean = freeBytes().let { it in 0 until MIN_FREE_BYTES }
 
     private fun granted(permission: String) =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
@@ -391,8 +508,9 @@ class MomentRecorder(
     private fun ProcessCameraProvider.hasCameraSafe(s: CameraSelector) = runCatching { hasCamera(s) }.getOrDefault(false)
 
     companion object {
-        private const val TAG = "Moments"
         private const val ENCODER_LATENCY_MILLIS = 800L
         private const val MIN_FREE_BYTES = 1_000_000_000L
+        private const val STALL_MILLIS = 10_000L
+        private const val LOW_POWER_BITRATE = 1_500_000
     }
 }

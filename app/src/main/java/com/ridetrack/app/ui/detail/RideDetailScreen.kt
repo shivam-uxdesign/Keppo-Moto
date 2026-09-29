@@ -68,6 +68,7 @@ import com.ridetrack.app.ui.components.LineChart
 import com.ridetrack.app.ui.components.RouteMap
 import com.ridetrack.app.ui.components.MapPin
 import com.ridetrack.app.ui.moments.MomentStrip
+import com.ridetrack.app.ui.moments.MomentsDiagnostics
 import com.ridetrack.app.ui.moments.momentColor
 import com.ridetrack.app.ui.moments.rememberMoments
 import com.ridetrack.app.ui.components.ScreenHeader
@@ -183,6 +184,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onReplay: () -> Unit, o
                 Spacer(Modifier.height(18.dp))
                 MomentStrip(moments, onOpen = onOpenMoment)
             }
+            if (BuildConfig.DEBUG) MomentsDiagnostics(rideId)
             Spacer(Modifier.height(20.dp))
             StatRow(
                 listOf(

@@ -44,6 +44,7 @@ fun momentTitle(m: Moment): String {
         RideEventType.HARD_BRAKE, RideEventType.STRONG_ACCELERATION -> v?.let { String.format(Locale.US, "%.2f G", abs(it)) }
         else -> null
     }
+    if (parts.isEmpty()) return "Clip"
     return listOfNotNull(parts.joinToString(" + "), value).joinToString(" · ")
 }
 

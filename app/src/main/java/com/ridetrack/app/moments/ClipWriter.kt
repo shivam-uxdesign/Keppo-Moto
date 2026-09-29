@@ -9,6 +9,7 @@ import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.media.MediaMuxer
 import com.ridetrack.telemetry.moments.EncodedSample
+import com.ridetrack.telemetry.moments.RollingBuffer
 import java.io.File
 import java.nio.ByteBuffer
 
@@ -16,7 +17,10 @@ import java.nio.ByteBuffer
 object ClipWriter {
     private const val THUMB_EDGE = 480
 
-    /** Muxes samples into an MP4. Returns the clip length in ms, or null if nothing was written. */
+    /**
+     * Muxes samples into an MP4, writing video and audio interleaved in time order.
+     * Returns the clip length in ms, or null if there was no video.
+     */
     fun writeMp4(
         file: File,
         videoFormat: MediaFormat,
@@ -26,25 +30,23 @@ object ClipWriter {
         rotationDegrees: Int,
     ): Long? {
         if (video.isEmpty()) return null
+        val base = video.first().wallMicros
+        val audioInClip = if (audioFormat != null) audio.filter { it.wallMicros >= base } else emptyList()
         val muxer = MediaMuxer(file.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         try {
             muxer.setOrientationHint(((rotationDegrees % 360) + 360) % 360)
             val vTrack = muxer.addTrack(videoFormat)
-            val aTrack = if (audioFormat != null && audio.isNotEmpty()) muxer.addTrack(audioFormat) else -1
+            val aTrack = if (audioFormat != null && audioInClip.isNotEmpty()) muxer.addTrack(audioFormat) else -1
             muxer.start()
-            val base = video.first().wallMicros
             val info = MediaCodec.BufferInfo()
-            fun write(track: Int, s: EncodedSample, lastPts: Long): Long {
-                val pts = maxOf(s.wallMicros - base, lastPts + 1)
+            var lastV = -1L
+            var lastA = -1L
+            for ((isVideo, s) in RollingBuffer.interleave(video, if (aTrack >= 0) audioInClip else emptyList())) {
+                val last = if (isVideo) lastV else lastA
+                val pts = maxOf(s.wallMicros - base, last + 1)
                 info.set(0, s.data.size, pts, if (s.keyFrame) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
-                muxer.writeSampleData(track, ByteBuffer.wrap(s.data), info)
-                return pts
-            }
-            var last = -1L
-            video.forEach { last = write(vTrack, it, last) }
-            if (aTrack >= 0) {
-                var lastA = -1L
-                audio.filter { it.wallMicros >= base }.forEach { lastA = write(aTrack, it, lastA) }
+                muxer.writeSampleData(if (isVideo) vTrack else aTrack, ByteBuffer.wrap(s.data), info)
+                if (isVideo) lastV = pts else lastA = pts
             }
             muxer.stop()
             return (video.last().wallMicros - base) / 1000

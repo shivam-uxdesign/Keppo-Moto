@@ -129,3 +129,16 @@ fun Thumb(file: File?, modifier: Modifier, maxEdge: Int = 320) {
     if (b != null) Image(b, null, contentScale = ContentScale.Crop, modifier = modifier)
     else Box(modifier.background(RtColors.SurfaceRaised))
 }
+
+/** Beta builds: one line from the ride's Moments log (clips, photos, last problem). */
+@Composable
+fun MomentsDiagnostics(rideId: String, modifier: Modifier = Modifier) {
+    val c = com.ridetrack.app.ui.appContainer()
+    var line by remember(rideId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(rideId) {
+        line = withContext(Dispatchers.IO) {
+            com.ridetrack.app.moments.MomentLog.summary(File(c.moments.dir(rideId), com.ridetrack.app.moments.MomentLog.FILE_NAME))
+        }
+    }
+    line?.let { Text(it, style = RtType.caption, color = RtColors.TextTertiary, modifier = modifier.padding(top = 8.dp)) }
+}

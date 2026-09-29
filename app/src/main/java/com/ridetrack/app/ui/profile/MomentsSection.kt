@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.ridetrack.app.BuildConfig
 import com.ridetrack.app.data.PhotoInterval
 import com.ridetrack.app.data.VideoQuality
 import com.ridetrack.app.sensors.Permissions
@@ -53,6 +54,7 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel) {
     var explain by remember { mutableStateOf(false) }
     var denied by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var testQueued by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.refreshMomentsStorage() }
 
     val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -97,6 +99,15 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel) {
                 VideoQuality.entries.forEach { q -> Pick(q.label, m.quality == q, !s.rideActive) { vm.setMoments(m.copy(quality = q)) } }
             }
             Spacer(Modifier.height(RtDimens.sm))
+        }
+        if (BuildConfig.DEBUG && s.rideActive && vm.canTestClip) {
+            // Beta: checks the whole clip path in ~15 s (camera → buffer → MP4 → ride page).
+            TextButton(onClick = {
+                vm.testClip()
+                testQueued = true
+            }, enabled = !testQueued) {
+                Text(if (testQueued) "Test clip queued: check the ride page after it ends" else "Save a test clip now (beta)", color = RtColors.Primary)
+            }
         }
         HorizontalDivider(color = RtColors.Outline.copy(alpha = 0.6f))
         Text(

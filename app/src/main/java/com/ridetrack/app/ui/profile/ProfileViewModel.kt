@@ -43,6 +43,13 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
         viewModelScope.launch { if (!state.value.rideActive) c.settings.setMoments(m) }
     }
 
+    /** Debug: only while a ride with Moments is recording. */
+    val canTestClip: Boolean get() = c.session.active.value?.moments != null
+
+    fun testClip() {
+        c.session.active.value?.takeIf { it.moments != null }?.let { c.momentsHub.requestTestClip(it.rideId) }
+    }
+
     fun deleteAllMoments() {
         viewModelScope.launch {
             c.moments.deleteAll()

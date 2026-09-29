@@ -42,6 +42,24 @@ class RollingBufferTest {
     }
 
     @Test
+    fun `interleave merges by time with video first on ties`() {
+        val v = listOf(0L, 33L, 66L).map { EncodedSample(it, it == 0L, ByteArray(1)) }
+        val a = listOf(0L, 23L, 46L, 69L).map { EncodedSample(it, true, ByteArray(1)) }
+        val merged = RollingBuffer.interleave(v, a)
+        assertTrue(merged.size == 7)
+        assertTrue(merged.zipWithNext().all { (x, y) -> x.second.wallMicros <= y.second.wallMicros })
+        assertTrue(merged[0].first && !merged[1].first) // tie at 0: video first
+        assertTrue(merged.count { it.first } == 3)
+    }
+
+    @Test
+    fun `log lines carry UTC time and stay on one line`() {
+        val line = com.ridetrack.telemetry.moments.momentLogLine(1_759_118_321_342L, "clip skipped:\nno frames")
+        assertTrue(line.startsWith("03:58:41.342Z  "), line)
+        assertTrue(!line.contains('\n'))
+    }
+
+    @Test
     fun `window before the buffer starts at the first keyframe, empty buffer gives nothing`() {
         val b = RollingBuffer(capacityMicros = 5_000_000)
         assertTrue(b.extract(0, 10).first.isEmpty())

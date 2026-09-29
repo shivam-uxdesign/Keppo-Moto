@@ -59,6 +59,12 @@ class MomentsHub {
         if (s != null) s(r) else queue += r
     }
 
+    /** Debug: save the last 10 s and the next 5 s now, without waiting for an event. */
+    fun requestTestClip(rideId: String) {
+        val now = System.currentTimeMillis()
+        submit(MomentRequest.Clip(rideId, MomentWindow(now - 10_000, now + 5_000, now, emptySet(), null, null, null, null)))
+    }
+
     @Synchronized
     fun attach(s: (MomentRequest) -> Unit) {
         sink = s

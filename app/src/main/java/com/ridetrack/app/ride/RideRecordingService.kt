@@ -71,7 +71,7 @@ class RideRecordingService : LifecycleService() {
         val active = session.active.value ?: return
         val settings = active.moments ?: return
         val c = (application as RideTrackApp).container
-        val r = MomentRecorder(this, this, c.moments, c.momentsHub, settings, active.landscapeMount, c.appScope)
+        val r = MomentRecorder(this, this, c.moments, c.momentsHub, settings, active.landscapeMount, c.appScope, active.rideId)
         recorder = r
         r.start()
         lifecycleScope.launch {
