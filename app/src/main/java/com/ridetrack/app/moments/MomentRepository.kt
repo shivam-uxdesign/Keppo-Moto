@@ -27,7 +27,11 @@ data class Moment(
     val thumb: File?,
     val durationMillis: Long?,
     val starred: Boolean,
+    val clipStartMillis: Long? = null,
 ) {
+    /** When the clip's first frame was filmed; estimated for clips saved before this was stored. */
+    val videoStartMillis: Long get() = clipStartMillis ?: (timeMillis - 10_000)
+
     /** The event that best describes the moment (for its dot colour). */
     val primaryType: RideEventType?
         get() = listOf(RideEventType.HARD_BRAKE, RideEventType.SIGNIFICANT_LEAN, RideEventType.STRONG_ACCELERATION)
@@ -56,6 +60,7 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
             thumbFile = m.thumb?.name,
             durationMillis = m.durationMillis,
             starred = m.starred,
+            clipStartMillis = m.clipStartMillis,
         ),
     )
 
@@ -99,6 +104,7 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
             thumb = thumbFile?.let { File(d, it) },
             durationMillis = durationMillis,
             starred = starred,
+            clipStartMillis = clipStartMillis,
         )
     }
 }

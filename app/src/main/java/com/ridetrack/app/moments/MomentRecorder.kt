@@ -440,6 +440,7 @@ class MomentRecorder(
                 thumb = thumb.takeIf { hasThumb },
                 durationMillis = length,
                 starred = false,
+                clipStartMillis = clipStartMillis,
             ),
         )
         log.log("clip saved: ${file.name} ${length / 1000}s ${file.length() / 1024}KB, ${video.size} frames, ${audioSamples.size} audio")

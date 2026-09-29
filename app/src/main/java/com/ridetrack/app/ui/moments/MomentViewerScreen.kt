@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarOutline
@@ -102,7 +103,7 @@ class MomentViewerViewModel(private val c: AppContainer, rideId: String) : ViewM
 
 /** Full-screen moments of one ride; swipe between them. Clips loop, photos sit still. */
 @Composable
-fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit) {
+fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onShareMoment: (String) -> Unit) {
     val vm = appViewModel(key = "moments-$rideId") { MomentViewerViewModel(it, rideId) }
     val s by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -176,7 +177,9 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit) {
                 style = RtType.metricM,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Action(Icons.Outlined.IosShare, "Share") { share(context, current) }
+                // Share = the styled graphic with details; Original = the plain file.
+                Action(Icons.Outlined.IosShare, "Share") { onShareMoment(current.id) }
+                Action(Icons.Outlined.Share, "Original") { share(context, current) }
                 Action(Icons.Outlined.Download, "Save") {
                     scope.launch {
                         val ok = saveToGallery(context, current)

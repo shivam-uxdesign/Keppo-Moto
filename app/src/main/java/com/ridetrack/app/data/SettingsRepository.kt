@@ -1,5 +1,8 @@
 package com.ridetrack.app.data
 
+import com.ridetrack.app.share.MomentField
+import com.ridetrack.app.share.MomentLayout
+
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -92,6 +95,9 @@ data class Settings(
     val hud: HudSettings = HudSettings(),
     val mapStyle: MapStyle = MapStyle.DARK,
     val moments: MomentSettings = MomentSettings(),
+    /** Last-used moment share graphic: which details are on, and the layout. */
+    val momentShareFields: Set<MomentField> = MomentField.DEFAULT,
+    val momentShareLayout: MomentLayout = MomentLayout.MINIMAL,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -119,6 +125,8 @@ class SettingsRepository(private val context: Context) {
         val momentsLean = booleanPreferencesKey("moments_lean")
         val momentsPhotos = stringPreferencesKey("moments_photos")
         val momentsQuality = stringPreferencesKey("moments_quality")
+        val momentShareFields = stringSetPreferencesKey("moment_share_fields")
+        val momentShareLayout = stringPreferencesKey("moment_share_layout")
     }
 
     private inline fun <reified T : Enum<T>> enumOf(name: String?, fallback: T): T =
@@ -154,6 +162,11 @@ class SettingsRepository(private val context: Context) {
                 photos = enumOf(p[Keys.momentsPhotos], PhotoInterval.FIFTEEN),
                 quality = enumOf(p[Keys.momentsQuality], VideoQuality.HD),
             ),
+            momentShareFields = p[Keys.momentShareFields]
+                ?.mapNotNull { n -> MomentField.entries.firstOrNull { it.name == n } }
+                ?.toSet()
+                ?: MomentField.DEFAULT,
+            momentShareLayout = enumOf(p[Keys.momentShareLayout], MomentLayout.MINIMAL),
         )
     }
 
@@ -177,6 +190,11 @@ class SettingsRepository(private val context: Context) {
     }
     suspend fun setHudPromptDismissed(dismissed: Boolean) = context.dataStore.edit { it[Keys.hudPromptDismissed] = dismissed }
     suspend fun setMapStyle(style: MapStyle) = context.dataStore.edit { it[Keys.mapStyle] = style.name }
+
+    suspend fun setMomentShare(fields: Set<MomentField>, layout: MomentLayout) = context.dataStore.edit {
+        it[Keys.momentShareFields] = fields.map { f -> f.name }.toSet()
+        it[Keys.momentShareLayout] = layout.name
+    }
 
     suspend fun setMoments(m: MomentSettings) = context.dataStore.edit {
         it[Keys.momentsEnabled] = m.enabled

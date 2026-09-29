@@ -9,6 +9,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -78,11 +80,27 @@ data class ShareUiState(
     val images: Map<ShareStyle, Bitmap> = emptyMap(),
     val fileName: String = "ride",
     val missing: Boolean = false,
+    /** Small previews for the layout picker. */
+    val thumbs: Map<ShareStyle, Bitmap> = emptyMap(),
 )
 
 class ShareRideViewModel(private val c: AppContainer, rideId: String) : ViewModel() {
     private val _state = MutableStateFlow(ShareUiState())
     val state: StateFlow<ShareUiState> = _state.asStateFlow()
+    private var data: ShareCardData? = null
+    private val renderer by lazy { ShareCardRenderer(c.appContext) }
+
+    /** Full-size render of [style] (only the selected one is kept at full size). */
+    fun select(style: ShareStyle) {
+        val d = data ?: return
+        if (_state.value.images.containsKey(style)) return
+        viewModelScope.launch {
+            val bmp = withContext(Dispatchers.Default) { renderer.render(d, style) }
+            // Only the selected layout stays at full size; the previous one is left to GC
+            // (it may still be on screen during the crossfade).
+            _state.update { it.copy(images = mapOf(style to bmp)) }
+        }
+    }
 
     init {
         viewModelScope.launch {
@@ -93,18 +111,20 @@ class ShareRideViewModel(private val c: AppContainer, rideId: String) : ViewMode
             }
             val bike = c.bikes.get(ride.bikeId)
             val track = c.rides.track(rideId)
-            val data = ShareCardData.from(ride, bike?.displayName, track.samples)
-            val images = withContext(Dispatchers.Default) {
-                val r = ShareCardRenderer(c.appContext)
-                ShareStyle.entries.associateWith { r.render(data, it) }
-            }
+            val d = ShareCardData.from(ride, bike?.displayName, track.samples)
+            data = d
             val slug = ride.name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifBlank { "ride" }
-            _state.update { ShareUiState(loading = false, images = images, fileName = "ridetrack-$slug") }
+            val first = withContext(Dispatchers.Default) { renderer.render(d, ShareStyle.SOLID) }
+            _state.update { ShareUiState(loading = false, images = mapOf(ShareStyle.SOLID to first), fileName = "ridetrack-$slug") }
+            // Picker thumbnails, rendered one by one so the screen is usable straight away.
+            ShareStyle.entries.forEach { st ->
+                val thumb = withContext(Dispatchers.Default) {
+                    val full = renderer.render(d, st)
+                    Bitmap.createScaledBitmap(full, full.width / 6, full.height / 6, true).also { full.recycle() }
+                }
+                _state.update { it.copy(thumbs = it.thumbs + (st to thumb)) }
+            }
         }
-    }
-
-    override fun onCleared() {
-        _state.value.images.values.forEach { it.recycle() }
     }
 }
 
@@ -117,6 +137,7 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
     var style by remember { mutableStateOf(ShareStyle.SOLID) }
+    LaunchedEffect(style, s.loading) { if (!s.loading) vm.select(style) }
     var toast by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(toast) {
         if (toast != null) {
@@ -133,15 +154,15 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
             .padding(horizontal = RtDimens.screenPadding),
     ) {
         ScreenHeader("Share ride", onBack = onBack)
-        Segmented(style, onSelect = { style = it })
-        Spacer(Modifier.height(14.dp))
+        LayoutPicker(s.thumbs, style, onSelect = { style = it })
+        Spacer(Modifier.height(12.dp))
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val image = s.images[style]
+            val image = s.images[style] ?: s.thumbs[style]
             when {
                 s.missing -> Text("Ride not found", style = RtType.body, color = RtColors.TextSecondary)
                 image == null -> CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp)
                 else -> Crossfade(style, label = "share-style") { st ->
-                    val bmp = s.images[st]
+                    val bmp = s.images[st] ?: s.thumbs[st]
                     Box(
                         Modifier
                             .fillMaxHeight()
@@ -150,11 +171,11 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
                             .border(1.dp, RtColors.Hairline, RoundedCornerShape(20.dp)),
                     ) {
                         // The overlay is previewed on a stand-in "photo" so the transparency is obvious.
-                        if (st == ShareStyle.OVERLAY) SamplePhoto(Modifier.fillMaxSize())
+                        if (st.transparent) SamplePhoto(Modifier.fillMaxSize())
                         if (bmp != null) {
                             Image(
                                 bmp.asImageBitmap(),
-                                contentDescription = if (st == ShareStyle.SOLID) "Ride share card preview" else "Transparent ride overlay preview",
+                                contentDescription = "${st.label} share graphic preview",
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier.fillMaxSize(),
                             )
@@ -176,8 +197,8 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
             }
         }
         Text(
-            if (style == ShareStyle.SOLID) "A ready-made story card. Share straight to Instagram or anywhere else."
-            else "Transparent PNG. In an Instagram story, add your photo, then paste or add this as a sticker on top.",
+            if (!style.transparent) "A ready-made story card. Share straight to Instagram or anywhere else."
+            else "${style.label} · covers ${style.coverage.lowercase()} of a story. Transparent PNG: add your photo in Instagram, then paste this on top as a sticker.",
             style = RtType.caption,
             color = RtColors.TextSecondary,
             modifier = Modifier.padding(top = 12.dp),
@@ -197,7 +218,7 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
                     toast = if (ok) "Saved to Pictures/Ride Track" else "Couldn't save here. Use Share instead."
                 }
             }
-            if (style == ShareStyle.OVERLAY) {
+            if (style.transparent) {
                 ActionButton("Copy", Icons.Outlined.ContentCopy, enabled = bmp != null) {
                     val b = bmp ?: return@ActionButton
                     scope.launch {
@@ -211,27 +232,31 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
     }
 }
 
+/** Thumbnails of every layout with how much of the story each one covers. */
 @Composable
-private fun Segmented(selected: ShareStyle, onSelect: (ShareStyle) -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(RtColors.Surface, RoundedCornerShape(50))
-            .border(1.dp, RtColors.Hairline, RoundedCornerShape(50))
-            .padding(4.dp),
-    ) {
-        ShareStyle.entries.forEach { st ->
+private fun LayoutPicker(thumbs: Map<ShareStyle, Bitmap>, selected: ShareStyle, onSelect: (ShareStyle) -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        items(ShareStyle.entries.toList()) { st ->
             val on = st == selected
-            Box(
+            Column(
                 Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(50))
-                    .background(if (on) RtColors.Inverse else Color.Transparent)
-                    .clickable(role = Role.Tab) { onSelect(st) }
-                    .padding(vertical = 10.dp),
-                contentAlignment = Alignment.Center,
+                    .width(76.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(role = Role.Tab) { onSelect(st) },
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(st.label, style = RtType.button, color = if (on) RtColors.OnInverse else RtColors.TextSecondary)
+                Box(
+                    Modifier
+                        .width(72.dp)
+                        .aspectRatio(9f / 16f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(if (on) 2.dp else 1.dp, if (on) RtColors.Primary else RtColors.Hairline, RoundedCornerShape(10.dp)),
+                ) {
+                    if (st.transparent) SamplePhoto(Modifier.fillMaxSize())
+                    thumbs[st]?.let { Image(it.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
+                }
+                Text(st.label, style = RtType.caption, color = if (on) RtColors.TextPrimary else RtColors.TextSecondary, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
+                Text(st.coverage, style = RtType.caption, color = if (on) RtColors.Primary else RtColors.TextTertiary, maxLines = 1)
             }
         }
     }
@@ -269,7 +294,7 @@ private fun ActionButton(
 
 /** An abstract dusk-road "photo" behind the overlay preview. */
 @Composable
-private fun SamplePhoto(modifier: Modifier) {
+internal fun SamplePhoto(modifier: Modifier) {
     Canvas(modifier) {
         drawRect(Brush.verticalGradient(listOf(Color(0xFF3A4A6B), Color(0xFFC9826B), Color(0xFF2B2A30))))
         drawCircle(Color(0x55FFD7A8), radius = size.width * 0.22f, center = Offset(size.width * 0.7f, size.height * 0.36f))

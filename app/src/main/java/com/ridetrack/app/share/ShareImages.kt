@@ -20,17 +20,27 @@ import java.io.File
 object ShareImages {
     private const val AUTHORITY_SUFFIX = ".exports"
 
-    suspend fun toCacheUri(context: Context, bitmap: Bitmap, name: String): Uri = withContext(Dispatchers.IO) {
-        val dir = File(context.cacheDir, "shares").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() } // keep only the latest
-        val file = File(dir, "$name.png")
-        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        FileProvider.getUriForFile(context, context.packageName + AUTHORITY_SUFFIX, file)
+    /** PNG keeps transparency; [jpeg] for photos with a picture behind (much smaller). */
+    suspend fun toCacheUri(context: Context, bitmap: Bitmap, name: String, jpeg: Boolean = false): Uri = withContext(Dispatchers.IO) {
+        val dir = sharesDir(context)
+        val file = File(dir, if (jpeg) "$name.jpg" else "$name.png")
+        file.outputStream().use {
+            if (jpeg) bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it) else bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        uriFor(context, file)
     }
 
-    fun share(context: Context, uri: Uri) {
+    /** A fresh cache folder for share outputs (only the latest ones are kept). */
+    fun sharesDir(context: Context): File = File(context.cacheDir, "shares").apply {
+        mkdirs()
+        listFiles()?.forEach { it.delete() }
+    }
+
+    fun uriFor(context: Context, file: File): Uri = FileProvider.getUriForFile(context, context.packageName + AUTHORITY_SUFFIX, file)
+
+    fun share(context: Context, uri: Uri, mime: String = "image/png") {
         val send = Intent(Intent.ACTION_SEND)
-            .setType("image/png")
+            .setType(mime)
             .putExtra(Intent.EXTRA_STREAM, uri)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         send.clipData = ClipData.newRawUri("", uri)
@@ -44,19 +54,38 @@ object ShareImages {
         return true
     }
 
-    /** Saves to Pictures/Ride Track. API 29+ needs no permission; older phones fall back to sharing. */
-    suspend fun saveToPhotos(context: Context, bitmap: Bitmap, name: String): Boolean = withContext(Dispatchers.IO) {
+    /** Copies a video into Movies/Ride Track (Android 10+, no permission needed). */
+    suspend fun saveVideo(context: Context, file: File, name: String): Boolean = withContext(Dispatchers.IO) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@withContext false
         val resolver = context.contentResolver
         val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "$name.png")
-            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(MediaStore.Video.Media.DISPLAY_NAME, "$name.mp4")
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Ride Track")
+            put(MediaStore.Video.Media.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: return@withContext false
+        runCatching {
+            resolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } }
+            resolver.update(uri, ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }, null, null)
+        }.onFailure { resolver.delete(uri, null, null) }.isSuccess
+    }
+
+    /** Saves to Pictures/Ride Track. API 29+ needs no permission; older phones fall back to sharing. */
+    suspend fun saveToPhotos(context: Context, bitmap: Bitmap, name: String, jpeg: Boolean = false): Boolean = withContext(Dispatchers.IO) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@withContext false
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, if (jpeg) "$name.jpg" else "$name.png")
+            put(MediaStore.Images.Media.MIME_TYPE, if (jpeg) "image/jpeg" else "image/png")
             put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Ride Track")
             put(MediaStore.Images.Media.IS_PENDING, 1)
         }
         val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return@withContext false
         runCatching {
-            resolver.openOutputStream(uri)?.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            resolver.openOutputStream(uri)?.use {
+                if (jpeg) bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it) else bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
             resolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
         }.onFailure { resolver.delete(uri, null, null) }.isSuccess
     }

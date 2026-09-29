@@ -116,4 +116,6 @@ data class MomentEntity(
     val thumbFile: String?,
     val durationMillis: Long?,
     val starred: Boolean,
+    /** Wall time of the clip's first frame (lines telemetry up with the video). */
+    val clipStartMillis: Long? = null,
 )

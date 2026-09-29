@@ -50,6 +50,7 @@ import com.ridetrack.app.ui.home.HomeScreen
 import com.ridetrack.app.ui.hud.HudSettingsScreen
 import com.ridetrack.app.ui.live.LiveRideScreen
 import com.ridetrack.app.ui.profile.ProfileScreen
+import com.ridetrack.app.share.MomentShareScreen
 import com.ridetrack.app.share.ShareRideScreen
 import com.ridetrack.app.ui.moments.MomentViewerScreen
 import com.ridetrack.app.ui.rides.RidesMapScreen
@@ -75,6 +76,8 @@ object Routes {
     fun share(id: String) = "share/$id"
     const val MOMENTS = "moments/{rideId}/{momentId}"
     fun moments(rideId: String, momentId: String) = "moments/$rideId/$momentId"
+    const val MOMENT_SHARE = "moment-share/{rideId}/{momentId}"
+    fun momentShare(rideId: String, momentId: String) = "moment-share/$rideId/$momentId"
 
     fun summary(id: String) = "summary/$id"
     fun detail(id: String) = "ride/$id"
@@ -196,9 +199,24 @@ fun RideTrackNavHost() {
                         navArgument("momentId") { type = NavType.StringType },
                     ),
                 ) { entry ->
+                    val rideId = entry.arguments?.getString("rideId").orEmpty()
                     MomentViewerScreen(
-                        rideId = entry.arguments?.getString("rideId").orEmpty(),
+                        rideId = rideId,
                         startId = entry.arguments?.getString("momentId"),
+                        onBack = { nav.popBackStack() },
+                        onShareMoment = { nav.navigate(Routes.momentShare(rideId, it)) },
+                    )
+                }
+                composable(
+                    Routes.MOMENT_SHARE,
+                    arguments = listOf(
+                        navArgument("rideId") { type = NavType.StringType },
+                        navArgument("momentId") { type = NavType.StringType },
+                    ),
+                ) { entry ->
+                    MomentShareScreen(
+                        rideId = entry.arguments?.getString("rideId").orEmpty(),
+                        momentId = entry.arguments?.getString("momentId").orEmpty(),
                         onBack = { nav.popBackStack() },
                     )
                 }
