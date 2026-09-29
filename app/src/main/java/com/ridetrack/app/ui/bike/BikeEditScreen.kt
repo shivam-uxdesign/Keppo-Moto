@@ -99,8 +99,10 @@ fun BikeEditScreen(bikeId: String?, onDone: () -> Unit) {
                 Field("Weight (kg)", f.weightKg, "Optional", { v -> vm.update { it.copy(weightKg = v.filter(Char::isDigit).take(4)) } }, Modifier.weight(1f), number = true, error = f.weightError)
                 Field("Redline (rpm)", f.redlineRpm, "Optional", { v -> vm.update { it.copy(redlineRpm = v.filter(Char::isDigit).take(5)) } }, Modifier.weight(1f), number = true, error = f.redlineError)
             }
+            Field("Odometer (km)", f.odometerKm, "Optional", { v -> vm.update { it.copy(odometerKm = v.filter(Char::isDigit).take(7)) } }, number = true, error = f.odometerError)
             Text(
-                "Redline marks the red zone on the rev meter, which appears once an OBD adapter is connected.",
+                "Enter the reading on your bike's odometer. Rides you record on this bike are added to it automatically. " +
+                    "Redline marks the red zone on the rev meter, which appears once an OBD adapter is connected.",
                 style = RtType.caption,
                 color = RtColors.TextSecondary,
                 modifier = Modifier.padding(top = RtDimens.xs),

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import android.net.Uri
 import com.ridetrack.app.AppContainer
 import com.ridetrack.app.data.BikePhotos
+import com.ridetrack.app.ui.common.Odometer
 import com.ridetrack.telemetry.model.Bike
 import com.ridetrack.telemetry.model.FuelType
 import com.ridetrack.telemetry.model.MountOrientation
@@ -18,7 +19,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 import java.util.UUID
+import kotlin.math.roundToLong
 
 data class BikesUiState(
     val loading: Boolean = true,
@@ -71,12 +74,15 @@ data class BikeForm(
     val redlineRpm: String = "",
     val photoFile: String? = null,
     val photoBusy: Boolean = false,
+    /** Whole km; blank = not set. */
+    val odometerKm: String = "",
 ) {
+    val odometerError: Boolean get() = odometerKm.isNotBlank() && (odometerKm.toLongOrNull() ?: -1) !in 0..2_000_000
     val redlineError: Boolean get() = redlineRpm.isNotBlank() && (redlineRpm.toIntOrNull() ?: 0) !in 2_000..25_000
     val yearError: Boolean get() = year.isNotBlank() && (year.toIntOrNull() ?: 0) !in 1900..2100
     val ccError: Boolean get() = displacementCc.isNotBlank() && (displacementCc.toIntOrNull() ?: 0) !in 1..5000
     val weightError: Boolean get() = weightKg.isNotBlank() && (weightKg.toIntOrNull() ?: 0) !in 1..2000
-    val isValid: Boolean get() = (make.isNotBlank() || model.isNotBlank()) && !yearError && !ccError && !weightError && !redlineError && !photoBusy
+    val isValid: Boolean get() = (make.isNotBlank() || model.isNotBlank()) && !yearError && !ccError && !weightError && !redlineError && !odometerError && !photoBusy
 }
 
 class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?) : ViewModel() {
@@ -88,12 +94,16 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
     /** Photos imported in this session; unsaved ones are cleaned up. */
     private val imported = mutableListOf<String>()
     private var saved = false
+    /** The odometer as shown when the form opened; unchanged means keep the stored reading. */
+    private var initialOdometer = ""
 
     init {
         if (bikeId != null) {
             viewModelScope.launch {
                 c.bikes.get(bikeId)?.let { b ->
                     existing = b
+                    val reading = Odometer.readingKm(b, c.rides.observeCompleted().first())
+                    initialOdometer = reading?.let { String.format(Locale.US, "%d", it.roundToLong()) }.orEmpty()
                     _form.value = BikeForm(
                         make = b.make,
                         model = b.model,
@@ -104,6 +114,7 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
                         mountOrientation = b.mountOrientation,
                         redlineRpm = b.redlineRpm?.toString().orEmpty(),
                         photoFile = b.photoFile,
+                        odometerKm = initialOdometer,
                     )
                 }
             }
@@ -137,6 +148,12 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
         val f = _form.value
         if (!f.isValid) return
         val prev = existing
+        // A new reading restarts the count; rides from now on are added on top of it.
+        val (odometer, odometerAt) = when {
+            f.odometerKm.isBlank() -> null to null
+            prev != null && f.odometerKm == initialOdometer -> prev.odometerKm to prev.odometerSetAtMillis
+            else -> f.odometerKm.toLong().toDouble() to System.currentTimeMillis()
+        }
         val bike = Bike(
             id = prev?.id ?: id,
             make = f.make.trim(),
@@ -150,6 +167,8 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
             createdAtMillis = prev?.createdAtMillis ?: System.currentTimeMillis(),
             redlineRpm = f.redlineRpm.toIntOrNull(),
             photoFile = f.photoFile,
+            odometerKm = odometer,
+            odometerSetAtMillis = odometerAt,
         )
         viewModelScope.launch {
             c.bikes.save(bike)

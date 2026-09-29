@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [BikeEntity::class, RideEntity::class, SampleEntity::class, EventEntity::class, MomentEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class RideTrackDatabase : RoomDatabase() {
@@ -22,7 +22,7 @@ abstract class RideTrackDatabase : RoomDatabase() {
             Room.databaseBuilder(context, RideTrackDatabase::class.java, "ridetrack.db")
                 // WAL keeps frequent small ride writes cheap and durable.
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
 
         /** Bike photo + redline, and OBD engine data per sample. Existing rows get NULL (unknown). */
@@ -47,6 +47,14 @@ abstract class RideTrackDatabase : RoomDatabase() {
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE moments ADD COLUMN clipStartMillis INTEGER")
+            }
+        }
+
+        /** Bike odometer: the rider's reading and when it was set. Existing bikes get NULL (not set). */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE bikes ADD COLUMN odometerKm REAL")
+                db.execSQL("ALTER TABLE bikes ADD COLUMN odometerSetAtMillis INTEGER")
             }
         }
 

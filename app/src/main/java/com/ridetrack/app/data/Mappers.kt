@@ -43,6 +43,8 @@ fun BikeEntity.toModel(): Bike {
         createdAtMillis = createdAtMillis,
         redlineRpm = redlineRpm,
         photoFile = photoFile,
+        odometerKm = odometerKm,
+        odometerSetAtMillis = odometerSetAtMillis,
     )
 }
 
@@ -62,6 +64,8 @@ fun Bike.toEntity() = BikeEntity(
     createdAtMillis = createdAtMillis,
     redlineRpm = redlineRpm,
     photoFile = photoFile,
+    odometerKm = odometerKm,
+    odometerSetAtMillis = odometerSetAtMillis,
 )
 
 fun RideEntity.toModel() = Ride(

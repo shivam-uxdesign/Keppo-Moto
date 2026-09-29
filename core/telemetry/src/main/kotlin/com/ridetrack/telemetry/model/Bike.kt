@@ -20,6 +20,10 @@ data class Bike(
     val redlineRpm: Int? = null,
     /** File name of the bike's photo in app storage, if the rider added one. */
     val photoFile: String? = null,
+    /** Odometer reading the rider entered, in km; null = never set. */
+    val odometerKm: Double? = null,
+    /** When [odometerKm] was entered; rides after this are added on top of it. */
+    val odometerSetAtMillis: Long? = null,
 ) {
     val displayName: String get() = listOf(make, model).filter { it.isNotBlank() }.joinToString(" ")
 }
