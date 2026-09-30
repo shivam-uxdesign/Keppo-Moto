@@ -17,7 +17,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -91,7 +93,8 @@ private val CardTints = listOf(
     Color(0xFF3E3A7A) to Color(0xFF111020),
 )
 
-private fun tint(index: Int) = CardTints[index.mod(CardTints.size)]
+/** Card colours by the bike's position in the garage. */
+internal fun bikeTint(index: Int) = CardTints[index.mod(CardTints.size)]
 
 private val CardShape = RoundedCornerShape(26.dp)
 private val CardHeight = 292.dp
@@ -122,7 +125,7 @@ fun GarageStack(
         peeks.forEachIndexed { i, bike ->
             PeekTab(
                 bike = bike,
-                tint = tint(bikes.indexOf(bike)),
+                tint = bikeTint(bikes.indexOf(bike)),
                 odometerKm = odometers[bike.id],
                 // The tab nearest the card is the widest, like cards fanned in a wallet.
                 inset = (MAX_PEEKS - 1 - i + (MAX_PEEKS - peeks.size)) * 8,
@@ -140,7 +143,7 @@ fun GarageStack(
         ) { bike ->
             FrontCard(
                 bike = bike,
-                tint = tint(bikes.indexOf(bike)),
+                tint = bikeTint(bikes.indexOf(bike)),
                 odometerKm = odometers[bike.id],
                 lastRidden = lastRidden[bike.id],
                 starting = starting,
@@ -230,8 +233,16 @@ private fun FrontCard(
     val idle by motion.animateFloat(-1f, 1f, infiniteRepeatable(tween(90, easing = LinearEasing), RepeatMode.Reverse), label = "idle")
     val glow by animateFloatAsState(if (starting) 1f else 0f, tween(300), label = "glow")
 
-    Box(
-        Modifier
+    BikeCardFace(
+        bike = bike,
+        tint = tint,
+        odometerKm = odometerKm,
+        lastRidden = lastRidden,
+        onEditOdometer = onEditBike,
+        drift = drift,
+        startZoom = startZoom,
+        border = BorderStroke(if (glow > 0f) 2.dp else 1.dp, if (glow > 0f) RtColors.Primary else Color.White.copy(alpha = 0.10f)),
+        modifier = Modifier
             .fillMaxWidth()
             .height(CardHeight)
             .graphicsLayer { if (starting && !reduce) translationX = idle * 0.8f }
@@ -244,10 +255,8 @@ private fun FrontCard(
                         cornerRadius = androidx.compose.ui.geometry.CornerRadius(32.dp.toPx()),
                     )
                 }
-            }
-            .clip(CardShape)
-            .background(Brush.radialGradient(listOf(tint.first, tint.second), center = Offset.Unspecified))
-            .border(if (glow > 0f) 2.dp else 1.dp, if (glow > 0f) RtColors.Primary else Color.White.copy(alpha = 0.10f), CardShape)
+            },
+        contentModifier = Modifier
             .pointerInput(bike.id) {
                 var dragX = 0f
                 detectHorizontalDragGestures(
@@ -257,6 +266,46 @@ private fun FrontCard(
                 )
             }
             .clickable(role = Role.Button, onClickLabel = "Manage bikes", onClick = onOpenBikes),
+    ) {
+        if (rideActive) {
+            ReturnToRide(onReturnToRide)
+        } else {
+            SlideToRide(
+                label = if (starting) "Starting on ${bike.displayName}…" else "Ride this bike",
+                bikeName = bike.displayName,
+                enabled = !starting,
+                onComplete = onStart,
+            )
+        }
+    }
+}
+
+/**
+ * A bike as a card: its photo (slowly drifting) or a tinted card with a motorcycle, the
+ * make, year and last-ridden tag, the name and the odometer; [footer] sits at the bottom.
+ * Shared by the home garage and the Bikes tab.
+ */
+@Composable
+internal fun BikeCardFace(
+    bike: Bike,
+    tint: Pair<Color, Color>,
+    odometerKm: Double?,
+    lastRidden: String?,
+    onEditOdometer: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentModifier: Modifier = Modifier,
+    drift: Float = 0f,
+    startZoom: Float = 0f,
+    border: BorderStroke = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+    footer: @Composable ColumnScope.() -> Unit = {},
+) {
+    val reduce = rememberReduceMotion()
+    Box(
+        modifier
+            .clip(CardShape)
+            .background(Brush.radialGradient(listOf(tint.first, tint.second), center = Offset.Unspecified))
+            .border(border, CardShape)
+            .then(contentModifier),
     ) {
         if (bike.photoFile != null) {
             BikeImage(
@@ -270,7 +319,7 @@ private fun FrontCard(
                         if (!reduce) translationX = -size.width * 0.02f * drift
                     },
             )
-            // Darken top and bottom so the name, odometer and slider stay readable on any photo.
+            // Darken top and bottom so the name, odometer and footer stay readable on any photo.
             Box(
                 Modifier
                     .fillMaxSize()
@@ -323,19 +372,10 @@ private fun FrontCard(
                     )
                 }
                 Spacer(Modifier.width(10.dp))
-                OdometerReadout(odometerKm, onEditBike)
+                OdometerReadout(odometerKm, onEditOdometer)
             }
             Spacer(Modifier.weight(1f))
-            if (rideActive) {
-                ReturnToRide(onReturnToRide)
-            } else {
-                SlideToRide(
-                    label = if (starting) "Starting on ${bike.displayName}…" else "Ride this bike",
-                    bikeName = bike.displayName,
-                    enabled = !starting,
-                    onComplete = onStart,
-                )
-            }
+            footer()
         }
     }
 }

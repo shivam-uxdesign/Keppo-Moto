@@ -1,6 +1,12 @@
 package com.ridetrack.app.ui.bike
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import com.ridetrack.app.ui.home.BikeCardFace
+import com.ridetrack.app.ui.home.bikeTint
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,13 +33,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import com.ridetrack.app.ui.components.BikeImage
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ridetrack.app.ui.appViewModel
@@ -74,9 +75,12 @@ fun BikeScreen(onAddBike: () -> Unit, onEditBike: (String) -> Unit, onCalibrate:
                 action = { PrimaryButton("Add bike", onAddBike, icon = Icons.Outlined.Add) },
             )
         }
-        s.bikes.forEach { bike ->
+        s.bikes.forEachIndexed { i, bike ->
             BikeCard(
                 bike = bike,
+                tintIndex = i,
+                odometerKm = s.odometers[bike.id],
+                lastRidden = s.lastRidden[bike.id],
                 selected = bike.id == s.selectedId,
                 onSelect = { vm.select(bike.id) },
                 onEdit = { onEditBike(bike.id) },
@@ -142,47 +146,57 @@ fun BikeScreen(onAddBike: () -> Unit, onEditBike: (String) -> Unit, onCalibrate:
     }
 }
 
+/** Same card as the home garage, with the bike's details and actions under it. */
 @Composable
-private fun BikeCard(bike: Bike, selected: Boolean, onSelect: () -> Unit, onEdit: () -> Unit, onCalibrate: () -> Unit, onDelete: () -> Unit) {
-    RtCard(onClick = onSelect) {
-        if (bike.photoFile != null) {
-            BikeImage(
-                bike.photoFile,
-                Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(14.dp)),
-            )
-            Spacer(Modifier.height(RtDimens.md))
+private fun BikeCard(
+    bike: Bike,
+    tintIndex: Int,
+    odometerKm: Double?,
+    lastRidden: String?,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onEdit: () -> Unit,
+    onCalibrate: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Column {
+        BikeCardFace(
+            bike = bike,
+            tint = bikeTint(tintIndex),
+            odometerKm = odometerKm,
+            lastRidden = lastRidden,
+            onEditOdometer = onEdit,
+            border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) RtColors.Primary else Color.White.copy(alpha = 0.10f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp),
+            contentModifier = Modifier.clickable(role = Role.Button, onClickLabel = if (selected) null else "Use for rides", onClick = onSelect),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (selected) {
+                    Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = RtColors.Primary, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Used for your next ride", style = RtType.caption, color = RtColors.TextPrimary)
+                } else {
+                    Text("Tap to use for your next ride", style = RtType.caption, color = RtColors.TextPrimary.copy(alpha = 0.75f))
+                }
+            }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (bike.photoFile == null) {
-                Icon(Icons.Outlined.TwoWheeler, contentDescription = null, tint = if (selected) RtColors.Primary else RtColors.TextSecondary)
-                Spacer(Modifier.width(RtDimens.sm))
-            }
-            Column(Modifier.weight(1f)) {
-                Text(bike.displayName, style = RtType.headline, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val details = listOfNotNull(
-                    bike.year?.toString(),
-                    bike.displacementCc?.let { "$it cc" },
-                    bike.weightKg?.let { "$it kg" },
-                    bike.redlineRpm?.let { "redline ${Format.rpm(it.toDouble())}" },
-                    bike.fuelType.name.lowercase().replaceFirstChar { it.titlecase(Locale.getDefault()) },
-                ).joinToString(" · ")
-                Text(details, style = RtType.caption, color = RtColors.TextSecondary)
-            }
-            if (selected) {
-                Icon(Icons.Outlined.CheckCircle, contentDescription = "Current bike", tint = RtColors.Primary)
-            }
-        }
-        Spacer(Modifier.height(RtDimens.md))
-        InfoRow("Phone mount", bike.mountOrientation.name.lowercase().replaceFirstChar { it.titlecase(Locale.getDefault()) })
-        InfoRow(
-            "Calibration",
-            bike.calibration?.let { "Calibrated · ${Format.rideDate(it.createdAtMillis)}" } ?: "Automatic on your next ride",
-            valueColor = if (bike.calibration == null) RtColors.TextSecondary else RtColors.TextPrimary,
+        Spacer(Modifier.height(10.dp))
+        val details = listOfNotNull(
+            bike.displacementCc?.let { "$it cc" },
+            bike.weightKg?.let { "$it kg" },
+            bike.redlineRpm?.let { "redline ${Format.rpm(it.toDouble())}" },
+            bike.fuelType.name.lowercase().replaceFirstChar { it.titlecase(Locale.getDefault()) },
+            bike.mountOrientation.name.lowercase().replaceFirstChar { it.titlecase(Locale.getDefault()) } + " mount",
+        ).joinToString(" · ")
+        Text(details, style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(horizontal = 4.dp))
+        Text(
+            bike.calibration?.let { "Calibrated · ${Format.rideDate(it.createdAtMillis)}" } ?: "Calibrates automatically on your next ride",
+            style = RtType.caption,
+            color = RtColors.TextTertiary,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
         )
-        Spacer(Modifier.height(RtDimens.sm))
         Row {
             TextButton(onClick = onCalibrate) { Text(if (bike.calibration == null) "Calibrate manually" else "Recalibrate", color = RtColors.Primary) }
             TextButton(onClick = onEdit) { Text("Edit", color = RtColors.TextPrimary) }

@@ -30,13 +30,21 @@ data class BikesUiState(
     val sensors: SensorAvailability = SensorAvailability(false, false, false),
     val hasGps: Boolean = false,
     val message: String? = null,
+    /** Current odometer per bike id, in km; null = not set. */
+    val odometers: Map<String, Double?> = emptyMap(),
+    /** "Ridden today" etc. per bike id. */
+    val lastRidden: Map<String, String> = emptyMap(),
 )
 
 class BikesViewModel(private val c: AppContainer) : ViewModel() {
     private val message = MutableStateFlow<String?>(null)
 
-    val state: StateFlow<BikesUiState> = combine(c.bikes.observeBikes(), c.settings.settings, message) { bikes, settings, msg ->
+    val state: StateFlow<BikesUiState> = combine(c.bikes.observeBikes(), c.settings.settings, message, c.rides.observeCompleted()) { bikes, settings, msg, rides ->
+        val now = java.time.ZonedDateTime.now()
+        val real = rides.filter { it.source != com.ridetrack.telemetry.model.DataSourceKind.DEMO }
         BikesUiState(
+            odometers = bikes.associate { it.id to Odometer.readingKm(it, rides) },
+            lastRidden = bikes.associate { b -> b.id to com.ridetrack.app.ui.home.lastRiddenLabel(real.filter { it.bikeId == b.id }.maxOfOrNull { it.startTimeMillis }, now) },
             loading = false,
             bikes = bikes,
             selectedId = bikes.firstOrNull { it.id == settings.selectedBikeId }?.id ?: bikes.firstOrNull()?.id,
