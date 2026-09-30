@@ -3,11 +3,10 @@ package com.ridetrack.app.ui.moments
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import android.widget.VideoView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -42,6 +41,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import com.ridetrack.telemetry.moments.telemetryAt
+import kotlin.math.roundToInt
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -118,6 +136,23 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
         }
     }
 
+    val player = remember { ExoPlayer.Builder(context).build().apply { repeatMode = Player.REPEAT_MODE_ONE } }
+    DisposableEffect(player) { onDispose { player.release() } }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { player.playWhenReady = false }
+    var positionMs by remember { mutableLongStateOf(0L) }
+    var durationMs by remember { mutableLongStateOf(0L) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var muted by remember { mutableStateOf(false) }
+    LaunchedEffect(muted) { player.volume = if (muted) 0f else 1f }
+    LaunchedEffect(player) {
+        while (true) {
+            positionMs = player.currentPosition.coerceAtLeast(0)
+            durationMs = player.duration.takeIf { it > 0 } ?: durationMs
+            isPlaying = player.playWhenReady
+            delay(POSITION_TICK_MS)
+        }
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (s.loading) return@Box
         if (s.moments.isEmpty()) {
@@ -126,14 +161,44 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
         }
         val initial = s.moments.indexOfFirst { it.id == startId }.coerceAtLeast(0)
         val pager = rememberPagerState(initialPage = initial) { s.moments.size }
+        val current = s.moments.getOrNull(pager.currentPage) ?: return@Box
+        val clip = current.kind == MomentKind.CLIP
+        // One player, loaded with whichever clip is on screen.
+        LaunchedEffect(current.id) {
+            if (clip) {
+                player.setMediaItem(MediaItem.fromUri(Uri.fromFile(current.file)))
+                player.prepare()
+                player.playWhenReady = true
+            } else {
+                player.stop()
+                player.clearMediaItems()
+            }
+            positionMs = 0
+        }
         HorizontalPager(pager, Modifier.fillMaxSize(), key = { s.moments[it].id }) { page ->
             val m = s.moments[page]
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                if (m.kind == MomentKind.CLIP) Clip(m, playing = pager.currentPage == page)
-                else Thumb(m.file, Modifier.fillMaxSize().padding(vertical = 80.dp), maxEdge = 1600)
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(enabled = m.kind == MomentKind.CLIP, onClickLabel = "Play or pause", indication = null, interactionSource = null) {
+                        player.playWhenReady = !player.playWhenReady
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (m.kind == MomentKind.CLIP && page == pager.currentPage) {
+                    AndroidView(
+                        factory = { ctx -> PlayerView(ctx).apply { useController = false; setShutterBackgroundColor(android.graphics.Color.BLACK) } },
+                        update = { it.player = player },
+                        onRelease = { it.player = null },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else if (m.kind == MomentKind.CLIP) {
+                    Thumb(m.thumb, Modifier.fillMaxSize(), maxEdge = 1080)
+                } else {
+                    Thumb(m.file, Modifier.fillMaxSize().padding(vertical = 80.dp), maxEdge = 1600)
+                }
             }
         }
-        val current = s.moments.getOrNull(pager.currentPage) ?: return@Box
 
         // Top: back, position, star.
         Row(
@@ -167,15 +232,41 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                     Text(Format.timeOfDay(current.timeMillis), style = RtType.caption, color = Color.White.copy(alpha = 0.7f))
                 }
             }
-            val sample = s.samples.sampleAt(current.timeMillis)
+            // Numbers follow the video: the ride at the frame on screen.
+            val at = if (clip) current.videoStartMillis + positionMs else current.timeMillis
+            val point = telemetryAt(s.samples, at)
+            val elevation = s.samples.sampleAt(at)?.altitudeM
+            val g = point?.longitudinalG
             StatRow(
                 listOf(
-                    Stat("Speed", Format.speedKmh(sample?.speedMps ?: current.speedMps), "km/h"),
-                    Stat("Lean", Format.lean(sample?.leanDeg), color = leanColor(sample?.leanDeg)),
-                    Stat("G", sample?.combinedG?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: Format.DASH, color = RtColors.GForce),
+                    Stat("Speed", Format.speedKmh(point?.speedMps ?: current.speedMps.takeIf { !clip }), "km/h"),
+                    Stat("Lean", Format.lean(point?.leanDeg), color = leanColor(point?.leanDeg)),
+                    Stat(
+                        when {
+                            g != null && g < -0.05 -> "Braking"
+                            g != null && g > 0.05 -> "Accel"
+                            else -> "G"
+                        },
+                        point?.combinedG?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: Format.DASH,
+                        color = RtColors.GForce,
+                    ),
+                    Stat("Elev.", elevation?.let { "${it.roundToInt()}" } ?: Format.DASH, if (elevation != null) "m" else null),
                 ),
                 style = RtType.metricM,
             )
+            if (clip) {
+                PlayerControls(
+                    playing = isPlaying,
+                    positionMs = positionMs,
+                    durationMs = durationMs,
+                    eventAtMs = (current.timeMillis - current.videoStartMillis).takeIf { it in 0..durationMs },
+                    eventColor = momentColor(current),
+                    muted = muted,
+                    onToggle = { player.playWhenReady = !player.playWhenReady },
+                    onSeek = { ms -> player.seekTo(ms); positionMs = ms },
+                    onMute = { muted = !muted },
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Share = the styled graphic with details; Original = the plain file.
                 Action(Icons.Outlined.IosShare, "Share") { onShareMoment(current.id) }
@@ -220,18 +311,69 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
     }
 }
 
+private const val POSITION_TICK_MS = 100L
+
+/** Play/pause, a seek bar (with a tick where the event happened), time and mute. */
 @Composable
-private fun Clip(m: Moment, playing: Boolean) {
-    val context = LocalContext.current
-    val view = remember(m.id) {
-        VideoView(context).apply {
-            setVideoPath(m.file.path)
-            setOnPreparedListener { mp: MediaPlayer -> mp.isLooping = true }
+private fun PlayerControls(
+    playing: Boolean,
+    positionMs: Long,
+    durationMs: Long,
+    eventAtMs: Long?,
+    eventColor: Color,
+    muted: Boolean,
+    onToggle: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onMute: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(
+            Modifier
+                .size(44.dp)
+                .background(Color.White, CircleShape)
+                .clickable(role = Role.Button, onClick = onToggle)
+                .semantics { contentDescription = if (playing) "Pause" else "Play" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.Black, modifier = Modifier.size(24.dp))
+        }
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            val max = durationMs.coerceAtLeast(1L).toFloat()
+            if (eventAtMs != null) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(eventAtMs / max)
+                            .height(14.dp),
+                        contentAlignment = Alignment.CenterEnd,
+                    ) { Box(Modifier.size(3.dp, 14.dp).background(eventColor, RoundedCornerShape(2.dp))) }
+                }
+            }
+            Slider(
+                value = positionMs.toFloat().coerceIn(0f, max),
+                onValueChange = { onSeek(it.toLong()) },
+                valueRange = 0f..max,
+                colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White, inactiveTrackColor = Color.White.copy(alpha = 0.25f)),
+                modifier = Modifier.semantics { contentDescription = "Seek" },
+            )
+        }
+        Text(
+            "${Format.clock(positionMs)} / ${Format.clock(durationMs)}",
+            style = RtType.caption.copy(fontFeatureSettings = "tnum"),
+            color = Color.White.copy(alpha = 0.85f),
+        )
+        IconButton(onClick = onMute, modifier = Modifier.background(Color.White.copy(alpha = 0.12f), CircleShape)) {
+            Icon(
+                if (muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
+                contentDescription = if (muted) "Unmute" else "Mute",
+                tint = Color.White,
+            )
         }
     }
-    LaunchedEffect(playing) { if (playing) view.start() else view.pause() }
-    DisposableEffect(view) { onDispose { view.stopPlayback() } }
-    AndroidView(factory = { view }, modifier = Modifier.fillMaxWidth())
 }
 
 @Composable
