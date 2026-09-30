@@ -1,65 +1,61 @@
 package com.ridetrack.app.ui.common
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import com.ridetrack.app.ui.components.InfoRow
-import com.ridetrack.app.ui.components.RtCard
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.ridetrack.app.ui.components.SectionHeader
-import com.ridetrack.app.ui.components.StatTile
-import com.ridetrack.app.ui.components.TwoColumn
 import com.ridetrack.app.ui.format.Format
 import com.ridetrack.app.ui.theme.RtColors
 import com.ridetrack.app.ui.theme.RtDimens
 import com.ridetrack.app.ui.theme.RtType
 import com.ridetrack.telemetry.model.Ride
+import java.util.Locale
+import kotlin.math.roundToInt
 
+/**
+ * Ride dynamics on one line: lean left, lean right, hardest braking, strongest acceleration.
+ * Each entry with a known moment is tappable ([onLeft] etc.) to show it on the timeline.
+ */
 @Composable
-fun HeadlineStats(ride: Ride) {
-    TwoColumn(
-        left = { StatTile("Distance", Format.distanceValue(ride.stats.distanceM), it, unit = "km") },
-        right = { StatTile("Duration", Format.duration(ride.durationMillis), it) },
-    )
-    Spacer(Modifier.height(RtDimens.cardSpacing))
-    TwoColumn(
-        left = { StatTile("Avg speed", Format.speedKmh(ride.stats.avgSpeedMps), it, unit = "km/h") },
-        right = { StatTile("Max speed", Format.speedKmh(ride.stats.maxSpeedMps), it, unit = "km/h") },
-    )
-}
-
-@Composable
-fun TimeBreakdown(ride: Ride) {
-    SectionHeader("Time")
-    RtCard {
-        InfoRow("Moving time", Format.duration(ride.stats.movingMillis))
-        Line()
-        InfoRow("Stopped time", Format.duration(ride.stats.stoppedMillis))
-        Line()
-        InfoRow("Stops", ride.stats.stopCount.toString())
-        Line()
-        InfoRow("Average stop", Format.duration(ride.stats.avgStopMillis))
-    }
-}
-
-@Composable
-fun RideDynamics(ride: Ride) {
+fun RideDynamics(
+    ride: Ride,
+    onLeft: (() -> Unit)? = null,
+    onRight: (() -> Unit)? = null,
+    onBrake: (() -> Unit)? = null,
+    onAccel: (() -> Unit)? = null,
+) {
     val s = ride.stats
-    SectionHeader("Ride dynamics")
-    RtCard {
-        InfoRow("Maximum left lean", Format.leanMagnitude(s.maxLeftLeanDeg), valueColor = RtColors.Left)
-        Line()
-        InfoRow("Maximum right lean", Format.leanMagnitude(s.maxRightLeanDeg), valueColor = RtColors.Right)
-        Line()
-        InfoRow("Average lean", Format.leanMagnitude(s.avgLeanDeg))
-        Line()
-        InfoRow("Maximum acceleration", Format.gSigned(s.maxAccelG), valueColor = RtColors.Accel)
-        Line()
-        InfoRow("Maximum braking", Format.gSigned(s.maxBrakeG), valueColor = RtColors.Brake)
-        Line()
-        InfoRow("Peak G-force", Format.g(s.peakG), valueColor = RtColors.GForce)
+    SectionHeader("Ride dynamics") {
+        if (listOf(onLeft, onRight, onBrake, onAccel).any { it != null }) {
+            Text("Tap to see it on the timeline", style = RtType.caption, color = RtColors.TextTertiary)
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        DynamicsEntry("Lean left", s.maxLeftLeanDeg?.let { "${it.roundToInt()}" }, "°", RtColors.Left, onLeft, Modifier.weight(1f))
+        DynamicsEntry("Lean right", s.maxRightLeanDeg?.let { "${it.roundToInt()}" }, "°", RtColors.Right, onRight, Modifier.weight(1f))
+        DynamicsEntry("Braking", s.maxBrakeG?.let { String.format(Locale.US, "%.2f", kotlin.math.abs(it)) }, " G", RtColors.Brake, onBrake, Modifier.weight(1f))
+        DynamicsEntry("Accel", s.maxAccelG?.let { String.format(Locale.US, "%.2f", kotlin.math.abs(it)) }, " G", RtColors.Accel, onAccel, Modifier.weight(1f))
     }
     Spacer(Modifier.height(RtDimens.xs))
     Text(
@@ -70,19 +66,27 @@ fun RideDynamics(ride: Ride) {
 }
 
 @Composable
-fun Maneuvers(ride: Ride) {
-    val s = ride.stats
-    SectionHeader("Maneuvers")
-    TwoColumn(
-        left = { StatTile("Left turns", s.leftTurns.toString(), it, color = RtColors.Left) },
-        right = { StatTile("Right turns", s.rightTurns.toString(), it, color = RtColors.Right) },
-    )
-    Spacer(Modifier.height(RtDimens.cardSpacing))
-    TwoColumn(
-        left = { StatTile("Brake events", s.brakeEvents.toString(), it, color = RtColors.Brake) },
-        right = { StatTile("Lean events", s.leanEvents.toString(), it) },
-    )
+private fun DynamicsEntry(label: String, value: String?, unit: String, color: Color, onClick: (() -> Unit)?, modifier: Modifier) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier
+            .height(74.dp)
+            .clip(shape)
+            .background(RtColors.Surface)
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClickLabel = "Show on timeline", onClick = onClick) else Modifier)
+            .padding(horizontal = 10.dp)
+            .semantics(mergeDescendants = true) {},
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(6.dp).background(color, CircleShape))
+            Spacer(Modifier.width(5.dp))
+            Text(label, style = RtType.caption.copy(fontSize = 10.sp), color = RtColors.TextSecondary, maxLines = 1)
+        }
+        Spacer(Modifier.height(3.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(value ?: Format.DASH, style = RtType.metricS.copy(fontSize = 21.sp, fontWeight = FontWeight.Light), color = if (value != null) color else RtColors.TextTertiary, maxLines = 1)
+            if (value != null) Text(unit, style = RtType.caption.copy(fontSize = 10.sp), color = RtColors.TextSecondary, modifier = Modifier.padding(bottom = 2.dp))
+        }
+    }
 }
-
-@Composable
-private fun Line() = HorizontalDivider(color = RtColors.Outline.copy(alpha = 0.6f))

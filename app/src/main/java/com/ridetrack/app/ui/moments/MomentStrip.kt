@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -55,10 +58,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** "Moments" row under a ride's map: thumbnails in ride order, a dot for what happened. */
+/**
+ * "Moments" row under a ride's map: thumbnails in ride order, a dot for what happened.
+ * [selectedId] (the moment nearest the timeline) is highlighted and scrolled into view.
+ */
 @Composable
-fun MomentStrip(moments: List<Moment>, onOpen: (String) -> Unit, modifier: Modifier = Modifier) {
+fun MomentStrip(moments: List<Moment>, onOpen: (String) -> Unit, modifier: Modifier = Modifier, selectedId: String? = null) {
     if (moments.isEmpty()) return
+    val listState = rememberLazyListState()
+    LaunchedEffect(selectedId) {
+        val i = moments.indexOfFirst { it.id == selectedId }
+        if (i >= 0) listState.animateScrollToItem((i - 1).coerceAtLeast(0))
+    }
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Label("Moments")
@@ -66,23 +77,25 @@ fun MomentStrip(moments: List<Moment>, onOpen: (String) -> Unit, modifier: Modif
             Text("${moments.size}", style = RtType.caption, color = RtColors.TextTertiary)
         }
         Spacer(Modifier.height(10.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(end = 8.dp)) {
-            items(moments, key = { it.id }) { m -> MomentTile(m) { onOpen(m.id) } }
+        LazyRow(state = listState, horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 4.dp, horizontal = 4.dp)) {
+            items(moments, key = { it.id }) { m -> MomentTile(m, selected = m.id == selectedId) { onOpen(m.id) } }
         }
     }
 }
 
 @Composable
-private fun MomentTile(m: Moment, onClick: () -> Unit) {
+private fun MomentTile(m: Moment, selected: Boolean = false, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val shape = RoundedCornerShape(16.dp)
+    val scale by animateFloatAsState(if (selected) 1.06f else 1f, label = "momentScale")
     Box(
         Modifier
             .size(84.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .pressScale(interaction)
             .clip(shape)
             .background(RtColors.Surface)
-            .border(1.dp, RtColors.Hairline, shape)
+            .border(if (selected) 2.dp else 1.dp, if (selected) RtColors.Primary else RtColors.Hairline, shape)
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = "${momentTitle(m)}, ${momentSubtitle(m)}" },
     ) {

@@ -31,7 +31,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -44,7 +43,6 @@ import com.ridetrack.app.ui.appContainer
 import com.ridetrack.app.ui.bike.BikeEditScreen
 import com.ridetrack.app.ui.bike.BikeScreen
 import com.ridetrack.app.ui.bike.CalibrationScreen
-import com.ridetrack.app.ui.detail.ReplayScreen
 import com.ridetrack.app.ui.detail.RideDetailScreen
 import com.ridetrack.app.ui.home.HomeScreen
 import com.ridetrack.app.ui.hud.HudSettingsScreen
@@ -67,7 +65,6 @@ object Routes {
     const val LIVE = "live"
     const val SUMMARY = "summary/{rideId}"
     const val DETAIL = "ride/{rideId}"
-    const val REPLAY = "replay/{rideId}"
     const val BIKE_EDIT = "bike/edit?bikeId={bikeId}"
     const val CALIBRATE = "calibrate/{bikeId}"
     const val HUD_SETTINGS = "hud-settings"
@@ -81,7 +78,6 @@ object Routes {
 
     fun summary(id: String) = "summary/$id"
     fun detail(id: String) = "ride/$id"
-    fun replay(id: String) = "replay/$id"
     fun bikeEdit(id: String? = null) = if (id == null) "bike/edit" else "bike/edit?bikeId=$id"
     fun calibrate(bikeId: String) = "calibrate/$bikeId"
 }
@@ -188,7 +184,6 @@ fun RideTrackNavHost() {
                     RideDetailScreen(
                         rideId = id,
                         onBack = { nav.popBackStack() },
-                        onReplay = { nav.navigate(Routes.replay(id)) },
                         onShare = { nav.navigate(Routes.share(id)) },
                         onOpenMoment = { nav.navigate(Routes.moments(id, it)) },
                     )
@@ -223,9 +218,6 @@ fun RideTrackNavHost() {
                 }
                 composable(Routes.SHARE, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
                     ShareRideScreen(rideId = entry.arguments?.getString("rideId").orEmpty(), onBack = { nav.popBackStack() })
-                }
-                composable(Routes.REPLAY, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
-                    ReplayScreen(rideId = entry.arguments?.getString("rideId").orEmpty(), onBack = { nav.popBackStack() })
                 }
                 composable(
                     Routes.BIKE_EDIT,
