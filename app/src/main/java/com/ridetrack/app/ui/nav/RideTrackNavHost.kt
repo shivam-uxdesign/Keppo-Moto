@@ -126,7 +126,6 @@ fun RideTrackNavHost() {
                         onRideStarted = { nav.navigate(Routes.LIVE) { launchSingleTop = true } },
                         onReturnToRide = { nav.navigate(Routes.LIVE) { launchSingleTop = true } },
                         onOpenProfile = { nav.switchTab(Routes.PROFILE) },
-                        onOpenBikes = { nav.switchTab(Routes.BIKE) },
                         onAddBike = { nav.navigate(Routes.bikeEdit()) },
                         onEditBike = { nav.navigate(Routes.bikeEdit(it)) },
                     )

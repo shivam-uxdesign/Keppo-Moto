@@ -29,6 +29,13 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -80,10 +87,12 @@ private const val MARKER_SOURCE = "marker-source"
 private const val PROGRESS_SOURCE = "progress-source"
 private const val PINS_SOURCE = "moment-pins"
 private const val PINS_LAYER = "moment-pins"
-private const val BIKE_LAYER = "bike"
-private const val BIKE_ICON = "bike-icon"
 private const val FOLLOW_ZOOM = 17.0
 private const val FOLLOW_TILT = 60.0
+/** Top padding (share of the map height) that puts the followed bike low in the 3D view. */
+private const val FOLLOW_TOP_PAD = 0.4
+private const val FLY_IN_MS = 600L
+private const val PROGRESS_REFRESH_MS = 80L
 
 /** A moment on the map. */
 data class MapPin(val id: String, val latitude: Double, val longitude: Double, val thumb: java.io.File?, val color: androidx.compose.ui.graphics.Color)
@@ -146,6 +155,12 @@ fun RouteMap(
     playing: Boolean = false,
     /** + / − buttons on the right edge. */
     zoomButtons: Boolean = false,
+    /** Lean (degrees, negative = left) of the bike drawn in the 3D view. */
+    bikeLean: Float = 0f,
+    /** Corner rounding; 0 for a full-bleed map. */
+    corner: Dp = RtDimens.cardRadius,
+    /** Space above the map-style toggle (for a header drawn over the map). */
+    controlsTop: Dp = 0.dp,
     /** Extra controls drawn over the map (time chip, play controls, view toggle). */
     overlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
 ) {
@@ -198,7 +213,6 @@ fun RouteMap(
         style = null
         m.setStyle(styleBuilder(mapStyle)) { s ->
             addRouteLayers(s)
-            s.addImage(BIKE_ICON, bikeIcon(context.resources.displayMetrics.density))
             style = s
         }
     }
@@ -212,12 +226,23 @@ fun RouteMap(
         }
     }
     val drawnCount = if (drawAnim.value < 1f) (route.size * drawAnim.value).toInt().coerceAtLeast(1) else null
-    val effectiveProgress = drawnCount ?: progress
 
-    LaunchedEffect(style, route, effectiveProgress) {
+    val routePoints = remember(route) { route.map { Point.fromLngLat(it.longitude, it.latitude) } }
+    // The travelled line ends at the marker, which moves every frame during replay; redrawing
+    // a long line that often is wasteful, so while playing it is refreshed a few times a second.
+    val shown = remember { arrayOf<Pair<Int?, GeoPoint?>>(null to null) }
+    val shownAt = remember { longArrayOf(0L) }
+    val now = android.os.SystemClock.uptimeMillis()
+    if (!playing || now - shownAt[0] >= PROGRESS_REFRESH_MS) {
+        shown[0] = progress to marker?.takeIf { progress != null }
+        shownAt[0] = now
+    }
+    val (lineProgress, progressHead) = shown[0]
+    val effectiveProgress = drawnCount ?: lineProgress
+    LaunchedEffect(style, route, effectiveProgress, progressHead) {
         val s = style ?: return@LaunchedEffect
         val done = effectiveProgress?.coerceIn(0, route.size)
-        val pts = route.take(done ?: 0).map { Point.fromLngLat(it.longitude, it.latitude) }
+        val pts = routePoints.subList(0, done ?: 0) + listOfNotNull(progressHead?.takeIf { drawnCount == null }?.let { Point.fromLngLat(it.longitude, it.latitude) })
         s.getSourceAs<GeoJsonSource>(PROGRESS_SOURCE)?.setGeoJson(
             if (pts.size >= 2) FeatureCollection.fromFeature(Feature.fromGeometry(LineString.fromLngLats(pts)))
             else FeatureCollection.fromFeatures(emptyList()),
@@ -247,24 +272,40 @@ fun RouteMap(
 
     // Extra zoom the rider applied in 3D (on top of the default follow distance).
     var zoom3d by remember { mutableDoubleStateOf(0.0) }
-    LaunchedEffect(style, marker, threeD, bearing) {
+    var mapHeight by remember { mutableIntStateOf(0) }
+    LaunchedEffect(style, marker, threeD) {
         val s = style ?: return@LaunchedEffect
-        val feature = marker?.let { Feature.fromGeometry(Point.fromLngLat(it.longitude, it.latitude)).apply { addNumberProperty("bearing", bearing ?: 0f) } }
+        // In 3D the bike is drawn over the map instead of the dot.
+        val feature = marker?.takeIf { !threeD }?.let { Feature.fromGeometry(Point.fromLngLat(it.longitude, it.latitude)) }
         s.getSourceAs<GeoJsonSource>(MARKER_SOURCE)?.setGeoJson(FeatureCollection.fromFeatures(listOfNotNull(feature)))
-        s.getLayer("marker")?.setProperties(PropertyFactory.visibility(if (threeD) Property.NONE else Property.VISIBLE))
-        s.getLayer(BIKE_LAYER)?.setProperties(PropertyFactory.visibility(if (threeD) Property.VISIBLE else Property.NONE))
-        val m = map ?: return@LaunchedEffect
-        if (threeD && marker != null) {
+    }
+    // The 3D camera sits behind the bike and follows it every frame. Entering 3D flies there
+    // first; after that each frame moves the camera directly so nothing lags behind the bike.
+    val flyUntil = remember { longArrayOf(0L) }
+    val m3 = map
+    val extraZoom = zoom3d
+    val padTop = mapHeight * FOLLOW_TOP_PAD
+    SideEffect {
+        val m = m3 ?: return@SideEffect
+        if (style == null || marker == null) return@SideEffect
+        if (threeD) {
             val cam = CameraPosition.Builder()
                 .target(LatLng(marker.latitude, marker.longitude))
-                .zoom(FOLLOW_ZOOM + zoom3d)
+                .zoom(FOLLOW_ZOOM + extraZoom)
                 .tilt(FOLLOW_TILT)
                 .bearing((bearing ?: 0f).toDouble())
+                .padding(0.0, padTop, 0.0, 0.0)
                 .build()
-            if (playing) m.moveCamera(CameraUpdateFactory.newCameraPosition(cam))
-            else m.easeCamera(CameraUpdateFactory.newCameraPosition(cam), 450)
-        } else if (followMarker && marker != null) {
-            m.moveCamera(CameraUpdateFactory.newLatLng(LatLng(marker.latitude, marker.longitude)))
+            val now = android.os.SystemClock.uptimeMillis()
+            if (m.cameraPosition.tilt < 1.0 && flyUntil[0] == 0L) {
+                flyUntil[0] = now + FLY_IN_MS
+                m.animateCamera(CameraUpdateFactory.newCameraPosition(cam), FLY_IN_MS.toInt())
+            } else if (now >= flyUntil[0]) {
+                m.moveCamera(CameraUpdateFactory.newCameraPosition(cam))
+            }
+        } else {
+            flyUntil[0] = 0L
+            if (followMarker) m.moveCamera(CameraUpdateFactory.newLatLng(LatLng(marker.latitude, marker.longitude)))
         }
     }
     // Leaving 3D: back to the flat overview of the whole route.
@@ -272,7 +313,7 @@ fun RouteMap(
     LaunchedEffect(threeD, map) {
         val m = map ?: return@LaunchedEffect
         if (wasThreeD && !threeD) {
-            m.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(m.cameraPosition.target).tilt(0.0).bearing(0.0).zoom(m.cameraPosition.zoom).build()), 300)
+            m.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(m.cameraPosition.target).tilt(0.0).bearing(0.0).padding(0.0, 0.0, 0.0, 0.0).zoom(m.cameraPosition.zoom).build()), 300)
             mapView.postDelayed({ fitCamera(m, route) }, 320)
         }
         wasThreeD = threeD
@@ -316,11 +357,25 @@ fun RouteMap(
 
     Box(
         modifier
-            .clip(RoundedCornerShape(RtDimens.cardRadius))
+            .clip(RoundedCornerShape(corner))
             .background(RtColors.Surface)
+            .onSizeChanged { mapHeight = it.height }
             .semantics { contentDescription = "Route map" },
     ) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+        if (threeD && marker != null && style != null) {
+            // Pinned where the follow camera puts the bike's position.
+            val density = LocalDensity.current
+            val bikeSize = 132.dp
+            val anchorY = mapHeight * (1f + FOLLOW_TOP_PAD.toFloat()) / 2f
+            LeanBike(
+                bikeLean,
+                size = bikeSize,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset { IntOffset(0, (anchorY - with(density) { bikeSize.toPx() } * BIKE_CONTACT_Y).toInt()) },
+            )
+        }
         if (zoomButtons) {
             ZoomButtons(
                 onZoom = { delta ->
@@ -340,7 +395,7 @@ fun RouteMap(
                 onSelect = { st -> scope.launch { container.settings.setMapStyle(st) } },
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(10.dp),
+                    .padding(start = 10.dp, end = 10.dp, bottom = 10.dp, top = 10.dp + controlsTop),
             )
         }
         if (route.size < 2) {
@@ -420,17 +475,6 @@ private fun addRouteLayers(s: Style) {
         ),
     )
     s.addLayer(
-        SymbolLayer(BIKE_LAYER, MARKER_SOURCE).withProperties(
-            PropertyFactory.iconImage(BIKE_ICON),
-            PropertyFactory.iconAllowOverlap(true),
-            PropertyFactory.iconIgnorePlacement(true),
-            PropertyFactory.iconRotate(Expression.get("bearing")),
-            PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
-            PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_MAP),
-            PropertyFactory.visibility(Property.NONE),
-        ),
-    )
-    s.addLayer(
         CircleLayer("marker", MARKER_SOURCE).withProperties(
             PropertyFactory.circleRadius(8f),
             PropertyFactory.circleColor(hex(RtColors.GForce)),
@@ -460,42 +504,6 @@ private fun ZoomButtons(onZoom: (Double) -> Unit, modifier: Modifier = Modifier)
             ) { Text(label, style = RtType.bodyStrong.copy(fontSize = 20.sp), color = RtColors.TextPrimary) }
         }
     }
-}
-
-/** A top-down motorcycle, pointing up; rotated on the map to the direction of travel. */
-private fun bikeIcon(density: Float): android.graphics.Bitmap {
-    val w = (34 * density).toInt()
-    val h = (46 * density).toInt()
-    val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
-    val c = android.graphics.Canvas(bmp)
-    val d = density
-    val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-    // Glow.
-    p.color = android.graphics.Color.argb(90, 105, 200, 203)
-    c.drawOval(2 * d, 6 * d, 32 * d, 44 * d, p)
-    // Wheels.
-    p.color = android.graphics.Color.rgb(26, 26, 29)
-    c.drawRoundRect(14.5f * d, 1 * d, 19.5f * d, 12 * d, 2.5f * d, 2.5f * d, p)
-    c.drawRoundRect(14.5f * d, 33 * d, 19.5f * d, 45 * d, 2.5f * d, 2.5f * d, p)
-    // Body.
-    val body = android.graphics.Path().apply {
-        moveTo(11 * d, 14 * d)
-        quadTo(17 * d, 6 * d, 23 * d, 14 * d)
-        lineTo(22 * d, 32 * d)
-        quadTo(17 * d, 36 * d, 12 * d, 32 * d)
-        close()
-    }
-    p.color = android.graphics.Color.rgb(163, 22, 42)
-    c.drawPath(body, p)
-    p.style = android.graphics.Paint.Style.STROKE
-    p.strokeWidth = 1.2f * d
-    p.color = android.graphics.Color.WHITE
-    c.drawPath(body, p)
-    p.style = android.graphics.Paint.Style.FILL
-    // Handlebar and rider.
-    c.drawRoundRect(5 * d, 12 * d, 29 * d, 14.6f * d, 1.3f * d, 1.3f * d, p)
-    c.drawCircle(17 * d, 22 * d, 3.4f * d, p)
-    return bmp
 }
 
 @Composable

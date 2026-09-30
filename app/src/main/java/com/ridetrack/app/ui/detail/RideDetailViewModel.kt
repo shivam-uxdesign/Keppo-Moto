@@ -6,6 +6,9 @@ import com.ridetrack.app.AppContainer
 import com.ridetrack.app.data.RideTrack
 import com.ridetrack.app.ui.common.indexAt
 import com.ridetrack.app.ui.common.positionAt
+import com.ridetrack.app.ui.common.positionAtSmooth
+import com.ridetrack.app.ui.common.sampleAt
+import com.ridetrack.app.moments.Moment
 import com.ridetrack.app.ui.common.routePoints
 import com.ridetrack.app.ui.components.ChartWindow
 import com.ridetrack.telemetry.math.Geo
@@ -21,9 +24,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,11 +68,42 @@ class TrackData(val track: RideTrack) {
         return Geo.bearingDeg(a.latitude, a.longitude, b.latitude, b.longitude).toFloat()
     }
 
+    /** Ride time (ms, between samples) at [fraction] of the timeline. */
+    fun timeAt(fraction: Float): Double {
+        if (samples.size < 2) return startMillis.toDouble()
+        val x = fraction.coerceIn(0f, 1f).toDouble() * (samples.size - 1)
+        val i = x.toInt().coerceAtMost(samples.size - 2)
+        val a = samples[i].timeMillis
+        return a + (samples[i + 1].timeMillis - a) * (x - i)
+    }
+
+    /** Where ride time [timeMillis] sits on the timeline (0..1), between samples. */
+    fun fractionOf(timeMillis: Double): Float {
+        if (samples.size < 2) return 0f
+        val i = samples.indexAt(timeMillis.toLong()).coerceAtLeast(0)
+        if (i >= samples.size - 1) return 1f
+        val a = samples[i].timeMillis
+        val b = samples[i + 1].timeMillis
+        val within = if (b > a) ((timeMillis - a) / (b - a)).coerceIn(0.0, 1.0) else 0.0
+        return ((i + within) / (samples.size - 1)).toFloat()
+    }
+
+    fun timeOf(index: Int): Double = samples.getOrNull(index)?.timeMillis?.toDouble() ?: startMillis.toDouble()
+
+    /** Direction of travel at [timeMillis], from the smoothed positions either side. */
+    fun bearingAtTime(timeMillis: Double): Float? {
+        val a = samples.positionAtSmooth(timeMillis - SMOOTH_BEARING_SPAN_MS) ?: return null
+        val b = samples.positionAtSmooth(timeMillis + SMOOTH_BEARING_SPAN_MS) ?: return null
+        if (Geo.distanceM(a.latitude, a.longitude, b.latitude, b.longitude) < 3.0) return samples.sampleAt(timeMillis.toLong())?.headingDeg?.toFloat()
+        return Geo.bearingDeg(a.latitude, a.longitude, b.latitude, b.longitude).toFloat()
+    }
+
     private fun series(symmetric: Boolean = false, floorZero: Boolean = false, f: (TelemetrySample) -> Double?) =
         ChartSeries(FloatArray(samples.size) { i -> f(samples[i])?.toFloat() ?: Float.NaN }, symmetric, floorZero)
 }
 
 private const val BEARING_SPAN_MS = 4_000L
+private const val SMOOTH_BEARING_SPAN_MS = 8_000.0
 
 enum class ChartKind(val label: String) { SPEED("Speed"), LEAN("Lean"), G("G"), ELEVATION("Elevation") }
 
@@ -89,19 +120,26 @@ data class Playback(val playing: Boolean = false, val speedIndex: Int = 1, val t
 
 /** Real-time multiples; 60× plays an hour's ride in a minute. */
 val PLAY_SPEEDS = listOf(1.0, 4.0, 16.0, 60.0)
-private const val FRAME_MILLIS = 33L
 private const val JUMP_WINDOW_MS = 10 * 60_000L
 private const val JUMP_MIN_SPAN_MS = 60_000L
 
 class RideDetailViewModel(private val c: AppContainer, private val rideId: String) : ViewModel() {
     private val data = MutableStateFlow<TrackData?>(null)
+    /** The playhead as ride time (ms); moves continuously during replay. */
+    private val _time = MutableStateFlow<Double?>(null)
+    val time: StateFlow<Double?> = _time.asStateFlow()
     private val _scrub = MutableStateFlow<Float?>(null)
     val scrub: StateFlow<Float?> = _scrub.asStateFlow()
     private val _window = MutableStateFlow(ChartWindow.Full)
     val window: StateFlow<ChartWindow> = _window.asStateFlow()
     private val _playback = MutableStateFlow(Playback())
     val playback: StateFlow<Playback> = _playback.asStateFlow()
-    private var playJob: Job? = null
+
+    val moments: StateFlow<List<Moment>> = c.moments.observe(rideId).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    private val replay = MomentReplay()
+    private val _activeMoment = MutableStateFlow<Moment?>(null)
+    /** The moment popping up over the map during replay. */
+    val activeMoment: StateFlow<Moment?> = _activeMoment.asStateFlow()
 
     val state: StateFlow<DetailUiState> = combine(c.rides.observeRide(rideId), c.bikes.observeBikes(), data) { ride, bikes, d ->
         DetailUiState(
@@ -116,16 +154,32 @@ class RideDetailViewModel(private val c: AppContainer, private val rideId: Strin
         viewModelScope.launch {
             val d = withContext(Dispatchers.Default) { TrackData(c.rides.track(rideId)) }
             data.value = d
-            if (_scrub.value == null && d.samples.size >= 2) {
-                _scrub.value = d.initialIndex.toFloat() / (d.samples.size - 1)
-            }
+            if (_time.value == null && d.samples.size >= 2) setTime(d.timeOf(d.initialIndex))
+        }
+        viewModelScope.launch {
+            moments.collect { list -> replay.setWindows(list.map(MomentWindow::of)) }
         }
     }
 
-    fun scrubTo(fraction: Float) {
-        val f = fraction.coerceIn(0f, 1f)
+    private fun setTime(t: Double, follow: Boolean = true) {
+        val d = data.value ?: return
+        val clamped = t.coerceIn(d.startMillis.toDouble(), (d.startMillis + d.durationMillis).toDouble())
+        _time.value = clamped
+        val f = d.fractionOf(clamped)
         _scrub.value = f
-        _window.value = _window.value.follow(f)
+        if (follow) _window.value = _window.value.follow(f)
+    }
+
+    /** The rider moved the playhead: moments may pop up again. */
+    private fun moved() {
+        replay.reset()
+        _activeMoment.value = null
+    }
+
+    fun scrubTo(fraction: Float) {
+        val d = data.value ?: return
+        moved()
+        setTime(d.timeAt(fraction))
     }
 
     fun setWindow(w: ChartWindow) {
@@ -145,17 +199,20 @@ class RideDetailViewModel(private val c: AppContainer, private val rideId: Strin
      */
     fun jumpToIndex(index: Int) {
         val d = data.value ?: return
-        pause()
-        val f = d.fraction(index)
-        _scrub.value = f
-        val around = d.durationMillis.takeIf { it > 0 }?.let { (JUMP_WINDOW_MS.toFloat() / it).coerceAtMost(1f) } ?: 1f
-        _window.value = ChartWindow.around(f, minOf(around, _window.value.span))
+        jumpToTime(d.timeOf(index))
     }
 
-    fun jumpToTime(timeMillis: Long) {
+    fun jumpToTime(timeMillis: Long) = jumpToTime(timeMillis.toDouble())
+
+    private fun jumpToTime(timeMillis: Double) {
         val d = data.value ?: return
         if (d.samples.size < 2) return
-        jumpToIndex(d.samples.indexAt(timeMillis).coerceAtLeast(0))
+        pause()
+        moved()
+        setTime(timeMillis, follow = false)
+        val f = _scrub.value ?: return
+        val around = d.durationMillis.takeIf { it > 0 }?.let { (JUMP_WINDOW_MS.toFloat() / it).coerceAtMost(1f) } ?: 1f
+        _window.value = ChartWindow.around(f, minOf(around, _window.value.span))
     }
 
     fun setThreeD(on: Boolean) = _playback.update { it.copy(threeD = on) }
@@ -164,32 +221,41 @@ class RideDetailViewModel(private val c: AppContainer, private val rideId: Strin
 
     fun togglePlay() = if (_playback.value.playing) pause() else play()
 
-    /** Replays the ride on the map, the chart and the moments together. */
+    /** Replays the ride on the map, the chart and the moments together; the screen drives it with [advance]. */
     fun play() {
         val d = data.value ?: return
         if (d.durationMillis <= 0 || d.samples.size < 2) return
-        if ((_scrub.value ?: 0f) >= 0.999f) _scrub.value = 0f
-        _playback.update { it.copy(playing = true) }
-        playJob?.cancel()
-        playJob = viewModelScope.launch {
-            var last = System.nanoTime()
-            while (isActive) {
-                delay(FRAME_MILLIS)
-                val now = System.nanoTime()
-                val realMillis = (now - last) / 1_000_000.0
-                last = now
-                val rideMillis = realMillis * PLAY_SPEEDS[_playback.value.speedIndex]
-                val next = ((_scrub.value ?: 0f) + (rideMillis / d.durationMillis).toFloat()).coerceAtMost(1f)
-                scrubTo(next)
-                if (next >= 1f) break
-            }
-            _playback.update { it.copy(playing = false) }
+        if ((_scrub.value ?: 0f) >= 0.999f) {
+            moved()
+            setTime(d.startMillis.toDouble())
         }
+        _playback.update { it.copy(playing = true) }
+    }
+
+    /** One display frame of replay: [realMillis] of wall-clock time has passed. */
+    fun advance(realMillis: Double) {
+        val d = data.value ?: return
+        if (!_playback.value.playing) return
+        val now = _time.value ?: d.startMillis.toDouble()
+        val next = replay.advance(now, realMillis, PLAY_SPEEDS[_playback.value.speedIndex])
+        setTime(next)
+        syncActive()
+        if (next >= d.startMillis + d.durationMillis) pause()
+    }
+
+    /** Tapped outside the pop-up: skip the rest of the moment and carry on. */
+    fun skipMoment() {
+        val end = replay.skip() ?: return
+        setTime(end)
+        syncActive()
+    }
+
+    private fun syncActive() {
+        val id = replay.active?.id
+        if (_activeMoment.value?.id != id) _activeMoment.value = id?.let { i -> moments.value.firstOrNull { it.id == i } }
     }
 
     fun pause() {
-        playJob?.cancel()
-        playJob = null
         _playback.update { it.copy(playing = false) }
     }
 
@@ -199,8 +265,8 @@ class RideDetailViewModel(private val c: AppContainer, private val rideId: Strin
         _chart.value = kind
     }
 
-    fun clearScrub() {
-        _scrub.value = null
+    fun cycleChart() {
+        _chart.value = ChartKind.entries[(_chart.value.ordinal + 1) % ChartKind.entries.size]
     }
 
     fun rename(name: String) {

@@ -43,6 +43,9 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
 
     fun observe(rideId: String): Flow<List<Moment>> = dao.observeForRide(rideId).map { list -> list.map { it.toModel() } }
 
+    /** Number of moments per bike id. */
+    fun observeCountsByBike(): Flow<Map<String, Int>> = dao.observeCountsByBike().map { rows -> rows.mapNotNull { r -> r.bikeId?.let { it to r.count } }.toMap() }
+
     suspend fun forRide(rideId: String): List<Moment> = dao.forRide(rideId).map { it.toModel() }
 
     suspend fun add(m: Moment) = dao.insert(

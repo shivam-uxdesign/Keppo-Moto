@@ -71,7 +71,6 @@ fun HomeScreen(
     onRideStarted: () -> Unit,
     onReturnToRide: () -> Unit,
     onOpenProfile: () -> Unit,
-    onOpenBikes: () -> Unit,
     onAddBike: () -> Unit,
     onEditBike: (String) -> Unit,
 ) {
@@ -126,13 +125,13 @@ fun HomeScreen(
                 selected = bike,
                 odometers = s.odometers,
                 lastRidden = s.lastRidden,
+                stats = s.bikeStats,
                 starting = s.starting,
                 rideActive = s.rideState.isActive,
                 onSelect = vm::selectBike,
                 onStart = ::go,
                 onReturnToRide = onReturnToRide,
                 onEditBike = onEditBike,
-                onOpenBikes = onOpenBikes,
                 modifier = Modifier.riseIn(0),
             )
         } else if (!s.loading) {

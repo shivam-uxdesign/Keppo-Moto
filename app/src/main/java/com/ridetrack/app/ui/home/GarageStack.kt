@@ -1,5 +1,8 @@
 package com.ridetrack.app.ui.home
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -23,7 +26,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
@@ -102,7 +105,8 @@ private const val MAX_PEEKS = 2
 
 /**
  * The garage as a wallet: the selected bike is a full card you slide to start a ride on,
- * the others peek out above it. Swipe the card sideways or tap a tab to change bikes.
+ * the others peek out above it. Swipe the card up or down, or tap a tab, to change bikes;
+ * tap the card to flip it over to the bike's lifetime stats.
  */
 @Composable
 fun GarageStack(
@@ -110,13 +114,13 @@ fun GarageStack(
     selected: Bike,
     odometers: Map<String, Double?>,
     lastRidden: Map<String, String>,
+    stats: Map<String, BikeStats>,
     starting: Boolean,
     rideActive: Boolean,
     onSelect: (String) -> Unit,
     onStart: (Bike) -> Unit,
     onReturnToRide: () -> Unit,
     onEditBike: (String) -> Unit,
-    onOpenBikes: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val index = bikes.indexOfFirst { it.id == selected.id }.coerceAtLeast(0)
@@ -146,15 +150,13 @@ fun GarageStack(
                 tint = bikeTint(bikes.indexOf(bike)),
                 odometerKm = odometers[bike.id],
                 lastRidden = lastRidden[bike.id],
+                stats = stats[bike.id],
                 starting = starting,
                 rideActive = rideActive,
-                onSwipe = { dir ->
-                    if (bikes.size > 1) onSelect(bikes[(index + dir).mod(bikes.size)].id)
-                },
+                onSwipe = if (bikes.size > 1) { dir -> onSelect(bikes[(index + dir).mod(bikes.size)].id) } else null,
                 onStart = { onStart(bike) },
                 onReturnToRide = onReturnToRide,
                 onEditBike = { onEditBike(bike.id) },
-                onOpenBikes = onOpenBikes,
             )
         }
         if (bikes.size > 1) {
@@ -216,13 +218,14 @@ private fun FrontCard(
     tint: Pair<Color, Color>,
     odometerKm: Double?,
     lastRidden: String?,
+    stats: BikeStats?,
     starting: Boolean,
     rideActive: Boolean,
-    onSwipe: (Int) -> Unit,
+    /** Next (+1) or previous (-1) bike; null with only one bike. */
+    onSwipe: ((Int) -> Unit)?,
     onStart: () -> Unit,
     onReturnToRide: () -> Unit,
     onEditBike: () -> Unit,
-    onOpenBikes: () -> Unit,
 ) {
     val reduce = rememberReduceMotion()
     val motion = rememberInfiniteTransition(label = "card")
@@ -232,7 +235,32 @@ private fun FrontCard(
     // An idling-engine shiver while starting.
     val idle by motion.animateFloat(-1f, 1f, infiniteRepeatable(tween(90, easing = LinearEasing), RepeatMode.Reverse), label = "idle")
     val glow by animateFloatAsState(if (starting) 1f else 0f, tween(300), label = "glow")
+    // Each bike's card starts face up, so changing bike always shows the front.
+    var flipped by remember { mutableStateOf(false) }
+    val turn by animateFloatAsState(if (flipped && !starting) 180f else 0f, tween(if (reduce) 0 else FLIP_MS, easing = FastOutSlowInEasing), label = "flip")
+    val swipe = onSwipe?.let { f ->
+        Modifier.pointerInput(bike.id) {
+            var dragY = 0f
+            detectVerticalDragGestures(
+                onDragStart = { dragY = 0f },
+                onVerticalDrag = { change, d -> dragY += d; change.consume() },
+                onDragEnd = { if (abs(dragY) > 50.dp.toPx()) f(if (dragY < 0) 1 else -1) },
+            )
+        }
+    } ?: Modifier
+    val flip = Modifier.clickable(role = Role.Button, onClickLabel = if (flipped) "Show the card" else "Show bike stats") { flipped = !flipped }
+    val cardFrame = Modifier
+        .fillMaxWidth()
+        .height(CardHeight)
+        .graphicsLayer {
+            rotationY = if (turn > 90f) turn - 180f else turn
+            cameraDistance = 14f * density
+        }
 
+    if (turn > 90f && stats != null) {
+        BikeStatsFace(bike, tint, stats, modifier = cardFrame.then(swipe).then(flip))
+        return
+    }
     BikeCardFace(
         bike = bike,
         tint = tint,
@@ -242,9 +270,7 @@ private fun FrontCard(
         drift = drift,
         startZoom = startZoom,
         border = BorderStroke(if (glow > 0f) 2.dp else 1.dp, if (glow > 0f) RtColors.Primary else Color.White.copy(alpha = 0.10f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(CardHeight)
+        modifier = cardFrame
             .graphicsLayer { if (starting && !reduce) translationX = idle * 0.8f }
             .drawBehind {
                 if (glow > 0f) {
@@ -256,16 +282,7 @@ private fun FrontCard(
                     )
                 }
             },
-        contentModifier = Modifier
-            .pointerInput(bike.id) {
-                var dragX = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { dragX = 0f },
-                    onHorizontalDrag = { _, d -> dragX += d },
-                    onDragEnd = { if (abs(dragX) > 50.dp.toPx()) onSwipe(if (dragX < 0) 1 else -1) },
-                )
-            }
-            .clickable(role = Role.Button, onClickLabel = "Manage bikes", onClick = onOpenBikes),
+        contentModifier = swipe.then(flip),
     ) {
         if (rideActive) {
             ReturnToRide(onReturnToRide)
@@ -379,6 +396,61 @@ internal fun BikeCardFace(
         }
     }
 }
+
+/** The back of the card: the bike's lifetime numbers. */
+@Composable
+private fun BikeStatsFace(bike: Bike, tint: Pair<Color, Color>, stats: BikeStats, modifier: Modifier) {
+    Column(
+        modifier
+            .clip(CardShape)
+            .background(Brush.radialGradient(listOf(tint.first, tint.second), center = Offset.Unspecified))
+            .background(Color(0x990A0A0B))
+            .border(1.dp, Color.White.copy(alpha = 0.10f), CardShape)
+            .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                val sub = listOfNotNull(bike.make.takeIf { it.isNotBlank() && bike.model.isNotBlank() }, bike.year?.toString(), BikeStats.sinceLabel(stats.sinceMillis)).joinToString(" · ")
+                Text(sub, style = RtType.caption, color = RtColors.TextPrimary.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(bike.model.ifBlank { bike.displayName }, style = RtType.headline, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text("BIKE STATS", style = RtType.caption.copy(fontSize = 10.sp, letterSpacing = 1.sp), color = RtColors.TextSecondary, modifier = Modifier.padding(top = 3.dp))
+        }
+        Spacer(Modifier.height(14.dp))
+        val rows = listOf(
+            listOf(
+                Triple("Rides", "${stats.rides}", RtColors.TextPrimary),
+                Triple("Riding time", Format.duration(stats.ridingMillis), RtColors.TextPrimary),
+                Triple("Distance", Format.distance(stats.distanceM), RtColors.TextPrimary),
+            ),
+            listOf(
+                Triple("Top speed", stats.topSpeedMps?.let { Format.speedWithUnit(it) } ?: Format.DASH, RtColors.GForce),
+                Triple("Lean left", stats.maxLeftLeanDeg?.let { "${it.roundToInt()}°" } ?: Format.DASH, RtColors.Left),
+                Triple("Lean right", stats.maxRightLeanDeg?.let { "${it.roundToInt()}°" } ?: Format.DASH, RtColors.Right),
+            ),
+            listOf(
+                Triple("Hardest brake", stats.hardestBrakeG?.let { String.format(Locale.US, "%.2f G", it) } ?: Format.DASH, RtColors.Brake),
+                Triple("Longest ride", stats.longestRideM?.let { Format.distance(it) } ?: Format.DASH, RtColors.TextPrimary),
+                Triple("Moments", "${stats.moments}", RtColors.TextPrimary),
+            ),
+        )
+        rows.forEachIndexed { i, row ->
+            if (i > 0) Spacer(Modifier.height(12.dp))
+            Row {
+                row.forEach { (label, value, color) ->
+                    Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                        Text(label, style = RtType.caption.copy(fontSize = 11.sp), color = RtColors.TextSecondary, maxLines = 1)
+                        Text(value, style = RtType.bodyStrong.copy(fontSize = 18.sp, fontWeight = FontWeight.Normal), color = color, maxLines = 1)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        Text("Tap to flip back", style = RtType.caption.copy(fontSize = 11.sp), color = RtColors.TextTertiary, modifier = Modifier.align(Alignment.End))
+    }
+}
+
+private const val FLIP_MS = 650
 
 private fun odometerText(km: Double): String = String.format(Locale.US, "%,d", km.roundToLong())
 

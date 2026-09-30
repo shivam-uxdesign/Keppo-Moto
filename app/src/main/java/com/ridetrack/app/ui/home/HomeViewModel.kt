@@ -51,6 +51,15 @@ data class HomeUiState(
     val lastRidden: Map<String, String> = emptyMap(),
     /** Speed trace of the latest real ride, for the Today chart. */
     val trace: SpeedTrace? = null,
+    /** Lifetime numbers per bike id, for the back of the card. */
+    val bikeStats: Map<String, BikeStats> = emptyMap(),
+)
+
+private data class Extras(
+    val environment: Pair<GpsReadiness, SensorAvailability>,
+    val starting: Boolean,
+    val trace: SpeedTrace?,
+    val momentCounts: Map<String, Int>,
 )
 
 class HomeViewModel(private val c: AppContainer) : ViewModel() {
@@ -79,8 +88,8 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
         combine(c.rides.observeInProgress(), c.session.active, c.session.state) { inProgress, active, rideState ->
             Triple(inProgress.firstOrNull { it.id != active?.rideId }, rideState, active)
         },
-        combine(environment, starting, trace) { e, s, t -> Triple(e, s, t) },
-    ) { bikes, settings, rides, (unfinished, rideState, _), (env, isStarting, speedTrace) ->
+        combine(environment, starting, trace, c.moments.observeCountsByBike()) { e, s, t, m -> Extras(e, s, t, m) },
+    ) { bikes, settings, rides, (unfinished, rideState, _), (env, isStarting, speedTrace, momentCounts) ->
         val bike = bikes.firstOrNull { it.id == settings.selectedBikeId } ?: bikes.firstOrNull()
         val totals = RideTotals.from(rides)
         val now = ZonedDateTime.now()
@@ -101,6 +110,7 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
             odometers = bikes.associate { it.id to Odometer.readingKm(it, rides) },
             lastRidden = bikes.associate { b -> b.id to lastRiddenLabel(real.filter { it.bikeId == b.id }.maxOfOrNull { it.startTimeMillis }, now) },
             trace = speedTrace,
+            bikeStats = bikes.associate { b -> b.id to BikeStats.from(b, rides, momentCounts[b.id] ?: 0) },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 

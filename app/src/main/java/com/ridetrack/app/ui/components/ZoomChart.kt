@@ -14,15 +14,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
@@ -34,6 +31,7 @@ import com.ridetrack.app.ui.theme.RtType
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.roundToInt
 
 /** A marker on the chart at [fraction] of the ride: events along the bottom, moments along the top. */
 data class ChartMark(val fraction: Float, val color: Color, val top: Boolean = false)
@@ -90,6 +88,8 @@ fun ZoomChart(
     marks: List<ChartMark> = emptyList(),
     unavailableText: String = "Unavailable for this ride",
     height: Dp = 120.dp,
+    /** Off when the caller draws its own playhead across several tracks. */
+    showScrubLine: Boolean = true,
 ) {
     if (!series.hasData) {
         Text(unavailableText, style = RtType.caption, color = RtColors.TextSecondary, modifier = modifier.height(height))
@@ -217,105 +217,12 @@ fun ZoomChart(
 
         if (scrub != null && window.contains(scrub)) {
             val cx = (scrub - window.start) / window.span * w
-            drawLine(RtColors.TextPrimary.copy(alpha = 0.7f), Offset(cx, 0f), Offset(cx, h), 1.dp.toPx())
-            val idx = (scrub * (v.size - 1)).toInt().coerceIn(0, v.size - 1)
+            if (showScrubLine) drawLine(RtColors.TextPrimary.copy(alpha = 0.7f), Offset(cx, 0f), Offset(cx, h), 1.dp.toPx())
+            val idx = (scrub * (v.size - 1)).roundToInt().coerceIn(0, v.size - 1)
             if (!v[idx].isNaN()) {
                 drawCircle(RtColors.Background, 6.dp.toPx(), Offset(cx, y(v[idx])))
                 drawCircle(color, 4.dp.toPx(), Offset(cx, y(v[idx])))
             }
         }
     }
-}
-
-/**
- * The whole ride in miniature with the chart's zoom window on it: drag the window to move
- * along the ride, drag its edges to zoom, tap elsewhere to jump the window there.
- */
-@Composable
-fun OverviewStrip(
-    series: ChartSeries,
-    window: ChartWindow,
-    scrub: Float?,
-    onWindow: (ChartWindow) -> Unit,
-    minSpan: Float,
-    modifier: Modifier = Modifier,
-    color: Color = RtColors.Primary,
-) {
-    val win by rememberUpdatedState(window)
-    val setWindow by rememberUpdatedState(onWindow)
-    val min by rememberUpdatedState(minSpan)
-    Canvas(
-        modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .semantics { contentDescription = "Whole ride overview. Drag the window to move the zoomed chart." }
-            .pointerInput(Unit) {
-                val edge = 14.dp.toPx()
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val w = size.width
-                    val f0 = down.position.x / w
-                    val x0 = win.start * w
-                    val x1 = win.end * w
-                    val mode = when {
-                        abs(down.position.x - x0) < edge -> 'l'
-                        abs(down.position.x - x1) < edge -> 'r'
-                        down.position.x in x0..x1 -> 'm'
-                        else -> {
-                            setWindow(ChartWindow.around(f0, win.span))
-                            'm'
-                        }
-                    }
-                    val offset = f0 - win.start
-                    down.consume()
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val c = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!c.pressed) break
-                        val f = (c.position.x / w).coerceIn(0f, 1f)
-                        setWindow(
-                            when (mode) {
-                                'l' -> ChartWindow(f.coerceAtMost(win.end - min), win.end)
-                                'r' -> ChartWindow(win.start, f.coerceAtLeast(win.start + min))
-                                else -> ChartWindow.of(f - offset, win.span)
-                            },
-                        )
-                        c.consume()
-                    }
-                }
-            },
-    ) {
-        drawRoundRect(RtColors.Surface, cornerRadius = CornerRadius(10.dp.toPx()))
-        drawSpark(series, color.copy(alpha = 0.5f))
-        val w = size.width
-        val h = size.height
-        val x0 = window.start * w
-        val x1 = window.end * w
-        drawRect(RtColors.Background.copy(alpha = 0.6f), Offset.Zero, Size(x0, h))
-        drawRect(RtColors.Background.copy(alpha = 0.6f), Offset(x1, 0f), Size(w - x1, h))
-        drawRoundRect(color, Offset(x0, 1f), Size(x1 - x0, h - 2f), CornerRadius(8.dp.toPx()), style = Stroke(1.5.dp.toPx()))
-        val hw = 5.dp.toPx()
-        val hh = 16.dp.toPx()
-        drawRoundRect(color, Offset(x0 - hw / 2, (h - hh) / 2), Size(hw, hh), CornerRadius(hw / 2))
-        drawRoundRect(color, Offset(x1 - hw / 2, (h - hh) / 2), Size(hw, hh), CornerRadius(hw / 2))
-        if (scrub != null) drawLine(RtColors.TextPrimary, Offset(scrub * w, 3f), Offset(scrub * w, h - 3f), 1.2.dp.toPx())
-    }
-}
-
-private fun DrawScope.drawSpark(series: ChartSeries, color: Color) {
-    val v = series.values
-    if (v.size < 2) return
-    val step = maxOf(1, v.size / 400)
-    val p = Path()
-    var pen = false
-    val pad = 4.dp.toPx()
-    for (i in v.indices step step) {
-        val value = v[i]
-        if (value.isNaN()) { pen = false; continue }
-        val px = i.toFloat() / (v.size - 1) * size.width
-        val py = size.height - pad - (value - series.min) / (series.max - series.min) * (size.height - 2 * pad)
-        if (pen) p.lineTo(px, py) else p.moveTo(px, py)
-        pen = true
-    }
-    drawPath(p, color, style = Stroke(1.2.dp.toPx()))
 }

@@ -92,6 +92,9 @@ interface RideDao {
     suspend fun lastSampleTime(rideId: String): Long?
 }
 
+/** Row of [MomentDao.observeCountsByBike]. */
+data class BikeMomentCount(val bikeId: String?, val count: Int)
+
 @Dao
 interface MomentDao {
     @Query("SELECT * FROM moments WHERE rideId = :rideId ORDER BY timeMillis ASC")
@@ -102,6 +105,10 @@ interface MomentDao {
 
     @Query("SELECT * FROM moments")
     suspend fun all(): List<MomentEntity>
+
+    /** Moments per bike, through the ride each was captured on. */
+    @Query("SELECT r.bikeId AS bikeId, COUNT(m.id) AS count FROM moments m JOIN rides r ON r.id = m.rideId GROUP BY r.bikeId")
+    fun observeCountsByBike(): Flow<List<BikeMomentCount>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(m: MomentEntity)
