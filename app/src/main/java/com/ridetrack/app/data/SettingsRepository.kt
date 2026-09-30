@@ -7,6 +7,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -45,7 +46,9 @@ enum class HudTheme(val label: String) { DARK("Dark"), HIGH_CONTRAST("High contr
 
 enum class MapStyle(val label: String) { DARK("Dark"), SATELLITE("Satellite") }
 
-enum class PhotoInterval(val label: String, val minutes: Int) { OFF("Off", 0), TEN("Every 10 min", 10), FIFTEEN("Every 15 min", 15) }
+enum class PhotoInterval(val label: String, val minutes: Int) {
+    OFF("Off", 0), FIVE("5 min", 5), TEN("10 min", 10), FIFTEEN("15 min", 15), THIRTY("30 min", 30),
+}
 
 enum class VideoQuality(val label: String, val height: Int, val bitrate: Int) {
     HD("720p", 720, 5_000_000),
@@ -60,8 +63,27 @@ data class MomentSettings(
     val lean: Boolean = true,
     val photos: PhotoInterval = PhotoInterval.FIFTEEN,
     val quality: VideoQuality = VideoQuality.HD,
+    /** Braking at least this hard starts a clip (G). */
+    val brakeG: Double = DEFAULT_BRAKE_G,
+    /** Accelerating at least this hard starts a clip (G). */
+    val accelG: Double = DEFAULT_ACCEL_G,
+    /** Leaning past this angle starts a clip (degrees). */
+    val leanDeg: Int = DEFAULT_LEAN_DEG,
+    /** Seconds kept before and after each event. */
+    val clipSeconds: Int = DEFAULT_CLIP_SECONDS,
 ) {
     val anyTrigger: Boolean get() = braking || acceleration || lean
+
+    companion object {
+        const val DEFAULT_BRAKE_G = 0.5
+        const val DEFAULT_ACCEL_G = 0.3
+        const val DEFAULT_LEAN_DEG = 20
+        const val DEFAULT_CLIP_SECONDS = 10
+        val BRAKE_CHOICES = listOf(0.3, 0.4, 0.5, 0.6, 0.7, 0.8)
+        val ACCEL_CHOICES = listOf(0.2, 0.3, 0.4, 0.5, 0.6)
+        val LEAN_CHOICES = listOf(15, 20, 25, 30, 35, 40)
+        val CLIP_CHOICES = listOf(5, 10, 15)
+    }
 }
 
 /** Floating pop-up HUD shown over other apps during a ride. */
@@ -125,6 +147,10 @@ class SettingsRepository(private val context: Context) {
         val momentsLean = booleanPreferencesKey("moments_lean")
         val momentsPhotos = stringPreferencesKey("moments_photos")
         val momentsQuality = stringPreferencesKey("moments_quality")
+        val momentsBrakeG = doublePreferencesKey("moments_brake_g")
+        val momentsAccelG = doublePreferencesKey("moments_accel_g")
+        val momentsLeanDeg = intPreferencesKey("moments_lean_deg")
+        val momentsClipSeconds = intPreferencesKey("moments_clip_seconds")
         val momentShareFields = stringSetPreferencesKey("moment_share_fields")
         val momentShareLayout = stringPreferencesKey("moment_share_layout")
     }
@@ -161,6 +187,10 @@ class SettingsRepository(private val context: Context) {
                 lean = p[Keys.momentsLean] ?: true,
                 photos = enumOf(p[Keys.momentsPhotos], PhotoInterval.FIFTEEN),
                 quality = enumOf(p[Keys.momentsQuality], VideoQuality.HD),
+                brakeG = p[Keys.momentsBrakeG] ?: MomentSettings.DEFAULT_BRAKE_G,
+                accelG = p[Keys.momentsAccelG] ?: MomentSettings.DEFAULT_ACCEL_G,
+                leanDeg = p[Keys.momentsLeanDeg] ?: MomentSettings.DEFAULT_LEAN_DEG,
+                clipSeconds = p[Keys.momentsClipSeconds] ?: MomentSettings.DEFAULT_CLIP_SECONDS,
             ),
             momentShareFields = p[Keys.momentShareFields]
                 ?.mapNotNull { n -> MomentField.entries.firstOrNull { it.name == n } }
@@ -203,5 +233,9 @@ class SettingsRepository(private val context: Context) {
         it[Keys.momentsLean] = m.lean
         it[Keys.momentsPhotos] = m.photos.name
         it[Keys.momentsQuality] = m.quality.name
+        it[Keys.momentsBrakeG] = m.brakeG
+        it[Keys.momentsAccelG] = m.accelG
+        it[Keys.momentsLeanDeg] = m.leanDeg
+        it[Keys.momentsClipSeconds] = m.clipSeconds
     }
 }

@@ -6,12 +6,28 @@ import com.ridetrack.telemetry.processing.EventContext
 import com.ridetrack.telemetry.processing.EventDetector
 import com.ridetrack.telemetry.processing.EventThresholds
 
-/** Which events may start a moment clip. */
+/** Which events may start a moment clip, and how strong they must be. */
 data class MomentTriggers(
     val braking: Boolean = true,
     val acceleration: Boolean = true,
     val lean: Boolean = true,
+    /** Braking at least this hard (G). */
+    val brakeG: Double = 0.5,
+    /** Accelerating at least this hard (G). */
+    val accelG: Double = 0.3,
+    /** Leaning past this angle (degrees, either side). */
+    val leanDeg: Double = 20.0,
 ) {
+    /** Detector thresholds for these settings; each episode ends a little below its trigger. */
+    fun thresholds(): EventThresholds = EventThresholds(
+        hardBrakeG = brakeG,
+        hardBrakeReleaseG = brakeG / 2,
+        strongAccelG = accelG,
+        strongAccelReleaseG = accelG * 0.4,
+        significantLeanDeg = leanDeg,
+        significantLeanReleaseDeg = leanDeg * 0.75,
+    )
+
     fun allows(type: RideEventType) = when (type) {
         RideEventType.HARD_BRAKE -> braking
         RideEventType.STRONG_ACCELERATION -> acceleration
@@ -21,12 +37,12 @@ data class MomentTriggers(
 }
 
 /**
- * Detects moment-worthy episodes. A second [EventDetector] with its own thresholds, so
- * moments can trigger on a lower lean (20°) without changing the ride's own statistics.
+ * Detects moment-worthy episodes. A second [EventDetector] with the rider's own thresholds,
+ * so moments can trigger differently from the ride's statistics (e.g. a lower lean).
  */
 class MomentTrigger(
     private val triggers: MomentTriggers = MomentTriggers(),
-    thresholds: EventThresholds = EventThresholds(significantLeanDeg = 20.0, significantLeanReleaseDeg = 15.0),
+    thresholds: EventThresholds = triggers.thresholds(),
 ) {
     private val detector = EventDetector(thresholds)
 

@@ -157,12 +157,14 @@ class RideSessionManager(
         }
 
         val m = prefs.moments.takeIf { it.enabled && hasCamera() }
-        val triggers = m?.takeIf { it.anyTrigger }?.let { MomentTriggers(it.braking, it.acceleration, it.lean) }
+        val triggers = m?.takeIf { it.anyTrigger }?.let {
+            MomentTriggers(it.braking, it.acceleration, it.lean, brakeG = it.brakeG, accelG = it.accelG, leanDeg = it.leanDeg.toDouble())
+        }
         val pipeline = TelemetryPipeline(source.kind, calibration, source.sensors, startNanos, startWall, momentTriggers = triggers)
         val rec = Recorder(
             rideId,
             pipeline,
-            planner = MomentPlanner().takeIf { triggers != null },
+            planner = m?.takeIf { triggers != null }?.let { MomentPlanner(beforeMillis = it.clipSeconds * 1_000L, afterMillis = it.clipSeconds * 1_000L) },
             photos = m?.photos?.takeIf { it.minutes > 0 }?.let { PhotoScheduler(it.minutes * 60_000L) },
         ).also { it.pendingEvents += pipeline.start() }
         momentsHub.reset()

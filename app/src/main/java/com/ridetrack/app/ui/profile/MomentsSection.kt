@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.ridetrack.app.BuildConfig
+import com.ridetrack.app.data.MomentSettings
 import com.ridetrack.app.data.PhotoInterval
 import com.ridetrack.app.data.VideoQuality
 import com.ridetrack.app.sensors.Permissions
@@ -69,7 +70,7 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel) {
             "Capture moments",
             when {
                 s.rideActive -> "Can't be changed during a ride."
-                m.enabled -> "Saves 10 s before and after hard braking, strong acceleration and leans past 20°, from the selfie camera with sound."
+                m.enabled -> "Saves ${m.clipSeconds} s before and after the events you pick below, from the selfie camera with sound."
                 else -> "Automatically film the best bits of your ride and take a photo now and then. Off by default."
             },
             m.enabled,
@@ -80,13 +81,32 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel) {
         )
         if (m.enabled) {
             HorizontalDivider(color = RtColors.Outline.copy(alpha = 0.6f))
-            ToggleRow("Hard braking", "0.5 G or more.", m.braking, { vm.setMoments(m.copy(braking = it)) }, enabled = !s.rideActive)
-            ToggleRow("Strong acceleration", "0.3 G or more.", m.acceleration, { vm.setMoments(m.copy(acceleration = it)) }, enabled = !s.rideActive)
-            ToggleRow("Lean past 20°", "Needs a calibrated mount.", m.lean, { vm.setMoments(m.copy(lean = it)) }, enabled = !s.rideActive)
+            val editable = !s.rideActive
+            ToggleRow("Hard braking", "Braking at ${gText(m.brakeG)} or more.", m.braking, { vm.setMoments(m.copy(braking = it)) }, enabled = editable)
+            if (m.braking) {
+                ChoiceRow(MomentSettings.BRAKE_CHOICES, m.brakeG, ::gText, editable) { vm.setMoments(m.copy(brakeG = it)) }
+            }
+            ToggleRow("Strong acceleration", "Accelerating at ${gText(m.accelG)} or more.", m.acceleration, { vm.setMoments(m.copy(acceleration = it)) }, enabled = editable)
+            if (m.acceleration) {
+                ChoiceRow(MomentSettings.ACCEL_CHOICES, m.accelG, ::gText, editable) { vm.setMoments(m.copy(accelG = it)) }
+            }
+            ToggleRow("Deep lean", "Leaning past ${m.leanDeg}°. Needs a calibrated mount.", m.lean, { vm.setMoments(m.copy(lean = it)) }, enabled = editable)
+            if (m.lean) {
+                ChoiceRow(MomentSettings.LEAN_CHOICES, m.leanDeg, { "$it°" }, editable) { vm.setMoments(m.copy(leanDeg = it)) }
+            }
+            Spacer(Modifier.height(RtDimens.sm))
+            Label("Clip length")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
+                MomentSettings.CLIP_CHOICES.forEach { sec ->
+                    Pick("$sec s before & after", m.clipSeconds == sec, editable) { vm.setMoments(m.copy(clipSeconds = sec)) }
+                }
+            }
             Spacer(Modifier.height(RtDimens.sm))
             Label("Photos")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
-                PhotoInterval.entries.forEach { p -> Pick(p.label, m.photos == p, !s.rideActive) { vm.setMoments(m.copy(photos = p)) } }
+                PhotoInterval.entries.forEach { p ->
+                    Pick(if (p == PhotoInterval.OFF) p.label else "Every ${p.label}", m.photos == p, editable) { vm.setMoments(m.copy(photos = p)) }
+                }
             }
             Text(
                 "Plus one photo at each stop longer than a minute.",
@@ -180,7 +200,7 @@ private fun MomentsExplainer(onContinue: () -> Unit, onDismiss: () -> Unit) {
         ) {
             Text("How Moments works", style = RtType.headline, color = RtColors.TextPrimary)
             Bullet("During a ride, the selfie camera and microphone keep the last few seconds in memory. Nothing is saved unless something happens.")
-            Bullet("On hard braking, strong acceleration or a lean past 20°, the 10 s before and after are saved as a clip. A photo is taken every 10–15 minutes.")
+            Bullet("On hard braking, strong acceleration or a deep lean, the seconds before and after are saved as a clip. You choose how strong each one must be, and how often a photo is taken.")
             Bullet("No camera screen opens. The ride screen and pop-up show a small CAM dot, and REC while a moment is saved. Android also shows its green camera dot.")
             Bullet("Clips stay on this phone (about 12 MB each at 720p) until you delete them. It uses more battery, and the phone may get warm on the mount; Moments pauses itself if it gets hot.")
             PrimaryButton("Continue", onContinue, large = true)
@@ -216,4 +236,18 @@ private fun formatBytes(b: Long?): String = when {
     b < 1_000_000 -> "none"
     b < 1_000_000_000 -> "${b / 1_000_000} MB"
     else -> String.format(Locale.US, "%.1f GB", b / 1e9)
+}
+
+private fun gText(g: Double): String = String.format(java.util.Locale.US, "%.1f G", g)
+
+/** A row of chips for a trigger's strength; the lower the value, the more often it fires. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun <T> ChoiceRow(choices: List<T>, selected: T, label: (T) -> String, enabled: Boolean, onPick: (T) -> Unit) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(RtDimens.xs),
+        modifier = Modifier.padding(start = 4.dp, bottom = RtDimens.xs),
+    ) {
+        choices.forEach { c -> Pick(label(c), c == selected, enabled) { onPick(c) } }
+    }
 }
