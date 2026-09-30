@@ -71,6 +71,8 @@ data class MomentSettings(
     val leanDeg: Int = DEFAULT_LEAN_DEG,
     /** Seconds kept before and after each event. */
     val clipSeconds: Int = DEFAULT_CLIP_SECONDS,
+    /** Microphone for clips, as MicChoice.encode(); null = the phone's. */
+    val mic: String? = null,
 ) {
     val anyTrigger: Boolean get() = braking || acceleration || lean
 
@@ -151,6 +153,7 @@ class SettingsRepository(private val context: Context) {
         val momentsAccelG = doublePreferencesKey("moments_accel_g")
         val momentsLeanDeg = intPreferencesKey("moments_lean_deg")
         val momentsClipSeconds = intPreferencesKey("moments_clip_seconds")
+        val momentsMic = stringPreferencesKey("moments_mic")
         val momentShareFields = stringSetPreferencesKey("moment_share_fields")
         val momentShareLayout = stringPreferencesKey("moment_share_layout")
     }
@@ -191,6 +194,7 @@ class SettingsRepository(private val context: Context) {
                 accelG = p[Keys.momentsAccelG] ?: MomentSettings.DEFAULT_ACCEL_G,
                 leanDeg = p[Keys.momentsLeanDeg] ?: MomentSettings.DEFAULT_LEAN_DEG,
                 clipSeconds = p[Keys.momentsClipSeconds] ?: MomentSettings.DEFAULT_CLIP_SECONDS,
+                mic = p[Keys.momentsMic],
             ),
             momentShareFields = p[Keys.momentShareFields]
                 ?.mapNotNull { n -> MomentField.entries.firstOrNull { it.name == n } }
@@ -237,5 +241,7 @@ class SettingsRepository(private val context: Context) {
         it[Keys.momentsAccelG] = m.accelG
         it[Keys.momentsLeanDeg] = m.leanDeg
         it[Keys.momentsClipSeconds] = m.clipSeconds
+        val mic = m.mic
+        if (mic == null) it.remove(Keys.momentsMic) else it[Keys.momentsMic] = mic
     }
 }

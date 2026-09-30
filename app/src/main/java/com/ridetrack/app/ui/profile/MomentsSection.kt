@@ -1,5 +1,9 @@
 package com.ridetrack.app.ui.profile
 
+import android.os.Build
+import com.ridetrack.app.moments.MicChoice
+import com.ridetrack.app.moments.MicType
+import com.ridetrack.app.moments.Microphones
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -113,6 +117,8 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel) {
                 style = RtType.caption,
                 color = RtColors.TextSecondary,
             )
+            Spacer(Modifier.height(RtDimens.sm))
+            MicPicker(m.mic, editable) { vm.setMoments(m.copy(mic = it)) }
             Spacer(Modifier.height(RtDimens.sm))
             Label("Video quality")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
@@ -250,4 +256,47 @@ private fun <T> ChoiceRow(choices: List<T>, selected: T, label: (T) -> String, e
     ) {
         choices.forEach { c -> Pick(label(c), c == selected, enabled) { onPick(c) } }
     }
+}
+
+/**
+ * Which microphone records clip audio: the phone, or an external mic that's connected now
+ * (e.g. a DJI Mic receiver in USB-C, or the mic over Bluetooth). A saved mic that isn't
+ * connected stays selected; rides fall back to the phone mic until it's back.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MicPicker(saved: String?, enabled: Boolean, onPick: (String?) -> Unit) {
+    val context = LocalContext.current
+    var scan by remember { mutableStateOf(0) }
+    val btPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { scan++ }
+    val available = remember(scan) { Microphones.available(context) }
+    val current = MicChoice.decode(saved)
+    val options = if (current in available) available else available + current
+    Label("Microphone")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
+        options.forEach { choice ->
+            val connected = choice in available
+            Pick(if (connected) choice.label else "${choice.label} (not connected)", choice == current, enabled) {
+                onPick(if (choice.type == MicType.PHONE) null else choice.encode())
+            }
+        }
+        Pick("Look for mics", false, enabled) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+            ) {
+                btPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            } else {
+                scan++
+            }
+        }
+    }
+    Text(
+        when (current.type) {
+            MicType.BLUETOOTH -> "Bluetooth mics record at call quality, and other apps' audio may switch to the call route while filming. For full quality, use the mic's USB-C receiver."
+            MicType.PHONE -> "Connect a mic (USB-C receiver or Bluetooth), then tap Look for mics."
+            else -> "Clips record from this mic while it's connected; otherwise the phone mic."
+        },
+        style = RtType.caption,
+        color = RtColors.TextSecondary,
+    )
 }

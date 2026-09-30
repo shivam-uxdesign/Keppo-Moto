@@ -312,8 +312,15 @@ class MomentRecorder(
             log.log("no microphone permission: clips without sound")
             return
         }
+        val choice = MicChoice.decode(settings.mic)
+        val device = Microphones.find(context, choice)
+        if (choice.type != MicType.PHONE && device == null) log.log("mic ${choice.label} not connected: using the phone mic")
         audio = try {
-            AudioEncoder(buffer)
+            AudioEncoder(context, buffer, device).also { enc ->
+                log.log("audio from ${enc.routedDevice?.let { d -> "${Microphones.typeOf(d)?.label ?: d.type} ${d.productName}" } ?: "default mic"}")
+                // A mic that drops out (battery, range) falls back to the phone; note it in the log.
+                enc.addOnRoutingChanged { d -> log.log("audio now from ${d?.let { "${Microphones.typeOf(it)?.label ?: it.type} ${it.productName}" } ?: "default mic"}") }
+            }
         } catch (e: Exception) {
             log.error("audio unavailable, clips without sound", e)
             null
