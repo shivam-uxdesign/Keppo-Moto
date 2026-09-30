@@ -22,7 +22,7 @@ enum class MomentField(val label: String) {
 
 enum class MomentLayout(val label: String, val hint: String) {
     MINIMAL("Minimal", "A small cluster in the corner"),
-    BAR("Bar", "A band along the bottom"),
+    BAR("Strip", "A strip of live numbers"),
     HUD("HUD", "Gauges, like the bike's dash"),
 }
 

@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -88,10 +90,14 @@ data class MomentShareState(
     val loading: Boolean = true,
     val moment: Moment? = null,
     val fields: Set<MomentField> = MomentField.DEFAULT,
-    val layout: MomentLayout = MomentLayout.MINIMAL,
+    /** Which graphic: a moment layout (live numbers) or a whole-ride layout. */
+    val choice: OverlayChoice = OverlayChoice.Moment(MomentLayout.MINIMAL),
     /** Photos only: transparent overlay instead of the photo with the overlay. */
     val overlayOnly: Boolean = false,
-    val preview: Bitmap? = null,
+    /** Full-size preview of the selected graphic, by [OverlayChoice.key]. */
+    val previews: Map<String, Bitmap> = emptyMap(),
+    /** Small previews for the picker, by [OverlayChoice.key]. */
+    val thumbs: Map<String, Bitmap> = emptyMap(),
     /** Which details have data for this moment (the others are shown disabled). */
     val available: Set<MomentField> = emptySet(),
     /** Video export: null = idle, 0..100 = running. */
@@ -111,6 +117,10 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
     private var demo = false
     private var background: Bitmap? = null
     private val renderer = MomentShareRenderer(c.appContext)
+    private val rideRenderer by lazy { ShareCardRenderer(c.appContext) }
+    private var rideCard: ShareCardData? = null
+    private val rideGraphics = mutableMapOf<ShareStyle, Bitmap>()
+    private var thumbJob: Job? = null
     private var renderJob: Job? = null
     private var exportJob: Job? = null
 
@@ -125,6 +135,7 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
             rideName = ride?.name
             demo = ride?.source == DataSourceKind.DEMO
             samples = c.rides.track(rideId).samples
+            if (ride != null) rideCard = ShareCardData.from(ride, c.bikes.get(ride.bikeId)?.displayName, samples)
             route = samples.mapNotNull { s -> s.latitude?.let { la -> s.longitude?.let { lo -> la to lo } } }
                 .let { pts -> if (pts.size <= 400) pts else pts.filterIndexed { i, _ -> i % (pts.size / 400 + 1) == 0 } }
             background = withContext(Dispatchers.IO) { loadBackground(moment) }
@@ -135,23 +146,31 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
                     loading = false,
                     moment = moment,
                     fields = prefs.momentShareFields,
-                    layout = prefs.momentShareLayout,
+                    choice = OverlayChoice.Moment(prefs.momentShareLayout),
                     available = MomentField.entries.filter { f -> probe.shows(f, MomentField.DEFAULT) }.toSet(),
                 )
             }
             render()
+            renderThumbs()
         }
     }
 
     fun toggle(field: MomentField) = change { it.copy(fields = if (field in it.fields) it.fields - field else it.fields + field) }
-    fun setLayout(layout: MomentLayout) = change { it.copy(layout = layout) }
+    fun setChoice(choice: OverlayChoice) {
+        if (choice == _state.value.choice) return
+        change { it.copy(choice = choice) }
+    }
     fun setOverlayOnly(on: Boolean) = change { it.copy(overlayOnly = on) }
 
     private fun change(f: (MomentShareState) -> MomentShareState) {
+        val before = _state.value
         _state.update { f(it).copy(exported = null, error = null) }
         val s = _state.value
-        viewModelScope.launch { c.settings.setMomentShare(s.fields, s.layout) }
+        val layout = (s.choice as? OverlayChoice.Moment)?.layout
+        if (layout != null) viewModelScope.launch { c.settings.setMomentShare(s.fields, layout) }
         render()
+        // Thumbnails depend on the details shown and the photo mode, not on which one is picked.
+        if (before.fields != s.fields || before.overlayOnly != s.overlayOnly) renderThumbs()
     }
 
     fun overlayAt(m: Moment, timeMillis: Long): MomentOverlay = MomentOverlay(
@@ -173,23 +192,55 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
         renderJob = viewModelScope.launch {
             delay(60)
             val img = withContext(Dispatchers.Default) { build(m, s) }
-            _state.update { it.copy(preview = img) }
+            _state.update { it.copy(previews = mapOf(s.choice.key to img)) }
         }
+    }
+
+    /** Small previews of every graphic for the picker, one at a time. */
+    private fun renderThumbs() {
+        val m = _state.value.moment ?: return
+        thumbJob?.cancel()
+        thumbJob = viewModelScope.launch {
+            OverlayChoice.all.forEach { choice ->
+                val s = _state.value.copy(choice = choice)
+                val thumb = withContext(Dispatchers.Default) {
+                    val full = build(m, s)
+                    Bitmap.createScaledBitmap(full, (full.width / 6).coerceAtLeast(1), (full.height / 6).coerceAtLeast(1), true).also { if (it !== full) full.recycle() }
+                }
+                _state.update { it.copy(thumbs = it.thumbs + (choice.key to thumb)) }
+            }
+        }
+    }
+
+    /** A whole-ride layout at story size (1080×1920), rendered once per style. */
+    private fun rideGraphic(style: ShareStyle): Bitmap? {
+        val d = rideCard ?: return null
+        return synchronized(rideGraphics) { rideGraphics.getOrPut(style) { rideRenderer.render(d, style) } }
     }
 
     private fun build(m: Moment, s: MomentShareState): Bitmap {
         val bg = background
+        val choice = s.choice
+        if (choice is OverlayChoice.Ride) {
+            val g = rideGraphic(choice.style) ?: return Bitmap.createBitmap(1080, 1920, Bitmap.Config.ARGB_8888)
+            return when {
+                m.kind == MomentKind.PHOTO && s.overlayOnly || bg == null -> g.copy(Bitmap.Config.ARGB_8888, false)
+                m.kind == MomentKind.PHOTO -> cropPhoto(bg, 1080, 1920).also { drawFrameGraphic(android.graphics.Canvas(it), it.width, it.height, g) }
+                else -> bg.copy(Bitmap.Config.ARGB_8888, true).also { drawFrameGraphic(android.graphics.Canvas(it), it.width, it.height, g) }
+            }
+        }
+        val layout = (choice as OverlayChoice.Moment).layout
         val o = overlayAt(m, m.timeMillis)
         return when {
-            m.kind == MomentKind.PHOTO && s.overlayOnly -> renderer.overlayOnly(1080, 1920, o, s.fields, s.layout)
-            bg != null && m.kind == MomentKind.PHOTO -> renderer.composePhoto(bg, 1080, 1920, o, s.fields, s.layout)
+            m.kind == MomentKind.PHOTO && s.overlayOnly -> renderer.overlayOnly(1080, 1920, o, s.fields, layout)
+            bg != null && m.kind == MomentKind.PHOTO -> renderer.composePhoto(bg, 1080, 1920, o, s.fields, layout)
             bg != null -> {
                 // Clip preview: the frame at its own size, overlay on top, like the export.
                 val out = bg.copy(Bitmap.Config.ARGB_8888, true)
-                renderer.draw(android.graphics.Canvas(out), out.width, out.height, o, s.fields, s.layout)
+                renderer.draw(android.graphics.Canvas(out), out.width, out.height, o, s.fields, layout)
                 out
             }
-            else -> renderer.overlayOnly(1080, 1920, o, s.fields, s.layout)
+            else -> renderer.overlayOnly(1080, 1920, o, s.fields, layout)
         }
     }
 
@@ -235,9 +286,13 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
                 input = m.file,
                 output = out,
                 videoStartMillis = m.videoStartMillis,
-                overlayAt = { t -> overlayAt(m, t) },
-                fields = s.fields,
-                layout = s.layout,
+                draw = when (val choice = s.choice) {
+                    is OverlayChoice.Moment -> { canvas, w, h, t -> renderer.draw(canvas, w, h, overlayAt(m, t), s.fields, choice.layout) }
+                    is OverlayChoice.Ride -> {
+                        val g = rideGraphic(choice.style)
+                        ({ canvas, w, h, _ -> if (g != null) drawFrameGraphic(canvas, w, h, g) })
+                    }
+                },
                 onProgress = { p -> _state.update { it.copy(exportProgress = p) } },
             )
             _state.update {
@@ -279,31 +334,45 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
             .padding(horizontal = RtDimens.screenPadding),
     ) {
         ScreenHeader(if (isClip) "Share clip" else "Share photo", onBack = onBack)
+        val choices = OverlayChoice.all
+        val pager = rememberPagerState(initialPage = choices.indexOf(s.choice).coerceAtLeast(0)) { choices.size }
+        LaunchedEffect(pager.settledPage) { vm.setChoice(choices[pager.settledPage]) }
+        LaunchedEffect(s.loading) { if (!s.loading) pager.scrollToPage(choices.indexOf(s.choice).coerceAtLeast(0)) }
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val p = s.preview
             when {
                 !s.loading && m == null -> Text("Moment not found", style = RtType.body, color = RtColors.TextSecondary)
-                p == null -> CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp)
-                else -> Box(
-                    Modifier
-                        .fillMaxHeight()
-                        .aspectRatio(p.width.toFloat() / p.height)
-                        .clip(RoundedCornerShape(18.dp))
-                        .border(1.dp, RtColors.Hairline, RoundedCornerShape(18.dp)),
-                ) {
-                    if (s.overlayOnly && !isClip) SamplePhoto(Modifier.fillMaxSize())
-                    Image(p.asImageBitmap(), "Moment share preview", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-                    if (isClip) {
-                        Text(
-                            "Numbers move with the video",
-                            style = RtType.caption,
-                            color = Color.White,
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(top = 10.dp)
-                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))
-                                .padding(horizontal = 10.dp, vertical = 4.dp),
-                        )
+                s.loading -> CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp)
+                // Swipe left or right to change the graphic.
+                else -> HorizontalPager(pager, Modifier.fillMaxSize(), key = { choices[it].key }) { page ->
+                    val choice = choices[page]
+                    val p = s.previews[choice.key] ?: s.thumbs[choice.key]
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        if (p == null) {
+                            CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp)
+                        } else {
+                            Box(
+                                Modifier
+                                    .fillMaxHeight()
+                                    .aspectRatio(p.width.toFloat() / p.height)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .border(1.dp, RtColors.Hairline, RoundedCornerShape(18.dp)),
+                            ) {
+                                if (s.overlayOnly && !isClip && choice.transparent) SamplePhoto(Modifier.fillMaxSize())
+                                Image(p.asImageBitmap(), "${choice.label} preview", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                                if (isClip && choice is OverlayChoice.Moment) {
+                                    Text(
+                                        "Numbers move with the video",
+                                        style = RtType.caption,
+                                        color = Color.White,
+                                        modifier = Modifier
+                                            .align(Alignment.TopCenter)
+                                            .padding(top = 10.dp)
+                                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))
+                                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -321,15 +390,19 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
             }
         }
 
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MomentLayout.entries.forEach { l -> Pill(l.label, s.layout == l) { vm.setLayout(l) } }
-        }
+        Text(
+            "${s.choice.label} · ${s.choice.note} · swipe for more",
+            style = RtType.caption,
+            color = RtColors.TextSecondary,
+            modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
+        )
+        LayoutPicker(s.thumbs, s.choice, onSelect = { ch -> scope.launch { pager.animateScrollToPage(choices.indexOf(ch)) } }, sampleBehind = false)
         Spacer(Modifier.height(10.dp))
-        Label("Show")
+        val momentLayout = s.choice is OverlayChoice.Moment
+        Label(if (momentLayout) "Show" else "Show (moment layouts only; ride layouts show the whole ride)")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             MomentField.entries.forEach { f ->
-                val has = f in s.available
+                val has = f in s.available && momentLayout
                 FilterChip(
                     selected = f in s.fields && has,
                     onClick = { vm.toggle(f) },
@@ -409,21 +482,6 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
             }
         }
     }
-}
-
-@Composable
-private fun Pill(text: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        text,
-        style = RtType.caption,
-        color = if (selected) RtColors.OnInverse else RtColors.TextSecondary,
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (selected) RtColors.Inverse else RtColors.Surface)
-            .border(1.dp, if (selected) Color.Transparent else RtColors.Hairline, RoundedCornerShape(50))
-            .clickable(role = Role.Tab, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 9.dp),
-    )
 }
 
 @Composable

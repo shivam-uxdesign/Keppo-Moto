@@ -1,7 +1,8 @@
 package com.ridetrack.app.share
 
 import android.graphics.Bitmap
-import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -77,28 +78,34 @@ import kotlinx.coroutines.withContext
 
 data class ShareUiState(
     val loading: Boolean = true,
-    val images: Map<ShareStyle, Bitmap> = emptyMap(),
+    /** Full-size renders by [OverlayChoice.key] (only the selected one is kept). */
+    val images: Map<String, Bitmap> = emptyMap(),
     val fileName: String = "ride",
     val missing: Boolean = false,
-    /** Small previews for the layout picker. */
-    val thumbs: Map<ShareStyle, Bitmap> = emptyMap(),
+    /** Small previews for the layout picker, by [OverlayChoice.key]. */
+    val thumbs: Map<String, Bitmap> = emptyMap(),
 )
 
 class ShareRideViewModel(private val c: AppContainer, rideId: String) : ViewModel() {
     private val _state = MutableStateFlow(ShareUiState())
     val state: StateFlow<ShareUiState> = _state.asStateFlow()
     private var data: ShareCardData? = null
+    /** The moment layouts on a ride show its top-speed instant. */
+    private var instant: MomentOverlay? = null
     private val renderer by lazy { ShareCardRenderer(c.appContext) }
+    private val momentRenderer by lazy { MomentShareRenderer(c.appContext) }
 
-    /** Full-size render of [style] (only the selected one is kept at full size). */
-    fun select(style: ShareStyle) {
-        val d = data ?: return
-        if (_state.value.images.containsKey(style)) return
+    private fun render(choice: OverlayChoice): Bitmap? = when (choice) {
+        is OverlayChoice.Ride -> data?.let { renderer.render(it, choice.style) }
+        is OverlayChoice.Moment -> instant?.let { momentRenderer.overlayOnly(1080, 1920, it, MomentField.DEFAULT, choice.layout) }
+    }
+
+    /** Full-size render of [choice] (only the selected one is kept at full size). */
+    fun select(choice: OverlayChoice) {
+        if (data == null || _state.value.images.containsKey(choice.key)) return
         viewModelScope.launch {
-            val bmp = withContext(Dispatchers.Default) { renderer.render(d, style) }
-            // Only the selected layout stays at full size; the previous one is left to GC
-            // (it may still be on screen during the crossfade).
-            _state.update { it.copy(images = mapOf(style to bmp)) }
+            val bmp = withContext(Dispatchers.Default) { render(choice) } ?: return@launch
+            _state.update { it.copy(images = mapOf(choice.key to bmp)) }
         }
     }
 
@@ -113,19 +120,37 @@ class ShareRideViewModel(private val c: AppContainer, rideId: String) : ViewMode
             val track = c.rides.track(rideId)
             val d = ShareCardData.from(ride, bike?.displayName, track.samples)
             data = d
+            instant = topSpeedInstant(ride, track.samples)
             val slug = ride.name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifBlank { "ride" }
-            val first = withContext(Dispatchers.Default) { renderer.render(d, ShareStyle.SOLID) }
-            _state.update { ShareUiState(loading = false, images = mapOf(ShareStyle.SOLID to first), fileName = "ridetrack-$slug") }
+            val firstChoice = OverlayChoice.all.first()
+            val first = withContext(Dispatchers.Default) { render(firstChoice) }
+            _state.update { ShareUiState(loading = false, images = listOfNotNull(first?.let { firstChoice.key to it }).toMap(), fileName = "ridetrack-$slug") }
             // Picker thumbnails, rendered one by one so the screen is usable straight away.
-            ShareStyle.entries.forEach { st ->
+            OverlayChoice.all.forEach { choice ->
                 val thumb = withContext(Dispatchers.Default) {
-                    val full = renderer.render(d, st)
-                    Bitmap.createScaledBitmap(full, full.width / 6, full.height / 6, true).also { full.recycle() }
-                }
-                _state.update { it.copy(thumbs = it.thumbs + (st to thumb)) }
+                    render(choice)?.let { full -> Bitmap.createScaledBitmap(full, full.width / 6, full.height / 6, true).also { full.recycle() } }
+                } ?: return@forEach
+                _state.update { it.copy(thumbs = it.thumbs + (choice.key to thumb)) }
             }
         }
     }
+}
+
+/** The ride's top-speed instant, for the moment layouts. */
+private fun topSpeedInstant(ride: com.ridetrack.telemetry.model.Ride, samples: List<com.ridetrack.telemetry.model.TelemetrySample>): MomentOverlay? {
+    val top = samples.maxByOrNull { it.speedMps ?: -1.0 } ?: return null
+    val route = samples.mapNotNull { s -> s.latitude?.let { la -> s.longitude?.let { lo -> la to lo } } }
+        .let { pts -> if (pts.size <= 400) pts else pts.filterIndexed { i, _ -> i % (pts.size / 400 + 1) == 0 } }
+    return MomentOverlay(
+        eventTypes = emptySet(),
+        eventValue = null,
+        timeText = com.ridetrack.app.ui.format.Format.timeOfDay(top.timeMillis),
+        dateText = com.ridetrack.app.ui.format.Format.rideDate(top.timeMillis).substringBefore(" ·"),
+        rideName = ride.name,
+        point = com.ridetrack.telemetry.moments.telemetryAt(samples, top.timeMillis),
+        route = route,
+        demo = ride.source == com.ridetrack.telemetry.model.DataSourceKind.DEMO,
+    )
 }
 
 /** Strava-style share: a full story card, or a transparent overlay for your own photo. */
@@ -136,8 +161,10 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
-    var style by remember { mutableStateOf(ShareStyle.SOLID) }
-    LaunchedEffect(style, s.loading) { if (!s.loading) vm.select(style) }
+    val choices = OverlayChoice.all
+    val pager = rememberPagerState { choices.size }
+    val style = choices[pager.currentPage]
+    LaunchedEffect(pager.settledPage, s.loading) { if (!s.loading) vm.select(choices[pager.settledPage]) }
     var toast by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(toast) {
         if (toast != null) {
@@ -154,31 +181,31 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
             .padding(horizontal = RtDimens.screenPadding),
     ) {
         ScreenHeader("Share ride", onBack = onBack)
-        LayoutPicker(s.thumbs, style, onSelect = { style = it })
+        LayoutPicker(s.thumbs, style, onSelect = { c -> scope.launch { pager.animateScrollToPage(choices.indexOf(c)) } })
         Spacer(Modifier.height(12.dp))
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val image = s.images[style] ?: s.thumbs[style]
             when {
                 s.missing -> Text("Ride not found", style = RtType.body, color = RtColors.TextSecondary)
-                image == null -> CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp)
-                else -> Crossfade(style, label = "share-style") { st ->
-                    val bmp = s.images[st] ?: s.thumbs[st]
-                    Box(
-                        Modifier
-                            .fillMaxHeight()
-                            .aspectRatio(9f / 16f)
-                            .clip(RoundedCornerShape(20.dp))
-                            .border(1.dp, RtColors.Hairline, RoundedCornerShape(20.dp)),
-                    ) {
-                        // The overlay is previewed on a stand-in "photo" so the transparency is obvious.
-                        if (st.transparent) SamplePhoto(Modifier.fillMaxSize())
-                        if (bmp != null) {
-                            Image(
-                                bmp.asImageBitmap(),
-                                contentDescription = "${st.label} share graphic preview",
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize(),
-                            )
+                s.loading -> CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp)
+                // Swipe left or right to change the overlay.
+                else -> HorizontalPager(pager, Modifier.fillMaxSize(), key = { choices[it].key }) { page ->
+                    val st = choices[page]
+                    val bmp = s.images[st.key] ?: s.thumbs[st.key]
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier
+                                .fillMaxHeight()
+                                .aspectRatio(9f / 16f)
+                                .clip(RoundedCornerShape(20.dp))
+                                .border(1.dp, RtColors.Hairline, RoundedCornerShape(20.dp)),
+                        ) {
+                            // Overlays are previewed on a stand-in "photo" so the transparency is obvious.
+                            if (st.transparent) SamplePhoto(Modifier.fillMaxSize())
+                            if (bmp != null) {
+                                Image(bmp.asImageBitmap(), "${st.label} share graphic preview", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                            } else {
+                                CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp, modifier = Modifier.align(Alignment.Center))
+                            }
                         }
                     }
                 }
@@ -197,15 +224,16 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
             }
         }
         Text(
-            if (!style.transparent) "A ready-made story card. Share straight to Instagram or anywhere else."
-            else "${style.label} · covers ${style.coverage.lowercase()} of a story. Transparent PNG: add your photo in Instagram, then paste this on top as a sticker.",
+            "${style.label} · ${pager.currentPage + 1} of ${choices.size} · swipe for more\n" +
+                if (!style.transparent) "A ready-made story card. Share straight to Instagram or anywhere else."
+                else "${style.note}. Transparent PNG: add your photo in Instagram, then paste this on top as a sticker.",
             style = RtType.caption,
             color = RtColors.TextSecondary,
             modifier = Modifier.padding(top = 12.dp),
         )
         Row(Modifier.padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            val bmp = s.images[style]
-            val name = "${s.fileName}-${style.name.lowercase()}"
+            val bmp = s.images[style.key]
+            val name = "${s.fileName}-${style.key}"
             ActionButton("Share", Icons.Outlined.IosShare, primary = true, enabled = bmp != null, modifier = Modifier.weight(1f)) {
                 val b = bmp ?: return@ActionButton
                 scope.launch { ShareImages.share(context, ShareImages.toCacheUri(context, b, name)) }
@@ -234,9 +262,11 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
 
 /** Thumbnails of every layout with how much of the story each one covers. */
 @Composable
-private fun LayoutPicker(thumbs: Map<ShareStyle, Bitmap>, selected: ShareStyle, onSelect: (ShareStyle) -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(ShareStyle.entries.toList()) { st ->
+internal fun LayoutPicker(thumbs: Map<String, Bitmap>, selected: OverlayChoice, onSelect: (OverlayChoice) -> Unit, sampleBehind: Boolean = true) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(selected) { listState.animateScrollToItem((OverlayChoice.all.indexOf(selected) - 1).coerceAtLeast(0)) }
+    LazyRow(state = listState, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        items(OverlayChoice.all) { st ->
             val on = st == selected
             Column(
                 Modifier
@@ -252,11 +282,17 @@ private fun LayoutPicker(thumbs: Map<ShareStyle, Bitmap>, selected: ShareStyle, 
                         .clip(RoundedCornerShape(10.dp))
                         .border(if (on) 2.dp else 1.dp, if (on) RtColors.Primary else RtColors.Hairline, RoundedCornerShape(10.dp)),
                 ) {
-                    if (st.transparent) SamplePhoto(Modifier.fillMaxSize())
-                    thumbs[st]?.let { Image(it.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
+                    if (st.transparent && sampleBehind) SamplePhoto(Modifier.fillMaxSize())
+                    thumbs[st.key]?.let { Image(it.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
                 }
                 Text(st.label, style = RtType.caption, color = if (on) RtColors.TextPrimary else RtColors.TextSecondary, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
-                Text(st.coverage, style = RtType.caption, color = if (on) RtColors.Primary else RtColors.TextTertiary, maxLines = 1)
+                Text(
+                    when (st) {
+                        is OverlayChoice.Ride -> st.style.coverage
+                        is OverlayChoice.Moment -> "Instant"
+                    },
+                    style = RtType.caption, color = if (on) RtColors.Primary else RtColors.TextTertiary, maxLines = 1,
+                )
             }
         }
     }

@@ -33,19 +33,16 @@ import kotlin.coroutines.resume
  */
 @UnstableApi
 class MomentVideoExporter(private val context: Context) {
-    private val renderer = MomentShareRenderer(context)
-
     /**
-     * [overlayAt] gives the overlay for a wall-clock time; the clip's first frame was filmed
-     * at [videoStartMillis]. Reports 0–100 through [onProgress]. Returns the output file.
+     * [draw] paints the overlay for a wall-clock time onto a frame-sized canvas; the clip's
+     * first frame was filmed at [videoStartMillis]. Reports 0–100 through [onProgress].
+     * Returns the output file.
      */
     suspend fun export(
         input: File,
         output: File,
         videoStartMillis: Long,
-        overlayAt: (Long) -> MomentOverlay,
-        fields: Set<MomentField>,
-        layout: MomentLayout,
+        draw: (canvas: Canvas, width: Int, height: Int, timeMillis: Long) -> Unit,
         onProgress: (Int) -> Unit,
     ): Result<File> {
         val (w, h) = withContext(Dispatchers.IO) { displaySize(input) } ?: return Result.failure(IllegalStateException("Unreadable clip"))
@@ -62,7 +59,7 @@ class MomentVideoExporter(private val context: Context) {
                 if (bucket != lastBucket) {
                     lastBucket = bucket
                     canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
-                    renderer.draw(canvas, w, h, overlayAt(videoStartMillis + presentationTimeUs / 1000), fields, layout)
+                    draw(canvas, w, h, videoStartMillis + presentationTimeUs / 1000)
                 }
                 return bitmap
             }
