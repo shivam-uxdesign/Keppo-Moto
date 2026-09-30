@@ -83,7 +83,7 @@ fun HudCard(data: HudData, settings: HudSettings, modifier: Modifier = Modifier)
             },
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        StatusRow(data, c)
+        StatusRow(data, c, compact = settings.layout == HudLayout.MINIMAL)
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 Format.speedKmh(data.speedMps),
@@ -148,7 +148,8 @@ fun HudCard(data: HudData, settings: HudSettings, modifier: Modifier = Modifier)
  * RECORDING with the ride time, PAUSED (by the rider), STOPPED (auto-pause), or READY.
  */
 @Composable
-private fun StatusRow(data: HudData, c: HudColors) {
+private fun StatusRow(data: HudData, c: HudColors, compact: Boolean) {
+    val label = hudLabel.copy(letterSpacing = 0.6.sp)
     Row(verticalAlignment = Alignment.CenterVertically) {
         val gpsLost = data.status == HudStatus.GPS_LOST
         val gpsColor = when {
@@ -168,14 +169,14 @@ private fun StatusRow(data: HudData, c: HudColors) {
                 gpsLost -> "GPS LOST"
                 else -> "GPS ON"
             },
-            style = hudLabel,
+            style = label,
             color = if (gpsLost || data.demo) gpsColor else c.muted,
             maxLines = 1,
         )
         Spacer(Modifier.weight(1f))
         val time = data.elapsedMillis?.let { " · " + Format.clock(it) } ?: ""
         val (text, color) = when (data.status) {
-            HudStatus.RECORDING, HudStatus.GPS_LOST -> "RECORDING$time" to RtColors.Error
+            HudStatus.RECORDING, HudStatus.GPS_LOST -> (if (compact) "REC$time" else "RECORDING$time") to RtColors.Error
             HudStatus.PAUSED -> "PAUSED$time" to RtColors.Warning
             HudStatus.STOPPED -> "STOPPED" + (data.stoppedForMillis?.let { " · " + Format.clock(it) } ?: "") to RtColors.Paused
             HudStatus.IDLE -> "READY" to c.muted
@@ -184,7 +185,7 @@ private fun StatusRow(data: HudData, c: HudColors) {
             Box(Modifier.size(6.dp).background(color, CircleShape))
             Spacer(Modifier.width(4.dp))
         }
-        Text(text, style = hudLabel, color = color, maxLines = 1)
+        Text(text, style = label, color = color, maxLines = 1, softWrap = false)
     }
 }
 
