@@ -42,6 +42,8 @@ internal class HudOverlay(
     private var collapsed by mutableStateOf(false)
     private var controlsOpen by mutableStateOf(false)
     private var nearTarget by mutableStateOf(false)
+    /** Top of the Pause / Stop / Record buttons in the window; touches below it are taps, not drags. */
+    private var buttonsTop = Float.MAX_VALUE
 
     val isShowing: Boolean get() = hudView != null
 
@@ -53,7 +55,7 @@ internal class HudOverlay(
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent {
                 val d = data
-                if (d != null) HudOverlayContent(d, settings, collapsed, controlsOpen, actions)
+                if (d != null) HudOverlayContent(d, settings, collapsed, controlsOpen, actions, onButtonsTop = { buttonsTop = it })
             }
         }
         val container = HudTouchContainer(context, gestureCallbacks).apply {
@@ -101,7 +103,7 @@ internal class HudOverlay(
     }
 
     private val gestureCallbacks = object : HudTouchContainer.Callbacks {
-        override fun handlesGestures() = !controlsOpen
+        override fun handlesGestures(y: Float) = !controlsOpen && y < buttonsTop
         override fun onDragStart() = showTarget()
         override fun onDrag(dx: Int, dy: Int) {
             val p = params ?: return

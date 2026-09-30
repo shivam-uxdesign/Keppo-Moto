@@ -101,6 +101,10 @@ class LiveRideViewModel(private val c: AppContainer) : ViewModel() {
 
     fun calibrateNow() = c.session.calibrateNow()
 
+    /** The rider paused the ride (here or from the pop-up). */
+    val manuallyPaused: StateFlow<Boolean> = c.session.manuallyPaused
+    fun togglePause() = if (c.session.manuallyPaused.value) c.session.resume() else c.session.pause()
+
     fun requestEnd() = c.session.requestEnd()
     fun cancelEnd() = c.session.cancelEnd()
     fun confirmEnd() = c.session.confirmEnd()

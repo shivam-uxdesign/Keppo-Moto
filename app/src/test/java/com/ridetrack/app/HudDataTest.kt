@@ -79,4 +79,13 @@ class HudDataTest {
         assertEquals(HudStatus.RECORDING, d.status)
         assertFalse(HudData.from(frame(), active(), false, null).demo)
     }
+
+    @Test
+    fun `a rider pause shows as paused, not an auto-stop, and idle has no ride`() {
+        assertEquals(HudStatus.PAUSED, HudData.from(frame(), active(), paused = true, stoppedForMillis = 5_000, manuallyPaused = true).status)
+        assertEquals(HudStatus.STOPPED, HudData.from(frame(), active(), paused = true, stoppedForMillis = 5_000).status)
+        val idle = HudData.idle()
+        assertEquals(HudStatus.IDLE, idle.status)
+        assertNull(idle.speedMps)
+    }
 }

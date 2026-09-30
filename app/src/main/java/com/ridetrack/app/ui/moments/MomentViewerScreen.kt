@@ -187,7 +187,7 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
             ) {
                 if (m.kind == MomentKind.CLIP && page == pager.currentPage) {
                     AndroidView(
-                        factory = { ctx -> PlayerView(ctx).apply { useController = false; setShutterBackgroundColor(android.graphics.Color.BLACK) } },
+                        factory = { ctx -> PlayerView(ctx).apply { useController = false } },
                         update = { it.player = player },
                         onRelease = { it.player = null },
                         modifier = Modifier.fillMaxSize(),

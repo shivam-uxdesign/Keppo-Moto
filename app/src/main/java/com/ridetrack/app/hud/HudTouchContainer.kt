@@ -17,8 +17,11 @@ import kotlin.math.hypot
 internal class HudTouchContainer(context: Context, private val callbacks: Callbacks) : FrameLayout(context) {
 
     interface Callbacks {
-        /** When false, touches are passed to the Compose children (controls open). */
-        fun handlesGestures(): Boolean
+        /**
+         * Whether a touch starting at [y] (in this view) drags / long-presses the pop-up.
+         * False passes it to the Compose children (quick controls open, or the ride buttons).
+         */
+        fun handlesGestures(y: Float): Boolean
         fun onDragStart()
         fun onDrag(dx: Int, dy: Int)
         fun onDragEnd()
@@ -33,6 +36,8 @@ internal class HudTouchContainer(context: Context, private val callbacks: Callba
     private var lastX = 0f
     private var lastY = 0f
     private var dragging = false
+    /** Decided on ACTION_DOWN for the whole gesture. */
+    private var mine = false
 
     private val detector = GestureDetector(
         context,
@@ -48,7 +53,10 @@ internal class HudTouchContainer(context: Context, private val callbacks: Callba
         },
     )
 
-    override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = callbacks.handlesGestures()
+    override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) mine = callbacks.handlesGestures(ev.y)
+        return mine
+    }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(ev: MotionEvent): Boolean {
@@ -56,7 +64,8 @@ internal class HudTouchContainer(context: Context, private val callbacks: Callba
             callbacks.onOutsideTouch()
             return true
         }
-        if (!callbacks.handlesGestures()) return super.onTouchEvent(ev)
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) mine = callbacks.handlesGestures(ev.y)
+        if (!mine) return super.onTouchEvent(ev)
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = ev.rawX

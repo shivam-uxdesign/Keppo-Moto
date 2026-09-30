@@ -7,7 +7,11 @@ import com.ridetrack.telemetry.model.DataSourceKind
 import com.ridetrack.telemetry.model.GpsQuality
 import com.ridetrack.telemetry.model.TelemetryFrame
 
-enum class HudStatus { RECORDING, STOPPED, GPS_LOST }
+/**
+ * What the ride is doing: recording, auto-paused at a stop, paused by the rider, GPS lost,
+ * or no ride at all (the pop-up waiting with its record button).
+ */
+enum class HudStatus { RECORDING, STOPPED, PAUSED, GPS_LOST, IDLE }
 
 /** The Moments camera, as the rider should see it: quiet while buffering, REC while saving. */
 enum class CameraIndicator {
@@ -53,6 +57,7 @@ data class HudData(
             paused: Boolean,
             stoppedForMillis: Long?,
             camera: CameraIndicator = CameraIndicator.OFF,
+            manuallyPaused: Boolean = false,
         ): HudData {
             val stats = frame?.stats
             val left = stats?.maxLeftLeanDeg
@@ -66,6 +71,7 @@ data class HudData(
                 (frame?.gpsQuality == GpsQuality.LOST || frame?.gpsQuality == GpsQuality.UNAVAILABLE)
             return HudData(
                 status = when {
+                    manuallyPaused -> HudStatus.PAUSED
                     paused -> HudStatus.STOPPED
                     gpsLost -> HudStatus.GPS_LOST
                     else -> HudStatus.RECORDING
@@ -93,5 +99,12 @@ data class HudData(
                 camera = camera,
             )
         }
+
+        /** No ride: the pop-up stays up with its record button. */
+        fun idle(): HudData = HudData(
+            status = HudStatus.IDLE, stoppedForMillis = null, speedMps = null, leanDeg = null, leanNote = null,
+            distanceM = null, elapsedMillis = null, avgSpeedMps = null, maxSpeedMps = null, longitudinalG = null,
+            combinedG = null, maxLeanDeg = null, headingDeg = null, demo = false,
+        )
     }
 }

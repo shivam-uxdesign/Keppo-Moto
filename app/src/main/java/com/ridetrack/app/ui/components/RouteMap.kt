@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -245,7 +246,7 @@ fun RouteMap(
     }
 
     // Extra zoom the rider applied in 3D (on top of the default follow distance).
-    var zoom3d by remember { mutableStateOf(0.0) }
+    var zoom3d by remember { mutableDoubleStateOf(0.0) }
     LaunchedEffect(style, marker, threeD, bearing) {
         val s = style ?: return@LaunchedEffect
         val feature = marker?.let { Feature.fromGeometry(Point.fromLngLat(it.longitude, it.latitude)).apply { addNumberProperty("bearing", bearing ?: 0f) } }

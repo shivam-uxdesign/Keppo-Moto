@@ -29,6 +29,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -267,7 +268,7 @@ private fun <T> ChoiceRow(choices: List<T>, selected: T, label: (T) -> String, e
 @Composable
 private fun MicPicker(saved: String?, enabled: Boolean, onPick: (String?) -> Unit) {
     val context = LocalContext.current
-    var scan by remember { mutableStateOf(0) }
+    var scan by remember { mutableIntStateOf(0) }
     val btPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { scan++ }
     val available = remember(scan) { Microphones.available(context) }
     val current = MicChoice.decode(saved)

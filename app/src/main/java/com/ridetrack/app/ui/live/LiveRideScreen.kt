@@ -8,6 +8,14 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import com.ridetrack.app.ui.theme.rememberHaptics
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -188,15 +196,38 @@ private fun Banners(chrome: LiveChrome, frame: TelemetryFrame?, vm: LiveRideView
     if (canCalibrate) CalibrateOffer(frame, onCalibrate = vm::calibrateNow)
 }
 
+/** Pause / resume next to hold-to-end. */
 @Composable
 private fun EndControl(canEnd: Boolean, vm: LiveRideViewModel) {
-    HoldToConfirmButton(
-        label = "Hold to end ride",
-        holdingLabel = "Keep holding…",
-        onConfirmed = vm::endNow,
-        onAccessibleClick = vm::requestEnd,
-        enabled = canEnd,
-    )
+    val paused by vm.manuallyPaused.collectAsStateWithLifecycle()
+    val haptics = rememberHaptics()
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(
+            Modifier
+                .size(RtDimens.primaryButtonHeight)
+                .clip(CircleShape)
+                .background(if (paused) RtColors.Primary else RtColors.Surface)
+                .border(1.dp, RtColors.Hairline, CircleShape)
+                .clickable(enabled = canEnd, role = Role.Button) { haptics.tick(); vm.togglePause() }
+                .semantics { contentDescription = if (paused) "Resume ride" else "Pause ride" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                contentDescription = null,
+                tint = if (paused) RtColors.OnPrimary else RtColors.TextPrimary,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+        HoldToConfirmButton(
+            label = "Hold to end ride",
+            holdingLabel = "Keep holding…",
+            onConfirmed = vm::endNow,
+            onAccessibleClick = vm::requestEnd,
+            enabled = canEnd,
+            modifier = Modifier.weight(1f),
+        )
+    }
 }
 
 @Composable

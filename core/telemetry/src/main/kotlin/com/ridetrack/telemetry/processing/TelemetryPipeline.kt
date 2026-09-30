@@ -72,6 +72,13 @@ class TelemetryPipeline(
     /** Stopped after moving; the ride can be shown as paused. */
     val isPausedStop: Boolean get() = autoPause.isCountedStop
 
+    /**
+     * The rider paused the ride: samples keep being recorded, but distance, moving time,
+     * dynamics and events don't count until it's resumed.
+     */
+    @Volatile
+    var manuallyPaused: Boolean = false
+
     fun wallMillis(nanos: Long): Long = startWallMillis + (nanos - startNanos) / 1_000_000L
 
     fun start(): RideEvent = record(RideEvent(RideEventType.START, startWallMillis, gps.latitude, gps.longitude, null))
@@ -158,7 +165,8 @@ class TelemetryPipeline(
     private fun onLocation(r: LocationReading): List<RideEvent> {
         val out = ArrayList<RideEvent>()
         val wasLost = gpsLostReported
-        accumulator.addDistance(gps.onLocation(r))
+        val travelled = gps.onLocation(r)
+        if (!manuallyPaused) accumulator.addDistance(travelled)
         val ctx = context(r.timeNanos)
         if (wasLost && gps.quality.hasFix) {
             gpsLostReported = false
@@ -171,7 +179,7 @@ class TelemetryPipeline(
         lastGpsNanos = r.timeNanos
         dynamics.onGpsAccel(gps.accelMps2, dt)
         val goodFix = gps.quality == GpsQuality.GOOD || gps.quality == GpsQuality.EXCELLENT
-        if (speed != null && goodFix) {
+        if (speed != null && goodFix && !manuallyPaused) {
             accumulator.onReliableSpeed(speed)
         }
         val accel = gps.accelMps2
@@ -190,7 +198,7 @@ class TelemetryPipeline(
             }
             AutoPauseDetector.Transition.RESUMED, null -> Unit
         }
-        if (!autoPause.isStopped) out += detector.onHeading(ctx, gps.headingDeg)
+        if (!autoPause.isStopped && !manuallyPaused) out += detector.onHeading(ctx, gps.headingDeg)
         return out.map(::record)
     }
 
@@ -200,7 +208,7 @@ class TelemetryPipeline(
         lean.onAccel(r)
         dynamics.onAccel(r)
         val speed = gps.speedMps
-        val moving = !autoPause.isStopped && speed != null && speed >= 2.0
+        val moving = !autoPause.isStopped && !manuallyPaused && speed != null && speed >= 2.0
         if (!moving) return emptyList()
 
         val leanDeg = lean.leanDeg?.takeIf { lean.confidence == LeanConfidence.GOOD }
@@ -307,7 +315,7 @@ class TelemetryPipeline(
     private fun accountTime(nowNanos: Long) {
         val dtMillis = (nowNanos - lastAccountedNanos) / 1_000_000L
         if (dtMillis > 0) {
-            accumulator.addTime(dtMillis, autoPause.isStopped)
+            accumulator.addTime(dtMillis, autoPause.isStopped || manuallyPaused)
             lastAccountedNanos += dtMillis * 1_000_000L
         }
     }

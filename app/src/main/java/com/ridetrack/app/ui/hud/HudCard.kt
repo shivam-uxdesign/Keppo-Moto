@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.GpsOff
-import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,10 +59,12 @@ private fun hudColors(s: HudSettings, demo: Boolean): HudColors = when (s.theme)
     )
 }
 
+
 private fun statusColor(status: HudStatus) = when (status) {
     HudStatus.RECORDING -> RtColors.Ok
     HudStatus.STOPPED -> RtColors.Paused
-    HudStatus.GPS_LOST -> RtColors.Warning
+    HudStatus.PAUSED, HudStatus.GPS_LOST -> RtColors.Warning
+    HudStatus.IDLE -> RtColors.TextTertiary
 }
 
 /** The floating pop-up card. Size scaling is applied by the caller via density. */
@@ -142,37 +143,48 @@ fun HudCard(data: HudData, settings: HudSettings, modifier: Modifier = Modifier)
     }
 }
 
+/**
+ * Left: GPS, which never changes with the ride state. Right: the ride state itself:
+ * RECORDING with the ride time, PAUSED (by the rider), STOPPED (auto-pause), or READY.
+ */
 @Composable
 private fun StatusRow(data: HudData, c: HudColors) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        if (data.demo) {
-            Text(
-                "DEMO",
-                style = hudLabel,
-                color = RtColors.Warning,
-                modifier = Modifier
-                    .background(RtColors.Warning.copy(alpha = 0.14f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            )
-            Spacer(Modifier.width(6.dp))
+        val gpsLost = data.status == HudStatus.GPS_LOST
+        val gpsColor = when {
+            data.demo -> RtColors.Warning
+            gpsLost -> RtColors.Warning
+            else -> RtColors.Ok
         }
-        val color = statusColor(data.status)
-        when (data.status) {
-            HudStatus.RECORDING -> Box(Modifier.size(6.dp).background(color, CircleShape))
-            HudStatus.STOPPED -> Icon(Icons.Rounded.Pause, contentDescription = null, tint = color, modifier = Modifier.size(12.dp))
-            HudStatus.GPS_LOST -> Icon(Icons.Outlined.GpsOff, contentDescription = null, tint = color, modifier = Modifier.size(12.dp))
+        if (gpsLost) {
+            Icon(Icons.Outlined.GpsOff, contentDescription = null, tint = gpsColor, modifier = Modifier.size(12.dp))
+        } else {
+            Box(Modifier.size(6.dp).background(gpsColor, CircleShape))
         }
         Spacer(Modifier.width(6.dp))
-        val text = when (data.status) {
-            HudStatus.RECORDING -> if (data.demo) "SIMULATED" else "RECORDING"
-            HudStatus.STOPPED -> "STOPPED" + (data.stoppedForMillis?.let { " · " + Format.clock(it) } ?: "")
-            HudStatus.GPS_LOST -> "GPS LOST"
+        Text(
+            when {
+                data.demo -> "SIMULATED"
+                gpsLost -> "GPS LOST"
+                else -> "GPS ON"
+            },
+            style = hudLabel,
+            color = if (gpsLost || data.demo) gpsColor else c.muted,
+            maxLines = 1,
+        )
+        Spacer(Modifier.weight(1f))
+        val time = data.elapsedMillis?.let { " · " + Format.clock(it) } ?: ""
+        val (text, color) = when (data.status) {
+            HudStatus.RECORDING, HudStatus.GPS_LOST -> "RECORDING$time" to RtColors.Error
+            HudStatus.PAUSED -> "PAUSED$time" to RtColors.Warning
+            HudStatus.STOPPED -> "STOPPED" + (data.stoppedForMillis?.let { " · " + Format.clock(it) } ?: "") to RtColors.Paused
+            HudStatus.IDLE -> "READY" to c.muted
         }
-        Text(text, style = hudLabel, color = if (data.status == HudStatus.RECORDING) c.muted else color, maxLines = 1)
-        if (data.camera != CameraIndicator.OFF) {
-            Spacer(Modifier.weight(1f))
-            CameraBadge(data.camera, c.muted)
+        if (data.status == HudStatus.RECORDING || data.status == HudStatus.GPS_LOST) {
+            Box(Modifier.size(6.dp).background(color, CircleShape))
+            Spacer(Modifier.width(4.dp))
         }
+        Text(text, style = hudLabel, color = color, maxLines = 1)
     }
 }
 

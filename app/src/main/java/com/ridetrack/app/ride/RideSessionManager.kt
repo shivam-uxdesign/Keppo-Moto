@@ -109,6 +109,9 @@ class RideSessionManager(
     private val lifecycleMutex = Mutex()
     private var recordingJob: Job? = null
     private var recorder: Recorder? = null
+    private val _manuallyPaused = MutableStateFlow(false)
+    /** The rider paused the ride (from the HUD or the live screen), as opposed to an auto-pause at a stop. */
+    val manuallyPaused: StateFlow<Boolean> = _manuallyPaused.asStateFlow()
     private var gpsJob: Job? = null
     private var phone: PhoneTelemetrySource? = null
 
@@ -169,6 +172,7 @@ class RideSessionManager(
         ).also { it.pendingEvents += pipeline.start() }
         momentsHub.reset()
         recorder = rec
+        _manuallyPaused.value = false
         _active.value = ActiveRide(
             rideId = rideId,
             bikeId = bike.id,
@@ -274,7 +278,7 @@ class RideSessionManager(
         ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
     private fun syncAutoPause(rec: Recorder) {
-        val shouldPause = autoPauseEnabled.value && rec.pipeline.isPausedStop
+        val shouldPause = _manuallyPaused.value || (autoPauseEnabled.value && rec.pipeline.isPausedStop)
         val s = _state.value
         if (shouldPause && s is RideState.Recording) dispatch(RideAction.AutoPause)
         if (!shouldPause && (s is RideState.Paused || (s is RideState.EndingRide && s.wasPaused))) {
@@ -299,6 +303,22 @@ class RideSessionManager(
             _active.update { it?.copy(storageProblem = true) }
             false
         }
+    }
+
+    /** Pauses the ride: distance and moving time stop counting until [resume]. */
+    fun pause() {
+        val rec = recorder ?: return
+        if (!_state.value.isActive) return
+        rec.pipeline.manuallyPaused = true
+        _manuallyPaused.value = true
+        syncAutoPause(rec)
+    }
+
+    fun resume() {
+        val rec = recorder ?: return
+        rec.pipeline.manuallyPaused = false
+        _manuallyPaused.value = false
+        syncAutoPause(rec)
     }
 
     fun requestEnd() {
@@ -356,6 +376,7 @@ class RideSessionManager(
             }
             RideRecordingService.stop(context)
             recorder = null
+            _manuallyPaused.value = false
             if (ok) {
                 _active.value = null
                 _frame.value = null
