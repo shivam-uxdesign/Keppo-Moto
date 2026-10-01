@@ -26,6 +26,7 @@ import com.ridetrack.telemetry.model.DataSourceKind
 import com.ridetrack.telemetry.model.MountCalibration
 import com.ridetrack.telemetry.model.RideEvent
 import com.ridetrack.telemetry.model.SensorAvailability
+import com.ridetrack.telemetry.model.GpsQuality
 import com.ridetrack.telemetry.model.TelemetryFrame
 import com.ridetrack.telemetry.model.TelemetrySample
 import com.ridetrack.telemetry.processing.TelemetryPipeline
@@ -171,6 +172,7 @@ class RideSessionManager(
             pipeline,
             planner = m?.takeIf { triggers != null }?.let { MomentPlanner(beforeMillis = it.clipSeconds * 1_000L, afterMillis = it.clipSeconds * 1_000L) },
             photos = m?.photos?.takeIf { it.minutes > 0 }?.let { PhotoScheduler(it.minutes * 60_000L) },
+            gpsVideo = if (m != null && !demo && prefs.safety.gpsLostVideo) GpsLostVideo() else null,
         ).also { it.pendingEvents += pipeline.start() }
         momentsHub.reset()
         recorder = rec
@@ -268,6 +270,17 @@ class RideSessionManager(
             rec.pipeline.takeMomentEvents().forEach { (event, at) -> planner.add(event, at) }
             planner.due(frame.timeMillis).forEach { momentsHub.submit(MomentRequest.Clip(rec.rideId, it)) }
             momentsHub.setEventPending(planner.hasPending)
+        }
+        rec.gpsVideo?.let { g ->
+            // LOST = had a fix and it went away (not the wait for a first fix at the start).
+            val lost = frame.gpsQuality == GpsQuality.LOST
+            val live = momentsHub.live.value
+            val ours = live?.source == MomentSource.GPS_LOST
+            when (g.onTick(frame.timeMillis, lost, ourVideoRunning = ours, otherVideoRunning = live != null && !ours)) {
+                GpsLostVideo.Action.START -> startVideo(MomentSource.GPS_LOST, g.leadInMillis(frame.timeMillis).coerceAtMost(MAX_LEAD_IN_MILLIS))
+                GpsLostVideo.Action.STOP -> if (ours) stopVideo()
+                GpsLostVideo.Action.NONE -> Unit
+            }
         }
         rec.photos?.let { photos ->
             if (photos.onTick(frame.timeMillis, frame.stats.movingMillis, frame.isStopped)) {
@@ -421,6 +434,7 @@ class RideSessionManager(
         val pipeline: TelemetryPipeline,
         val planner: MomentPlanner? = null,
         val photos: PhotoScheduler? = null,
+        val gpsVideo: GpsLostVideo? = null,
     ) {
         val pendingSamples = ArrayList<TelemetrySample>()
         val pendingEvents = ArrayList<RideEvent>()
@@ -431,5 +445,7 @@ class RideSessionManager(
         private const val TICK_MILLIS = 200L
         private const val SAMPLE_EVERY_TICKS = 5L // 1 Hz
         private const val FLUSH_EVERY_TICKS = 10L // every 2 s
+        /** The clip buffer holds ~45 s; a GPS-lost video starts at most this far back. */
+        private const val MAX_LEAD_IN_MILLIS = 30_000L
     }
 }

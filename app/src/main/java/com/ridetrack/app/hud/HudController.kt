@@ -39,6 +39,8 @@ class HudController(
     /** The ride the rider hid the pop-up for; it stays hidden until that ride ends. */
     private val hiddenForRide = MutableStateFlow<String?>(null)
     private var stoppedSinceMillis: Long? = null
+    /** A short note under the buttons (why a video couldn't start), with when it was set. */
+    private val note = MutableStateFlow<Pair<String, Long>?>(null)
 
     private val actions: HudControlActions = object : HudControlActions {
         override fun setLayout(layout: HudLayout) { scope.launch { settings.setHudLayout(layout) } }
@@ -48,7 +50,7 @@ class HudController(
         override fun openApp() = openRideTrack()
         override fun closeControls() = overlay.closeControls()
         override fun recordVideo() {
-            session.startVideo()
+            if (!session.startVideo()) note.value = "Turn on Moments in Ride Track to film" to System.currentTimeMillis()
         }
         override fun pauseVideo() = session.pauseVideo()
         override fun resumeVideo() = session.resumeVideo()
@@ -89,7 +91,7 @@ class HudController(
         }
 
         scope.launch {
-            combine(session.frame, session.state, session.active, moments.state, combine(session.manuallyPaused, moments.live, moments.liveSaved) { _, _, _ -> Unit }) { _, _, _, _, _ -> Unit }
+            combine(session.frame, session.state, session.active, moments.state, combine(session.manuallyPaused, moments.live, moments.liveSaved, note) { _, _, _, _ -> Unit }) { _, _, _, _, _ -> Unit }
                 .collect { refreshData() }
         }
 
@@ -119,7 +121,7 @@ class HudController(
             video = moments.live.value?.let { HudVideo(it.source, it.starting, it.paused, it.elapsedMillis(now)) },
             savedNote = moments.liveSaved.value?.takeIf { now - it.atMillis < SAVED_NOTE_MILLIS }?.let { saved ->
                 (if (saved.source == MomentSource.GPS_LOST) "GPS back · saved · " else "Saved to moments · ") + Format.clock(saved.lengthMillis)
-            },
+            } ?: note.value?.takeIf { now - it.second < SAVED_NOTE_MILLIS }?.first,
         )
     }
 

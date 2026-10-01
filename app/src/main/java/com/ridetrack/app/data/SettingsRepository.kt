@@ -122,6 +122,7 @@ data class Settings(
     /** Last-used moment share graphic: which details are on, and the layout. */
     val momentShareFields: Set<MomentField> = MomentField.DEFAULT,
     val momentShareLayout: MomentLayout = MomentLayout.MINIMAL,
+    val safety: SafetySettings = SafetySettings(),
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -156,6 +157,14 @@ class SettingsRepository(private val context: Context) {
         val momentsMic = stringPreferencesKey("moments_mic")
         val momentShareFields = stringSetPreferencesKey("moment_share_fields")
         val momentShareLayout = stringPreferencesKey("moment_share_layout")
+        val safetyCrash = booleanPreferencesKey("safety_crash")
+        val safetySensitivity = stringPreferencesKey("safety_sensitivity")
+        val safetyGpsVideo = booleanPreferencesKey("safety_gps_video")
+        val safetyContacts = stringPreferencesKey("safety_contacts")
+        val safetyBlood = stringPreferencesKey("safety_blood")
+        val safetyAllergies = stringPreferencesKey("safety_allergies")
+        val safetyNotes = stringPreferencesKey("safety_notes")
+        val safetyName = stringPreferencesKey("safety_name")
     }
 
     private inline fun <reified T : Enum<T>> enumOf(name: String?, fallback: T): T =
@@ -201,7 +210,31 @@ class SettingsRepository(private val context: Context) {
                 ?.toSet()
                 ?: MomentField.DEFAULT,
             momentShareLayout = enumOf(p[Keys.momentShareLayout], MomentLayout.MINIMAL),
+            safety = SafetySettings(
+                crashDetection = p[Keys.safetyCrash] ?: false,
+                sensitivity = enumOf(p[Keys.safetySensitivity], CrashSensitivity.NORMAL),
+                gpsLostVideo = p[Keys.safetyGpsVideo] ?: true,
+                contacts = EmergencyContact.decode(p[Keys.safetyContacts]),
+                medical = MedicalInfo(
+                    bloodGroup = p[Keys.safetyBlood]?.takeIf { it in MedicalInfo.BLOOD_GROUPS },
+                    allergies = p[Keys.safetyAllergies].orEmpty(),
+                    notes = p[Keys.safetyNotes].orEmpty(),
+                ),
+                riderName = p[Keys.safetyName].orEmpty(),
+            ),
         )
+    }
+
+    suspend fun setSafety(s: SafetySettings) = context.dataStore.edit {
+        it[Keys.safetyCrash] = s.crashDetection
+        it[Keys.safetySensitivity] = s.sensitivity.name
+        it[Keys.safetyGpsVideo] = s.gpsLostVideo
+        it[Keys.safetyContacts] = EmergencyContact.encode(s.contacts)
+        val blood = s.medical.bloodGroup
+        if (blood == null) it.remove(Keys.safetyBlood) else it[Keys.safetyBlood] = blood
+        it[Keys.safetyAllergies] = s.medical.allergies
+        it[Keys.safetyNotes] = s.medical.notes
+        it[Keys.safetyName] = s.riderName
     }
 
     suspend fun setAutoPause(enabled: Boolean) = context.dataStore.edit { it[Keys.autoPause] = enabled }
