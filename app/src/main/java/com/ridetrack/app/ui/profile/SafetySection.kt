@@ -102,7 +102,7 @@ internal fun SafetySection(s: ProfileUiState, vm: ProfileViewModel) {
     SectionHeader("Safety")
     RtCard {
         Text(
-            "If it looks like you've crashed, Ride Track asks if you're OK. No answer in 30 seconds and it texts your contacts where you are.",
+            "If it looks like you've crashed, Keppo Moto asks if you're OK. No answer in 30 seconds and it texts your contacts where you are.",
             style = RtType.caption,
             color = RtColors.TextSecondary,
         )

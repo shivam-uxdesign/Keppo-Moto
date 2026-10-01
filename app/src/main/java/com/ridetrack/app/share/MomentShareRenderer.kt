@@ -267,7 +267,7 @@ class MomentShareRenderer(context: Context) {
     }
 
     private fun brandLine(o: MomentOverlay) =
-        listOfNotNull("RIDE TRACK", o.rideName?.uppercase(), "DEMO".takeIf { o.demo }).joinToString("  ·  ")
+        listOfNotNull("KEPPO MOTO", o.rideName?.uppercase(), "DEMO".takeIf { o.demo }).joinToString("  ·  ")
 
     private fun leanText(lean: Double?) = lean?.let { "${abs(it).roundToInt()}° ${if (it < 0) "L" else "R"}" } ?: Format.DASH
 

@@ -1,4 +1,4 @@
-# Ride Track
+# Keppo Moto
 
 A motorcycle ride telemetry tracker for Android. It records rides with the phone's GPS
 and motion sensors — speed, distance, lean angle, acceleration/braking, G-force, stops
@@ -16,7 +16,7 @@ post-ride analysis with charts, a route map and replay.
 - **Replay** — animated route playback with play/pause and 0.5×/1×/2×.
 - **History** — rides grouped Today / Yesterday / This week / Earlier, with date, bike, distance and duration filters.
 - **Bikes** — multiple motorcycles, calibration per bike, sensor inventory, OBD shown as *Not connected* (planned).
-- **Pop-up HUD** — a floating overlay (Minimal / Touring / Sport / Telemetry) that appears over other apps, e.g. navigation, while a ride is recorded, and hides when you return to Ride Track. Drag to move (position remembered), drag onto the ✕ to hide for the ride, long-press for quick controls (layout, size, opacity), double-tap for a speed bubble. Needs Android's "Display over other apps" permission, requested with an explanation. Settings: Profile → Pop-up HUD.
+- **Pop-up HUD** — a floating overlay (Minimal / Touring / Sport / Telemetry) that appears over other apps, e.g. navigation, while a ride is recorded, and hides when you return to Keppo Moto. Drag to move (position remembered), drag onto the ✕ to hide for the ride, long-press for quick controls (layout, size, opacity), double-tap for a speed bubble. Needs Android's "Display over other apps" permission, requested with an explanation. Settings: Profile → Pop-up HUD.
 - **Demo mode** (Profile → Developer) — a simulated ride fed through the *real* processing pipeline so the whole UI can be tested without riding. Demo rides are labelled DEMO everywhere and excluded from statistics.
 
 ## Data honesty

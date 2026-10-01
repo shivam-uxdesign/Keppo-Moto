@@ -458,7 +458,7 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
                         scope.launch {
                             val ok = ShareImages.saveVideo(context, file, name)
                             if (ok) haptics.confirm()
-                            toast = if (ok) "Saved to Movies/Ride Track" else "Couldn't save here. Use Share instead."
+                            toast = if (ok) "Saved to Movies/Keppo Moto" else "Couldn't save here. Use Share instead."
                         }
                     }
                 }
@@ -475,7 +475,7 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
                             val img = vm.photoImage() ?: return@launch
                             val ok = ShareImages.saveToPhotos(context, img, name, jpeg)
                             if (ok) haptics.confirm()
-                            toast = if (ok) "Saved to Pictures/Ride Track" else "Couldn't save here. Use Share instead."
+                            toast = if (ok) "Saved to Pictures/Keppo Moto" else "Couldn't save here. Use Share instead."
                         }
                     }
                 }

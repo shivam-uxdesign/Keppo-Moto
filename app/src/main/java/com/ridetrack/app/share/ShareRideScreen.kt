@@ -243,7 +243,7 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
                 scope.launch {
                     val ok = ShareImages.saveToPhotos(context, b, name)
                     if (ok) haptics.confirm()
-                    toast = if (ok) "Saved to Pictures/Ride Track" else "Couldn't save here. Use Share instead."
+                    toast = if (ok) "Saved to Pictures/Keppo Moto" else "Couldn't save here. Use Share instead."
                 }
             }
             if (style.transparent) {

@@ -172,7 +172,7 @@ fun HomeScreen(
         AlertDialog(
             onDismissRequest = { permissionDenied = false },
             title = { Text("Location is needed to record") },
-            text = { Text("Ride Track uses GPS for speed, distance and your route. Allow location in Settings, or try Demo mode in Profile.") },
+            text = { Text("Keppo Moto uses GPS for speed, distance and your route. Allow location in Settings, or try Demo mode in Profile.") },
             confirmButton = {
                 TextButton(onClick = {
                     permissionDenied = false

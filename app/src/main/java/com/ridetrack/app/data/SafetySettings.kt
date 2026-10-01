@@ -1,6 +1,6 @@
 package com.ridetrack.app.data
 
-/** Someone to text if Ride Track thinks you've crashed. */
+/** Someone to text if Keppo Moto thinks you've crashed. */
 data class EmergencyContact(val name: String, val phone: String) {
     companion object {
         const val MAX = 3

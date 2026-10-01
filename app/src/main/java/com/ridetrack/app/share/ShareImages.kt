@@ -50,18 +50,18 @@ object ShareImages {
     /** Copies the image so it can be pasted as a sticker (e.g. into an Instagram story). */
     fun copy(context: Context, uri: Uri): Boolean {
         val cm = context.getSystemService<ClipboardManager>() ?: return false
-        cm.setPrimaryClip(ClipData.newUri(context.contentResolver, "Ride Track", uri))
+        cm.setPrimaryClip(ClipData.newUri(context.contentResolver, "Keppo Moto", uri))
         return true
     }
 
-    /** Copies a video into Movies/Ride Track (Android 10+, no permission needed). */
+    /** Copies a video into Movies/Keppo Moto (Android 10+, no permission needed). */
     suspend fun saveVideo(context: Context, file: File, name: String): Boolean = withContext(Dispatchers.IO) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@withContext false
         val resolver = context.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, "$name.mp4")
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-            put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Ride Track")
+            put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Keppo Moto")
             put(MediaStore.Video.Media.IS_PENDING, 1)
         }
         val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: return@withContext false
@@ -71,14 +71,14 @@ object ShareImages {
         }.onFailure { resolver.delete(uri, null, null) }.isSuccess
     }
 
-    /** Saves to Pictures/Ride Track. API 29+ needs no permission; older phones fall back to sharing. */
+    /** Saves to Pictures/Keppo Moto. API 29+ needs no permission; older phones fall back to sharing. */
     suspend fun saveToPhotos(context: Context, bitmap: Bitmap, name: String, jpeg: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@withContext false
         val resolver = context.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, if (jpeg) "$name.jpg" else "$name.png")
             put(MediaStore.Images.Media.MIME_TYPE, if (jpeg) "image/jpeg" else "image/png")
-            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Ride Track")
+            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Keppo Moto")
             put(MediaStore.Images.Media.IS_PENDING, 1)
         }
         val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return@withContext false

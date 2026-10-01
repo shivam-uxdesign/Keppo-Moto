@@ -186,7 +186,7 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit) {
         SectionHeader("Privacy")
         RtCard {
             Text(
-                "Your rides are stored only on this phone. Ride Track has no account and no cloud sync, and recording works fully offline. " +
+                "Your rides are stored only on this phone. Keppo Moto has no account and no cloud sync, and recording works fully offline. " +
                     "Map backgrounds are downloaded from OpenStreetMap/CARTO tile servers when you view a map.",
                 style = RtType.body,
                 color = RtColors.TextSecondary,

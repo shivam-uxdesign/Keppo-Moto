@@ -134,7 +134,7 @@ fun HudSettingsScreen(onBack: () -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Text("Show pop-up in other apps", style = RtType.bodyStrong, color = RtColors.TextPrimary)
                     Text(
-                        "Appears when you leave Ride Track during a ride; hides when you come back.",
+                        "Appears when you leave Keppo Moto during a ride; hides when you come back.",
                         style = RtType.caption,
                         color = RtColors.TextSecondary,
                     )

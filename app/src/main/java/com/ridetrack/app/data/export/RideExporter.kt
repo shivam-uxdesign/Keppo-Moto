@@ -78,7 +78,7 @@ object RideExporter {
     fun gpx(ride: Ride, track: RideTrack): String {
         val sb = StringBuilder()
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
-        sb.append("<gpx version=\"1.1\" creator=\"Ride Track\" xmlns=\"http://www.topografix.com/GPX/1/1\" xmlns:rt=\"https://ridetrack.app/gpx/1\">\n")
+        sb.append("<gpx version=\"1.1\" creator=\"Keppo Moto\" xmlns=\"http://www.topografix.com/GPX/1/1\" xmlns:rt=\"https://ridetrack.app/gpx/1\">\n")
         sb.append("  <metadata><name>").append(xml(ride.name)).append("</name><time>").append(iso(ride.startTimeMillis)).append("</time></metadata>\n")
         sb.append("  <trk><name>").append(xml(ride.name)).append("</name><trkseg>\n")
         track.samples.filter { it.latitude != null && it.longitude != null }.forEach { p ->

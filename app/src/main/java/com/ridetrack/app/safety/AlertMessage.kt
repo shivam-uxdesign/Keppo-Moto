@@ -30,7 +30,7 @@ object AlertMessage {
     fun mapsLink(lat: Double, lon: Double): String = String.format(Locale.US, "https://maps.google.com/?q=%.5f,%.5f", lat, lon)
 
     fun crash(r: CrashReport, zone: ZoneId = ZoneId.systemDefault(), test: Boolean = false): String = buildString {
-        append("Ride Track: ")
+        append("Keppo Moto: ")
         append(if (test) "(test) this is how a crash alert looks. " else "possible crash. ")
         append(r.riderName.ifBlank { "The rider" })
         if (r.bikeName.isNotBlank()) append(" on ").append(r.bikeName)
@@ -48,9 +48,9 @@ object AlertMessage {
     }
 
     fun update(lat: Double, lon: Double, timeMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String =
-        "Ride Track: updated location at ${time.format(Instant.ofEpochMilli(timeMillis).atZone(zone))}: ${mapsLink(lat, lon)}"
+        "Keppo Moto: updated location at ${time.format(Instant.ofEpochMilli(timeMillis).atZone(zone))}: ${mapsLink(lat, lon)}"
 
-    fun allClear(riderName: String): String = "Ride Track: ${riderName.ifBlank { "The rider" }} says they're OK. Sorry for the scare."
+    fun allClear(riderName: String): String = "Keppo Moto: ${riderName.ifBlank { "The rider" }} says they're OK. Sorry for the scare."
 
     private fun medical(m: MedicalInfo): String? {
         val parts = listOfNotNull(

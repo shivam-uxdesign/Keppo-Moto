@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
- * Shows the pop-up HUD when a ride is being recorded and Ride Track is not in front,
+ * Shows the pop-up HUD when a ride is being recorded and Keppo Moto is not in front,
  * and removes it when the rider returns, the ride ends, or they hide it for this ride.
  * Its record button films a video (saved as a moment); rides start and end in the app.
  */
@@ -50,7 +50,7 @@ class HudController(
         override fun openApp() = openRideTrack()
         override fun closeControls() = overlay.closeControls()
         override fun recordVideo() {
-            if (!session.startVideo()) note.value = "Turn on Moments in Ride Track to film" to System.currentTimeMillis()
+            if (!session.startVideo()) note.value = "Turn on Moments in Keppo Moto to film" to System.currentTimeMillis()
         }
         override fun pauseVideo() = session.pauseVideo()
         override fun resumeVideo() = session.resumeVideo()

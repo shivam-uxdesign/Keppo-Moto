@@ -61,7 +61,7 @@ object ExportShare {
         val send = Intent(Intent.ACTION_SEND)
             .setType("application/zip")
             .putExtra(Intent.EXTRA_STREAM, uri)
-            .putExtra(Intent.EXTRA_SUBJECT, "Ride Track export")
+            .putExtra(Intent.EXTRA_SUBJECT, "Keppo Moto export")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         context.startActivity(Intent.createChooser(send, "Share ride data").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         return zip.second

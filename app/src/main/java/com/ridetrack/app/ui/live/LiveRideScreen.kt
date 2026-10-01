@@ -483,7 +483,7 @@ private fun HudPermissionSheet(onContinue: () -> Unit, onNotNow: () -> Unit) {
             Text("Keep your ride data visible in other apps", style = RtType.headline, color = RtColors.TextPrimary)
             Text(
                 "When you switch to navigation or music during a ride, a small pop-up shows your speed and lean. " +
-                    "It hides again when you come back to Ride Track.",
+                    "It hides again when you come back to Keppo Moto.",
                 style = RtType.body,
                 color = RtColors.TextSecondary,
             )

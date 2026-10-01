@@ -409,7 +409,7 @@ private fun share(context: Context, m: Moment) {
     }
 }
 
-/** Copies into Movies/ or Pictures/Ride Track (no permission needed on Android 10+). */
+/** Copies into Movies/ or Pictures/Keppo Moto (no permission needed on Android 10+). */
 private suspend fun saveToGallery(context: Context, m: Moment): Boolean = withContext(Dispatchers.IO) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@withContext false
     val video = m.kind == MomentKind.CLIP
@@ -417,7 +417,7 @@ private suspend fun saveToGallery(context: Context, m: Moment): Boolean = withCo
     val values = ContentValues().apply {
         put(MediaStore.MediaColumns.DISPLAY_NAME, m.file.name)
         put(MediaStore.MediaColumns.MIME_TYPE, mime(m))
-        put(MediaStore.MediaColumns.RELATIVE_PATH, (if (video) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES) + "/Ride Track")
+        put(MediaStore.MediaColumns.RELATIVE_PATH, (if (video) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES) + "/Keppo Moto")
         put(MediaStore.MediaColumns.IS_PENDING, 1)
     }
     val resolver = context.contentResolver

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Ride Track</string>
+    <string name="app_name">Keppo Moto</string>
     <string name="notification_channel_ride">Ride recording</string>
     <string name="notification_channel_ride_desc">Shown while a ride is being recorded.</string>
 </resources>
