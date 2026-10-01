@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
@@ -211,7 +212,9 @@ private fun Sent(s: CrashAlertState.Sent, onAllClear: () -> Unit, onClose: () ->
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Spacer(Modifier.height(24.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(34.dp).background(AlertRed, CircleShape))
+                Box(Modifier.size(34.dp).background(AlertRed, CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                }
                 Spacer(Modifier.width(10.dp))
                 Column {
                     Text(if (s.delivered.values.any { it }) "Alert sent" else "Alert not sent", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Color.White)

@@ -79,7 +79,11 @@ fun ViewfinderCard(data: HudData, video: HudVideo, frame: ImageBitmap?, modifier
             Image(frame, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else {
             Text(
-                if (video.starting) "Starting camera…" else "Filming · no preview on this phone",
+                when {
+                    video.starting -> "Starting camera…"
+                    safety -> "Filming while GPS is lost"
+                    else -> "Filming · no preview on this phone"
+                },
                 fontSize = 11.sp,
                 color = Color.White.copy(alpha = 0.6f),
                 modifier = Modifier.align(Alignment.Center).padding(16.dp),
