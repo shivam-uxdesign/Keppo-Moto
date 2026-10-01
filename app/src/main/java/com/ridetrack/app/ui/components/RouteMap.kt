@@ -156,6 +156,8 @@ fun RouteMap(
     corner: Dp = RtDimens.cardRadius,
     /** Space above the map-style toggle (for a header drawn over the map). */
     controlsTop: Dp = 0.dp,
+    /** Height covered at the bottom (a sheet over the map); the bike and route stay above it. */
+    bottomInset: Dp = 0.dp,
     /** Extra controls drawn over the map (time chip, play controls, view toggle). */
     overlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
 ) {
@@ -187,6 +189,12 @@ fun RouteMap(
     val container = appContainer()
     val mapStyle by remember { container.settings.settings.map { it.mapStyle } }.collectAsState(initial = MapStyle.DARK)
     val scope = rememberCoroutineScope()
+    val insetPx = with(LocalDensity.current) { bottomInset.toPx() }.toDouble()
+    // A sheet opening or closing over the map: refit the flat overview above it.
+    LaunchedEffect(map, insetPx) {
+        val m = map ?: return@LaunchedEffect
+        if (!threeD) mapView.post { fitCamera(m, route, insetPx.toInt()) }
+    }
 
     LaunchedEffect(mapView) {
         mapView.getMapAsync { m ->
@@ -262,7 +270,7 @@ fun RouteMap(
         s.getSourceAs<GeoJsonSource>(ENDS_SOURCE)?.setGeoJson(
             FeatureCollection.fromFeatures(listOfNotNull(points.firstOrNull(), points.lastOrNull()).map { Feature.fromGeometry(it) }),
         )
-        mapView.post { fitCamera(m, route) }
+        mapView.post { fitCamera(m, route, insetPx.toInt()) }
     }
 
     // Extra zoom the rider applied in 3D (on top of the default follow distance).
@@ -279,7 +287,7 @@ fun RouteMap(
     // first; after that each frame moves the camera directly so nothing lags behind the bike.
     val flyUntil = remember { longArrayOf(0L) }
     val m3 = map
-    val padTop = mapHeight * FOLLOW_TOP_PAD
+    val padTop = (mapHeight - insetPx) * FOLLOW_TOP_PAD
     SideEffect {
         val m = m3 ?: return@SideEffect
         if (style == null || marker == null) return@SideEffect
@@ -294,7 +302,7 @@ fun RouteMap(
                 .zoom(FOLLOW_ZOOM + zoom3d[0])
                 .tilt(FOLLOW_TILT)
                 .bearing((bearing ?: 0f).toDouble())
-                .padding(0.0, padTop, 0.0, 0.0)
+                .padding(0.0, padTop, 0.0, insetPx)
                 .build()
             zoom3d[1] = FOLLOW_ZOOM + zoom3d[0]
             if (m.cameraPosition.tilt < 1.0 && flyUntil[0] == 0L) {
@@ -315,7 +323,7 @@ fun RouteMap(
         val m = map ?: return@LaunchedEffect
         if (wasThreeD && !threeD) {
             m.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(m.cameraPosition.target).tilt(0.0).bearing(0.0).padding(0.0, 0.0, 0.0, 0.0).zoom(m.cameraPosition.zoom).build()), 300)
-            mapView.postDelayed({ fitCamera(m, route) }, 320)
+            mapView.postDelayed({ fitCamera(m, route, insetPx.toInt()) }, 320)
         }
         wasThreeD = threeD
     }
@@ -368,7 +376,7 @@ fun RouteMap(
             // Pinned where the follow camera puts the bike's position.
             val density = LocalDensity.current
             val bikeSize = 132.dp
-            val anchorY = mapHeight * (1f + FOLLOW_TOP_PAD.toFloat()) / 2f
+            val anchorY = (padTop + mapHeight - insetPx).toFloat() / 2f
             LeanBike(
                 bikeLean,
                 size = bikeSize,
@@ -495,7 +503,7 @@ internal fun MapStyleToggle(selected: MapStyle, onSelect: (MapStyle) -> Unit, mo
     }
 }
 
-private fun fitCamera(map: MapLibreMap, route: List<GeoPoint>) {
+private fun fitCamera(map: MapLibreMap, route: List<GeoPoint>, bottomPx: Int = 0) {
     when {
         route.isEmpty() -> Unit
         route.size == 1 || route.all { it == route.first() } -> {
@@ -504,7 +512,7 @@ private fun fitCamera(map: MapLibreMap, route: List<GeoPoint>) {
         }
         else -> {
             val bounds = LatLngBounds.Builder().apply { route.forEach { include(LatLng(it.latitude, it.longitude)) } }.build()
-            runCatching { map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, 64)) }
+            runCatching { map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, 64, 64, 64, 64 + bottomPx)) }
         }
     }
 }

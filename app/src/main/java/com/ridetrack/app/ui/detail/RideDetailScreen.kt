@@ -78,6 +78,16 @@ import com.ridetrack.app.ui.theme.RtType
 import com.ridetrack.app.ui.theme.rememberHaptics
 import com.ridetrack.telemetry.model.DataSourceKind
 import androidx.compose.foundation.layout.RowScope
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.FullscreenExit
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -86,7 +96,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.text.style.TextOverflow
 import com.ridetrack.app.ui.common.easeAngle
@@ -116,6 +125,10 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
     var confirmDelete by remember { mutableStateOf(false) }
     var showTurns by remember { mutableStateOf(false) }
     var eventsOpen by remember { mutableStateOf(false) }
+    // Full-screen map: the timeline floats over the bottom of it as a sheet.
+    var full by rememberSaveable { mutableStateOf(false) }
+    var sheetPx by remember { mutableIntStateOf(0) }
+    BackHandler(enabled = full) { full = false }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { vm.pause() }
 
     val ride = s.ride
@@ -154,9 +167,36 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val sheetHeight = if (full) with(density) { sheetPx.toDp() } else 0.dp
+        val mapHeight by animateDpAsState(if (full) maxHeight else maxHeight * MAP_SHARE, tween(FULL_ANIM_MS), label = "mapHeight")
+        // The timeline: under the map normally, a sheet over it in full screen.
+        val tracks: @Composable (Modifier) -> Unit = { mod ->
+            val time = shownTime
+            if (ride != null && data != null && !time.isNaN() && data.samples.size >= 2) {
+                RideTracks(
+                    data = data,
+                    ride = ride,
+                    moments = moments,
+                    time = time,
+                    fraction = data.fractionOf(time),
+                    lean = data.samples.valueAtSmooth(time) { it.leanDeg },
+                    window = window,
+                    chart = chart,
+                    minSpan = vm.minSpan(),
+                    onCycleChart = { haptics.tick(); vm.cycleChart() },
+                    onScrub = { f -> vm.pause(); vm.scrubTo(f) },
+                    onWindow = vm::setWindow,
+                    onResetZoom = vm::resetZoom,
+                    onJump = vm::jumpToIndex,
+                    onJumpToTime = vm::jumpToTime,
+                    onOpenMoment = { id -> vm.pause(); onOpenMoment(id) },
+                    modifier = mod.padding(horizontal = RtDimens.screenPaddingWide).padding(top = 6.dp, bottom = 10.dp),
+                )
+            }
+        }
         Column(Modifier.fillMaxSize()) {
-            val mapHeight = (LocalConfiguration.current.screenHeightDp * MAP_SHARE).dp
             Box(Modifier.fillMaxWidth().height(mapHeight)) {
                 val time = shownTime
                 if (data != null && !time.isNaN()) {
@@ -175,12 +215,19 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                         bikeLean = (samples.valueAtSmooth(time) { it.leanDeg } ?: 0.0).toFloat(),
                         corner = 0.dp,
                         controlsTop = MAP_HEADER_HEIGHT,
+                        bottomInset = sheetHeight,
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         ViewToggle(
                             play.threeD,
                             onChange = { haptics.tick(); vm.setThreeD(it) },
                             modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = MAP_HEADER_HEIGHT, end = 10.dp, start = 10.dp, bottom = 10.dp).padding(top = 10.dp),
+                        )
+                        RoundButton(
+                            if (full) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen,
+                            if (full) "Exit full screen" else "Full-screen map",
+                            onClick = { haptics.tick(); full = !full },
+                            modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = MAP_HEADER_HEIGHT + 60.dp, end = 10.dp),
                         )
                         val sample = samples.getOrNull(idx)
                         if (sample != null) {
@@ -190,6 +237,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                                 color = RtColors.TextPrimary,
                                 modifier = Modifier
                                     .align(Alignment.BottomStart)
+                                    .padding(bottom = sheetHeight)
                                     .padding(10.dp)
                                     .background(RtColors.Background.copy(alpha = 0.75f), RoundedCornerShape(50))
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -201,7 +249,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                                 speedLabel = if (active != null) "1×" else play.speedLabel,
                                 onToggle = { haptics.tick(); vm.togglePlay() },
                                 onSpeed = vm::cycleSpeed,
-                                modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp),
+                                modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = sheetHeight).padding(10.dp),
                             )
                         }
                     }
@@ -248,6 +296,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                 return@Column
             }
 
+            if (full) return@Column
             // The timeline, pinned under the map.
             val time = shownTime
             if (data == null || time.isNaN()) {
@@ -255,25 +304,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
             } else if (data.samples.size < 2) {
                 Text("Not enough telemetry was recorded for a timeline.", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(RtDimens.screenPaddingWide))
             } else {
-                RideTracks(
-                    data = data,
-                    ride = ride,
-                    moments = moments,
-                    time = time,
-                    fraction = data.fractionOf(time),
-                    lean = data.samples.valueAtSmooth(time) { it.leanDeg },
-                    window = window,
-                    chart = chart,
-                    minSpan = vm.minSpan(),
-                    onCycleChart = { haptics.tick(); vm.cycleChart() },
-                    onScrub = { f -> vm.pause(); vm.scrubTo(f) },
-                    onWindow = vm::setWindow,
-                    onResetZoom = vm::resetZoom,
-                    onJump = vm::jumpToIndex,
-                    onJumpToTime = vm::jumpToTime,
-                    onOpenMoment = { id -> vm.pause(); onOpenMoment(id) },
-                    modifier = Modifier.padding(horizontal = RtDimens.screenPaddingWide).padding(top = 6.dp, bottom = 10.dp),
-                )
+                tracks(Modifier)
             }
             HairlineDivider()
 
@@ -350,6 +381,19 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                 if (BuildConfig.DEBUG) MomentsDiagnostics(rideId)
                 Spacer(Modifier.height(RtDimens.lg))
             }
+        }
+
+        if (full) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .onSizeChanged { sheetPx = it.height }
+                    .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                    .background(RtColors.Background.copy(alpha = 0.86f))
+                    .border(1.dp, RtColors.Hairline, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                    .navigationBarsPadding(),
+            ) { tracks(Modifier.padding(top = 4.dp)) }
         }
 
         // A moment reached during replay pops up over everything.
@@ -464,9 +508,9 @@ private fun MapHeader(title: String, subtitle: String?, onBack: () -> Unit, acti
 }
 
 @Composable
-private fun RoundButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun RoundButton(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
-        Modifier
+        modifier
             .size(38.dp)
             .clip(CircleShape)
             .background(RtColors.Background.copy(alpha = 0.7f))
@@ -487,6 +531,7 @@ private fun headingSettled(d: TrackData, time: Double, heading: Float): Boolean 
 }
 
 private const val MAP_SHARE = 0.42f
+private const val FULL_ANIM_MS = 300
 private val MAP_HEADER_HEIGHT = 56.dp
 /** How quickly the view glides to a new playhead position (time constant, ms). */
 private const val GLIDE_MS = 90.0
