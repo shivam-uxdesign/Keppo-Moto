@@ -5,10 +5,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
-import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.selection.selectable
@@ -28,7 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.layout.offset
@@ -78,6 +74,7 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
+import kotlin.math.abs
 
 data class GeoPoint(val latitude: Double, val longitude: Double)
 
@@ -153,8 +150,6 @@ fun RouteMap(
     bearing: Float? = null,
     /** While replaying, the 3D camera follows every frame without easing. */
     playing: Boolean = false,
-    /** + / − buttons on the right edge. */
-    zoomButtons: Boolean = false,
     /** Lean (degrees, negative = left) of the bike drawn in the 3D view. */
     bikeLean: Float = 0f,
     /** Corner rounding; 0 for a full-bleed map. */
@@ -271,7 +266,8 @@ fun RouteMap(
     }
 
     // Extra zoom the rider applied in 3D (on top of the default follow distance).
-    var zoom3d by remember { mutableDoubleStateOf(0.0) }
+    // Pinching in 3D changes it: the next follow frame keeps the zoom the rider chose.
+    val zoom3d = remember { doubleArrayOf(0.0, Double.NaN) }
     var mapHeight by remember { mutableIntStateOf(0) }
     LaunchedEffect(style, marker, threeD) {
         val s = style ?: return@LaunchedEffect
@@ -283,20 +279,24 @@ fun RouteMap(
     // first; after that each frame moves the camera directly so nothing lags behind the bike.
     val flyUntil = remember { longArrayOf(0L) }
     val m3 = map
-    val extraZoom = zoom3d
     val padTop = mapHeight * FOLLOW_TOP_PAD
     SideEffect {
         val m = m3 ?: return@SideEffect
         if (style == null || marker == null) return@SideEffect
         if (threeD) {
+            val now = android.os.SystemClock.uptimeMillis()
+            val applied = zoom3d[1]
+            if (!applied.isNaN() && now >= flyUntil[0] && abs(m.cameraPosition.zoom - applied) > 0.01) {
+                zoom3d[0] = (m.cameraPosition.zoom - FOLLOW_ZOOM).coerceIn(-4.0, 3.0)
+            }
             val cam = CameraPosition.Builder()
                 .target(LatLng(marker.latitude, marker.longitude))
-                .zoom(FOLLOW_ZOOM + extraZoom)
+                .zoom(FOLLOW_ZOOM + zoom3d[0])
                 .tilt(FOLLOW_TILT)
                 .bearing((bearing ?: 0f).toDouble())
                 .padding(0.0, padTop, 0.0, 0.0)
                 .build()
-            val now = android.os.SystemClock.uptimeMillis()
+            zoom3d[1] = FOLLOW_ZOOM + zoom3d[0]
             if (m.cameraPosition.tilt < 1.0 && flyUntil[0] == 0L) {
                 flyUntil[0] = now + FLY_IN_MS
                 m.animateCamera(CameraUpdateFactory.newCameraPosition(cam), FLY_IN_MS.toInt())
@@ -305,6 +305,7 @@ fun RouteMap(
             }
         } else {
             flyUntil[0] = 0L
+            zoom3d[1] = Double.NaN
             if (followMarker) m.moveCamera(CameraUpdateFactory.newLatLng(LatLng(marker.latitude, marker.longitude)))
         }
     }
@@ -374,18 +375,6 @@ fun RouteMap(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .offset { IntOffset(0, (anchorY - with(density) { bikeSize.toPx() } * BIKE_CONTACT_Y).toInt()) },
-            )
-        }
-        if (zoomButtons) {
-            ZoomButtons(
-                onZoom = { delta ->
-                    val m = map
-                    if (threeD) zoom3d = (zoom3d + delta).coerceIn(-3.0, 3.0)
-                    else m?.animateCamera(CameraUpdateFactory.zoomBy(delta), 250)
-                },
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 10.dp),
             )
         }
         overlay()
@@ -482,28 +471,6 @@ private fun addRouteLayers(s: Style) {
             PropertyFactory.circleStrokeWidth(3f),
         ),
     )
-}
-
-@Composable
-private fun ZoomButtons(onZoom: (Double) -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(14.dp)
-    androidx.compose.foundation.layout.Column(
-        modifier
-            .clip(shape)
-            .background(RtColors.Background.copy(alpha = 0.75f))
-            .border(1.dp, RtColors.Hairline, shape),
-    ) {
-        listOf("+" to 1.0, "−" to -1.0).forEachIndexed { i, (label, delta) ->
-            if (i > 0) Box(Modifier.size(36.dp, 1.dp).background(RtColors.Hairline))
-            Box(
-                Modifier
-                    .size(36.dp)
-                    .clickable(role = Role.Button, onClickLabel = if (delta > 0) "Zoom in" else "Zoom out") { onZoom(delta) }
-                    .semantics { contentDescription = if (delta > 0) "Zoom in" else "Zoom out" },
-                contentAlignment = Alignment.Center,
-            ) { Text(label, style = RtType.bodyStrong.copy(fontSize = 20.sp), color = RtColors.TextPrimary) }
-        }
-    }
 }
 
 @Composable

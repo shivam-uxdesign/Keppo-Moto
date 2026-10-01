@@ -169,7 +169,6 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                         pins = moments.mapNotNull { m -> if (m.latitude != null && m.longitude != null) MapPin(m.id, m.latitude, m.longitude, m.thumb, momentColor(m)) else null },
                         onPinClick = onOpenMoment,
                         interactive = true,
-                        zoomButtons = true,
                         threeD = play.threeD,
                         bearing = shownHeading.takeIf { !it.isNaN() },
                         playing = play.playing,

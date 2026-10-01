@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.ridetrack.app.moments.Moment
 import com.ridetrack.app.moments.MomentKind
@@ -70,11 +71,11 @@ fun MomentPopup(moment: Moment, time: Double, playing: Boolean, onSkip: () -> Un
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
                 .padding(top = 56.dp)
-                .width(210.dp)
-                .aspectRatio(9f / 16f)
-                .clip(RoundedCornerShape(20.dp))
+                .width(POPUP_SIZE)
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(18.dp))
                 .background(Color.Black)
-                .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(20.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(18.dp))
                 .clickable(role = Role.Button, onClickLabel = "Open moment", onClick = onOpen)
                 .semantics { contentDescription = "${momentTitle(moment)}. Tap to open, tap outside to skip." },
         ) {
@@ -88,7 +89,7 @@ fun MomentPopup(moment: Moment, time: Double, playing: Boolean, onSkip: () -> Un
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(90.dp)
+                        .height(70.dp)
                         .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f)))),
                 )
                 Column(Modifier.align(Alignment.BottomStart).padding(12.dp)) {
@@ -113,7 +114,8 @@ fun MomentPopup(moment: Moment, time: Double, playing: Boolean, onSkip: () -> Un
     }
 }
 
-/** The clip, with sound, started where the replay is and running with it. */
+/** The clip, with sound, started where the replay is and running with it; cropped to the square card. */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun PopupClip(moment: Moment, startAtMs: Long, playing: Boolean) {
     val context = LocalContext.current
@@ -127,9 +129,11 @@ private fun PopupClip(moment: Moment, startAtMs: Long, playing: Boolean) {
     DisposableEffect(player) { onDispose { player.release() } }
     LaunchedEffect(player, playing) { player.playWhenReady = playing }
     AndroidView(
-        factory = { ctx -> PlayerView(ctx).apply { useController = false } },
+        factory = { ctx -> PlayerView(ctx).apply { useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM } },
         update = { it.player = player },
         onRelease = { it.player = null },
         modifier = Modifier.fillMaxSize(),
     )
 }
+
+private val POPUP_SIZE = 184.dp
