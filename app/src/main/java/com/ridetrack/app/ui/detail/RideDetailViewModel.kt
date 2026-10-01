@@ -114,7 +114,7 @@ data class DetailUiState(
     val data: TrackData? = null,
 )
 
-data class Playback(val playing: Boolean = false, val speedIndex: Int = 1, val threeD: Boolean = false) {
+data class Playback(val playing: Boolean = false, val speedIndex: Int = 1, val threeD: Boolean = false, val momentPopups: Boolean = true) {
     val speedLabel: String get() = "${PLAY_SPEEDS[speedIndex].toInt()}×"
 }
 
@@ -243,7 +243,22 @@ class RideDetailViewModel(private val c: AppContainer, private val rideId: Strin
         if (next >= d.startMillis + d.durationMillis) pause()
     }
 
-    /** Tapped outside the pop-up: skip the rest of the moment and carry on. */
+    /** "Skip all": no more pop-ups this replay (the map button turns them back on). */
+    fun skipAllMoments() {
+        replay.enabled = false
+        _playback.update { it.copy(momentPopups = false) }
+        skipMoment()
+    }
+
+    fun toggleMomentPopups() {
+        val on = !_playback.value.momentPopups
+        replay.enabled = on
+        if (on) replay.reset()
+        _playback.update { it.copy(momentPopups = on) }
+        if (!on) skipMoment()
+    }
+
+    /** Skip the rest of the moment playing and carry on. */
     fun skipMoment() {
         val end = replay.skip() ?: return
         setTime(end)

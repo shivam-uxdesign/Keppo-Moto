@@ -101,6 +101,17 @@ class ReplayTest {
     }
 
     @Test
+    fun `skip all plays straight through until switched back on`() {
+        val r = MomentReplay(listOf(MomentWindow("a", 10_000, 14_000), MomentWindow("b", 30_000, 34_000)))
+        r.enabled = false
+        assertEquals(60_000.0, r.advance(0.0, 1_000.0, 60.0))
+        assertNull(r.active)
+        r.enabled = true
+        r.reset()
+        assertEquals(10_000.0, r.advance(0.0, 1_000.0, 60.0))
+    }
+
+    @Test
     fun `each moment on the way stops the replay in turn`() {
         val r = MomentReplay(listOf(MomentWindow("b", 30_000, 34_000), MomentWindow("a", 10_000, 14_000)))
         assertEquals(10_000.0, r.advance(0.0, 1_000.0, 60.0))

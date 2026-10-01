@@ -24,6 +24,9 @@ class MomentReplay(windows: List<MomentWindow> = emptyList()) {
     private var windows: List<MomentWindow> = windows.sortedBy { it.startMillis }
     private val done = mutableSetOf<String>()
 
+    /** Off after "Skip all": the replay runs straight through until switched back on. */
+    var enabled: Boolean = true
+
     /** The moment playing right now, if any. */
     var active: MomentWindow? = null
         private set
@@ -48,6 +51,7 @@ class MomentReplay(windows: List<MomentWindow> = emptyList()) {
             return a.endMillis.toDouble()
         }
         val next = time + realMillis * speed
+        if (!enabled) return next
         val hit = windows.firstOrNull { it.id !in done && it.startMillis >= time && it.startMillis <= next }
         if (hit != null) {
             active = hit

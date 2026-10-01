@@ -78,6 +78,13 @@ import com.ridetrack.app.ui.theme.RtType
 import com.ridetrack.app.ui.theme.rememberHaptics
 import com.ridetrack.telemetry.model.DataSourceKind
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.material.icons.rounded.Videocam
+import androidx.compose.material.icons.rounded.VideocamOff
+import androidx.compose.ui.unit.IntOffset
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -214,7 +221,8 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                         playing = play.playing,
                         bikeLean = (samples.valueAtSmooth(time) { it.leanDeg } ?: 0.0).toFloat(),
                         corner = 0.dp,
-                        controlsTop = MAP_HEADER_HEIGHT,
+                        // Below the header, which sits under the status bar.
+                        controlsTop = MAP_HEADER_HEIGHT + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
                         bottomInset = sheetHeight,
                         modifier = Modifier.fillMaxSize(),
                     ) {
@@ -230,7 +238,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                             modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = MAP_HEADER_HEIGHT + 60.dp, end = 10.dp),
                         )
                         val sample = samples.getOrNull(idx)
-                        if (sample != null) {
+                        if (sample != null && active == null) {
                             Text(
                                 "${Format.timeOfDay(time.toLong())} · ${Format.speedWithUnit(sample.speedMps)}",
                                 style = RtType.caption.copy(fontFeatureSettings = "tnum"),
@@ -247,8 +255,11 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                             PlayControls(
                                 playing = play.playing,
                                 speedLabel = if (active != null) "1×" else play.speedLabel,
+                                popups = play.momentPopups,
+                                hasMoments = moments.isNotEmpty(),
                                 onToggle = { haptics.tick(); vm.togglePlay() },
                                 onSpeed = vm::cycleSpeed,
+                                onPopups = { haptics.tick(); vm.toggleMomentPopups() },
                                 modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = sheetHeight).padding(10.dp),
                             )
                         }
@@ -396,15 +407,21 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
             ) { tracks(Modifier.padding(top = 4.dp)) }
         }
 
-        // A moment reached during replay pops up over everything.
+        // A moment reached during replay: a small card at the bottom of the map, just over
+        // the timeline's edge, so the bike and the route stay in view.
         val popup = active
         if (popup != null && !shownTime.isNaN()) {
+            val mapBottom = if (full) maxHeight - sheetHeight else mapHeight
             MomentPopup(
                 popup,
                 time = shownTime,
                 playing = play.playing,
                 onSkip = { haptics.tick(); vm.skipMoment() },
+                onSkipAll = { haptics.tick(); vm.skipAllMoments() },
                 onOpen = { vm.pause(); onOpenMoment(popup.id) },
+                modifier = Modifier
+                    .padding(start = 12.dp, end = 12.dp)
+                    .offset { IntOffset(0, (mapBottom - POPUP_SIZE + POPUP_OVERLAP).roundToPx()) },
             )
         }
     }
@@ -458,8 +475,37 @@ private fun ViewToggle(threeD: Boolean, onChange: (Boolean) -> Unit, modifier: M
 
 /** Replay on the map: speed chip (1×/4×/16×/60×) and play/pause. */
 @Composable
-private fun PlayControls(playing: Boolean, speedLabel: String, onToggle: () -> Unit, onSpeed: () -> Unit, modifier: Modifier = Modifier) {
+private fun PlayControls(
+    playing: Boolean,
+    speedLabel: String,
+    popups: Boolean,
+    hasMoments: Boolean,
+    onToggle: () -> Unit,
+    onSpeed: () -> Unit,
+    onPopups: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (hasMoments) {
+            // Moments pop up during replay; off = play straight through ("Skip all" turns it off).
+            Box(
+                Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(RtColors.Background.copy(alpha = 0.75f))
+                    .border(1.dp, if (popups) RtColors.Hairline else RtColors.Warning.copy(alpha = 0.6f), CircleShape)
+                    .clickable(role = Role.Switch, onClickLabel = if (popups) "Stop showing moments" else "Show moments during replay", onClick = onPopups)
+                    .semantics { contentDescription = if (popups) "Moments pop up during replay" else "Moment pop-ups off" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (popups) Icons.Rounded.Videocam else Icons.Rounded.VideocamOff,
+                    contentDescription = null,
+                    tint = if (popups) RtColors.TextPrimary else RtColors.Warning,
+                    modifier = Modifier.size(17.dp),
+                )
+            }
+        }
         Text(
             speedLabel,
             style = RtType.caption.copy(fontFeatureSettings = "tnum"),
