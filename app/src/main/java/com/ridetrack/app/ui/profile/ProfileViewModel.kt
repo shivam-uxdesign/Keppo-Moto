@@ -1,9 +1,14 @@
 package com.ridetrack.app.ui.profile
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import com.ridetrack.app.data.MedicalInfo
 import com.ridetrack.app.data.SafetySettings
+import com.ridetrack.app.data.EmergencyContact
 import com.ridetrack.app.safety.CrashReport
+import com.ridetrack.app.safety.SmsStatus
 import androidx.lifecycle.viewModelScope
 import com.ridetrack.app.AppContainer
 import com.ridetrack.app.data.LiveMetric
@@ -64,8 +69,8 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
         viewModelScope.launch { c.settings.setSafety(v) }
     }
 
-    /** Sends the "(test)" alert; [done] gets how many texts went out. */
-    fun sendTestAlert(done: (Int) -> Unit) {
+    /** Sends the "(test)" alert; [done] gets what happened to each contact's text. */
+    fun sendTestAlert(done: (List<Pair<EmergencyContact, SmsStatus>>) -> Unit) {
         viewModelScope.launch { done(c.crashAlerts.sendTest()) }
     }
 
@@ -81,6 +86,11 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
     }
 
     fun canSendSms(): Boolean = c.crashAlerts.canSendSms()
+
+    /** Picking a SIM (dual-SIM phones) and calling from the alert screen. */
+    fun hasCallPermissions(): Boolean = listOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.CALL_PHONE).all {
+        ContextCompat.checkSelfPermission(c.appContext, it) == PackageManager.PERMISSION_GRANTED
+    }
 
     fun setAutoPause(v: Boolean) {
         viewModelScope.launch { c.settings.setAutoPause(v) }

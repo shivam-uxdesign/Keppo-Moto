@@ -55,6 +55,7 @@ import com.ridetrack.app.data.CrashSensitivity
 import com.ridetrack.app.data.EmergencyContact
 import com.ridetrack.app.data.MedicalInfo
 import com.ridetrack.app.data.SafetySettings
+import com.ridetrack.app.safety.SmsStatus
 import com.ridetrack.app.ui.components.Label
 import com.ridetrack.app.ui.components.RtCard
 import com.ridetrack.app.ui.components.SecondaryButton
@@ -89,10 +90,14 @@ internal fun SafetySection(s: ProfileUiState, vm: ProfileViewModel) {
         }.getOrNull()
         if (picked != null && picked.phone.isNotBlank()) save(safety.copy(contacts = (safety.contacts + picked).take(EmergencyContact.MAX)))
     }
-    val smsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    // SMS to send the alert; phone state to pick a SIM when SMS is "ask every time";
+    // calls so the alert screen's Call button rings straight away.
+    val smsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        val granted = result[Manifest.permission.SEND_SMS] == true || vm.canSendSms()
         smsDenied = !granted
         if (granted) save(safety.copy(crashDetection = true))
     }
+    val askPermissions = { smsPermission.launch(arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE, Manifest.permission.CALL_PHONE)) }
 
     SectionHeader("Safety")
     RtCard {
@@ -195,8 +200,8 @@ internal fun SafetySection(s: ProfileUiState, vm: ProfileViewModel) {
             { on ->
                 when {
                     !on -> save(safety.copy(crashDetection = false))
-                    vm.canSendSms() -> save(safety.copy(crashDetection = true))
-                    else -> smsPermission.launch(Manifest.permission.SEND_SMS)
+                    vm.canSendSms() && vm.hasCallPermissions() -> save(safety.copy(crashDetection = true))
+                    else -> askPermissions()
                 }
             },
             enabled = safety.contacts.isNotEmpty() || safety.crashDetection,
@@ -242,10 +247,19 @@ internal fun SafetySection(s: ProfileUiState, vm: ProfileViewModel) {
         SecondaryButton(
             "Send test message",
             onClick = {
-                if (!vm.canSendSms()) {
-                    smsPermission.launch(Manifest.permission.SEND_SMS)
+                if (!vm.canSendSms() || !vm.hasCallPermissions()) {
+                    askPermissions()
                 } else {
-                    vm.sendTestAlert { n -> result = if (n > 0) "Test sent to $n contact${if (n > 1) "s" else ""}" else "Couldn't send the test" }
+                    result = "Sending…"
+                    vm.sendTestAlert { outcomes ->
+                        result = outcomes.joinToString("\n") { (c, st) ->
+                            when (st) {
+                                SmsStatus.Sent -> "✓ Sent to ${c.name}"
+                                is SmsStatus.Failed -> "✗ ${c.name}: ${st.reason}"
+                                SmsStatus.Sending -> "${c.name}: no answer yet"
+                            }
+                        }
+                    }
                 }
             },
             enabled = safety.contacts.isNotEmpty(),

@@ -68,7 +68,7 @@ class SafetyTest {
     fun `crash text has who, where, when and the medical basics`() {
         assertEquals(
             "Ride Track: possible crash. Shivam on Pulsar NS200 at 9:21 AM, 1 Oct. Last speed 54 km/h. " +
-                "Location: https://maps.google.com/?q=12.97164,77.59456 (±8 m). Battery 62%. Blood group B+, allergies: penicillin.",
+                "Location: https://maps.google.com/?q=12.97164,77.59456 (within 8 m). Battery 62%. Blood group B+, allergies: penicillin.",
             AlertMessage.crash(report, ZoneOffset.UTC),
         )
     }
@@ -78,5 +78,8 @@ class SafetyTest {
         val bare = report.copy(latitude = null, longitude = null, speedBeforeMps = null, riderName = "", batteryPercent = null, medical = MedicalInfo())
         assertEquals("Ride Track: possible crash. The rider on Pulsar NS200 at 9:21 AM, 1 Oct. Location unknown (no GPS).", AlertMessage.crash(bare, ZoneOffset.UTC))
         assertEquals(true, AlertMessage.crash(report, ZoneOffset.UTC, test = true).startsWith("Ride Track: (test) "))
+        // Plain ASCII, so each SMS part holds 160 characters (a B− blood group included).
+        val text = AlertMessage.crash(report.copy(medical = MedicalInfo(bloodGroup = "B−")), ZoneOffset.UTC)
+        assertEquals(true, text.all { it.code < 128 }, text)
     }
 }

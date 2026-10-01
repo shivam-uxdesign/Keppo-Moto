@@ -1,12 +1,10 @@
 package com.ridetrack.app.safety
 
-import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.Ringtone
 import android.media.RingtoneManager
@@ -14,10 +12,8 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.telephony.SmsManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.ridetrack.app.R
 import com.ridetrack.app.data.EmergencyContact
@@ -33,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -42,7 +39,7 @@ sealed interface CrashAlertState {
     val contacts: List<EmergencyContact>
 
     data class Countdown(override val report: CrashReport, override val contacts: List<EmergencyContact>, val deadlineMillis: Long) : CrashAlertState
-    data class Sent(override val report: CrashReport, override val contacts: List<EmergencyContact>, val delivered: Map<String, Boolean>, val message: String, val sentAtMillis: Long, val allClearSent: Boolean = false) : CrashAlertState
+    data class Sent(override val report: CrashReport, override val contacts: List<EmergencyContact>, val delivered: Map<String, SmsStatus>, val message: String, val sentAtMillis: Long, val allClearSent: Boolean = false) : CrashAlertState
     data class Cancelled(override val report: CrashReport, override val contacts: List<EmergencyContact>) : CrashAlertState
 }
 
@@ -64,9 +61,11 @@ class CrashAlerts(
     private var countdown: Job? = null
     private var followUp: Job? = null
     private var ringtone: Ringtone? = null
+    private val sms = SmsSender(context)
 
     fun start() {
         createChannel()
+        sms.start()
         scope.launch { session.crashes.collect { onCrash(it) } }
     }
 
@@ -107,8 +106,13 @@ class CrashAlerts(
         countdown?.cancel()
         stopAlarm()
         val text = AlertMessage.crash(s.report)
-        val delivered = s.contacts.associate { c -> c.phone to send(c.phone, text) }
-        _state.value = CrashAlertState.Sent(s.report, s.contacts, delivered, text, System.currentTimeMillis())
+        _state.value = CrashAlertState.Sent(s.report, s.contacts, s.contacts.associate { it.phone to SmsStatus.Sending }, text, System.currentTimeMillis())
+        s.contacts.forEach { c ->
+            sms.send(c.phone, text) { status ->
+                if (status is SmsStatus.Failed) Log.w(TAG, "Alert to ${c.name} not sent: ${status.reason}")
+                _state.update { st -> if (st is CrashAlertState.Sent) st.copy(delivered = st.delivered + (c.phone to status)) else st }
+            }
+        }
         followUp?.cancel()
         followUp = scope.launch { followUpLocation(s) }
     }
@@ -118,7 +122,7 @@ class CrashAlerts(
         val s = _state.value as? CrashAlertState.Sent ?: return
         followUp?.cancel()
         val name = s.report.riderName
-        s.contacts.forEach { send(it.phone, AlertMessage.allClear(name)) }
+        s.contacts.forEach { sms.send(it.phone, AlertMessage.allClear(name)) }
         _state.value = s.copy(allClearSent = true)
     }
 
@@ -128,8 +132,8 @@ class CrashAlerts(
         _state.value = null
     }
 
-    /** Profile's "Send test message". Returns how many went out. */
-    suspend fun sendTest(): Int {
+    /** Profile's "Send test message": each contact with what happened to their text. */
+    suspend fun sendTest(): List<Pair<EmergencyContact, SmsStatus>> {
         val s = settings.settings.first().safety
         val frame = session.frame.value
         val report = CrashReport(
@@ -139,27 +143,10 @@ class CrashAlerts(
             batteryPercent = battery.current()?.percent, medical = s.medical,
         )
         val text = AlertMessage.crash(report, test = true)
-        return s.contacts.count { send(it.phone, text) }
+        return s.contacts.map { it to sms.sendAndWait(it.phone, text) }
     }
 
-    fun canSendSms(): Boolean =
-        ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
-
-    private fun send(phone: String, text: String): Boolean {
-        if (!canSendSms()) {
-            Log.w(TAG, "No SMS permission; alert not sent to $phone")
-            return false
-        }
-        return try {
-            val sms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) context.getSystemService<SmsManager>() else @Suppress("DEPRECATION") SmsManager.getDefault()
-            val manager = sms ?: return false
-            manager.sendMultipartTextMessage(phone, null, manager.divideMessage(text), null, null)
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "SMS to $phone failed", e)
-            false
-        }
-    }
+    fun canSendSms(): Boolean = sms.canSend()
 
     /** If the rider is moved (ambulance, help), tell the contacts where to, once, within 2 min. */
     private suspend fun followUpLocation(s: CrashAlertState.Countdown) {
@@ -174,7 +161,7 @@ class CrashAlerts(
             val moved = lat0 == null || lon0 == null || Geo.distanceM(lat0, lon0, lat, lon) > FOLLOW_UP_METERS
             if (moved) {
                 val text = AlertMessage.update(lat, lon, System.currentTimeMillis())
-                s.contacts.forEach { send(it.phone, text) }
+                s.contacts.forEach { sms.send(it.phone, text) }
                 return
             }
         }

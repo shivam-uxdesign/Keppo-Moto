@@ -1,6 +1,13 @@
 package com.ridetrack.app.ui.safety
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.mutableStateOf
+import androidx.core.content.ContextCompat
+import com.ridetrack.app.safety.SmsStatus
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
@@ -208,6 +215,24 @@ private fun MedicalCard(name: String, m: MedicalInfo, modifier: Modifier = Modif
 @Composable
 private fun Sent(s: CrashAlertState.Sent, onAllClear: () -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
+    // Call straight away when allowed; otherwise ask once, and fall back to the dialer.
+    var calling by remember { mutableStateOf<String?>(null) }
+    val placeCall: (String, Boolean) -> Unit = { phone, direct ->
+        val action = if (direct) Intent.ACTION_CALL else Intent.ACTION_DIAL
+        runCatching { context.startActivity(Intent(action, Uri.parse("tel:$phone")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+    val callPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        calling?.let { placeCall(it, granted) }
+        calling = null
+    }
+    val call: (String) -> Unit = { phone ->
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
+            placeCall(phone, true)
+        } else {
+            calling = phone
+            callPermission.launch(Manifest.permission.CALL_PHONE)
+        }
+    }
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 20.dp)) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Spacer(Modifier.height(24.dp))
@@ -217,7 +242,15 @@ private fun Sent(s: CrashAlertState.Sent, onAllClear: () -> Unit, onClose: () ->
                 }
                 Spacer(Modifier.width(10.dp))
                 Column {
-                    Text(if (s.delivered.values.any { it }) "Alert sent" else "Alert not sent", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                    val statuses = s.delivered.values
+                    Text(
+                        when {
+                            statuses.any { it is SmsStatus.Sending } -> "Sending alert…"
+                            statuses.any { it is SmsStatus.Sent } -> "Alert sent"
+                            else -> "Alert not sent"
+                        },
+                        fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Color.White,
+                    )
                     Text(
                         if (s.allClearSent) "You told them you're OK" else "They'll get one update if you're moved",
                         fontSize = 12.sp, color = RtColors.TextSecondary,
@@ -225,7 +258,7 @@ private fun Sent(s: CrashAlertState.Sent, onAllClear: () -> Unit, onClose: () ->
                 }
             }
             s.contacts.forEach { c ->
-                val ok = s.delivered[c.phone] == true
+                val status = s.delivered[c.phone]
                 Row(
                     Modifier.padding(top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFF141416)).padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -237,17 +270,25 @@ private fun Sent(s: CrashAlertState.Sent, onAllClear: () -> Unit, onClose: () ->
                     Column(Modifier.weight(1f)) {
                         Text(c.name, fontSize = 15.sp, color = Color.White)
                         Text(
-                            (if (ok) "✓ Sent · " else "Not sent · ") + c.phone,
-                            fontSize = 12.sp, color = if (ok) RtColors.Ok else RtColors.Warning, maxLines = 1,
+                            when (status) {
+                                SmsStatus.Sent -> "✓ Sent · ${c.phone}"
+                                is SmsStatus.Failed -> "Not sent: ${status.reason}"
+                                else -> "Sending… · ${c.phone}"
+                            },
+                            fontSize = 12.sp,
+                            color = when (status) {
+                                SmsStatus.Sent -> RtColors.Ok
+                                is SmsStatus.Failed -> RtColors.Warning
+                                else -> RtColors.TextSecondary
+                            },
+                            maxLines = 2,
                         )
                     }
                     Box(
                         Modifier
                             .clip(RoundedCornerShape(12.dp))
                             .background(RtColors.Ok)
-                            .clickable(role = Role.Button, onClickLabel = "Call ${c.name}") {
-                                runCatching { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${c.phone}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                            }
+                            .clickable(role = Role.Button, onClickLabel = "Call ${c.name}") { call(c.phone) }
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                     ) { Text("Call", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF04210F)) }
                 }

@@ -22,6 +22,10 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Safety: text emergency contacts after a crash, and show the alert full screen. -->
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- Dual-SIM phones with SMS on "ask every time": find a SIM to send from. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- The alert screen's Call button rings the contact directly. -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Tablets without a SIM can still install; the alert just can't text. -->

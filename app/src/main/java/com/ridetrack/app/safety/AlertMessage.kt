@@ -20,7 +20,10 @@ data class CrashReport(
     val medical: MedicalInfo,
 )
 
-/** The SMS texts. Kept short: one SMS where possible, and readable on any phone. */
+/**
+ * The SMS texts. Plain ASCII on purpose: one symbol like ± switches the whole text to
+ * Unicode (70 characters per part instead of 160), and some phones show it garbled.
+ */
 object AlertMessage {
     private val time = DateTimeFormatter.ofPattern("h:mm a, d MMM", Locale.US)
 
@@ -35,7 +38,7 @@ object AlertMessage {
         r.speedBeforeMps?.let { append(" Last speed ").append((it * 3.6).roundToInt()).append(" km/h.") }
         if (r.latitude != null && r.longitude != null) {
             append(" Location: ").append(mapsLink(r.latitude, r.longitude))
-            r.accuracyM?.let { append(" (±").append(it.roundToInt()).append(" m)") }
+            r.accuracyM?.let { append(" (within ").append(it.roundToInt()).append(" m)") }
             append('.')
         } else {
             append(" Location unknown (no GPS).")
@@ -51,7 +54,7 @@ object AlertMessage {
 
     private fun medical(m: MedicalInfo): String? {
         val parts = listOfNotNull(
-            m.bloodGroup?.let { "Blood group $it" },
+            m.bloodGroup?.let { "Blood group ${it.replace('−', '-')}" },
             m.allergies.trim().takeIf { it.isNotEmpty() }?.let { "allergies: $it" },
             m.notes.trim().takeIf { it.isNotEmpty() },
         )
