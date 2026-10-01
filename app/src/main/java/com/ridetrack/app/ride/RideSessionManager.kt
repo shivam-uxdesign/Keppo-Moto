@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import com.ridetrack.app.data.MomentSettings
+import com.ridetrack.app.data.MedicalInfo
 import com.ridetrack.app.moments.LiveAction
+import com.ridetrack.app.safety.CrashReport
 import com.ridetrack.app.moments.MomentRequest
 import com.ridetrack.app.moments.MomentSource
 import com.ridetrack.app.moments.MomentsHub
@@ -44,6 +46,9 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -101,6 +106,10 @@ class RideSessionManager(
     private val _frame = MutableStateFlow<TelemetryFrame?>(null)
     /** Low-rate (5 Hz) UI snapshot. */
     val frame: StateFlow<TelemetryFrame?> = _frame.asStateFlow()
+
+    private val _crashes = MutableSharedFlow<CrashReport>(extraBufferCapacity = 1)
+    /** Suspected crashes during the ride; the safety alert listens. */
+    val crashes: SharedFlow<CrashReport> = _crashes.asSharedFlow()
 
     private val _active = MutableStateFlow<ActiveRide?>(null)
     val active: StateFlow<ActiveRide?> = _active.asStateFlow()
@@ -166,7 +175,9 @@ class RideSessionManager(
         val triggers = m?.takeIf { it.anyTrigger }?.let {
             MomentTriggers(it.braking, it.acceleration, it.lean, brakeG = it.brakeG, accelG = it.accelG, leanDeg = it.leanDeg.toDouble())
         }
-        val pipeline = TelemetryPipeline(source.kind, calibration, source.sensors, startNanos, startWall, momentTriggers = triggers)
+        // Crash detection only on real rides: a simulated one must never text anybody.
+        val crashG = prefs.safety.takeIf { it.crashDetection && !demo }?.sensitivity?.impactG
+        val pipeline = TelemetryPipeline(source.kind, calibration, source.sensors, startNanos, startWall, momentTriggers = triggers, crashImpactG = crashG)
         val rec = Recorder(
             rideId,
             pipeline,
@@ -254,6 +265,22 @@ class RideSessionManager(
             _frame.value = frame
             syncAutoPause(rec)
             captureMoments(rec, frame)
+            rec.pipeline.takeCrash()?.let { (crash, at) ->
+                Log.w(TAG, "Possible crash: ${"%.1f".format(java.util.Locale.US, crash.peakG)} g impact")
+                _crashes.tryEmit(
+                    CrashReport(
+                        timeMillis = at.timeMillis,
+                        latitude = at.latitude ?: frame.latitude,
+                        longitude = at.longitude ?: frame.longitude,
+                        accuracyM = frame.gpsAccuracyM,
+                        speedBeforeMps = crash.speedBeforeMps ?: at.speedMps,
+                        bikeName = _active.value?.bikeName.orEmpty(),
+                        riderName = "",
+                        batteryPercent = null,
+                        medical = MedicalInfo(),
+                    ),
+                )
+            }
             rec.pipeline.takeNewCalibration()?.let { cal ->
                 _active.update { it?.copy(calibrated = true) }
                 // Next ride starts with this mount; it is re-learned every ride anyway.

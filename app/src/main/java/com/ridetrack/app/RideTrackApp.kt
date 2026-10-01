@@ -16,6 +16,7 @@ class RideTrackApp : Application() {
         MapLibre.getInstance(this)
         createNotificationChannel()
         container.hud.start()
+        container.crashAlerts.start()
     }
 
     private fun createNotificationChannel() {

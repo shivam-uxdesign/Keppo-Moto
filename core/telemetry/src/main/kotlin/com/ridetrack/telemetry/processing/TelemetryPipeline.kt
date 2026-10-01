@@ -22,6 +22,8 @@ import com.ridetrack.telemetry.source.LocationReading
 import com.ridetrack.telemetry.source.RawReading
 import com.ridetrack.telemetry.source.SourceSignal
 import com.ridetrack.telemetry.source.SourceStatusReading
+import kotlin.math.sqrt
+import com.ridetrack.telemetry.math.Units
 
 /**
  * Raw readings in, derived telemetry out. Not thread-safe: feed it from one coroutine.
@@ -38,7 +40,15 @@ class TelemetryPipeline(
     thresholds: EventThresholds = EventThresholds(),
     /** Enables moment detection (clips); null = off. */
     momentTriggers: MomentTriggers? = null,
+    /** Impact (g) that starts crash detection; null = off. */
+    crashImpactG: Double? = null,
 ) {
+    private val crash = crashImpactG?.let { CrashDetector(impactG = it) }
+    private var pendingCrash: Pair<CrashSuspected, EventContext>? = null
+
+    /** A crash detected since the last call, with where and when it happened. */
+    fun takeCrash(): Pair<CrashSuspected, EventContext>? = pendingCrash.also { pendingCrash = null }
+
     private val moments = momentTriggers?.let { MomentTrigger(it) }
     private val momentEvents = ArrayList<Pair<RideEvent, Long>>()
 
@@ -207,6 +217,8 @@ class TelemetryPipeline(
         onAutoCalAccel(r)
         lean.onAccel(r)
         dynamics.onAccel(r)
+        crash?.onAccel(r.timeNanos, Units.mps2ToG(sqrt(r.x * r.x + r.y * r.y + r.z * r.z)), gps.speedMps, lean.leanDeg)
+            ?.let { pendingCrash = it to context(it.impactNanos) }
         val speed = gps.speedMps
         val moving = !autoPause.isStopped && !manuallyPaused && speed != null && speed >= 2.0
         if (!moving) return emptyList()

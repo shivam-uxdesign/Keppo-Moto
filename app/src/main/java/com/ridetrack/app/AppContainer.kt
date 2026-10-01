@@ -10,6 +10,7 @@ import com.ridetrack.app.hud.HudController
 import com.ridetrack.app.moments.MomentRepository
 import com.ridetrack.app.moments.MomentsHub
 import com.ridetrack.app.ride.RideSessionManager
+import com.ridetrack.app.safety.CrashAlerts
 import com.ridetrack.app.sensors.BatteryMonitor
 import com.ridetrack.app.sensors.PhoneTelemetrySource
 import com.ridetrack.app.sensors.SensorInventory
@@ -45,4 +46,5 @@ class AppContainer(context: Context) {
     )
 
     val hud = HudController(appContext, session, settings, momentsHub)
+    val crashAlerts = CrashAlerts(appContext, settings, session, battery, appScope)
 }

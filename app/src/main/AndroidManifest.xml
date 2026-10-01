@@ -20,6 +20,12 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Optional pop-up HUD over other apps during a ride; asked for with an explanation. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Safety: text emergency contacts after a crash, and show the alert full screen. -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Tablets without a SIM can still install; the alert just can't text. -->
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <!-- Map tiles only; ride recording never needs the network. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -62,6 +68,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/export_paths" />
         </provider>
+
+        <!-- Crash alert: over the lock screen, its own task so it never mixes with the app's back stack. -->
+        <activity
+            android:name=".safety.CrashAlertActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="${applicationId}.crash" />
 
         <service
             android:name=".ride.RideRecordingService"

@@ -156,6 +156,8 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit) {
             Spacer(Modifier.height(RtDimens.sm))
         }
 
+        SafetySection(s, vm)
+
         MomentsSection(s, vm)
 
         SectionHeader("Developer")
@@ -191,7 +193,7 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit) {
             )
             Spacer(Modifier.height(RtDimens.sm))
             Text(
-                "Lean angle and G-force are estimates from phone sensors. They are not certified measurements, and Ride Track is not a crash-detection system.",
+                "Lean angle and G-force are estimates from phone sensors, not certified measurements. Crash detection is a best-effort aid: it can miss a crash or raise a false alarm, and it doesn't replace calling emergency services.",
                 style = RtType.body,
                 color = RtColors.TextSecondary,
             )

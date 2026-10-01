@@ -1,6 +1,9 @@
 package com.ridetrack.app.ui.profile
 
 import androidx.lifecycle.ViewModel
+import com.ridetrack.app.data.MedicalInfo
+import com.ridetrack.app.data.SafetySettings
+import com.ridetrack.app.safety.CrashReport
 import androidx.lifecycle.viewModelScope
 import com.ridetrack.app.AppContainer
 import com.ridetrack.app.data.LiveMetric
@@ -56,6 +59,28 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
             refreshMomentsStorage()
         }
     }
+
+    fun setSafety(v: SafetySettings) {
+        viewModelScope.launch { c.settings.setSafety(v) }
+    }
+
+    /** Sends the "(test)" alert; [done] gets how many texts went out. */
+    fun sendTestAlert(done: (Int) -> Unit) {
+        viewModelScope.launch { done(c.crashAlerts.sendTest()) }
+    }
+
+    /** Debug builds: run the whole alert without a crash (texts only go out if you let it count down). */
+    fun simulateCrash() {
+        val f = c.session.frame.value
+        c.crashAlerts.onCrash(
+            CrashReport(
+                timeMillis = System.currentTimeMillis(), latitude = f?.latitude, longitude = f?.longitude, accuracyM = f?.gpsAccuracyM,
+                speedBeforeMps = 15.0, bikeName = c.session.active.value?.bikeName ?: "Test bike", riderName = "", batteryPercent = null, medical = MedicalInfo(),
+            ),
+        )
+    }
+
+    fun canSendSms(): Boolean = c.crashAlerts.canSendSms()
 
     fun setAutoPause(v: Boolean) {
         viewModelScope.launch { c.settings.setAutoPause(v) }

@@ -1,6 +1,11 @@
 package com.ridetrack.app
 
 import com.ridetrack.app.data.EmergencyContact
+import com.ridetrack.app.data.MedicalInfo
+import com.ridetrack.app.safety.AlertMessage
+import com.ridetrack.app.safety.CrashReport
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import com.ridetrack.app.ride.GpsLostVideo
 import com.ridetrack.app.ride.GpsLostVideo.Action
 import kotlin.test.Test
@@ -50,5 +55,28 @@ class SafetyTest {
         assertEquals(emptyList(), run(g, 32_000, 90_000, lost = true, ours = false))
         run(g, 91_000, 100_000, lost = false)
         assertEquals(listOf(Action.START), run(g, 101_000, 120_000, lost = true, ours = false).map { it.second })
+    }
+
+    private val report = CrashReport(
+        timeMillis = ZonedDateTime.of(2026, 10, 1, 9, 21, 0, 0, ZoneOffset.UTC).toInstant().toEpochMilli(),
+        latitude = 12.971642, longitude = 77.594561, accuracyM = 8.4, speedBeforeMps = 15.0,
+        bikeName = "Pulsar NS200", riderName = "Shivam", batteryPercent = 62,
+        medical = MedicalInfo(bloodGroup = "B+", allergies = "penicillin"),
+    )
+
+    @Test
+    fun `crash text has who, where, when and the medical basics`() {
+        assertEquals(
+            "Ride Track: possible crash. Shivam on Pulsar NS200 at 9:21 AM, 1 Oct. Last speed 54 km/h. " +
+                "Location: https://maps.google.com/?q=12.97164,77.59456 (±8 m). Battery 62%. Blood group B+, allergies: penicillin.",
+            AlertMessage.crash(report, ZoneOffset.UTC),
+        )
+    }
+
+    @Test
+    fun `without GPS or details it still reads`() {
+        val bare = report.copy(latitude = null, longitude = null, speedBeforeMps = null, riderName = "", batteryPercent = null, medical = MedicalInfo())
+        assertEquals("Ride Track: possible crash. The rider on Pulsar NS200 at 9:21 AM, 1 Oct. Location unknown (no GPS).", AlertMessage.crash(bare, ZoneOffset.UTC))
+        assertEquals(true, AlertMessage.crash(report, ZoneOffset.UTC, test = true).startsWith("Ride Track: (test) "))
     }
 }
