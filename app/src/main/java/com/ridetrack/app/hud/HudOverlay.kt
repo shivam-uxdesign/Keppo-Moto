@@ -9,6 +9,7 @@ import android.view.WindowManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.getSystemService
@@ -39,6 +40,8 @@ internal class HudOverlay(
 
     var data by mutableStateOf<HudData?>(null)
     var settings by mutableStateOf(HudSettings())
+    /** The camera while you film a video; null otherwise. */
+    var viewfinder by mutableStateOf<ImageBitmap?>(null)
     private var collapsed by mutableStateOf(false)
     private var controlsOpen by mutableStateOf(false)
     private var nearTarget by mutableStateOf(false)
@@ -55,7 +58,7 @@ internal class HudOverlay(
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent {
                 val d = data
-                if (d != null) HudOverlayContent(d, settings, collapsed, controlsOpen, actions, onButtonsTop = { buttonsTop = it })
+                if (d != null) HudOverlayContent(d, settings, collapsed, controlsOpen, actions, viewfinder = viewfinder, onButtonsTop = { buttonsTop = it })
             }
         }
         val container = HudTouchContainer(context, gestureCallbacks).apply {

@@ -44,5 +44,5 @@ class AppContainer(context: Context) {
         scope = appScope,
     )
 
-    val hud = HudController(appContext, session, settings, momentsHub, bikes)
+    val hud = HudController(appContext, session, settings, momentsHub)
 }

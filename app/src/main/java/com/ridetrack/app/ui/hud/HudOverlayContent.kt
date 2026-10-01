@@ -23,7 +23,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
-import com.ridetrack.app.hud.HudStatus
+import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.unit.sp
+import com.ridetrack.app.moments.MomentSource
 import com.ridetrack.app.ui.theme.RtColors
 import com.ridetrack.app.ui.theme.rememberHaptics
 import androidx.compose.foundation.layout.Column
@@ -51,10 +54,10 @@ interface HudControlActions {
     fun hideForRide()
     fun openApp()
     fun closeControls()
-    fun pauseRide()
-    fun resumeRide()
-    fun stopRide()
-    fun startRide()
+    fun recordVideo()
+    fun pauseVideo()
+    fun resumeVideo()
+    fun stopVideo()
 }
 
 @Composable
@@ -64,16 +67,25 @@ fun HudOverlayContent(
     collapsed: Boolean,
     controlsOpen: Boolean,
     actions: HudControlActions,
+    viewfinder: ImageBitmap? = null,
     onButtonsTop: (Float) -> Unit = {},
 ) {
     RideTrackTheme {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             ScaledBy(settings.size.scale) {
-                if (collapsed && !controlsOpen) HudBubble(data, settings) else HudCard(data, settings)
+                val video = data.video
+                when {
+                    collapsed && !controlsOpen -> HudBubble(data, settings)
+                    video != null -> ViewfinderCard(data, video, viewfinder)
+                    else -> HudCard(data, settings)
+                }
             }
             if (!collapsed && !controlsOpen) {
                 ScaledBy(settings.size.scale) {
-                    RideButtons(data, actions, Modifier.onGloballyPositioned { onButtonsTop(it.positionInRoot().y) })
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        VideoButtons(data, actions, Modifier.onGloballyPositioned { onButtonsTop(it.positionInRoot().y) })
+                        data.savedNote?.let { SavedNote(it) }
+                    }
                 }
             } else {
                 SideEffect { onButtonsTop(Float.MAX_VALUE) }
@@ -101,35 +113,55 @@ fun ScaledBy(scale: Float, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalDensity provides Density(d.density * scale, d.fontScale), content = content)
 }
 
-/** Under the card: Pause/Resume and Stop while riding; a record button between rides. */
+/**
+ * Under the card: a record button that films a video (saved as a moment); while filming,
+ * Pause/Resume and Stop. A GPS-lost video stops by itself, so it only offers Stop.
+ */
 @Composable
-private fun RideButtons(data: HudData, actions: HudControlActions, modifier: Modifier = Modifier) {
+private fun VideoButtons(data: HudData, actions: HudControlActions, modifier: Modifier = Modifier) {
     val haptics = rememberHaptics()
+    val video = data.video
     Row(modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        when (data.status) {
-            HudStatus.IDLE -> RoundButton("Start recording a ride", Color(0xE60C0C0E), border = Color.White, borderWidth = 3.dp, size = 60.dp, onClick = { haptics.confirm(); actions.startRide() }) {
+        if (video == null) {
+            RoundButton("Record a video moment", Color(0xE60C0C0E), border = Color.White, borderWidth = 3.dp, size = 60.dp, onClick = { haptics.confirm(); actions.recordVideo() }) {
                 Box(Modifier.size(22.dp).background(Color(0xFFFF3B3B), CircleShape))
             }
-            else -> {
-                val paused = data.status == HudStatus.PAUSED
+        } else {
+            if (video.source == MomentSource.MANUAL) {
                 RoundButton(
-                    if (paused) "Resume ride" else "Pause ride",
-                    if (paused) RtColors.Primary else Color(0xE60C0C0E),
-                    onClick = { haptics.tick(); if (paused) actions.resumeRide() else actions.pauseRide() },
+                    if (video.paused) "Resume filming" else "Pause filming",
+                    if (video.paused) RtColors.Primary else Color(0xE60C0C0E),
+                    onClick = { haptics.tick(); if (video.paused) actions.resumeVideo() else actions.pauseVideo() },
                 ) {
                     Icon(
-                        if (paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                        if (video.paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
                         contentDescription = null,
-                        tint = if (paused) RtColors.OnPrimary else Color.White,
+                        tint = if (video.paused) RtColors.OnPrimary else Color.White,
                         modifier = Modifier.size(24.dp),
                     )
                 }
-                RoundButton("Stop and save the ride", Color(0xE60C0C0E), onClick = { haptics.confirm(); actions.stopRide() }) {
-                    Box(Modifier.size(18.dp).background(RtColors.Error, RoundedCornerShape(4.dp)))
-                }
+            }
+            RoundButton("Stop and save the video", Color(0xE60C0C0E), onClick = { haptics.confirm(); actions.stopVideo() }) {
+                Box(Modifier.size(18.dp).background(RtColors.Error, RoundedCornerShape(4.dp)))
             }
         }
     }
+}
+
+@Composable
+private fun SavedNote(text: String) {
+    Text(
+        text,
+        fontSize = 11.sp,
+        color = Color.White,
+        maxLines = 1,
+        modifier = Modifier
+            .padding(top = 10.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Color(0xEB0C0C0E))
+            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(50))
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    )
 }
 
 @Composable

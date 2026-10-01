@@ -1,7 +1,10 @@
 package com.ridetrack.app.hud
 
 import android.content.Context
+import androidx.compose.ui.graphics.asImageBitmap
+import com.ridetrack.app.moments.MomentSource
 import com.ridetrack.app.moments.MomentsHub
+import com.ridetrack.app.ui.format.Format
 import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.Lifecycle
@@ -10,10 +13,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.ridetrack.app.MainActivity
 import com.ridetrack.app.data.HudLayout
 import com.ridetrack.app.data.HudSize
-import com.ridetrack.app.data.BikeRepository
 import com.ridetrack.app.data.SettingsRepository
-import com.ridetrack.app.sensors.Permissions
-import kotlinx.coroutines.flow.first
 import com.ridetrack.app.ride.RideSessionManager
 import com.ridetrack.app.ui.hud.HudControlActions
 import com.ridetrack.telemetry.state.RideState
@@ -26,24 +26,19 @@ import kotlinx.coroutines.launch
 /**
  * Shows the pop-up HUD when a ride is being recorded and Ride Track is not in front,
  * and removes it when the rider returns, the ride ends, or they hide it for this ride.
+ * Its record button films a video (saved as a moment); rides start and end in the app.
  */
 class HudController(
     private val context: Context,
     private val session: RideSessionManager,
     private val settings: SettingsRepository,
     private val moments: MomentsHub,
-    private val bikes: BikeRepository,
 ) {
     private val scope = MainScope()
     private val appVisible = MutableStateFlow(true)
     /** The ride the rider hid the pop-up for; it stays hidden until that ride ends. */
     private val hiddenForRide = MutableStateFlow<String?>(null)
     private var stoppedSinceMillis: Long? = null
-    /**
-     * After a ride is stopped from the pop-up, it stays up between rides with its record
-     * button, until the rider opens Ride Track or drags it away.
-     */
-    private val idle = MutableStateFlow(false)
 
     private val actions: HudControlActions = object : HudControlActions {
         override fun setLayout(layout: HudLayout) { scope.launch { settings.setHudLayout(layout) } }
@@ -52,15 +47,12 @@ class HudController(
         override fun hideForRide() = hideForCurrentRide()
         override fun openApp() = openRideTrack()
         override fun closeControls() = overlay.closeControls()
-        override fun pauseRide() = session.pause()
-        override fun resumeRide() = session.resume()
-        override fun stopRide() {
-            if (!session.state.value.isActive) return
-            idle.value = true
-            session.requestEnd()
-            session.confirmEnd()
+        override fun recordVideo() {
+            session.startVideo()
         }
-        override fun startRide() = startFromPopup()
+        override fun pauseVideo() = session.pauseVideo()
+        override fun resumeVideo() = session.resumeVideo()
+        override fun stopVideo() = session.stopVideo()
     }
 
     private val overlay: HudOverlay = HudOverlay(
@@ -82,10 +74,10 @@ class HudController(
         )
 
         scope.launch {
-            combine(session.state, session.active, appVisible, settings.settings, combine(hiddenForRide, idle) { h, i -> h to i }) { state, active, visible, s, (hidden, waiting) ->
+            combine(session.state, session.active, appVisible, settings.settings, hiddenForRide) { state, active, visible, s, hidden ->
                 overlay.settings = s.hud
                 val riding = state.isActive && active != null && hidden != active.rideId
-                (riding || (waiting && !state.isActive)) && !visible && s.hud.enabled
+                riding && !visible && s.hud.enabled
             }.distinctUntilChanged().collect { wanted ->
                 if (wanted && canDrawOverlays()) {
                     refreshData()
@@ -97,8 +89,12 @@ class HudController(
         }
 
         scope.launch {
-            combine(session.frame, session.state, session.active, moments.state, combine(session.manuallyPaused, idle) { _, _ -> Unit }) { _, _, _, _, _ -> Unit }
+            combine(session.frame, session.state, session.active, moments.state, combine(session.manuallyPaused, moments.live, moments.liveSaved) { _, _, _ -> Unit }) { _, _, _, _, _ -> Unit }
                 .collect { refreshData() }
+        }
+
+        scope.launch {
+            moments.viewfinder.collect { overlay.viewfinder = it?.asImageBitmap() }
         }
 
         scope.launch {
@@ -106,18 +102,10 @@ class HudController(
             session.state.collect { if (!it.isActive && it !is RideState.Saving) hiddenForRide.value = null }
         }
 
-        scope.launch {
-            // Back in Ride Track: the waiting pop-up has done its job.
-            appVisible.collect { if (it) idle.value = false }
-        }
     }
 
     private fun refreshData() {
         val state = session.state.value
-        if (!state.isActive && idle.value) {
-            overlay.data = HudData.idle()
-            return
-        }
         val paused = state is RideState.Paused || (state is RideState.EndingRide && state.wasPaused)
         val now = System.currentTimeMillis()
         stoppedSinceMillis = if (paused) stoppedSinceMillis ?: now else null
@@ -128,27 +116,16 @@ class HudController(
             stoppedForMillis = stoppedSinceMillis?.let { now - it },
             camera = CameraIndicator.from(moments.state.value),
             manuallyPaused = session.manuallyPaused.value,
+            video = moments.live.value?.let { HudVideo(it.source, it.starting, it.paused, it.elapsedMillis(now)) },
+            savedNote = moments.liveSaved.value?.takeIf { now - it.atMillis < SAVED_NOTE_MILLIS }?.let { saved ->
+                (if (saved.source == MomentSource.GPS_LOST) "GPS back · saved · " else "Saved to moments · ") + Format.clock(saved.lengthMillis)
+            },
         )
     }
 
     private fun hideForCurrentRide() {
-        idle.value = false
         hiddenForRide.value = session.active.value?.rideId
         overlay.hide()
-    }
-
-    /** Record button: a new ride on the selected bike, straight from the pop-up. */
-    private fun startFromPopup() {
-        scope.launch {
-            val s = settings.settings.first()
-            val bike = s.selectedBikeId?.let { bikes.get(it) } ?: bikes.observeBikes().first().firstOrNull()
-            // No bike yet, or location not allowed: that needs the app.
-            if (bike == null || (!s.demoMode && !Permissions.hasFineLocation(context))) {
-                openRideTrack()
-                return@launch
-            }
-            if (session.startNow(bike) == null && !session.state.value.isActive) openRideTrack()
-        }
     }
 
     private fun openRideTrack() {
@@ -162,5 +139,6 @@ class HudController(
 
     companion object {
         private const val TAG = "HudController"
+        private const val SAVED_NOTE_MILLIS = 2_500L
     }
 }

@@ -2,6 +2,8 @@ package com.ridetrack.app
 
 import com.ridetrack.app.hud.HudData
 import com.ridetrack.app.hud.HudStatus
+import com.ridetrack.app.hud.HudVideo
+import com.ridetrack.app.moments.MomentSource
 import com.ridetrack.app.ride.ActiveRide
 import com.ridetrack.telemetry.model.DataSourceKind
 import com.ridetrack.telemetry.model.GpsQuality
@@ -81,11 +83,15 @@ class HudDataTest {
     }
 
     @Test
-    fun `a rider pause shows as paused, not an auto-stop, and idle has no ride`() {
+    fun `a rider pause shows as paused, not an auto-stop`() {
         assertEquals(HudStatus.PAUSED, HudData.from(frame(), active(), paused = true, stoppedForMillis = 5_000, manuallyPaused = true).status)
         assertEquals(HudStatus.STOPPED, HudData.from(frame(), active(), paused = true, stoppedForMillis = 5_000).status)
-        val idle = HudData.idle()
-        assertEquals(HudStatus.IDLE, idle.status)
-        assertNull(idle.speedMps)
+    }
+
+    @Test
+    fun `a video being filmed is carried to the pop-up`() {
+        val v = HudVideo(MomentSource.GPS_LOST, starting = false, paused = false, elapsedMillis = 12_000)
+        assertEquals(v, HudData.from(frame(), active(), false, null, video = v).video)
+        assertNull(HudData.from(frame(), active(), false, null).video)
     }
 }

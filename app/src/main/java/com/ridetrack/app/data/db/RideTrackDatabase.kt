@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [BikeEntity::class, RideEntity::class, SampleEntity::class, EventEntity::class, MomentEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class RideTrackDatabase : RoomDatabase() {
@@ -22,7 +22,7 @@ abstract class RideTrackDatabase : RoomDatabase() {
             Room.databaseBuilder(context, RideTrackDatabase::class.java, "ridetrack.db")
                 // WAL keeps frequent small ride writes cheap and durable.
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
 
         /** Bike photo + redline, and OBD engine data per sample. Existing rows get NULL (unknown). */
@@ -55,6 +55,13 @@ abstract class RideTrackDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE bikes ADD COLUMN odometerKm REAL")
                 db.execSQL("ALTER TABLE bikes ADD COLUMN odometerSetAtMillis INTEGER")
+            }
+        }
+
+        /** Where a clip came from (your video, GPS lost); existing clips get NULL (an event). */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE moments ADD COLUMN source TEXT")
             }
         }
 

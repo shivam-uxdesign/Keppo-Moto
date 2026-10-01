@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.ridetrack.app.moments.Moment
 import com.ridetrack.app.moments.MomentKind
+import com.ridetrack.app.moments.MomentSource
 import com.ridetrack.app.ui.appContainer
 import com.ridetrack.app.ui.format.Format
 import com.ridetrack.app.ui.theme.RtColors
@@ -21,7 +22,13 @@ import java.util.Locale
 import kotlin.math.abs
 
 /** Dot colour for a moment: what kind of event it was. */
-fun momentColor(m: Moment): Color = when (m.primaryType) {
+fun momentColor(m: Moment): Color = when {
+    m.source == MomentSource.MANUAL -> RtColors.Error
+    m.source == MomentSource.GPS_LOST -> RtColors.Warning
+    else -> eventColor(m)
+}
+
+private fun eventColor(m: Moment): Color = when (m.primaryType) {
     RideEventType.HARD_BRAKE -> RtColors.Brake
     RideEventType.STRONG_ACCELERATION -> RtColors.Accel
     RideEventType.SIGNIFICANT_LEAN -> if ((m.peakValue ?: 0.0) < 0) RtColors.Left else RtColors.Right
@@ -30,6 +37,8 @@ fun momentColor(m: Moment): Color = when (m.primaryType) {
 
 fun momentTitle(m: Moment): String {
     if (m.kind == MomentKind.PHOTO) return "Photo"
+    if (m.source == MomentSource.MANUAL) return "Your video"
+    if (m.source == MomentSource.GPS_LOST) return "GPS lost"
     val v = m.peakValue
     val parts = m.types.sortedBy { it.ordinal }.map {
         when (it) {

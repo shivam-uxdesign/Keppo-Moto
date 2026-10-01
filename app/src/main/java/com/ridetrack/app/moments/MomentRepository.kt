@@ -13,6 +13,9 @@ import java.io.File
 enum class MomentKind { CLIP, PHOTO }
 
 /** A saved clip or photo. Files live in app storage under files/moments/<rideId>/. */
+/** Why a clip exists: cut around an event, filmed on purpose, or filmed while GPS was lost. */
+enum class MomentSource { EVENT, MANUAL, GPS_LOST }
+
 data class Moment(
     val id: String,
     val rideId: String,
@@ -28,6 +31,7 @@ data class Moment(
     val durationMillis: Long?,
     val starred: Boolean,
     val clipStartMillis: Long? = null,
+    val source: MomentSource = MomentSource.EVENT,
 ) {
     /** When the clip's first frame was filmed; estimated for clips saved before this was stored. */
     val videoStartMillis: Long get() = clipStartMillis ?: (timeMillis - 10_000)
@@ -64,6 +68,7 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
             durationMillis = m.durationMillis,
             starred = m.starred,
             clipStartMillis = m.clipStartMillis,
+            source = m.source.takeIf { it != MomentSource.EVENT }?.name,
         ),
     )
 
@@ -108,6 +113,7 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
             durationMillis = durationMillis,
             starred = starred,
             clipStartMillis = clipStartMillis,
+            source = MomentSource.entries.firstOrNull { it.name == source } ?: MomentSource.EVENT,
         )
     }
 }

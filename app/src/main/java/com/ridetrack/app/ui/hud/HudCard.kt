@@ -64,7 +64,6 @@ private fun statusColor(status: HudStatus) = when (status) {
     HudStatus.RECORDING -> RtColors.Ok
     HudStatus.STOPPED -> RtColors.Paused
     HudStatus.PAUSED, HudStatus.GPS_LOST -> RtColors.Warning
-    HudStatus.IDLE -> RtColors.TextTertiary
 }
 
 /** The floating pop-up card. Size scaling is applied by the caller via density. */
@@ -145,7 +144,7 @@ fun HudCard(data: HudData, settings: HudSettings, modifier: Modifier = Modifier)
 
 /**
  * Left: GPS, which never changes with the ride state. Right: the ride state itself:
- * RECORDING with the ride time, PAUSED (by the rider), STOPPED (auto-pause), or READY.
+ * RECORDING with the ride time, PAUSED (by the rider) or STOPPED (auto-pause).
  */
 @Composable
 private fun StatusRow(data: HudData, c: HudColors, compact: Boolean) {
@@ -179,7 +178,6 @@ private fun StatusRow(data: HudData, c: HudColors, compact: Boolean) {
             HudStatus.RECORDING, HudStatus.GPS_LOST -> (if (compact) "REC$time" else "RECORDING$time") to RtColors.Error
             HudStatus.PAUSED -> "PAUSED$time" to RtColors.Warning
             HudStatus.STOPPED -> "STOPPED" + (data.stoppedForMillis?.let { " · " + Format.clock(it) } ?: "") to RtColors.Paused
-            HudStatus.IDLE -> "READY" to c.muted
         }
         if (data.status == HudStatus.RECORDING || data.status == HudStatus.GPS_LOST) {
             Box(Modifier.size(6.dp).background(color, CircleShape))

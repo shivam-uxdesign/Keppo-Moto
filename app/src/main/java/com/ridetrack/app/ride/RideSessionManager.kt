@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import com.ridetrack.app.data.MomentSettings
+import com.ridetrack.app.moments.LiveAction
 import com.ridetrack.app.moments.MomentRequest
+import com.ridetrack.app.moments.MomentSource
 import com.ridetrack.app.moments.MomentsHub
 import com.ridetrack.telemetry.model.MountOrientation
 import com.ridetrack.telemetry.moments.MomentPlanner
@@ -319,6 +321,24 @@ class RideSessionManager(
         rec.pipeline.manuallyPaused = false
         _manuallyPaused.value = false
         syncAutoPause(rec)
+    }
+
+    /** Films a video now (the HUD's record button); it's saved as a moment when stopped. */
+    fun startVideo(source: MomentSource = MomentSource.MANUAL, preRollMillis: Long = 0L): Boolean {
+        val id = _active.value?.rideId ?: return false
+        val f = _frame.value
+        return momentsHub.submitLive(MomentRequest.StartLive(id, source, preRollMillis, f?.latitude, f?.longitude, f?.speedMps))
+    }
+
+    fun pauseVideo() = videoControl(LiveAction.PAUSE)
+
+    fun resumeVideo() = videoControl(LiveAction.RESUME)
+
+    fun stopVideo() = videoControl(LiveAction.STOP)
+
+    private fun videoControl(action: LiveAction) {
+        val id = _active.value?.rideId ?: return
+        momentsHub.submitLive(MomentRequest.LiveControl(id, action))
     }
 
     fun requestEnd() {

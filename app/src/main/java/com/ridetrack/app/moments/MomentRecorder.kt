@@ -3,6 +3,8 @@ package com.ridetrack.app.moments
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.media.MediaFormat
 import android.os.Build
 import android.os.PowerManager
@@ -12,6 +14,7 @@ import android.view.Surface
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.CameraState
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
@@ -33,6 +36,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.Executors
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ExecutionException
@@ -85,6 +91,20 @@ class MomentRecorder(
     private var retryJob: Job? = null
     private var thermalListener: PowerManager.OnThermalStatusChangedListener? = null
 
+    /** A long video being filmed (yours, or GPS lost); event clips wait until it stops. */
+    private class Live(val rec: LiveRecording, val request: MomentRequest.StartLive)
+    @Volatile private var live: Live? = null
+    private val liveLock = Mutex()
+    /** Show the camera on the HUD: only while you film on purpose. */
+    @Volatile private var viewfinderWanted = false
+    @Volatile private var liveStarting = false
+    private var viewfinderBound = false
+    private var usingFront = false
+    /** Bumped for every new encoder session, so a start can wait for a fresh stream. */
+    @Volatile private var encoderSession = 0
+    private val analysisExecutor = Executors.newSingleThreadExecutor()
+    private var lastViewfinderMillis = 0L
+
     private val targetRotation get() = if (landscapeMount) Surface.ROTATION_90 else Surface.ROTATION_0
 
     fun start() {
@@ -108,13 +128,20 @@ class MomentRecorder(
                 delay(10_000)
                 tick++
                 setReason(PauseReason.LOW_STORAGE, lowStorage())
+                if (live != null && lowStorage()) liveLock.withLock { stopLive("storage almost full") }
                 withContext(Dispatchers.Main) { watchdog() }
                 if (tick % 6 == 0) log.log("status: ${hub.state.value.status} reasons=$reasons encoder=${encoderInfo()} ${buffer.describe()} thermal=${thermal()}")
                 log.flush()
             }
         }
         watchThermal()
-        hub.attach { requests.trySend(it) }
+        hub.attach { r ->
+            if (r is MomentRequest.StartLive || r is MomentRequest.LiveControl) {
+                scope.launch(Dispatchers.IO) { liveLock.withLock { handleLive(r) } }
+            } else {
+                requests.trySend(r)
+            }
+        }
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             try {
@@ -144,6 +171,7 @@ class MomentRecorder(
     suspend fun finish() {
         log.log("finish: ${buffer.describe()} saved=${hub.state.value.saved}")
         hub.detach()
+        withContext(Dispatchers.IO) { liveLock.withLock { stopLive("ride ended") } }
         hub.drainQueued().forEach { requests.trySend(it) }
         requests.close()
         if (withTimeoutOrNull(25_000) { worker?.join() } == null) log.error("finish: timed out writing queued moments")
@@ -157,6 +185,7 @@ class MomentRecorder(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) thermalListener?.let { pm?.removeThermalStatusListener(it) }
         }
         stopAudio()
+        analysisExecutor.shutdown()
         encoder?.release()
         encoder = null
         buffer.clear()
@@ -168,7 +197,7 @@ class MomentRecorder(
     // ---- Camera -------------------------------------------------------------------------
 
     private val videoWanted: Boolean
-        get() = reasons.none { it == PauseReason.RIDE_PAUSED || it == PauseReason.HOT || it == PauseReason.LOW_STORAGE }
+        get() = reasons.none { it == PauseReason.HOT || it == PauseReason.LOW_STORAGE || (it == PauseReason.RIDE_PAUSED && live == null && !liveStarting) }
 
     /** (Re)binds the use cases for the current state. Main thread. */
     private fun bindCamera() {
@@ -189,13 +218,27 @@ class MomentRecorder(
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             .build()
             .also { imageCapture = it }
+        usingFront = front
+        val withViewfinder = withVideo && viewfinderWanted
         val useCases = buildList {
             add(capture)
             if (withVideo) add(buildPreview())
+            if (withViewfinder) add(buildViewfinder())
         }
         try {
             p.unbindAll()
-            val cam = p.bindToLifecycle(owner, selector, *useCases.toTypedArray())
+            var withFinder = withViewfinder
+            val cam = try {
+                p.bindToLifecycle(owner, selector, *useCases.toTypedArray())
+            } catch (e: Exception) {
+                if (!withViewfinder) throw e
+                // Some cameras can't stream three ways at once: film without the viewfinder.
+                log.error("viewfinder not supported with filming; recording without it", e)
+                withFinder = false
+                p.unbindAll()
+                p.bindToLifecycle(owner, selector, *useCases.dropLast(1).toTypedArray())
+            }
+            viewfinderBound = withFinder
             camera = cam
             videoBound = withVideo
             boundLowPower = lowPower
@@ -243,9 +286,15 @@ class MomentRecorder(
                 setReason(PauseReason.FAILED, true)
                 return@setSurfaceProvider
             }
-            // A new encoder session: older samples came from a different stream.
+            // A new encoder session: older samples came from a different stream. A video
+            // being filmed can't change streams mid-file, so it's finished here.
+            if (live != null) {
+                buffer.stopTap()
+                scope.launch(Dispatchers.IO) { liveLock.withLock { stopLive("camera restarted") } }
+            }
             if (encoder != null || videoFormat != null) buffer.clear()
             encoder = enc
+            encoderSession++
             request.setTransformationInfoListener(main) { rotationDegrees = it.rotationDegrees }
             request.provideSurface(enc.inputSurface, main) { result ->
                 log.log("surface released (result ${result.resultCode}) after ${enc.frames} frames")
@@ -255,6 +304,39 @@ class MomentRecorder(
             refreshStatus()
         }
         return pv
+    }
+
+    /** Small frames for the HUD's viewfinder, upright (and mirrored for the selfie camera). */
+    private fun buildViewfinder(): ImageAnalysis {
+        val analysis = ImageAnalysis.Builder()
+            .setTargetRotation(targetRotation)
+            .setResolutionSelector(
+                ResolutionSelector.Builder()
+                    .setResolutionStrategy(ResolutionStrategy(Size(480, 360), ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER))
+                    .build(),
+            )
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+            .build()
+        analysis.setAnalyzer(analysisExecutor) { img ->
+            try {
+                val now = System.currentTimeMillis()
+                if (viewfinderWanted && now - lastViewfinderMillis >= VIEWFINDER_FRAME_MILLIS) {
+                    lastViewfinderMillis = now
+                    val m = Matrix().apply {
+                        postRotate(img.imageInfo.rotationDegrees.toFloat())
+                        if (usingFront) postScale(-1f, 1f)
+                    }
+                    val raw = img.toBitmap()
+                    hub.setViewfinder(Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true))
+                }
+            } catch (e: Exception) {
+                // A dropped viewfinder frame doesn't matter.
+            } finally {
+                img.close()
+            }
+        }
+        return analysis
     }
 
     /**
@@ -345,7 +427,7 @@ class MomentRecorder(
 
     private fun rebindIfNeeded() {
         if (provider == null || PauseReason.FAILED in reasons) return
-        if (videoWanted != videoBound || (videoBound && lowPower != boundLowPower)) bindCamera()
+        if (videoWanted != videoBound || (videoBound && lowPower != boundLowPower) || (videoBound && viewfinderWanted != viewfinderBound)) bindCamera()
     }
 
     private fun refreshStatus() {
@@ -385,6 +467,7 @@ class MomentRecorder(
             when (r) {
                 is MomentRequest.Clip -> writeClip(r)
                 is MomentRequest.Photo -> takePhoto(r)
+                is MomentRequest.StartLive, is MomentRequest.LiveControl -> Unit
             }
         } catch (e: Exception) {
             log.error("moment not saved", e)
@@ -398,9 +481,17 @@ class MomentRecorder(
         val w = r.window
         val label = w.types.joinToString("+").ifEmpty { "test" }
         log.log("clip requested: $label, window ${(w.endMillis - w.startMillis) / 1000}s")
+        if (live != null) {
+            log.log("clip skipped: a video is being filmed")
+            return
+        }
         // Let the encoders catch up with the end of the window.
         val wait = w.endMillis + ENCODER_LATENCY_MILLIS - System.currentTimeMillis()
         if (wait > 0) delay(wait)
+        if (live != null) {
+            log.log("clip skipped: a video started filming")
+            return
+        }
         if (lowStorage()) {
             log.log("clip skipped: storage almost full (${freeBytes() / 1_000_000}MB free)")
             setReason(PauseReason.LOW_STORAGE, true)
@@ -506,6 +597,137 @@ class MomentRecorder(
         hub.onSaved()
     }
 
+    // ---- Long videos (yours, GPS lost) ------------------------------------------------------
+
+    private suspend fun handleLive(r: MomentRequest) {
+        try {
+            when (r) {
+                is MomentRequest.StartLive -> startLive(r)
+                is MomentRequest.LiveControl -> when (r.action) {
+                    LiveAction.PAUSE -> live?.let { l ->
+                        l.rec.pause()
+                        hub.live.value?.let { st ->
+                            if (!st.paused) hub.setLive(st.copy(paused = true, recordedMillis = st.elapsedMillis(System.currentTimeMillis()), segmentStartMillis = null))
+                        }
+                        log.log("video paused")
+                    }
+                    LiveAction.RESUME -> live?.let { l ->
+                        l.rec.resume()
+                        hub.live.value?.let { st -> if (st.paused) hub.setLive(st.copy(paused = false, segmentStartMillis = System.currentTimeMillis())) }
+                        log.log("video resumed")
+                    }
+                    LiveAction.STOP -> stopLive("stopped")
+                }
+                else -> Unit
+            }
+        } catch (e: Exception) {
+            log.error("video control failed", e)
+        } finally {
+            log.flush()
+        }
+    }
+
+    private suspend fun startLive(r: MomentRequest.StartLive) {
+        if (live != null) return
+        val manual = r.source == MomentSource.MANUAL
+        log.log("video requested: ${r.source}, lead-in ${r.preRollMillis / 1000}s")
+        if (lowStorage()) {
+            log.log("video skipped: storage almost full")
+            return
+        }
+        hub.setLive(LiveState(r.source, starting = true))
+        liveStarting = true
+        try {
+            beginLive(r, manual)
+        } finally {
+            liveStarting = false
+        }
+    }
+
+    private suspend fun beginLive(r: MomentRequest.StartLive, manual: Boolean) {
+        val session = encoderSession
+        // Your video shows the camera on the HUD, which needs the camera re-set up (a new
+        // stream, so no lead-in). GPS-lost videos keep the running stream and its lead-in.
+        val restart = manual && !viewfinderBound
+        viewfinderWanted = manual
+        withContext(Dispatchers.Main) { if (restart) bindCamera() else rebindIfNeeded() }
+        val fromMillis = System.currentTimeMillis() - r.preRollMillis
+        var rec: LiveRecording? = null
+        val started = withTimeoutOrNull<Boolean>(LIVE_START_TIMEOUT_MILLIS) {
+            while (true) {
+                val fmt = videoFormat
+                val fresh = !restart || encoderSession != session
+                if (fmt != null && encoder != null && fresh) {
+                    val candidate = rec ?: LiveRecording(
+                        File(repo.dir(r.rideId), "video-${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(6)}.mp4"),
+                        fmt, audio?.format, rotationDegrees,
+                    ).also { rec = it }
+                    val from = if (restart) 0L else fromMillis * 1000
+                    if (buffer.startTap(from, seed = candidate::seed, onSample = candidate::write)) return@withTimeoutOrNull true
+                }
+                delay(150)
+            }
+            @Suppress("UNREACHABLE_CODE")
+            false
+        } == true
+        val recording = rec
+        if (!started || recording == null) {
+            log.error("video not started: camera not ready (encoder=${encoderInfo()}, reasons=$reasons)")
+            recording?.finish()
+            viewfinderWanted = false
+            hub.setLive(null)
+            withContext(Dispatchers.Main) { rebindIfNeeded() }
+            return
+        }
+        live = Live(recording, r)
+        hub.setLive(LiveState(r.source, segmentStartMillis = System.currentTimeMillis()))
+        log.log("video filming: ${recording.file.name}")
+    }
+
+    private suspend fun stopLive(reason: String) {
+        val l = live ?: return
+        buffer.stopTap()
+        live = null
+        val length = l.rec.finish()
+        val hadViewfinder = viewfinderWanted
+        viewfinderWanted = false
+        hub.setViewfinder(null)
+        hub.setLive(null)
+        l.rec.failed?.let { log.error("video write failed", it) }
+        if (hadViewfinder) withContext(Dispatchers.Main) { rebindIfNeeded() }
+        if (length == null) {
+            log.log("video not saved ($reason): no frames")
+            return
+        }
+        val file = l.rec.file
+        val start = l.rec.firstFrameMillis ?: System.currentTimeMillis()
+        val thumb = File(file.parentFile, file.nameWithoutExtension + ".jpg")
+        val hasThumb = ClipWriter.videoThumbnail(file, minOf(1_000L, length / 2), thumb)
+        val req = l.request
+        repo.add(
+            Moment(
+                id = UUID.randomUUID().toString(),
+                rideId = req.rideId,
+                kind = MomentKind.CLIP,
+                types = emptySet(),
+                timeMillis = start,
+                latitude = req.latitude,
+                longitude = req.longitude,
+                speedMps = req.speedMps,
+                peakValue = null,
+                file = file,
+                thumb = thumb.takeIf { hasThumb },
+                durationMillis = length,
+                starred = false,
+                clipStartMillis = start,
+                source = req.source,
+            ),
+        )
+        log.log("video saved ($reason): ${file.name} ${length / 1000}s ${file.length() / 1024}KB")
+        hub.onSaved()
+        hub.onLiveSaved(LiveSaved(req.source, length, System.currentTimeMillis()))
+    }
+
     private fun freeBytes(): Long = runCatching { StatFs(context.filesDir.path).availableBytes }.getOrDefault(-1)
 
     private fun lowStorage(): Boolean = freeBytes().let { it in 0 until MIN_FREE_BYTES }
@@ -520,5 +742,7 @@ class MomentRecorder(
         private const val MIN_FREE_BYTES = 1_000_000_000L
         private const val STALL_MILLIS = 10_000L
         private const val LOW_POWER_BITRATE = 1_500_000
+        private const val LIVE_START_TIMEOUT_MILLIS = 6_000L
+        private const val VIEWFINDER_FRAME_MILLIS = 100L
     }
 }

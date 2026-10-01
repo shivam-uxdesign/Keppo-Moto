@@ -1,5 +1,6 @@
 package com.ridetrack.app.hud
 
+import com.ridetrack.app.moments.MomentSource
 import com.ridetrack.app.moments.MomentState
 import com.ridetrack.app.moments.MomentStatus
 import com.ridetrack.app.ride.ActiveRide
@@ -8,10 +9,12 @@ import com.ridetrack.telemetry.model.GpsQuality
 import com.ridetrack.telemetry.model.TelemetryFrame
 
 /**
- * What the ride is doing: recording, auto-paused at a stop, paused by the rider, GPS lost,
- * or no ride at all (the pop-up waiting with its record button).
+ * What the ride is doing: recording, auto-paused at a stop, paused by the rider, or GPS lost.
  */
-enum class HudStatus { RECORDING, STOPPED, PAUSED, GPS_LOST, IDLE }
+enum class HudStatus { RECORDING, STOPPED, PAUSED, GPS_LOST }
+
+/** A video being filmed (your record button, or GPS lost), as the pop-up shows it. */
+data class HudVideo(val source: MomentSource, val starting: Boolean, val paused: Boolean, val elapsedMillis: Long)
 
 /** The Moments camera, as the rider should see it: quiet while buffering, REC while saving. */
 enum class CameraIndicator {
@@ -49,6 +52,9 @@ data class HudData(
     val gear: Int? = null,
     val redlineRpm: Int? = null,
     val camera: CameraIndicator = CameraIndicator.OFF,
+    val video: HudVideo? = null,
+    /** "Saved to moments · 0:42" for a moment after a video stops. */
+    val savedNote: String? = null,
 ) {
     companion object {
         fun from(
@@ -58,6 +64,8 @@ data class HudData(
             stoppedForMillis: Long?,
             camera: CameraIndicator = CameraIndicator.OFF,
             manuallyPaused: Boolean = false,
+            video: HudVideo? = null,
+            savedNote: String? = null,
         ): HudData {
             val stats = frame?.stats
             val left = stats?.maxLeftLeanDeg
@@ -97,14 +105,9 @@ data class HudData(
                 gear = frame?.gear,
                 redlineRpm = active?.redlineRpm,
                 camera = camera,
+                video = video,
+                savedNote = savedNote,
             )
         }
-
-        /** No ride: the pop-up stays up with its record button. */
-        fun idle(): HudData = HudData(
-            status = HudStatus.IDLE, stoppedForMillis = null, speedMps = null, leanDeg = null, leanNote = null,
-            distanceM = null, elapsedMillis = null, avgSpeedMps = null, maxSpeedMps = null, longitudinalG = null,
-            combinedG = null, maxLeanDeg = null, headingDeg = null, demo = false,
-        )
     }
 }

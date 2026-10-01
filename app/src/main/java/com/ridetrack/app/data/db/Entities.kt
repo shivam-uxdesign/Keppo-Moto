@@ -120,4 +120,6 @@ data class MomentEntity(
     val starred: Boolean,
     /** Wall time of the clip's first frame (lines telemetry up with the video). */
     val clipStartMillis: Long? = null,
+    /** MANUAL or GPS_LOST for videos filmed on purpose; null = cut around an event. */
+    val source: String? = null,
 )

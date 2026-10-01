@@ -1,5 +1,6 @@
 package com.ridetrack.app.moments
 
+import android.graphics.Bitmap
 import com.ridetrack.telemetry.moments.MomentWindow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +18,38 @@ sealed interface MomentRequest {
         val longitude: Double?,
         val speedMps: Double?,
     ) : MomentRequest
+
+    /** Start filming a long video (yours, or because GPS dropped), from [preRollMillis] ago. */
+    data class StartLive(
+        override val rideId: String,
+        val source: MomentSource,
+        val preRollMillis: Long,
+        val latitude: Double?,
+        val longitude: Double?,
+        val speedMps: Double?,
+    ) : MomentRequest
+
+    data class LiveControl(override val rideId: String, val action: LiveAction) : MomentRequest
 }
+
+enum class LiveAction { PAUSE, RESUME, STOP }
+
+/** A video being filmed on purpose, as the HUD shows it. */
+data class LiveState(
+    val source: MomentSource,
+    /** Camera getting ready; nothing is being written yet. */
+    val starting: Boolean = false,
+    val paused: Boolean = false,
+    /** Filmed before the current stretch (pauses don't count). */
+    val recordedMillis: Long = 0,
+    /** When the current stretch began; null while paused or starting. */
+    val segmentStartMillis: Long? = null,
+) {
+    fun elapsedMillis(now: Long): Long = recordedMillis + (segmentStartMillis?.let { now - it } ?: 0L)
+}
+
+/** A video that was just saved: its length, for the HUD's "Saved to moments" note. */
+data class LiveSaved(val source: MomentSource, val lengthMillis: Long, val atMillis: Long)
 
 enum class MomentStatus { OFF, STARTING, ARMED, PAUSED }
 
@@ -47,6 +79,16 @@ class MomentsHub {
     private val _state = MutableStateFlow(MomentState())
     val state: StateFlow<MomentState> = _state.asStateFlow()
 
+    private val _live = MutableStateFlow<LiveState?>(null)
+    val live: StateFlow<LiveState?> = _live.asStateFlow()
+
+    private val _liveSaved = MutableStateFlow<LiveSaved?>(null)
+    val liveSaved: StateFlow<LiveSaved?> = _liveSaved.asStateFlow()
+
+    /** Small camera frames while you film on purpose (the HUD's viewfinder). */
+    private val _viewfinder = MutableStateFlow<Bitmap?>(null)
+    val viewfinder: StateFlow<Bitmap?> = _viewfinder.asStateFlow()
+
     private val eventPending = MutableStateFlow(false)
     private var writing = false
 
@@ -63,6 +105,26 @@ class MomentsHub {
     fun requestTestClip(rideId: String) {
         val now = System.currentTimeMillis()
         submit(MomentRequest.Clip(rideId, MomentWindow(now - 10_000, now + 5_000, now, emptySet(), null, null, null, null)))
+    }
+
+    /** Live-video controls go straight to the recorder; without one (no ride) they're dropped. */
+    @Synchronized
+    fun submitLive(r: MomentRequest): Boolean {
+        val s = sink ?: return false
+        s(r)
+        return true
+    }
+
+    fun setLive(state: LiveState?) {
+        _live.value = state
+    }
+
+    fun onLiveSaved(saved: LiveSaved) {
+        _liveSaved.value = saved
+    }
+
+    fun setViewfinder(frame: Bitmap?) {
+        _viewfinder.value = frame
     }
 
     @Synchronized
@@ -104,6 +166,8 @@ class MomentsHub {
         eventPending.value = false
         writing = false
         _state.value = MomentState()
+        _live.value = null
+        _viewfinder.value = null
     }
 
     private fun publish() {

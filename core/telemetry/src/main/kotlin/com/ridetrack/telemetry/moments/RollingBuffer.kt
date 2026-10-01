@@ -19,6 +19,8 @@ class EncodedSample(
 class RollingBuffer(private val capacityMicros: Long = 45_000_000L) {
     private val video = ArrayDeque<EncodedSample>()
     private val audio = ArrayDeque<EncodedSample>()
+    /** Gets every new sample (true = video) while a long recording streams out of the buffer. */
+    private var tap: ((Boolean, EncodedSample) -> Unit)? = null
 
     @get:Synchronized
     val bytes: Long get() = video.sumOf { it.data.size.toLong() } + audio.sumOf { it.data.size.toLong() }
@@ -27,6 +29,7 @@ class RollingBuffer(private val capacityMicros: Long = 45_000_000L) {
     fun addVideo(s: EncodedSample) {
         video.addLast(s)
         trimVideo(s.wallMicros - capacityMicros)
+        tap?.invoke(true, s)
     }
 
     @Synchronized
@@ -34,6 +37,26 @@ class RollingBuffer(private val capacityMicros: Long = 45_000_000L) {
         audio.addLast(s)
         val cutoff = s.wallMicros - capacityMicros
         while (audio.isNotEmpty() && audio.first().wallMicros < cutoff) audio.removeFirst()
+        tap?.invoke(false, s)
+    }
+
+    /**
+     * Starts streaming: [seed] gets what's buffered from [fromMicros] on (as [extract]), then
+     * [onSample] every sample after it, with nothing lost or repeated in between. False when
+     * the buffer has no usable video yet (nothing is tapped then).
+     */
+    @Synchronized
+    fun startTap(fromMicros: Long, seed: (List<EncodedSample>, List<EncodedSample>) -> Unit, onSample: (Boolean, EncodedSample) -> Unit): Boolean {
+        val (v, a) = extract(fromMicros, Long.MAX_VALUE)
+        if (v.isEmpty()) return false
+        seed(v, a)
+        tap = onSample
+        return true
+    }
+
+    @Synchronized
+    fun stopTap() {
+        tap = null
     }
 
     /** Drops GOPs that end before [cutoff]: keep from the last keyframe at or before it. */
