@@ -71,7 +71,7 @@ The MapTiler key is never committed:
 
 - Local builds: add `MAPTILER_KEY=<your key>` to `local.properties`.
 - CI: add a repository secret named `MAPTILER_KEY` (Settings → Secrets and variables → Actions).
-- Restrict the key in MapTiler to the Android package `com.ridetrack.app`.
+- Restrict the key in MapTiler to the Android package `com.keppo.moto` (the app id; the code namespace stays `com.ridetrack.app`).
 
 Without a key the app falls back to a keyless dark basemap (CARTO tiles). Map backgrounds
 need a connection; routes are local data and are always recorded and drawn offline.

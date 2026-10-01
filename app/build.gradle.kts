@@ -19,7 +19,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.ridetrack.app"
+        applicationId = "com.keppo.moto"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
