@@ -69,6 +69,7 @@ import com.ridetrack.app.ui.components.MapTiler
 import com.ridetrack.app.ui.components.hex
 import com.ridetrack.app.ui.components.styleBuilder
 import com.ridetrack.app.ui.format.Format
+import com.ridetrack.app.ui.theme.DarkPalette
 import com.ridetrack.app.ui.theme.RtColors
 import com.ridetrack.app.ui.theme.RtType
 import com.ridetrack.app.ui.theme.pressScale
@@ -358,7 +359,7 @@ private fun AllRoutesMap(
             st.addSource(GeoJsonSource(SELECTED_SOURCE))
             st.addLayer(
                 LineLayer("all-routes", ALL_SOURCE).withProperties(
-                    PropertyFactory.lineColor(hex(RtColors.Primary)),
+                    PropertyFactory.lineColor(hex(DarkPalette.primary)),
                     PropertyFactory.lineWidth(3f),
                     PropertyFactory.lineOpacity(0.55f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
@@ -375,7 +376,7 @@ private fun AllRoutesMap(
             )
             st.addLayer(
                 LineLayer("selected-route", SELECTED_SOURCE).withProperties(
-                    PropertyFactory.lineColor(hex(RtColors.TextPrimary)),
+                    PropertyFactory.lineColor(hex(DarkPalette.textPrimary)),
                     PropertyFactory.lineWidth(4.5f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),

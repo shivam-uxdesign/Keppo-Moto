@@ -64,7 +64,7 @@ private val Mono = TextStyle(fontFamily = FontFamily.Monospace, shadow = Shade)
 @Composable
 fun ViewfinderCard(data: HudData, video: HudVideo, frame: ImageBitmap?, modifier: Modifier = Modifier) {
     val safety = video.source == MomentSource.GPS_LOST
-    val edge = if (video.paused || safety) RtColors.Warning else Color(0xFFFF5A5A)
+    val edge = if (video.paused || safety) RtColors.Warning else RtColors.Recording
     val shape = RoundedCornerShape(22.dp)
     Box(
         modifier

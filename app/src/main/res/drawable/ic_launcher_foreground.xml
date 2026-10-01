@@ -1,23 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keppo mark: a lowercase k whose leg is a dot, the moment kept. 512-grid mark scaled 0.15 about the centre. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Lean-angle arc -->
     <path
-        android:pathData="M34,66 A22,22 0 1,1 74,66"
-        android:strokeColor="#FF69C8CB"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000" />
-    <!-- Needle -->
-    <path
-        android:pathData="M54,60 L67,40"
-        android:strokeColor="#FFF5F5F7"
-        android:strokeWidth="5"
+        android:pathData="M43.2,34.8 L43.2,73.2 M46.8,60 L64.8,42"
+        android:strokeColor="#FF04292A"
+        android:strokeWidth="9.6"
         android:strokeLineCap="round"
         android:fillColor="#00000000" />
     <path
-        android:pathData="M54,60 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0"
-        android:fillColor="#FFF5F5F7" />
+        android:pathData="M57.6,67.2 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0"
+        android:fillColor="#FF04292A" />
 </vector>

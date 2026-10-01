@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.live
 
+import com.ridetrack.app.ui.theme.LocalRtPalette
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -289,7 +290,7 @@ fun SpeedWithRevs(frame: TelemetryFrame, redlineRpm: Int?, modifier: Modifier = 
                         Spacer(Modifier.width(26.dp))
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(Format.rpm(frame.rpm), style = RtType.metricL, color = rpmColor(frame.rpm, redlineRpm))
+                        Text(Format.rpm(frame.rpm), style = RtType.metricL, color = rpmColor(frame.rpm, redlineRpm, LocalRtPalette.current))
                         Label("RPM")
                     }
                 }

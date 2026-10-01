@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.home
 
+import com.ridetrack.app.ui.theme.LocalRtPalette
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -65,8 +66,6 @@ import java.time.LocalDate
 import java.time.format.TextStyle as DateTextStyle
 import java.util.Locale
 
-private val Amber = RtColors.GForce
-private val Inset = Color(0xFF0A0A0B)
 /** The speed arc on the bests tile is full at this speed. */
 private const val ARC_FULL_KMH = 140.0
 
@@ -154,7 +153,7 @@ private fun PeriodSwitch(period: StatPeriod, onPick: (StatPeriod) -> Unit) {
     Box(
         Modifier
             .clip(CircleShape)
-            .background(Inset)
+            .background(RtColors.Background)
             .padding(3.dp),
     ) {
         Box(
@@ -194,6 +193,7 @@ private fun rememberEntrance(key: Any?): Float {
 /** The latest ride's speed over time, with its peak marked. */
 @Composable
 private fun TraceChart(trace: SpeedTrace?) {
+    val rt = LocalRtPalette.current
     if (trace == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Your ride's speed trace appears here", style = RtType.caption, color = RtColors.TextTertiary)
@@ -227,16 +227,16 @@ private fun TraceChart(trace: SpeedTrace?) {
                 lineTo(0f, h)
                 close()
             }
-            drawLine(Color.White.copy(alpha = 0.08f), Offset(0f, h - 0.5f), Offset(size.width, h - 0.5f))
+            drawLine(rt.textPrimary.copy(alpha = 0.08f), Offset(0f, h - 0.5f), Offset(size.width, h - 0.5f))
             clipRect(right = size.width * progress) {
-                drawPath(area, Brush.verticalGradient(listOf(RtColors.Primary.copy(alpha = 0.35f), Color.Transparent)))
-                drawPath(line, RtColors.Primary, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawPath(area, Brush.verticalGradient(listOf(rt.primary.copy(alpha = 0.35f), Color.Transparent)))
+                drawPath(line, rt.primary, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
             if (progress > 0.95f && trace.peakIndex >= 0) {
                 val peak = pt(trace.peakIndex)
-                drawCircle(RtColors.Surface, 6.dp.toPx(), peak)
-                drawCircle(Amber, 4.dp.toPx(), peak)
-                val text = measurer.measure(peakLabel, TextStyle(color = Amber, fontSize = 11.sp))
+                drawCircle(rt.surface, 6.dp.toPx(), peak)
+                drawCircle(rt.gForce, 4.dp.toPx(), peak)
+                val text = measurer.measure(peakLabel, TextStyle(color = rt.gForce, fontSize = 11.sp))
                 val x = (peak.x - text.size.width / 2f).coerceIn(0f, size.width - text.size.width)
                 drawText(text, topLeft = Offset(x, (peak.y - text.size.height - 6.dp.toPx()).coerceAtLeast(0f)))
             }
@@ -261,6 +261,7 @@ private val FooterStyle = TextStyle(fontSize = 11.sp)
 /** Distance per day; today in teal, days with rides brighter than empty ones. */
 @Composable
 private fun DayBars(p: PeriodStats, labels: List<String>?, barWidthFraction: Float, footer: List<String>? = null) {
+    val rt = LocalRtPalette.current
     val progress = rememberEntrance(p.days.size)
     val max = p.days.maxOrNull()?.takeIf { it > 0 } ?: 1.0
     Column {
@@ -279,10 +280,10 @@ private fun DayBars(p: PeriodStats, labels: List<String>?, barWidthFraction: Flo
                 val full = if (m > 0) (m / max).toFloat() * size.height else 3.dp.toPx()
                 val h = full * stagger
                 val color = when {
-                    i == p.todayIndex -> RtColors.Primary
-                    m > 0 -> Color.White.copy(alpha = 0.4f)
-                    i > p.todayIndex -> Color.White.copy(alpha = 0.04f)
-                    else -> Color.White.copy(alpha = 0.09f)
+                    i == p.todayIndex -> rt.primary
+                    m > 0 -> rt.textPrimary.copy(alpha = 0.4f)
+                    i > p.todayIndex -> rt.textPrimary.copy(alpha = 0.04f)
+                    else -> rt.textPrimary.copy(alpha = 0.09f)
                 }
                 drawRoundRect(
                     color,
@@ -322,7 +323,7 @@ private fun BestTile(label: String, modifier: Modifier, value: @Composable () ->
         modifier
             .height(60.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(Inset)
+            .background(RtColors.Background)
             .padding(horizontal = 12.dp)
             .semantics(mergeDescendants = true) {},
         verticalAlignment = Alignment.CenterVertically,
@@ -338,6 +339,7 @@ private fun BestTile(label: String, modifier: Modifier, value: @Composable () ->
 
 @Composable
 private fun SpeedArc(topMps: Double?) {
+    val rt = LocalRtPalette.current
     val target = ((topMps ?: 0.0) * 3.6 / ARC_FULL_KMH).coerceIn(0.0, 1.0).toFloat()
     val fill by animateFloatAsState(target, tween(500), label = "arc")
     Canvas(Modifier.size(36.dp)) {
@@ -345,8 +347,8 @@ private fun SpeedArc(topMps: Double?) {
         val inset = stroke / 2 + 2.dp.toPx()
         val arcSize = Size(size.width - inset * 2, size.height - inset * 2)
         val tl = Offset(inset, inset)
-        drawArc(RtColors.SurfaceRaised, 135f, 270f, false, tl, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
-        if (fill > 0f) drawArc(Amber, 135f, 270f * fill, false, tl, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+        drawArc(rt.surfaceRaised, 135f, 270f, false, tl, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+        if (fill > 0f) drawArc(rt.gForce, 135f, 270f * fill, false, tl, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
     }
 }
 
@@ -355,14 +357,15 @@ private fun SpeedArc(topMps: Double?) {
 private fun LeanHorizon(leanDeg: Double?) {
     val angle by animateFloatAsState((leanDeg ?: 0.0).toFloat(), tween(500), label = "lean")
     val color = if ((leanDeg ?: 0.0) > 0) RtColors.Right else RtColors.Left
+    val horizon = RtColors.TextPrimary.copy(alpha = 0.14f)
     Canvas(
         Modifier
             .size(36.dp)
             .clip(CircleShape)
-            .background(Color(0xFF16161A)),
+            .background(RtColors.SurfaceRaised),
     ) {
         val c = center
-        drawLine(Color.White.copy(alpha = 0.14f), Offset(4.dp.toPx(), c.y), Offset(size.width - 4.dp.toPx(), c.y), 1.dp.toPx())
+        drawLine(horizon, Offset(4.dp.toPx(), c.y), Offset(size.width - 4.dp.toPx(), c.y), 1.dp.toPx())
         if (leanDeg != null) {
             rotate(angle, c) {
                 drawLine(color, Offset(-6.dp.toPx(), c.y), Offset(size.width + 6.dp.toPx(), c.y), 2.dp.toPx())

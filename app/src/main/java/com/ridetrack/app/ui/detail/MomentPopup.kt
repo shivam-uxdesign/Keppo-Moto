@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.detail
 
+import com.ridetrack.app.ui.theme.LocalRtPalette
 import android.net.Uri
 import android.view.LayoutInflater
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -107,11 +108,12 @@ private fun PopupCard(moment: Moment, time: Double, playing: Boolean, onSkipAll:
                 }
                 Spacer(Modifier.height(6.dp))
                 val mark = ((moment.timeMillis - window.startMillis).toFloat() / length).coerceIn(0f, 1f)
+                val dotColor = momentColor(moment)
                 Canvas(Modifier.fillMaxWidth().height(3.dp)) {
                     val r = CornerRadius(size.height / 2)
                     drawRoundRect(Color.White.copy(alpha = 0.25f), cornerRadius = r)
                     drawRoundRect(Color.White, size = Size(size.width * progress, size.height), cornerRadius = r)
-                    drawCircle(momentColor(moment), 3.dp.toPx(), Offset(size.width * mark, size.height / 2))
+                    drawCircle(dotColor, 3.dp.toPx(), Offset(size.width * mark, size.height / 2))
                 }
             }
         }

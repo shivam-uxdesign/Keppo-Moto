@@ -1,5 +1,7 @@
 package com.ridetrack.app.ui.common
 
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.Composable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.TrendingDown
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
@@ -25,6 +27,8 @@ import kotlin.math.roundToInt
 data class EventPresentation(val title: String, val detail: String?, val icon: ImageVector, val color: Color)
 
 /** Icon + colour + text for each event, so nothing relies on colour alone. */
+@Composable
+@ReadOnlyComposable
 fun RideEvent.presentation(): EventPresentation {
     val speed = speedMps?.let { Format.speedWithUnit(it) }
     return when (type) {

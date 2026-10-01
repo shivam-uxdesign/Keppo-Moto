@@ -1,5 +1,8 @@
 package com.ridetrack.app.ui.components
 
+import com.ridetrack.app.ui.theme.RtPalette
+import com.ridetrack.app.ui.theme.LocalRtPalette
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -26,6 +29,8 @@ import com.ridetrack.app.ui.theme.RtType
 import kotlin.math.cos
 import kotlin.math.sin
 
+@Composable
+@ReadOnlyComposable
 fun leanColor(deg: Double?) = when (Format.leanSide(deg)) {
     Format.LeanSide.LEFT -> RtColors.Left
     Format.LeanSide.RIGHT -> RtColors.Right
@@ -44,6 +49,7 @@ fun LeanArc(leanDeg: Double?, modifier: Modifier = Modifier, maxLeft: Double? = 
         label = "lean",
     )
     val color = leanColor(leanDeg)
+    val rt = LocalRtPalette.current
     Canvas(
         modifier
             .fillMaxWidth()
@@ -56,7 +62,7 @@ fun LeanArc(leanDeg: Double?, modifier: Modifier = Modifier, maxLeft: Double? = 
         val center = Offset(size.width / 2f, radius + knob)
         val topLeft = Offset(center.x - radius, center.y - radius)
         val arcSize = Size(radius * 2, radius * 2)
-        drawArc(RtColors.Outline, startAngle = 210f, sweepAngle = 120f, useCenter = false, topLeft = topLeft, size = arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+        drawArc(rt.outline, startAngle = 210f, sweepAngle = 120f, useCenter = false, topLeft = topLeft, size = arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
         fun point(deg: Double, r: Float): Offset {
             val a = Math.toRadians(270.0 + deg)
             return Offset(center.x + (r * cos(a)).toFloat(), center.y + (r * sin(a)).toFloat())
@@ -64,9 +70,9 @@ fun LeanArc(leanDeg: Double?, modifier: Modifier = Modifier, maxLeft: Double? = 
         fun mark(deg: Double, c: androidx.compose.ui.graphics.Color) {
             drawLine(c, point(deg, radius - 9.dp.toPx()), point(deg, radius + 3.dp.toPx()), strokeWidth = 1.5.dp.toPx(), cap = StrokeCap.Round)
         }
-        mark(0.0, RtColors.TextTertiary)
-        maxLeft?.let { mark(-it.coerceAtMost(60.0), RtColors.Left.copy(alpha = 0.6f)) }
-        maxRight?.let { mark(it.coerceAtMost(60.0), RtColors.Right.copy(alpha = 0.6f)) }
+        mark(0.0, rt.textTertiary)
+        maxLeft?.let { mark(-it.coerceAtMost(60.0), rt.left.copy(alpha = 0.6f)) }
+        maxRight?.let { mark(it.coerceAtMost(60.0), rt.right.copy(alpha = 0.6f)) }
         if (leanDeg != null) {
             drawArc(color, startAngle = 270f, sweepAngle = animated, useCenter = false, topLeft = topLeft, size = arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
             drawCircle(color, radius = knob, center = point(animated.toDouble(), radius))
@@ -80,6 +86,7 @@ fun GForceIndicator(longitudinalG: Double?, lateralG: Double?, modifier: Modifie
     val x by animateFloatAsState((lateralG ?: 0.0).toFloat().coerceIn(-1f, 1f), tween(150), label = "gx")
     val y by animateFloatAsState((longitudinalG ?: 0.0).toFloat().coerceIn(-1f, 1f), tween(150), label = "gy")
     val available = longitudinalG != null || lateralG != null
+    val rt = LocalRtPalette.current
     Box(
         modifier.semantics {
             contentDescription = "G-force: longitudinal ${Format.gSigned(longitudinalG)}, lateral ${Format.gSigned(lateralG)}"
@@ -93,12 +100,12 @@ fun GForceIndicator(longitudinalG: Double?, lateralG: Double?, modifier: Modifie
         ) {
             val r = size.minDimension / 2f
             val c = center
-            drawCircle(RtColors.Outline, radius = r, center = c, style = Stroke(1.dp.toPx()))
-            drawCircle(RtColors.Outline, radius = r / 2f, center = c, style = Stroke(1.dp.toPx()))
+            drawCircle(rt.outline, radius = r, center = c, style = Stroke(1.dp.toPx()))
+            drawCircle(rt.outline, radius = r / 2f, center = c, style = Stroke(1.dp.toPx()))
             if (available) {
                 val dot = Offset(c.x + x * r, c.y + y * r)
-                drawCircle(RtColors.GForce.copy(alpha = 0.2f), radius = 12.dp.toPx(), center = dot)
-                drawCircle(RtColors.GForce, radius = 5.dp.toPx(), center = dot)
+                drawCircle(rt.gForce.copy(alpha = 0.2f), radius = 12.dp.toPx(), center = dot)
+                drawCircle(rt.gForce, radius = 5.dp.toPx(), center = dot)
             }
         }
         Text("BRAKE", style = RtType.label, color = RtColors.TextTertiary, modifier = Modifier.align(Alignment.TopCenter))
@@ -111,13 +118,13 @@ fun tachMaxRpm(redlineRpm: Int?): Double =
     redlineRpm?.let { kotlin.math.ceil(it * 1.12 / 1000.0) * 1000.0 } ?: 12_000.0
 
 /** Rev colour: calm → warm near the redline → red past it (unknown redline stays calm). */
-fun rpmColor(rpm: Double?, redlineRpm: Int?): androidx.compose.ui.graphics.Color {
-    val red = redlineRpm ?: return RtColors.Primary
+fun rpmColor(rpm: Double?, redlineRpm: Int?, rt: RtPalette): androidx.compose.ui.graphics.Color {
+    val red = redlineRpm ?: return rt.primary
     return when {
-        rpm == null -> RtColors.TextTertiary
-        rpm >= red -> RtColors.Error
-        rpm >= red * 0.85 -> RtColors.Warning
-        else -> RtColors.Primary
+        rpm == null -> rt.textTertiary
+        rpm >= red -> rt.error
+        rpm >= red * 0.85 -> rt.warning
+        else -> rt.primary
     }
 }
 
@@ -139,7 +146,8 @@ fun RevMeter(
         animationSpec = tween(120),
         label = "rpm",
     )
-    val color = rpmColor(rpm, redlineRpm)
+    val rt = LocalRtPalette.current
+    val color = rpmColor(rpm, redlineRpm, rt)
     Box(
         modifier
             .aspectRatio(1.18f)
@@ -152,10 +160,10 @@ fun RevMeter(
                 val arcSize = Size(radius * 2, radius * 2)
                 val start = 150f
                 val sweep = 240f
-                drawArc(RtColors.Outline, start, sweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+                drawArc(rt.outline, start, sweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
                 redlineRpm?.let { red ->
                     val from = (red / max).toFloat().coerceIn(0f, 1f)
-                    drawArc(RtColors.Error.copy(alpha = 0.35f), start + sweep * from, sweep * (1f - from), false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
+                    drawArc(rt.error.copy(alpha = 0.35f), start + sweep * from, sweep * (1f - from), false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
                 }
                 val thousands = (max / 1000).toInt()
                 for (k in 1 until thousands) {
@@ -163,7 +171,7 @@ fun RevMeter(
                     val outer = radius - stroke * 1.4f
                     val inner = outer - (if (k % 5 == 0) 9.dp.toPx() else 5.dp.toPx())
                     drawLine(
-                        RtColors.TextTertiary,
+                        rt.textTertiary,
                         Offset(center.x + inner * cos(a).toFloat(), center.y + inner * sin(a).toFloat()),
                         Offset(center.x + outer * cos(a).toFloat(), center.y + outer * sin(a).toFloat()),
                         strokeWidth = 1.dp.toPx(),
@@ -181,6 +189,7 @@ fun RevMeter(
 @Composable
 fun RevBar(rpm: Double?, redlineRpm: Int?, modifier: Modifier = Modifier, segments: Int = 24) {
     val max = tachMaxRpm(redlineRpm)
+    val rt = LocalRtPalette.current
     Canvas(modifier.fillMaxWidth().aspectRatio(18f)) {
         val gap = 2.dp.toPx()
         val w = (size.width - gap * (segments - 1)) / segments
@@ -188,7 +197,7 @@ fun RevBar(rpm: Double?, redlineRpm: Int?, modifier: Modifier = Modifier, segmen
         for (i in 0 until segments) {
             val segRpm = (i + 1) * max / segments
             val on = rpm != null && i < lit
-            val c = if (on) rpmColor(segRpm, redlineRpm) else if (redlineRpm != null && segRpm > redlineRpm) RtColors.Error.copy(alpha = 0.25f) else RtColors.Outline
+            val c = if (on) rpmColor(segRpm, redlineRpm, rt) else if (redlineRpm != null && segRpm > redlineRpm) rt.error.copy(alpha = 0.25f) else rt.outline
             drawRoundRect(c, Offset(i * (w + gap), 0f), Size(w, size.height), androidx.compose.ui.geometry.CornerRadius(1.5.dp.toPx()))
         }
     }

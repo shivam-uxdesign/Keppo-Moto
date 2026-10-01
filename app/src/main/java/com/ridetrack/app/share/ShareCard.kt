@@ -215,7 +215,7 @@ class ShareCardRenderer(context: Context) {
         val sketch = RectF(card.left + 32f, card.top + 40f, card.left + 212f, card.bottom - 40f)
         drawRoute(c, d.route, sketch, RouteInk.HEAT_ON_PHOTO, k = 0.42f)
         val x = sketch.right + 34f
-        text(c, "KEPPO MOTO", x, card.top + 70f, semibold, 20f, withAlpha(WHITE, 190), tracking = 0.28f)
+        KeppoWordmark.draw(c, x, card.top + 70f, 24f, withAlpha(WHITE, 200), ACCENT)
         val kmW = text(c, km(d), x, card.top + 168f, medium, 88f, WHITE, tracking = -0.02f)
         text(c, "km", x + kmW + 8f, card.top + 168f, regular, 30f, MUTED)
         text(c, "${Format.duration(d.durationMillis)} · ${Format.speedKmh(d.avgSpeedMps)} avg", x, card.top + 218f, regular, 28f, withAlpha(WHITE, 210), maxWidth = card.right - x - 24f)
@@ -241,7 +241,7 @@ class ShareCardRenderer(context: Context) {
             val lw = text(c, " $l", cx + vw, y, regular, 26f, MUTED)
             cx += vw + lw + 34f
         }
-        text(c, "KEPPO MOTO", W - 70f - measure("KEPPO MOTO", semibold, 20f, 0.28f), H - 60f, semibold, 20f, withAlpha(WHITE, 150), tracking = 0.28f)
+        KeppoWordmark.draw(c, W - 70f - KeppoWordmark.width(22f), H - 60f, 22f, withAlpha(WHITE, 170), ACCENT)
     }
 
     // ---- Headline (~30%) ----------------------------------------------------------------
@@ -269,7 +269,7 @@ class ShareCardRenderer(context: Context) {
     private fun drawTrace(c: Canvas, d: ShareCardData) {
         drawRoute(c, d.route, RectF(150f, 520f, W - 150f, 1300f), RouteInk.HEAT_ON_PHOTO)
         centered(c, "${km(d)} km  ·  ${d.title}", 1400f, medium, 38f, WHITE, shadow = true)
-        centered(c, "KEPPO MOTO", 1450f, semibold, 20f, withAlpha(WHITE, 190), tracking = 0.3f, shadow = true)
+        KeppoWordmark.draw(c, (W - KeppoWordmark.width(24f)) / 2f, 1456f, 24f, withAlpha(WHITE, 210), ACCENT, shadow = SHADOW)
     }
 
     // ---- Boarding pass (~40%) -----------------------------------------------------------
@@ -400,8 +400,7 @@ class ShareCardRenderer(context: Context) {
 
     private fun header(c: Canvas, d: ShareCardData, shadow: Boolean) {
         val y = 150f
-        c.drawCircle(98f, y - 13f, 9f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ACCENT; if (shadow) setShadowLayer(8f, 0f, 2f, SHADOW) })
-        text(c, "KEPPO MOTO", 122f, y, semibold, 30f, WHITE, tracking = 0.28f, shadow = shadow)
+        KeppoWordmark.draw(c, 90f, y, 34f, WHITE, ACCENT, shadow = SHADOW.takeIf { shadow })
         if (d.demo) {
             val w = measure("DEMO", semibold, 26f, 0.2f)
             val r = RectF(W - 90f - w - 36f, y - 38f, W - 90f, y + 10f)

@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.components
 
+import com.ridetrack.app.ui.theme.LocalRtPalette
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -187,6 +188,7 @@ fun Modifier.breathingGlow(color: Color, radius: Dp = 32.dp, enabled: Boolean = 
 /** Loading placeholder with a moving sheen. */
 @Composable
 fun Shimmer(modifier: Modifier, radius: Dp = 12.dp) {
+    val rt = LocalRtPalette.current
     val reduce = rememberReduceMotion()
     val t = rememberInfiniteTransition(label = "shimmer")
     val x by t.animateFloat(-1f, 2f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "sheen")
@@ -194,14 +196,14 @@ fun Shimmer(modifier: Modifier, radius: Dp = 12.dp) {
         modifier
             .clip(RoundedCornerShape(radius))
             .drawBehind {
-                val base = RtColors.Surface
+                val base = rt.surface
                 if (reduce) {
                     drawRect(base)
                 } else {
                     val w = size.width
                     drawRect(
                         Brush.linearGradient(
-                            listOf(base, RtColors.SurfaceRaised, base),
+                            listOf(base, rt.surfaceRaised, base),
                             start = Offset(w * (x - 0.5f), 0f),
                             end = Offset(w * (x + 0.5f), 0f),
                         ),
@@ -240,9 +242,10 @@ fun AnimatedCheck(modifier: Modifier = Modifier, color: Color = RtColors.Primary
 /** Tiny route sketch for list rows, from real GPS points (normalised to fit). */
 @Composable
 fun RouteThumbnail(points: List<GeoPoint>, modifier: Modifier = Modifier, color: Color = RtColors.Primary) {
+    val rt = LocalRtPalette.current
     Canvas(modifier) {
         if (points.size < 2) {
-            drawLine(RtColors.TextTertiary, Offset(size.width * 0.3f, size.height / 2), Offset(size.width * 0.7f, size.height / 2), 2.dp.toPx(), cap = StrokeCap.Round)
+            drawLine(rt.textTertiary, Offset(size.width * 0.3f, size.height / 2), Offset(size.width * 0.7f, size.height / 2), 2.dp.toPx(), cap = StrokeCap.Round)
             return@Canvas
         }
         val minLat = points.minOf { it.latitude }

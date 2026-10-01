@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.detail
 
+import com.ridetrack.app.ui.theme.LocalRtPalette
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -84,6 +85,7 @@ fun RideTracks(
     onOpenMoment: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val rt = LocalRtPalette.current
     val sample = data.samples.getOrNull(data.index(fraction))
     val near = moments.minByOrNull { abs(it.timeMillis - time) }?.takeIf { abs(it.timeMillis - time) <= NEAR_MOMENT_MS }
     Column(modifier) {
@@ -119,8 +121,8 @@ fun RideTracks(
                 drawContent()
                 if (window.contains(fraction)) {
                     val x = (fraction - window.start) / window.span * size.width
-                    drawLine(RtColors.TextPrimary.copy(alpha = 0.85f), Offset(x, 4.dp.toPx()), Offset(x, size.height), 1.5.dp.toPx())
-                    drawCircle(RtColors.TextPrimary, 4.dp.toPx(), Offset(x, 4.dp.toPx()))
+                    drawLine(rt.textPrimary.copy(alpha = 0.85f), Offset(x, 4.dp.toPx()), Offset(x, size.height), 1.5.dp.toPx())
+                    drawCircle(rt.textPrimary, 4.dp.toPx(), Offset(x, 4.dp.toPx()))
                 }
             },
         ) {
@@ -133,9 +135,7 @@ fun RideTracks(
                 ChartKind.G -> Triple(data.gForce, RtColors.GForce, null)
                 ChartKind.ELEVATION -> Triple(data.elevation, RtColors.Left, null)
             }
-            val marks = remember(data) {
-                data.track.events.filterNot { it.type.isTurn }.map { e -> ChartMark(data.fractionAt(e.timeMillis), e.presentation().color) }
-            }
+            val marks = data.track.events.filterNot { it.type.isTurn }.map { e -> ChartMark(data.fractionAt(e.timeMillis), e.presentation().color) }
             Box(Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(12.dp)).background(RtColors.Surface)) {
                 ZoomChart(
                     series = series, color = color, negativeColor = negative,
@@ -171,9 +171,9 @@ fun RideTracks(
         }
         Canvas(Modifier.fillMaxWidth().padding(top = 6.dp).height(3.dp)) {
             val r = CornerRadius(size.height / 2)
-            drawRoundRect(RtColors.Hairline, cornerRadius = r)
+            drawRoundRect(rt.hairline, cornerRadius = r)
             drawRoundRect(
-                RtColors.Primary,
+                rt.primary,
                 topLeft = Offset(window.start * size.width, 0f),
                 size = Size((window.span * size.width).coerceAtLeast(size.height), size.height),
                 cornerRadius = r,
@@ -186,11 +186,12 @@ fun RideTracks(
 @Composable
 private fun MomentsTrack(moments: List<Moment>, data: TrackData, window: ChartWindow, selectedId: String?, onTap: (Moment) -> Unit) {
     val visible = moments.map { it to data.fractionAt(it.timeMillis) }.filter { window.contains(it.second) }.sortedBy { it.second }
+    val tickColors = visible.map { momentColor(it.first) }
     Box(Modifier.fillMaxWidth().height(46.dp)) {
         Canvas(Modifier.fillMaxSize()) {
-            visible.forEach { (m, f) ->
+            visible.forEachIndexed { i, (_, f) ->
                 val x = (f - window.start) / window.span * size.width
-                drawRect(momentColor(m), Offset(x - 1.dp.toPx(), size.height - 6.dp.toPx()), Size(2.dp.toPx(), 5.dp.toPx()))
+                drawRect(tickColors[i], Offset(x - 1.dp.toPx(), size.height - 6.dp.toPx()), Size(2.dp.toPx(), 5.dp.toPx()))
             }
         }
         SpreadRow(
@@ -224,14 +225,15 @@ private fun MomentsTrack(moments: List<Moment>, data: TrackData, window: ChartWi
 /** Pills where the ride's extremes happened: tap one to jump there. */
 @Composable
 private fun DynamicsTrack(data: TrackData, ride: Ride, window: ChartWindow, onJump: (Int) -> Unit) {
+    val rt = LocalRtPalette.current
     val s = ride.stats
     val pills = remember(data, ride) {
         listOfNotNull(
-            data.maxLeftIndex?.let { DynamicsPill(it, "${s.maxLeftLeanDeg?.roundToInt() ?: 0}°L", RtColors.Left, "Most lean left") },
-            data.maxRightIndex?.let { DynamicsPill(it, "${s.maxRightLeanDeg?.roundToInt() ?: 0}°R", RtColors.Right, "Most lean right") },
-            data.hardestBrakeIndex?.let { DynamicsPill(it, String.format(Locale.US, "%.2fG", abs(s.maxBrakeG ?: 0.0)), RtColors.Brake, "Hardest braking") },
-            data.strongestAccelIndex?.let { DynamicsPill(it, String.format(Locale.US, "%.2fG", abs(s.maxAccelG ?: 0.0)), RtColors.Accel, "Strongest acceleration") },
-            data.initialIndex.takeIf { data.samples.size >= 2 }?.let { DynamicsPill(it, "${Format.speedKmh(s.maxSpeedMps)} km/h", RtColors.GForce, "Top speed") },
+            data.maxLeftIndex?.let { DynamicsPill(it, "${s.maxLeftLeanDeg?.roundToInt() ?: 0}°L", rt.left, "Most lean left") },
+            data.maxRightIndex?.let { DynamicsPill(it, "${s.maxRightLeanDeg?.roundToInt() ?: 0}°R", rt.right, "Most lean right") },
+            data.hardestBrakeIndex?.let { DynamicsPill(it, String.format(Locale.US, "%.2fG", abs(s.maxBrakeG ?: 0.0)), rt.brake, "Hardest braking") },
+            data.strongestAccelIndex?.let { DynamicsPill(it, String.format(Locale.US, "%.2fG", abs(s.maxAccelG ?: 0.0)), rt.accel, "Strongest acceleration") },
+            data.initialIndex.takeIf { data.samples.size >= 2 }?.let { DynamicsPill(it, "${Format.speedKmh(s.maxSpeedMps)} km/h", rt.gForce, "Top speed") },
         )
     }
     val visible = pills.map { it to data.fraction(it.index) }.filter { window.contains(it.second) }.sortedBy { it.second }

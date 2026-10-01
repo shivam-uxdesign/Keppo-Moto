@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="black">#FF000000</color>
-    <color name="launcher_background">#FF0C0B0E</color>
+    <!-- Keppo Moto's product tile: Keppo Teal. -->
+    <color name="launcher_background">#FF69C8CB</color>
     <color name="primary">#FF69C8CB</color>
+    <!-- Window behind the first frame: paper in light, ink in dark. -->
+    <color name="window_background">#FFF7F7F5</color>
 </resources>

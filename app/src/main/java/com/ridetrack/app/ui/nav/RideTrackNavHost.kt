@@ -1,5 +1,13 @@
 package com.ridetrack.app.ui.nav
 
+import com.ridetrack.app.ui.theme.RideDark
+import com.ridetrack.app.ui.theme.LocalRtPalette
+import com.ridetrack.app.ui.theme.DarkPalette
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.foundation.background
+import android.app.Activity
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
@@ -157,12 +165,12 @@ fun RideTrackNavHost() {
                     },
                     exitTransition = { ExitTransition.None },
                 ) {
-                    LiveRideScreen(
+                    DarkRoute { LiveRideScreen(
                         onRideSaved = { id ->
                             nav.navigate(Routes.summary(id)) { popUpTo(Routes.HOME) }
                         },
                         onExit = { nav.navigate(Routes.HOME) { popUpTo(Routes.HOME) { inclusive = true } } },
-                    )
+                    ) }
                 }
                 composable(
                     Routes.SUMMARY,
@@ -195,12 +203,14 @@ fun RideTrackNavHost() {
                     ),
                 ) { entry ->
                     val rideId = entry.arguments?.getString("rideId").orEmpty()
-                    MomentViewerScreen(
-                        rideId = rideId,
-                        startId = entry.arguments?.getString("momentId"),
-                        onBack = { nav.popBackStack() },
-                        onShareMoment = { nav.navigate(Routes.momentShare(rideId, it)) },
-                    )
+                    DarkRoute {
+                        MomentViewerScreen(
+                            rideId = rideId,
+                            startId = entry.arguments?.getString("momentId"),
+                            onBack = { nav.popBackStack() },
+                            onShareMoment = { nav.navigate(Routes.momentShare(rideId, it)) },
+                        )
+                    }
                 }
                 composable(
                     Routes.MOMENT_SHARE,
@@ -209,14 +219,16 @@ fun RideTrackNavHost() {
                         navArgument("momentId") { type = NavType.StringType },
                     ),
                 ) { entry ->
-                    MomentShareScreen(
-                        rideId = entry.arguments?.getString("rideId").orEmpty(),
-                        momentId = entry.arguments?.getString("momentId").orEmpty(),
-                        onBack = { nav.popBackStack() },
-                    )
+                    DarkRoute {
+                        MomentShareScreen(
+                            rideId = entry.arguments?.getString("rideId").orEmpty(),
+                            momentId = entry.arguments?.getString("momentId").orEmpty(),
+                            onBack = { nav.popBackStack() },
+                        )
+                    }
                 }
                 composable(Routes.SHARE, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
-                    ShareRideScreen(rideId = entry.arguments?.getString("rideId").orEmpty(), onBack = { nav.popBackStack() })
+                    DarkRoute { ShareRideScreen(rideId = entry.arguments?.getString("rideId").orEmpty(), onBack = { nav.popBackStack() }) }
                 }
                 composable(
                     Routes.BIKE_EDIT,
@@ -266,5 +278,28 @@ private fun BottomBar(nav: NavHostController, current: String?) {
                 )
             }
         }
+    }
+}
+
+/**
+ * Riding and media screens: dark in every theme (true colours for photos and video, no glare
+ * while riding), with light status-bar icons while shown.
+ */
+@Composable
+private fun DarkRoute(content: @Composable () -> Unit) {
+    val view = LocalView.current
+    val appDark = LocalRtPalette.current.isDark
+    DisposableEffect(appDark) {
+        val window = (view.context as? Activity)?.window
+        val bars = window?.let { WindowCompat.getInsetsController(it, view) }
+        bars?.isAppearanceLightStatusBars = false
+        bars?.isAppearanceLightNavigationBars = false
+        onDispose {
+            bars?.isAppearanceLightStatusBars = !appDark
+            bars?.isAppearanceLightNavigationBars = !appDark
+        }
+    }
+    RideDark {
+        Box(Modifier.fillMaxSize().background(DarkPalette.background)) { content() }
     }
 }

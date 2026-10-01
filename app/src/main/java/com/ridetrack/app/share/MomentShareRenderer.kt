@@ -73,7 +73,7 @@ class MomentShareRenderer(context: Context) {
         val mapShown = o.shows(MomentField.MAP, on)
         if (mapShown) miniMap(c, W - 64f - 120f, hl - 64f - 120f, 120f, o, circle = true)
         if (o.shows(MomentField.BRAND, on)) {
-            text(c, brandLine(o), x, y, semibold, 22f, WHITE, tracking = 0.22f, alpha = 210)
+            brand(c, o, x, y, 22f, 210)
             y -= 46f
         }
         if (o.shows(MomentField.TIME, on)) {
@@ -126,7 +126,7 @@ class MomentShareRenderer(context: Context) {
                 if (unit.isNotEmpty()) text(c, unit, x + vw + 6f, top + 262f, regular, 24f, WHITE, alpha = 200)
             }
         }
-        if (o.shows(MomentField.BRAND, on)) text(c, brandLine(o), 64f, hl - 56f, semibold, 20f, WHITE, tracking = 0.22f, alpha = 170)
+        if (o.shows(MomentField.BRAND, on)) brand(c, o, 64f, hl - 56f, 20f, 170)
     }
 
     // ---- HUD: dash-style gauges ---------------------------------------------------------
@@ -148,7 +148,7 @@ class MomentShareRenderer(context: Context) {
         if (o.shows(MomentField.SPEED, on)) speedGauge(c, W / 2f, cy, 190f, o.speedMps)
         if (o.shows(MomentField.LEAN, on)) leanGauge(c, 175f, cy + 40f, 95f, o.lean!!)
         if (o.shows(MomentField.G_FORCE, on)) gGauge(c, W - 175f, cy + 40f, 95f, o)
-        if (o.shows(MomentField.BRAND, on)) centered(c, brandLine(o), hl - 60f, semibold, 20f, WHITE, tracking = 0.22f, alpha = 180)
+        if (o.shows(MomentField.BRAND, on)) brand(c, o, 0f, hl - 60f, 20f, 180, centered = true)
     }
 
     private fun speedGauge(c: Canvas, cx: Float, cy: Float, r: Float, speedMps: Double?) {
@@ -266,8 +266,16 @@ class MomentShareRenderer(context: Context) {
         else -> ACCENT
     }
 
-    private fun brandLine(o: MomentOverlay) =
-        listOfNotNull("KEPPO MOTO", o.rideName?.uppercase(), "DEMO".takeIf { o.demo }).joinToString("  ·  ")
+    /** The drawn keppo moto wordmark, then the ride name (and DEMO) as text. */
+    private fun brand(c: Canvas, o: MomentOverlay, x: Float, y: Float, size: Float, alpha: Int, centered: Boolean = false) {
+        val rest = listOfNotNull(o.rideName?.uppercase(), "DEMO".takeIf { o.demo }).joinToString("  ·  ").let { if (it.isEmpty()) it else "   ·   $it" }
+        val markH = size * 1.15f
+        val markW = KeppoWordmark.width(markH)
+        val total = markW + if (rest.isEmpty()) 0f else measure(rest, semibold, size, 0.22f)
+        val left = if (centered) (W - total) / 2f else x
+        KeppoWordmark.draw(c, left, y, markH, withAlpha(WHITE, alpha), ACCENT, shadow = SHADOW)
+        if (rest.isNotEmpty()) text(c, rest, left + markW, y, semibold, size, WHITE, tracking = 0.22f, alpha = alpha)
+    }
 
     private fun leanText(lean: Double?) = lean?.let { "${abs(it).roundToInt()}° ${if (it < 0) "L" else "R"}" } ?: Format.DASH
 

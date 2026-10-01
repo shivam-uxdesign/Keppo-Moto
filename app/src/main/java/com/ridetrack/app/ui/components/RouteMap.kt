@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.ridetrack.app.ui.theme.DarkPalette
 import com.ridetrack.app.ui.theme.RtColors
 import com.ridetrack.app.ui.theme.RtDimens
 import com.ridetrack.app.ui.theme.RtMotion
@@ -251,7 +252,7 @@ fun RouteMap(
             else FeatureCollection.fromFeatures(emptyList()),
         )
         // While a progress is shown, the untravelled route is dimmed; while drawing, hidden.
-        val baseColor = if (done == null) hex(RtColors.Primary) else "#2C4F50"
+        val baseColor = if (done == null) hex(DarkPalette.primary) else "#2C4F50"
         s.getLayer("route")?.setProperties(
             PropertyFactory.lineColor(baseColor),
             PropertyFactory.lineOpacity(if (drawnCount != null) 0f else 1f),
@@ -348,7 +349,7 @@ fun RouteMap(
         val images = withContext(Dispatchers.IO) {
             pins.associate { pin ->
                 val thumb = pin.thumb?.let { runCatching { ClipWriter.load(it, 160) }.getOrNull() }
-                pin.id to circlePin(thumb, pin.color, sizePx, ringPx)
+                pin.id to circlePin(thumb, pin.color, sizePx, ringPx, DarkPalette.surface)
             }
         }
         images.forEach { (id, bmp) -> s.addImage("pin-$id", bmp) }
@@ -441,7 +442,7 @@ private fun addRouteLayers(s: Style) {
     )
     s.addLayer(
         LineLayer("route", ROUTE_SOURCE).withProperties(
-            PropertyFactory.lineColor(hex(RtColors.Primary)),
+            PropertyFactory.lineColor(hex(DarkPalette.primary)),
             PropertyFactory.lineWidth(4f),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
             PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -449,7 +450,7 @@ private fun addRouteLayers(s: Style) {
     )
     s.addLayer(
         LineLayer("progress", PROGRESS_SOURCE).withProperties(
-            PropertyFactory.lineColor(hex(RtColors.Primary)),
+            PropertyFactory.lineColor(hex(DarkPalette.primary)),
             PropertyFactory.lineWidth(4.5f),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
             PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -458,7 +459,7 @@ private fun addRouteLayers(s: Style) {
     s.addLayer(
         CircleLayer("ends", ENDS_SOURCE).withProperties(
             PropertyFactory.circleRadius(5f),
-            PropertyFactory.circleColor(hex(RtColors.TextPrimary)),
+            PropertyFactory.circleColor(hex(DarkPalette.textPrimary)),
             PropertyFactory.circleStrokeColor("#000000"),
             PropertyFactory.circleStrokeWidth(2f),
         ),
@@ -474,7 +475,7 @@ private fun addRouteLayers(s: Style) {
     s.addLayer(
         CircleLayer("marker", MARKER_SOURCE).withProperties(
             PropertyFactory.circleRadius(8f),
-            PropertyFactory.circleColor(hex(RtColors.GForce)),
+            PropertyFactory.circleColor(hex(DarkPalette.gForce)),
             PropertyFactory.circleStrokeColor("#000000"),
             PropertyFactory.circleStrokeWidth(3f),
         ),

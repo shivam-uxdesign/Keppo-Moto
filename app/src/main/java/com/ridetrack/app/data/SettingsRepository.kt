@@ -46,6 +46,9 @@ enum class HudTheme(val label: String) { DARK("Dark"), HIGH_CONTRAST("High contr
 
 enum class MapStyle(val label: String) { DARK("Dark"), SATELLITE("Satellite") }
 
+/** App colours. Riding screens (live ride, HUD, viewfinder, crash alert) stay dark in every mode. */
+enum class AppTheme(val label: String) { SYSTEM("Match phone"), DARK("Dark"), LIGHT("Light") }
+
 enum class PhotoInterval(val label: String, val minutes: Int) {
     OFF("Off", 0), FIVE("5 min", 5), TEN("10 min", 10), FIFTEEN("15 min", 15), THIRTY("30 min", 30),
 }
@@ -118,6 +121,7 @@ data class Settings(
     val selectedBikeId: String? = null,
     val hud: HudSettings = HudSettings(),
     val mapStyle: MapStyle = MapStyle.DARK,
+    val appTheme: AppTheme = AppTheme.SYSTEM,
     val moments: MomentSettings = MomentSettings(),
     /** Last-used moment share graphic: which details are on, and the layout. */
     val momentShareFields: Set<MomentField> = MomentField.DEFAULT,
@@ -144,6 +148,7 @@ class SettingsRepository(private val context: Context) {
         val hudY = intPreferencesKey("hud_y")
         val hudPromptDismissed = booleanPreferencesKey("hud_prompt_dismissed")
         val mapStyle = stringPreferencesKey("map_style")
+        val appTheme = stringPreferencesKey("app_theme")
         val momentsEnabled = booleanPreferencesKey("moments_enabled")
         val momentsBraking = booleanPreferencesKey("moments_braking")
         val momentsAccel = booleanPreferencesKey("moments_accel")
@@ -192,6 +197,7 @@ class SettingsRepository(private val context: Context) {
                 promptDismissed = p[Keys.hudPromptDismissed] ?: false,
             ),
             mapStyle = enumOf(p[Keys.mapStyle], MapStyle.DARK),
+            appTheme = enumOf(p[Keys.appTheme], AppTheme.SYSTEM),
             moments = MomentSettings(
                 enabled = p[Keys.momentsEnabled] ?: false,
                 braking = p[Keys.momentsBraking] ?: true,
@@ -257,6 +263,7 @@ class SettingsRepository(private val context: Context) {
     }
     suspend fun setHudPromptDismissed(dismissed: Boolean) = context.dataStore.edit { it[Keys.hudPromptDismissed] = dismissed }
     suspend fun setMapStyle(style: MapStyle) = context.dataStore.edit { it[Keys.mapStyle] = style.name }
+    suspend fun setAppTheme(theme: AppTheme) = context.dataStore.edit { it[Keys.appTheme] = theme.name }
 
     suspend fun setMomentShare(fields: Set<MomentField>, layout: MomentLayout) = context.dataStore.edit {
         it[Keys.momentShareFields] = fields.map { f -> f.name }.toSet()

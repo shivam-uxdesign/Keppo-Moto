@@ -1,5 +1,7 @@
 package com.ridetrack.app.ui.home
 
+import com.ridetrack.app.ui.theme.RideDark
+import com.ridetrack.app.ui.theme.LocalRtPalette
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -123,58 +125,60 @@ fun GarageStack(
     onEditBike: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val index = bikes.indexOfFirst { it.id == selected.id }.coerceAtLeast(0)
-    val peeks = bikes.filter { it.id != selected.id }.take(MAX_PEEKS)
-    Column(modifier) {
-        peeks.forEachIndexed { i, bike ->
-            PeekTab(
-                bike = bike,
-                tint = bikeTint(bikes.indexOf(bike)),
-                odometerKm = odometers[bike.id],
-                // The tab nearest the card is the widest, like cards fanned in a wallet.
-                inset = (MAX_PEEKS - 1 - i + (MAX_PEEKS - peeks.size)) * 8,
-                onClick = { onSelect(bike.id) },
-            )
-        }
-        AnimatedContent(
-            targetState = selected,
-            contentKey = { it.id },
-            transitionSpec = {
-                (fadeIn(tween(320)) + slideInVertically(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) { it / 10 } +
-                    scaleIn(tween(420), initialScale = 0.95f)) togetherWith fadeOut(tween(160))
-            },
-            label = "frontCard",
-        ) { bike ->
-            FrontCard(
-                bike = bike,
-                tint = bikeTint(bikes.indexOf(bike)),
-                odometerKm = odometers[bike.id],
-                lastRidden = lastRidden[bike.id],
-                stats = stats[bike.id],
-                starting = starting,
-                rideActive = rideActive,
-                onSwipe = if (bikes.size > 1) { dir -> onSelect(bikes[(index + dir).mod(bikes.size)].id) } else null,
-                onStart = { onStart(bike) },
-                onReturnToRide = onReturnToRide,
-                onEditBike = { onEditBike(bike.id) },
-            )
-        }
-        if (bikes.size > 1) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-            ) {
-                bikes.forEach { b ->
-                    val on = b.id == selected.id
-                    val w by animateDpAsState(if (on) 18.dp else 6.dp, tween(300), label = "dot")
-                    Box(
-                        Modifier
-                            .size(w, 6.dp)
-                            .clip(CircleShape)
-                            .background(if (on) RtColors.TextPrimary else Color.White.copy(alpha = 0.2f)),
-                    )
+    RideDark {
+        val index = bikes.indexOfFirst { it.id == selected.id }.coerceAtLeast(0)
+        val peeks = bikes.filter { it.id != selected.id }.take(MAX_PEEKS)
+        Column(modifier) {
+            peeks.forEachIndexed { i, bike ->
+                PeekTab(
+                    bike = bike,
+                    tint = bikeTint(bikes.indexOf(bike)),
+                    odometerKm = odometers[bike.id],
+                    // The tab nearest the card is the widest, like cards fanned in a wallet.
+                    inset = (MAX_PEEKS - 1 - i + (MAX_PEEKS - peeks.size)) * 8,
+                    onClick = { onSelect(bike.id) },
+                )
+            }
+            AnimatedContent(
+                targetState = selected,
+                contentKey = { it.id },
+                transitionSpec = {
+                    (fadeIn(tween(320)) + slideInVertically(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) { it / 10 } +
+                        scaleIn(tween(420), initialScale = 0.95f)) togetherWith fadeOut(tween(160))
+                },
+                label = "frontCard",
+            ) { bike ->
+                FrontCard(
+                    bike = bike,
+                    tint = bikeTint(bikes.indexOf(bike)),
+                    odometerKm = odometers[bike.id],
+                    lastRidden = lastRidden[bike.id],
+                    stats = stats[bike.id],
+                    starting = starting,
+                    rideActive = rideActive,
+                    onSwipe = if (bikes.size > 1) { dir -> onSelect(bikes[(index + dir).mod(bikes.size)].id) } else null,
+                    onStart = { onStart(bike) },
+                    onReturnToRide = onReturnToRide,
+                    onEditBike = { onEditBike(bike.id) },
+                )
+            }
+            if (bikes.size > 1) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                ) {
+                    bikes.forEach { b ->
+                        val on = b.id == selected.id
+                        val w by animateDpAsState(if (on) 18.dp else 6.dp, tween(300), label = "dot")
+                        Box(
+                            Modifier
+                                .size(w, 6.dp)
+                                .clip(CircleShape)
+                                .background(if (on) RtColors.TextPrimary else Color.White.copy(alpha = 0.2f)),
+                        )
+                    }
                 }
             }
         }
@@ -227,6 +231,7 @@ private fun FrontCard(
     onReturnToRide: () -> Unit,
     onEditBike: () -> Unit,
 ) {
+    val rt = LocalRtPalette.current
     val reduce = rememberReduceMotion()
     val motion = rememberInfiniteTransition(label = "card")
     // A slow drift over the photo; it zooms in as the ride starts.
@@ -275,7 +280,7 @@ private fun FrontCard(
             .drawBehind {
                 if (glow > 0f) {
                     drawRoundRect(
-                        RtColors.Primary.copy(alpha = 0.35f * glow),
+                        rt.primary.copy(alpha = 0.35f * glow),
                         topLeft = Offset(-6.dp.toPx(), -6.dp.toPx()),
                         size = size.copy(size.width + 12.dp.toPx(), size.height + 12.dp.toPx()),
                         cornerRadius = androidx.compose.ui.geometry.CornerRadius(32.dp.toPx()),
@@ -316,83 +321,85 @@ internal fun BikeCardFace(
     border: BorderStroke = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
     footer: @Composable ColumnScope.() -> Unit = {},
 ) {
-    val reduce = rememberReduceMotion()
-    Box(
-        modifier
-            .clip(CardShape)
-            .background(Brush.radialGradient(listOf(tint.first, tint.second), center = Offset.Unspecified))
-            .border(border, CardShape)
-            .then(contentModifier),
-    ) {
-        if (bike.photoFile != null) {
-            BikeImage(
-                bike.photoFile,
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        val s = if (reduce) 1f else 1.02f + 0.08f * drift + 0.12f * startZoom
-                        scaleX = s
-                        scaleY = s
-                        if (!reduce) translationX = -size.width * 0.02f * drift
-                    },
-            )
-            // Darken top and bottom so the name, odometer and footer stay readable on any photo.
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0f to Color(0xC70A0A0B),
-                            0.32f to Color(0x400A0A0B),
-                            0.5f to Color.Transparent,
-                            0.68f to Color(0x260A0A0B),
-                            1f to Color(0xCC0A0A0B),
+    RideDark {
+        val reduce = rememberReduceMotion()
+        Box(
+            modifier
+                .clip(CardShape)
+                .background(Brush.radialGradient(listOf(tint.first, tint.second), center = Offset.Unspecified))
+                .border(border, CardShape)
+                .then(contentModifier),
+        ) {
+            if (bike.photoFile != null) {
+                BikeImage(
+                    bike.photoFile,
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val s = if (reduce) 1f else 1.02f + 0.08f * drift + 0.12f * startZoom
+                            scaleX = s
+                            scaleY = s
+                            if (!reduce) translationX = -size.width * 0.02f * drift
+                        },
+                )
+                // Darken top and bottom so the name, odometer and footer stay readable on any photo.
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0f to Color(0xC70A0A0B),
+                                0.32f to Color(0x400A0A0B),
+                                0.5f to Color.Transparent,
+                                0.68f to Color(0x260A0A0B),
+                                1f to Color(0xCC0A0A0B),
+                            ),
                         ),
-                    ),
-            )
-        } else {
-            Icon(
-                Icons.Outlined.TwoWheeler,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.22f),
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .size(132.dp),
-            )
-        }
-
-        Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 16.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val sub = listOfNotNull(bike.make.takeIf { it.isNotBlank() && bike.model.isNotBlank() }, bike.year?.toString()).joinToString(" · ")
-                        if (sub.isNotEmpty()) Text(sub, style = RtType.caption, color = RtColors.TextPrimary.copy(alpha = 0.7f), maxLines = 1)
-                        if (lastRidden != null) {
-                            Text(
-                                lastRidden,
-                                style = RtType.caption.copy(fontSize = 11.sp),
-                                color = RtColors.TextPrimary,
-                                maxLines = 1,
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.14f))
-                                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                            )
-                        }
-                    }
-                    Text(
-                        bike.model.ifBlank { bike.displayName },
-                        style = RtType.headline,
-                        color = RtColors.TextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Spacer(Modifier.width(10.dp))
-                OdometerReadout(odometerKm, onEditOdometer)
+                )
+            } else {
+                Icon(
+                    Icons.Outlined.TwoWheeler,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.22f),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(132.dp),
+                )
             }
-            Spacer(Modifier.weight(1f))
-            footer()
+
+            Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 16.dp)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val sub = listOfNotNull(bike.make.takeIf { it.isNotBlank() && bike.model.isNotBlank() }, bike.year?.toString()).joinToString(" · ")
+                            if (sub.isNotEmpty()) Text(sub, style = RtType.caption, color = RtColors.TextPrimary.copy(alpha = 0.7f), maxLines = 1)
+                            if (lastRidden != null) {
+                                Text(
+                                    lastRidden,
+                                    style = RtType.caption.copy(fontSize = 11.sp),
+                                    color = RtColors.TextPrimary,
+                                    maxLines = 1,
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(Color.White.copy(alpha = 0.14f))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                        Text(
+                            bike.model.ifBlank { bike.displayName },
+                            style = RtType.headline,
+                            color = RtColors.TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    OdometerReadout(odometerKm, onEditOdometer)
+                }
+                Spacer(Modifier.weight(1f))
+                footer()
+            }
         }
     }
 }

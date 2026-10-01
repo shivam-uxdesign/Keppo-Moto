@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.components
 
+import com.ridetrack.app.ui.theme.LocalRtPalette
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -91,6 +92,7 @@ fun ZoomChart(
     /** Off when the caller draws its own playhead across several tracks. */
     showScrubLine: Boolean = true,
 ) {
+    val rt = LocalRtPalette.current
     if (!series.hasData) {
         Text(unavailableText, style = RtType.caption, color = RtColors.TextSecondary, modifier = modifier.height(height))
         return
@@ -164,7 +166,7 @@ fun ZoomChart(
         fun y(value: Float) = bottom - (value - series.min) / (series.max - series.min) * (bottom - top)
         fun x(i: Int) = ((i.toFloat() / (v.size - 1)) - window.start) / window.span * w
         val zeroY = if (series.min < 0f && series.max > 0f) y(0f) else bottom
-        if (series.min < 0f && series.max > 0f) drawLine(RtColors.Outline, Offset(0f, zeroY), Offset(w, zeroY), 1.dp.toPx())
+        if (series.min < 0f && series.max > 0f) drawLine(rt.outline, Offset(0f, zeroY), Offset(w, zeroY), 1.dp.toPx())
 
         val first = floor(window.start * (v.size - 1)).toInt().coerceIn(0, v.size - 1)
         val last = ceil(window.end * (v.size - 1)).toInt().coerceIn(0, v.size - 1)
@@ -217,10 +219,10 @@ fun ZoomChart(
 
         if (scrub != null && window.contains(scrub)) {
             val cx = (scrub - window.start) / window.span * w
-            if (showScrubLine) drawLine(RtColors.TextPrimary.copy(alpha = 0.7f), Offset(cx, 0f), Offset(cx, h), 1.dp.toPx())
+            if (showScrubLine) drawLine(rt.textPrimary.copy(alpha = 0.7f), Offset(cx, 0f), Offset(cx, h), 1.dp.toPx())
             val idx = (scrub * (v.size - 1)).roundToInt().coerceIn(0, v.size - 1)
             if (!v[idx].isNaN()) {
-                drawCircle(RtColors.Background, 6.dp.toPx(), Offset(cx, y(v[idx])))
+                drawCircle(rt.background, 6.dp.toPx(), Offset(cx, y(v[idx])))
                 drawCircle(color, 4.dp.toPx(), Offset(cx, y(v[idx])))
             }
         }

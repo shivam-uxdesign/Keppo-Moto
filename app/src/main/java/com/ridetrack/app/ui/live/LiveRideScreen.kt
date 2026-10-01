@@ -1,5 +1,7 @@
 package com.ridetrack.app.ui.live
 
+import androidx.compose.ui.graphics.takeOrElse
+import androidx.compose.runtime.ReadOnlyComposable
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.RepeatMode
@@ -366,7 +368,7 @@ private fun SpeedAndLean(frame: TelemetryFrame?, chrome: LiveChrome) {
     }
 }
 
-private data class Cell(val label: String, val value: String, val unit: String?, val color: Color = RtColors.TextPrimary)
+private data class Cell(val label: String, val value: String, val unit: String?, val color: Color = Color.Unspecified)
 
 @Composable
 private fun MetricGrid(frame: TelemetryFrame?, chrome: LiveChrome) {
@@ -382,7 +384,7 @@ private fun MetricGrid(frame: TelemetryFrame?, chrome: LiveChrome) {
         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
             cells.chunked(2).forEach { pair ->
                 Row(Modifier.fillMaxWidth()) {
-                    pair.forEach { c -> StatBlock(c.label, c.value, Modifier.weight(1f), unit = c.unit, style = RtType.metricL, color = c.color) }
+                    pair.forEach { c -> StatBlock(c.label, c.value, Modifier.weight(1f), unit = c.unit, style = RtType.metricL, color = c.color.takeOrElse { RtColors.TextPrimary }) }
                     if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
@@ -393,6 +395,8 @@ private fun MetricGrid(frame: TelemetryFrame?, chrome: LiveChrome) {
     }
 }
 
+@Composable
+@ReadOnlyComposable
 private fun metricCell(metric: LiveMetric, frame: TelemetryFrame?): Cell {
     val long = frame?.longitudinalG
     val s = frame?.stats

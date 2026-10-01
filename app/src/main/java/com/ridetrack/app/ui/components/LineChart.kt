@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.components
 
+import com.ridetrack.app.ui.theme.LocalRtPalette
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -78,6 +79,7 @@ fun LineChart(
     showHeader: Boolean = true,
     height: androidx.compose.ui.unit.Dp = 96.dp,
 ) {
+    val rt = LocalRtPalette.current
     Column(modifier.fillMaxWidth()) {
         if (showHeader) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -115,7 +117,7 @@ fun LineChart(
             fun y(value: Float) = h - (value - series.min) / (series.max - series.min) * h
             val zeroY = y(0f).coerceIn(0f, h)
             if (series.min < 0f && series.max > 0f) {
-                drawLine(RtColors.Outline, Offset(0f, zeroY), Offset(w, zeroY), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f)))
+                drawLine(rt.outline, Offset(0f, zeroY), Offset(w, zeroY), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f)))
             }
             path.reset()
             var penDown = false
@@ -141,10 +143,10 @@ fun LineChart(
 
             if (scrubFraction != null) {
                 val x = scrubFraction * w
-                drawLine(RtColors.TextPrimary.copy(alpha = 0.6f), Offset(x, 0f), Offset(x, h), 1.5.dp.toPx())
+                drawLine(rt.textPrimary.copy(alpha = 0.6f), Offset(x, 0f), Offset(x, h), 1.5.dp.toPx())
                 val idx = (scrubFraction * (v.size - 1)).toInt().coerceIn(0, v.size - 1)
                 val value = v[idx]
-                if (!value.isNaN()) drawCircle(RtColors.TextPrimary, 4.dp.toPx(), Offset(x, y(value)))
+                if (!value.isNaN()) drawCircle(rt.textPrimary, 4.dp.toPx(), Offset(x, y(value)))
             }
         }
     }

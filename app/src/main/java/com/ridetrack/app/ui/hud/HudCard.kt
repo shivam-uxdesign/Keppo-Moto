@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.hud
 
+import com.ridetrack.app.ui.theme.DarkPalette
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -48,22 +49,23 @@ private val hudLabel = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 10
 
 private data class HudColors(val bg: Color, val border: Color, val text: Color, val muted: Color, val borderWidth: Dp)
 
+// The HUD is a riding surface: always the dark palette.
 private fun hudColors(s: HudSettings, demo: Boolean): HudColors = when (s.theme) {
     HudTheme.HIGH_CONTRAST -> HudColors(Color.Black, Color.White, Color.White, Color.White, 2.dp)
     HudTheme.DARK -> HudColors(
         bg = Color(0xFF141317).copy(alpha = s.opacity / 100f),
-        border = if (demo) RtColors.Warning.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.09f),
-        text = RtColors.TextPrimary,
-        muted = RtColors.TextSecondary,
+        border = if (demo) DarkPalette.warning.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.09f),
+        text = DarkPalette.textPrimary,
+        muted = DarkPalette.textSecondary,
         borderWidth = 1.dp,
     )
 }
 
 
 private fun statusColor(status: HudStatus) = when (status) {
-    HudStatus.RECORDING -> RtColors.Ok
-    HudStatus.STOPPED -> RtColors.Paused
-    HudStatus.PAUSED, HudStatus.GPS_LOST -> RtColors.Warning
+    HudStatus.RECORDING -> DarkPalette.ok
+    HudStatus.STOPPED -> DarkPalette.paused
+    HudStatus.PAUSED, HudStatus.GPS_LOST -> DarkPalette.warning
 }
 
 /** The floating pop-up card. Size scaling is applied by the caller via density. */

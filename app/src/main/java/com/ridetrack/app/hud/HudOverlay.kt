@@ -17,7 +17,7 @@ import com.ridetrack.app.data.HudSettings
 import com.ridetrack.app.ui.hud.HudControlActions
 import com.ridetrack.app.ui.hud.HudDismissTarget
 import com.ridetrack.app.ui.hud.HudOverlayContent
-import com.ridetrack.app.ui.theme.RideTrackTheme
+import com.ridetrack.app.ui.theme.RideDark
 import kotlin.math.hypot
 
 /**
@@ -162,7 +162,7 @@ internal class HudOverlay(
         if (targetView != null || owner == null) return
         val view = ComposeView(context).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-            setContent { RideTrackTheme { HudDismissTarget(nearTarget) } }
+            setContent { RideDark { HudDismissTarget(nearTarget) } }
         }
         owner?.attachTo(view)
         val p = baseParams(

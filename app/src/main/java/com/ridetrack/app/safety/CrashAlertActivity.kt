@@ -9,7 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.ridetrack.app.RideTrackApp
 import com.ridetrack.app.ui.safety.CrashAlertScreen
-import com.ridetrack.app.ui.theme.RideTrackTheme
+import com.ridetrack.app.ui.theme.RideDark
 
 /** The crash alert, shown over the lock screen and any app. */
 class CrashAlertActivity : ComponentActivity() {
@@ -29,7 +29,7 @@ class CrashAlertActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val alerts = (application as RideTrackApp).container.crashAlerts
         setContent {
-            RideTrackTheme {
+            RideDark {
                 CrashAlertScreen(alerts, onClose = { alerts.dismiss(); finish() })
             }
         }

@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.profile
 
+import com.ridetrack.app.data.AppTheme
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
@@ -90,6 +91,10 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
     /** Picking a SIM (dual-SIM phones) and calling from the alert screen. */
     fun hasCallPermissions(): Boolean = listOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.CALL_PHONE).all {
         ContextCompat.checkSelfPermission(c.appContext, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    fun setAppTheme(v: AppTheme) {
+        viewModelScope.launch { c.settings.setAppTheme(v) }
     }
 
     fun setAutoPause(v: Boolean) {

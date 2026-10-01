@@ -79,7 +79,8 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
-            android:taskAffinity="${applicationId}.crash" />
+            android:taskAffinity="${applicationId}.crash"
+            android:theme="@style/Theme.RideTrack.Ride" />
 
         <service
             android:name=".ride.RideRecordingService"

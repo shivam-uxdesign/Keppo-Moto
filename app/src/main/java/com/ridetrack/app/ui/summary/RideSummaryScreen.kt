@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.summary
 
+import com.ridetrack.app.ui.theme.LocalRtPalette
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -66,6 +67,7 @@ import com.ridetrack.telemetry.model.Ride
 
 @Composable
 fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Unit, onShare: () -> Unit, onOpenMoment: (String) -> Unit) {
+    val rt = LocalRtPalette.current
     val moments = rememberMoments(rideId)
     val vm = appViewModel(key = "summary-$rideId") { RideSummaryViewModel(it, rideId) }
     val s by vm.state.collectAsStateWithLifecycle()
@@ -145,17 +147,17 @@ fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Un
                 Spacer(Modifier.height(6.dp))
                 DynamicsRow("Max lean") {
                     buildAnnotatedString {
-                        withStyle(SpanStyle(color = RtColors.Left)) { append(Format.lean(ride.stats.maxLeftLeanDeg?.let { -it })) }
-                        withStyle(SpanStyle(color = RtColors.TextTertiary)) { append("  ·  ") }
-                        withStyle(SpanStyle(color = RtColors.Right)) { append(Format.lean(ride.stats.maxRightLeanDeg)) }
+                        withStyle(SpanStyle(color = rt.left)) { append(Format.lean(ride.stats.maxLeftLeanDeg?.let { -it })) }
+                        withStyle(SpanStyle(color = rt.textTertiary)) { append("  ·  ") }
+                        withStyle(SpanStyle(color = rt.right)) { append(Format.lean(ride.stats.maxRightLeanDeg)) }
                     }
                 }
                 HairlineDivider()
                 DynamicsRow("Acceleration / braking") {
                     buildAnnotatedString {
-                        withStyle(SpanStyle(color = RtColors.Accel)) { append(Format.gSigned(ride.stats.maxAccelG)) }
-                        withStyle(SpanStyle(color = RtColors.TextTertiary)) { append("  /  ") }
-                        withStyle(SpanStyle(color = RtColors.Brake)) { append(Format.gSigned(ride.stats.maxBrakeG)) }
+                        withStyle(SpanStyle(color = rt.accel)) { append(Format.gSigned(ride.stats.maxAccelG)) }
+                        withStyle(SpanStyle(color = rt.textTertiary)) { append("  /  ") }
+                        withStyle(SpanStyle(color = rt.brake)) { append(Format.gSigned(ride.stats.maxBrakeG)) }
                     }
                 }
                 HairlineDivider()

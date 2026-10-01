@@ -1,5 +1,7 @@
 package com.ridetrack.app.ui.components
 
+import androidx.compose.ui.graphics.takeOrElse
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -232,7 +234,8 @@ fun StatTile(label: String, value: String, modifier: Modifier = Modifier, unit: 
     }
 }
 
-data class Stat(val label: String, val value: String, val unit: String? = null, val color: Color = RtColors.TextPrimary)
+/** [color] Unspecified = primary text. */
+data class Stat(val label: String, val value: String, val unit: String? = null, val color: Color = Color.Unspecified)
 
 /** Up to four stats in a row, separated by hairlines — no card chrome. */
 @Composable
@@ -245,7 +248,7 @@ fun StatRow(stats: List<Stat>, modifier: Modifier = Modifier, style: TextStyle =
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = if (i == 0) 0.dp else 14.dp, end = 8.dp),
-                unit = s.unit, style = style, color = s.color,
+                unit = s.unit, style = style, color = s.color.takeOrElse { RtColors.TextPrimary },
             )
         }
     }
@@ -259,11 +262,16 @@ fun TwoColumn(modifier: Modifier = Modifier, left: @Composable (Modifier) -> Uni
     }
 }
 
-enum class StatusLevel(val color: Color) {
-    OK(RtColors.Ok),
-    WARNING(RtColors.Warning),
-    ERROR(RtColors.Error),
-    INACTIVE(RtColors.TextTertiary),
+enum class StatusLevel {
+    OK, WARNING, ERROR, INACTIVE;
+
+    val color: Color
+        @Composable @ReadOnlyComposable get() = when (this) {
+            OK -> RtColors.Ok
+            WARNING -> RtColors.Warning
+            ERROR -> RtColors.Error
+            INACTIVE -> RtColors.TextTertiary
+        }
 }
 
 /** Dot + text; state is always spelled out, never colour-only. */
@@ -385,4 +393,5 @@ fun InfoRow(label: String, value: String, modifier: Modifier = Modifier, valueCo
 }
 
 /** Retained for callers that want a thin border without a card. */
-val HairlineBorder = BorderStroke(1.dp, RtColors.Hairline)
+val HairlineBorder: BorderStroke
+    @Composable @ReadOnlyComposable get() = BorderStroke(1.dp, RtColors.Hairline)

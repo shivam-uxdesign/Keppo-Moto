@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.profile
 
+import com.ridetrack.app.data.AppTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -148,6 +149,28 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit) {
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = RtColors.Primary.copy(alpha = 0.18f),
                             selectedLabelColor = RtColors.Primary,
+                            labelColor = RtColors.TextSecondary,
+                        ),
+                    )
+                }
+            }
+            Spacer(Modifier.height(RtDimens.sm))
+        }
+
+        SectionHeader("Appearance")
+        RtCard {
+            Text("Theme", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+            Text("The ride screen, pop-up HUD and crash alert stay dark either way.", style = RtType.caption, color = RtColors.TextSecondary)
+            Spacer(Modifier.height(RtDimens.sm))
+            Row(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
+                AppTheme.entries.forEach { t ->
+                    FilterChip(
+                        selected = s.settings.appTheme == t,
+                        onClick = { vm.setAppTheme(t) },
+                        label = { Text(t.label) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = RtColors.PrimaryContainer,
+                            selectedLabelColor = RtColors.TextPrimary,
                             labelColor = RtColors.TextSecondary,
                         ),
                     )

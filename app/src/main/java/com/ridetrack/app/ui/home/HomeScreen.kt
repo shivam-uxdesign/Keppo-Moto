@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.home
 
+import com.ridetrack.app.ui.components.KeppoWordmark
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -196,6 +197,7 @@ private fun greeting(): String = when (LocalTime.now().hour) {
 private fun Header(s: HomeUiState, onOpenProfile: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            KeppoWordmark(Modifier.padding(bottom = 10.dp))
             Text(greeting(), style = RtType.title.copy(fontSize = 26.sp, lineHeight = 30.sp), color = RtColors.TextPrimary)
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 if (s.demoMode) {

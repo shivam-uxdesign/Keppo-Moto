@@ -44,7 +44,7 @@ import com.ridetrack.app.data.HudLayout
 import com.ridetrack.app.data.HudSettings
 import com.ridetrack.app.data.HudSize
 import com.ridetrack.app.hud.HudData
-import com.ridetrack.app.ui.theme.RideTrackTheme
+import com.ridetrack.app.ui.theme.RideDark
 
 /** Callbacks from the pop-up's quick controls. */
 interface HudControlActions {
@@ -70,7 +70,7 @@ fun HudOverlayContent(
     viewfinder: ImageBitmap? = null,
     onButtonsTop: (Float) -> Unit = {},
 ) {
-    RideTrackTheme {
+    RideDark {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             ScaledBy(settings.size.scale) {
                 val video = data.video

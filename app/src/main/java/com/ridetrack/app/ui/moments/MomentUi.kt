@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.moments
 
+import androidx.compose.runtime.ReadOnlyComposable
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.Canvas
@@ -22,17 +23,21 @@ import java.util.Locale
 import kotlin.math.abs
 
 /** Dot colour for a moment: what kind of event it was. */
+@Composable
+@ReadOnlyComposable
 fun momentColor(m: Moment): Color = when {
     m.source == MomentSource.MANUAL -> RtColors.Error
     m.source == MomentSource.GPS_LOST -> RtColors.Warning
     else -> eventColor(m)
 }
 
+@Composable
+@ReadOnlyComposable
 private fun eventColor(m: Moment): Color = when (m.primaryType) {
     RideEventType.HARD_BRAKE -> RtColors.Brake
     RideEventType.STRONG_ACCELERATION -> RtColors.Accel
     RideEventType.SIGNIFICANT_LEAN -> if ((m.peakValue ?: 0.0) < 0) RtColors.Left else RtColors.Right
-    else -> if (m.kind == MomentKind.PHOTO) Color.White else RtColors.Primary
+    else -> if (m.kind == MomentKind.PHOTO) RtColors.TextPrimary else RtColors.Primary
 }
 
 fun momentTitle(m: Moment): String {
@@ -69,7 +74,7 @@ fun rememberMoments(rideId: String): List<Moment> {
 }
 
 /** Round map pin: the thumbnail cropped to a circle inside a coloured ring. */
-fun circlePin(thumb: Bitmap?, ring: Color, sizePx: Int, ringPx: Float): Bitmap {
+fun circlePin(thumb: Bitmap?, ring: Color, sizePx: Int, ringPx: Float, empty: Color): Bitmap {
     val out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
     val c = Canvas(out)
     val r = sizePx / 2f
@@ -85,7 +90,7 @@ fun circlePin(thumb: Bitmap?, ring: Color, sizePx: Int, ringPx: Float): Bitmap {
         }
         paint.shader = BitmapShader(thumb, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply { setLocalMatrix(m) }
     } else {
-        paint.color = RtColors.Surface.toArgb()
+        paint.color = empty.toArgb()
     }
     c.drawCircle(r, r, inner, paint)
     return out
