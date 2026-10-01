@@ -118,6 +118,13 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
 
+    // Google Drive backup: Drive access through Play services; uploads run as WorkManager jobs.
+    implementation(libs.play.services.auth)
+    implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.androidx.work.runtime.ktx)
+
     testImplementation(libs.junit)
     testImplementation(kotlin("test-junit"))
+    // org.json ships with Android; unit tests on the JVM need the real implementation.
+    testImplementation(libs.org.json)
 }

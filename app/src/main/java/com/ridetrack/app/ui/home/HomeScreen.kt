@@ -136,6 +136,10 @@ fun HomeScreen(
                 modifier = Modifier.riseIn(0),
             )
         } else if (!s.loading) {
+            if (s.offerRestore) {
+                RestoreCard(onRestore = onOpenProfile, onDismiss = vm::dismissRestore, modifier = Modifier.riseIn(0))
+                Spacer(Modifier.height(RtDimens.md))
+            }
             AddBikeCard(onAddBike, Modifier.riseIn(0))
         }
 
@@ -262,6 +266,32 @@ private fun AddBikeCard(onAddBike: () -> Unit, modifier: Modifier) {
             )
         }
         PrimaryButton("Add bike", onAddBike, large = true, icon = Icons.Outlined.TwoWheeler)
+    }
+}
+
+/** First launch on a new phone: rides, bikes and settings can come back from Google Drive (Profile › Backup). */
+@Composable
+private fun RestoreCard(onRestore: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(RtDimens.cardRadius)
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(RtColors.Surface)
+            .border(1.dp, RtColors.Hairline, shape)
+            .padding(RtDimens.cardPadding),
+    ) {
+        Text("Restoring a phone?", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+        Text(
+            "Bring your rides, moments, bikes and settings back from Google Drive.",
+            style = RtType.caption,
+            color = RtColors.TextSecondary,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
+            SecondaryButton("Restore from Drive", onRestore, Modifier.weight(1f))
+            SecondaryButton("Not now", onDismiss, Modifier.weight(1f), contentColor = RtColors.TextSecondary)
+        }
     }
 }
 

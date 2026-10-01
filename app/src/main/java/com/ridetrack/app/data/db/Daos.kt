@@ -18,6 +18,9 @@ interface BikeDao {
     @Query("SELECT * FROM bikes WHERE id = :id")
     suspend fun get(id: String): BikeEntity?
 
+    @Query("SELECT * FROM bikes")
+    suspend fun all(): List<BikeEntity>
+
     @Upsert
     suspend fun upsert(bike: BikeEntity)
 
@@ -47,6 +50,13 @@ interface RideDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(ride: RideEntity)
+
+    /** What Drive backup keeps: finished, real rides (not demo, not in progress). */
+    @Query("SELECT * FROM rides WHERE status = 'COMPLETED' AND source != 'DEMO'")
+    suspend fun backupable(): List<RideEntity>
+
+    @Query("SELECT id FROM rides")
+    suspend fun allIds(): List<String>
 
     @Query(
         """
@@ -105,6 +115,9 @@ interface MomentDao {
 
     @Query("SELECT * FROM moments")
     suspend fun all(): List<MomentEntity>
+
+    @Query("SELECT id FROM moments")
+    suspend fun allIds(): List<String>
 
     /** Moments per bike, through the ride each was captured on. */
     @Query("SELECT r.bikeId AS bikeId, COUNT(m.id) AS count FROM moments m JOIN rides r ON r.id = m.rideId GROUP BY r.bikeId")

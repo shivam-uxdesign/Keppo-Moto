@@ -1,5 +1,9 @@
 package com.ridetrack.app.data
 
+import com.ridetrack.app.backup.BackupFormat
+import kotlinx.coroutines.flow.first
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import com.ridetrack.app.share.MomentField
 import com.ridetrack.app.share.MomentLayout
 
@@ -111,6 +115,26 @@ data class HudSettings(
     }
 }
 
+/** Google Drive backup. Its own keys (prefix `backup_`) are never themselves backed up. */
+data class BackupSettings(
+    /** Google account Drive access was granted for; null = not connected. */
+    val email: String? = null,
+    val allowMobileData: Boolean = false,
+    val videosOnlyWhileCharging: Boolean = false,
+    val lastSuccessMillis: Long? = null,
+    val lastBytes: Long? = null,
+    /**
+     * This phone's data may be written to the backup. False right after connecting to a Drive
+     * that already holds a backup, until the rider restores or chooses to merge, so a fresh
+     * phone can't overwrite the saved settings and contacts.
+     */
+    val adopted: Boolean = false,
+    /** The rider closed the "restore from Drive" card on Home. */
+    val restoreCardDismissed: Boolean = false,
+) {
+    val connected: Boolean get() = email != null
+}
+
 data class Settings(
     val autoPause: Boolean = true,
     val demoMode: Boolean = false,
@@ -127,9 +151,12 @@ data class Settings(
     val momentShareFields: Set<MomentField> = MomentField.DEFAULT,
     val momentShareLayout: MomentLayout = MomentLayout.MINIMAL,
     val safety: SafetySettings = SafetySettings(),
+    val backup: BackupSettings = BackupSettings(),
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+
+private const val BACKUP_PREFIX = "backup_"
 
 class SettingsRepository(private val context: Context) {
     private object Keys {
@@ -170,6 +197,13 @@ class SettingsRepository(private val context: Context) {
         val safetyAllergies = stringPreferencesKey("safety_allergies")
         val safetyNotes = stringPreferencesKey("safety_notes")
         val safetyName = stringPreferencesKey("safety_name")
+        val backupEmail = stringPreferencesKey("backup_email")
+        val backupMobileData = booleanPreferencesKey("backup_mobile_data")
+        val backupVideosCharging = booleanPreferencesKey("backup_videos_charging")
+        val backupLastSuccess = longPreferencesKey("backup_last_success")
+        val backupLastBytes = longPreferencesKey("backup_last_bytes")
+        val backupAdopted = booleanPreferencesKey("backup_adopted")
+        val backupRestoreDismissed = booleanPreferencesKey("backup_restore_dismissed")
     }
 
     private inline fun <reified T : Enum<T>> enumOf(name: String?, fallback: T): T =
@@ -228,6 +262,15 @@ class SettingsRepository(private val context: Context) {
                 ),
                 riderName = p[Keys.safetyName].orEmpty(),
             ),
+            backup = BackupSettings(
+                email = p[Keys.backupEmail],
+                allowMobileData = p[Keys.backupMobileData] ?: false,
+                videosOnlyWhileCharging = p[Keys.backupVideosCharging] ?: false,
+                lastSuccessMillis = p[Keys.backupLastSuccess],
+                lastBytes = p[Keys.backupLastBytes],
+                adopted = p[Keys.backupAdopted] ?: false,
+                restoreCardDismissed = p[Keys.backupRestoreDismissed] ?: false,
+            ),
         )
     }
 
@@ -241,6 +284,46 @@ class SettingsRepository(private val context: Context) {
         it[Keys.safetyAllergies] = s.medical.allergies
         it[Keys.safetyNotes] = s.medical.notes
         it[Keys.safetyName] = s.riderName
+    }
+
+    suspend fun setBackupConnected(email: String?, adopted: Boolean) = context.dataStore.edit {
+        if (email == null) {
+            it.remove(Keys.backupEmail)
+            it.remove(Keys.backupLastSuccess)
+            it.remove(Keys.backupLastBytes)
+        } else {
+            it[Keys.backupEmail] = email
+        }
+        it[Keys.backupAdopted] = adopted
+    }
+    suspend fun setBackupAdopted(adopted: Boolean) = context.dataStore.edit { it[Keys.backupAdopted] = adopted }
+    suspend fun setBackupMobileData(v: Boolean) = context.dataStore.edit { it[Keys.backupMobileData] = v }
+    suspend fun setBackupVideosCharging(v: Boolean) = context.dataStore.edit { it[Keys.backupVideosCharging] = v }
+    suspend fun setBackupResult(atMillis: Long, bytes: Long) = context.dataStore.edit {
+        it[Keys.backupLastSuccess] = atMillis
+        it[Keys.backupLastBytes] = bytes
+    }
+    suspend fun dismissRestoreCard() = context.dataStore.edit { it[Keys.backupRestoreDismissed] = true }
+
+    /** Every stored preference except the backup's own, for `settings.json`. */
+    suspend fun exportPrefs(): List<BackupFormat.Pref> = context.dataStore.data.first().asMap()
+        .filterKeys { !it.name.startsWith(BACKUP_PREFIX) }
+        .map { (k, v) -> BackupFormat.Pref(k.name, v) }
+
+    /** Writes preferences back from a backup (the backup's own keys are left alone). */
+    suspend fun importPrefs(prefs: List<BackupFormat.Pref>) = context.dataStore.edit { m ->
+        prefs.filterNot { it.key.startsWith(BACKUP_PREFIX) }.forEach { p ->
+            @Suppress("UNCHECKED_CAST")
+            when (val v = p.value) {
+                is Boolean -> m[booleanPreferencesKey(p.key)] = v
+                is Int -> m[intPreferencesKey(p.key)] = v
+                is Long -> m[longPreferencesKey(p.key)] = v
+                is Float -> m[floatPreferencesKey(p.key)] = v
+                is Double -> m[doublePreferencesKey(p.key)] = v
+                is String -> m[stringPreferencesKey(p.key)] = v
+                is Set<*> -> m[stringSetPreferencesKey(p.key)] = v as Set<String>
+            }
+        }
     }
 
     suspend fun setAutoPause(enabled: Boolean) = context.dataStore.edit { it[Keys.autoPause] = enabled }

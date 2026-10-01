@@ -53,6 +53,8 @@ data class HomeUiState(
     val trace: SpeedTrace? = null,
     /** Lifetime numbers per bike id, for the back of the card. */
     val bikeStats: Map<String, BikeStats> = emptyMap(),
+    /** A fresh install: offer to bring rides back from Google Drive. */
+    val offerRestore: Boolean = false,
 )
 
 private data class Extras(
@@ -100,6 +102,7 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
             bikes = bikes,
             starting = isStarting,
             hasBikes = bikes.isNotEmpty(),
+            offerRestore = bikes.isEmpty() && rides.isEmpty() && !settings.backup.restoreCardDismissed,
             demoMode = settings.demoMode,
             rideState = rideState,
             totals = totals.takeIf { it.rideCount > 0 },
@@ -113,6 +116,10 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
             bikeStats = bikes.associate { b -> b.id to BikeStats.from(b, rides, momentCounts[b.id] ?: 0) },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+
+    fun dismissRestore() {
+        viewModelScope.launch { c.settings.dismissRestoreCard() }
+    }
 
     fun selectBike(id: String) {
         viewModelScope.launch { c.settings.setSelectedBike(id) }

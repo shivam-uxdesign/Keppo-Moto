@@ -1,5 +1,8 @@
 package com.ridetrack.app
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import com.ridetrack.app.backup.BackupWorker
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -17,6 +20,10 @@ class RideTrackApp : Application() {
         createNotificationChannel()
         container.hud.start()
         container.crashAlerts.start()
+        container.appScope.launch {
+            val b = container.settings.settings.first().backup
+            if (b.connected) BackupWorker.scheduleDaily(this@RideTrackApp, b.allowMobileData)
+        }
     }
 
     private fun createNotificationChannel() {

@@ -99,6 +99,8 @@ class RideSessionManager(
     private val settings: SettingsRepository,
     private val phoneSource: () -> TelemetrySource,
     private val scope: CoroutineScope,
+    /** Called once a ride is saved (e.g. to back it up). */
+    private val onRideSaved: (rideId: String) -> Unit = {},
 ) {
     private val _state = MutableStateFlow<RideState>(RideState.Idle)
     val state: StateFlow<RideState> = _state.asStateFlow()
@@ -441,6 +443,7 @@ class RideSessionManager(
                 _active.value = null
                 _frame.value = null
                 dispatch(RideAction.Saved)
+                onRideSaved(rec.rideId)
             } else {
                 // The ride stays IN_PROGRESS in the database and is offered for recovery.
                 _active.value = null

@@ -238,7 +238,7 @@ private fun Pick(text: String, selected: Boolean, enabled: Boolean, onClick: () 
     )
 }
 
-private fun formatBytes(b: Long?): String = when {
+internal fun formatBytes(b: Long?): String = when {
     b == null -> "…"
     b < 1_000_000 -> "none"
     b < 1_000_000_000 -> "${b / 1_000_000} MB"

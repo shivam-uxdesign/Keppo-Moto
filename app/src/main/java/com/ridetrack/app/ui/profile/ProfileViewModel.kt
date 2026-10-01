@@ -1,5 +1,9 @@
 package com.ridetrack.app.ui.profile
 
+import kotlinx.coroutines.flow.first
+import com.ridetrack.app.backup.DriveAuth
+import com.ridetrack.app.backup.BackupWorker
+import android.content.Intent
 import com.ridetrack.app.data.AppTheme
 import android.Manifest
 import android.content.pm.PackageManager
@@ -91,6 +95,60 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
     /** Picking a SIM (dual-SIM phones) and calling from the alert screen. */
     fun hasCallPermissions(): Boolean = listOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.CALL_PHONE).all {
         ContextCompat.checkSelfPermission(c.appContext, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    // ---- Google Drive backup ----
+
+    val backupStatus = c.backup.status
+
+    suspend fun authorizeDrive(): DriveAuth.Outcome? = runCatching { c.backup.driveAuth().authorize() }.getOrNull()
+
+    fun onDriveConsent(data: Intent?) = c.backup.driveAuth().fromConsent(data)
+
+    /** Drive access granted: check for an existing backup, then start backing up if it's safe to. */
+    fun onDriveGranted(email: String?) {
+        c.appScope.launch {
+            c.backup.onConnected(email)
+            val b = c.settings.settings.first().backup
+            BackupWorker.scheduleDaily(c.appContext, b.allowMobileData)
+            if (b.adopted) BackupWorker.backUpSoon(c.appContext, b.allowMobileData)
+        }
+    }
+
+    fun backUpNow() {
+        c.appScope.launch { c.backup.backUp() }
+    }
+
+    /** Restores rides, bikes and settings now; moments download in the background after. */
+    fun restoreFromDrive() {
+        c.appScope.launch {
+            c.backup.restore()
+            val b = c.settings.settings.first().backup
+            BackupWorker.restoreMedia(c.appContext, b.allowMobileData)
+        }
+    }
+
+    fun keepBothBackups() {
+        c.appScope.launch {
+            c.backup.merge()
+            c.backup.backUp()
+        }
+    }
+
+    fun disconnectDrive() {
+        BackupWorker.cancelAll(c.appContext)
+        c.appScope.launch { c.backup.disconnect() }
+    }
+
+    fun setBackupMobileData(v: Boolean) {
+        c.appScope.launch {
+            c.settings.setBackupMobileData(v)
+            BackupWorker.scheduleDaily(c.appContext, v)
+        }
+    }
+
+    fun setBackupVideosCharging(v: Boolean) {
+        viewModelScope.launch { c.settings.setBackupVideosCharging(v) }
     }
 
     fun setAppTheme(v: AppTheme) {

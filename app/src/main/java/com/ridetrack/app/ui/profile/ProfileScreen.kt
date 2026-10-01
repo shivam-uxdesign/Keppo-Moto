@@ -183,6 +183,8 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit) {
 
         MomentsSection(s, vm)
 
+        BackupSection(s, vm)
+
         SectionHeader("Developer")
         RtCard {
             ToggleRow(

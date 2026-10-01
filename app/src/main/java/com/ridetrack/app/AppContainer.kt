@@ -1,5 +1,9 @@
 package com.ridetrack.app
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import com.ridetrack.app.backup.BackupWorker
+import com.ridetrack.app.backup.BackupRepository
 import android.content.Context
 import com.ridetrack.app.data.BikeRepository
 import com.ridetrack.app.data.RideRepository
@@ -43,7 +47,18 @@ class AppContainer(context: Context) {
         settings = settings,
         phoneSource = { phoneSource() },
         scope = appScope,
+        onRideSaved = { backUpSoon() },
     )
+
+    val backup = BackupRepository(appContext, database, settings)
+
+    /** Queues a Drive backup if Drive is connected (Wi-Fi only unless the rider allowed mobile data). */
+    fun backUpSoon() {
+        appScope.launch {
+            val b = settings.settings.first().backup
+            if (b.connected && b.adopted) BackupWorker.backUpSoon(appContext, b.allowMobileData)
+        }
+    }
 
     val hud = HudController(appContext, session, settings, momentsHub)
     val crashAlerts = CrashAlerts(appContext, settings, session, battery, appScope)
