@@ -71,7 +71,7 @@ data class MomentSettings(
     val leanDeg: Int = DEFAULT_LEAN_DEG,
     /** Seconds kept before and after each event. */
     val clipSeconds: Int = DEFAULT_CLIP_SECONDS,
-    /** Microphone for clips, as MicChoice.encode(); null = the phone's. */
+    /** Microphone for clips, as MicChoice.encode(); null = Automatic (USB-C, then headset, then phone). */
     val mic: String? = null,
 ) {
     val anyTrigger: Boolean get() = braking || acceleration || lean

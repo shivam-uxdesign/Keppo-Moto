@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.MediaFormat
 import android.os.Build
 import android.os.PowerManager
@@ -77,6 +80,16 @@ class MomentRecorder(
     /** Formats of the stream that's in the buffer; outlive the encoder that made them. */
     @Volatile private var videoFormat: MediaFormat? = null
     private var audio: AudioEncoder? = null
+    /** The mic [audio] records from. */
+    private var audioMic: MicChoice? = null
+    /** The headset dropped call mode: skip it until the camera next restarts (no retry loop). */
+    private var headsetSkipped = false
+    private var micCheck: Job? = null
+    private var inCall = false
+    private val deviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>?) = micsChanged()
+        override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) = micsChanged()
+    }
 
     private val reasons = linkedSetOf<PauseReason>()
     private var videoBound = false
@@ -128,6 +141,7 @@ class MomentRecorder(
                 delay(10_000)
                 tick++
                 setReason(PauseReason.LOW_STORAGE, lowStorage())
+                noteCalls()
                 if (live != null && lowStorage()) liveLock.withLock { stopLive("storage almost full") }
                 withContext(Dispatchers.Main) { watchdog() }
                 if (tick % 6 == 0) log.log("status: ${hub.state.value.status} reasons=$reasons encoder=${encoderInfo()} ${buffer.describe()} thermal=${thermal()}")
@@ -135,6 +149,7 @@ class MomentRecorder(
             }
         }
         watchThermal()
+        context.getSystemService<AudioManager>()?.registerAudioDeviceCallback(deviceCallback, android.os.Handler(android.os.Looper.getMainLooper()))
         hub.attach { r ->
             if (r is MomentRequest.StartLive || r is MomentRequest.LiveControl) {
                 scope.launch(Dispatchers.IO) { liveLock.withLock { handleLive(r) } }
@@ -183,6 +198,8 @@ class MomentRecorder(
             runCatching { provider?.unbindAll() }
             val pm = context.getSystemService<PowerManager>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) thermalListener?.let { pm?.removeThermalStatusListener(it) }
+            context.getSystemService<AudioManager>()?.unregisterAudioDeviceCallback(deviceCallback)
+            micCheck?.cancel()
         }
         stopAudio()
         analysisExecutor.shutdown()
@@ -246,7 +263,13 @@ class MomentRecorder(
             log.log("bound ${if (front) "front" else "back"} camera: photo${if (withVideo) " + video" + (if (lowPower) " (low power)" else "") else " only"}")
             cam.cameraInfo.cameraState.removeObservers(owner)
             cam.cameraInfo.cameraState.observe(owner) { st -> onCameraState(st) }
-            if (withVideo) startAudio() else stopAudio()
+            if (withVideo) {
+                startAudio()
+            } else {
+                stopAudio()
+                // Camera off for now: next time it starts, the headset may be tried again.
+                headsetSkipped = false
+            }
         } catch (e: Exception) {
             log.error("camera bind failed", e)
             setReason(PauseReason.CAMERA_BUSY, true)
@@ -388,6 +411,12 @@ class MomentRecorder(
         }
     }
 
+    /** The mic to use now: the saved choice resolved against what's connected (see [Microphones.pick]). */
+    private fun pickMic(): MicChoice {
+        val connected = Microphones.available(context).filter { it.type != MicType.PHONE && !(headsetSkipped && it.type == MicType.BLUETOOTH) }
+        return Microphones.pick(connected, MicChoice.decode(settings.mic))
+    }
+
     private fun startAudio() {
         if (audio != null) return
         if (!granted(Manifest.permission.RECORD_AUDIO)) {
@@ -395,11 +424,21 @@ class MomentRecorder(
             return
         }
         val choice = MicChoice.decode(settings.mic)
-        val device = Microphones.find(context, choice)
-        if (choice.type != MicType.PHONE && device == null) log.log("mic ${choice.label} not connected: using the phone mic")
+        val mic = pickMic()
+        val device = if (mic.type == MicType.PHONE) null else Microphones.find(context, mic)
+        if (choice.type != MicType.AUTO && choice.type != MicType.PHONE && mic.type == MicType.PHONE) {
+            log.log("mic ${choice.label} not connected: using the phone mic")
+        }
         audio = try {
-            AudioEncoder(context, buffer, device).also { enc ->
-                log.log("audio from ${enc.routedDevice?.let { d -> "${Microphones.typeOf(d)?.label ?: d.type} ${d.productName}" } ?: "default mic"}")
+            AudioEncoder(context, buffer, device, onHeadsetLost = {
+                scope.launch(Dispatchers.Main) {
+                    log.log("headset left call mode: released it (its music can play again); switching mic")
+                    headsetSkipped = true
+                    restartAudio()
+                }
+            }).also { enc ->
+                audioMic = mic
+                log.log("audio from ${if (device == null) "phone mic" else "${mic.type.label} ${device.productName}"} (setting: ${choice.label})")
                 // A mic that drops out (battery, range) falls back to the phone; note it in the log.
                 enc.addOnRoutingChanged { d -> log.log("audio now from ${d?.let { "${Microphones.typeOf(it)?.label ?: it.type} ${it.productName}" } ?: "default mic"}") }
             }
@@ -412,6 +451,37 @@ class MomentRecorder(
     private fun stopAudio() {
         audio?.release()
         audio = null
+        audioMic = null
+    }
+
+    private fun restartAudio() {
+        if (audio == null) return
+        stopAudio()
+        if (videoBound) startAudio()
+    }
+
+    /** A mic was plugged in or out: switch if the best one changed (e.g. the DJI receiver went in). */
+    private fun micsChanged() {
+        micCheck?.cancel()
+        micCheck = scope.launch(Dispatchers.Main) {
+            delay(MIC_SETTLE_MILLIS)
+            val current = audioMic ?: return@launch
+            val best = pickMic()
+            if (best != current) {
+                log.log("mic change: ${current.label} → ${best.label}")
+                restartAudio()
+            }
+        }
+    }
+
+    /** Calls take the microphone; note it, so silent stretches in clips make sense. */
+    private fun noteCalls() {
+        val mode = context.getSystemService<AudioManager>()?.mode ?: return
+        val call = mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_CALL_SCREENING
+        if (call != inCall) {
+            inCall = call
+            log.log(if (call) "mic busy (call): clips are silent until it ends" else "call ended: mic back")
+        }
     }
 
     /** Reasons are only touched on the main thread; callers may be on any thread. */
@@ -651,13 +721,18 @@ class MomentRecorder(
         val restart = manual && !viewfinderBound
         viewfinderWanted = manual
         withContext(Dispatchers.Main) { if (restart) bindCamera() else rebindIfNeeded() }
-        val fromMillis = System.currentTimeMillis() - r.preRollMillis
+        val askedAt = System.currentTimeMillis()
+        val fromMillis = askedAt - r.preRollMillis
         var rec: LiveRecording? = null
         val started = withTimeoutOrNull<Boolean>(LIVE_START_TIMEOUT_MILLIS) {
             while (true) {
                 val fmt = videoFormat
                 val fresh = !restart || encoderSession != session
-                if (fmt != null && encoder != null && fresh) {
+                // The mic restarts with the camera: give it a moment so the video has sound.
+                val waited = System.currentTimeMillis() - askedAt
+                val audioReady = audio == null || audio?.format != null || waited > AUDIO_WAIT_MILLIS
+                if (fmt != null && encoder != null && fresh && audioReady) {
+                    if (audio?.format == null && audio != null) log.log("video without sound: the mic wasn't ready")
                     val candidate = rec ?: LiveRecording(
                         File(repo.dir(r.rideId), "video-${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(6)}.mp4"),
                         fmt, audio?.format, rotationDegrees,
@@ -744,5 +819,7 @@ class MomentRecorder(
         private const val LOW_POWER_BITRATE = 1_500_000
         private const val LIVE_START_TIMEOUT_MILLIS = 6_000L
         private const val VIEWFINDER_FRAME_MILLIS = 100L
+        private const val AUDIO_WAIT_MILLIS = 2_000L
+        private const val MIC_SETTLE_MILLIS = 800L
     }
 }

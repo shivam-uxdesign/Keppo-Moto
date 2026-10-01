@@ -260,9 +260,9 @@ private fun <T> ChoiceRow(choices: List<T>, selected: T, label: (T) -> String, e
 }
 
 /**
- * Which microphone records clip audio: the phone, or an external mic that's connected now
- * (e.g. a DJI Mic receiver in USB-C, or the mic over Bluetooth). A saved mic that isn't
- * connected stays selected; rides fall back to the phone mic until it's back.
+ * Which microphone records clip audio. Automatic (the default) takes the best one connected:
+ * a USB-C receiver (DJI Mic), then a wired mic, then the Bluetooth headset, then the phone.
+ * A specific mic that isn't connected stays selected; rides use the phone mic until it's back.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -272,13 +272,13 @@ private fun MicPicker(saved: String?, enabled: Boolean, onPick: (String?) -> Uni
     val btPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { scan++ }
     val available = remember(scan) { Microphones.available(context) }
     val current = MicChoice.decode(saved)
-    val options = if (current in available) available else available + current
+    val options = listOf(MicChoice.AUTO) + if (current in available || current.type == MicType.AUTO) available else available + current
     Label("Microphone")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
         options.forEach { choice ->
-            val connected = choice in available
+            val connected = choice.type == MicType.AUTO || choice in available
             Pick(if (connected) choice.label else "${choice.label} (not connected)", choice == current, enabled) {
-                onPick(if (choice.type == MicType.PHONE) null else choice.encode())
+                onPick(if (choice.type == MicType.AUTO) null else choice.encode())
             }
         }
         Pick("Look for mics", false, enabled) {
@@ -293,9 +293,11 @@ private fun MicPicker(saved: String?, enabled: Boolean, onPick: (String?) -> Uni
     }
     Text(
         when (current.type) {
-            MicType.BLUETOOTH -> "Bluetooth mics record at call quality, and other apps' audio may switch to the call route while filming. For full quality, use the mic's USB-C receiver."
-            MicType.PHONE -> "Connect a mic (USB-C receiver or Bluetooth), then tap Look for mics."
-            else -> "Clips record from this mic while it's connected; otherwise the phone mic."
+            MicType.AUTO -> "Uses a USB-C mic (like the DJI receiver) when it's plugged in, else your Bluetooth headset, else the phone. " +
+                "A Bluetooth headset can't play music while its mic records, so plug in the USB-C mic to keep your music."
+            MicType.BLUETOOTH -> "Music on this headset stops while its mic is recording (Bluetooth can't do both). For music and recording together, use a USB-C mic."
+            MicType.PHONE -> "Records from the phone's own mic, even when other mics are connected."
+            else -> "Clips record from this mic while it's connected; otherwise the phone mic (never your headset, so your music keeps playing)."
         },
         style = RtType.caption,
         color = RtColors.TextSecondary,

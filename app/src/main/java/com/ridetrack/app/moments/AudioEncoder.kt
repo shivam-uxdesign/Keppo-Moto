@@ -19,12 +19,22 @@ import com.ridetrack.telemetry.moments.RollingBuffer
 /**
  * Microphone → AAC into the [RollingBuffer]. Runs its own thread until [release].
  * [device] picks an external mic (USB-C receiver, Bluetooth, wired); null = the phone's.
- * A Bluetooth mic needs the phone's call-audio link, which is opened here and closed on release.
+ *
+ * Only a Bluetooth headset needs the phone's call-audio link (and while it's open the
+ * headset can't play music). It's opened here, and closed on release or as soon as the
+ * headset drops it: [onHeadsetLost] then tells the owner to carry on with another mic.
+ * Any other mic never touches the call link or the headset.
  */
-class AudioEncoder(private val context: Context, private val buffer: RollingBuffer, private val device: AudioDeviceInfo? = null) {
+class AudioEncoder(
+    private val context: Context,
+    private val buffer: RollingBuffer,
+    private val device: AudioDeviceInfo? = null,
+    private val onHeadsetLost: () -> Unit = {},
+) {
     private val audioManager = context.getSystemService<AudioManager>()
     private val bluetooth = device != null && Microphones.typeOf(device) == MicType.BLUETOOTH
-    private var scoStarted = false
+    @Volatile private var scoStarted = false
+    private val startNanos = System.nanoTime()
 
     @Volatile
     var format: MediaFormat? = null
@@ -56,6 +66,17 @@ class AudioEncoder(private val context: Context, private val buffer: RollingBuff
         codec.start()
         if (bluetooth) openBluetoothRoute()
         if (device != null) record.setPreferredDevice(device)
+        if (bluetooth) {
+            record.addOnRoutingChangedListener({ r ->
+                val d = r.routedDevice
+                // The headset left call mode: let it go at once. Holding the request keeps it
+                // bouncing in and out of call mode, so its music stays silent.
+                if (scoStarted && System.nanoTime() - startNanos > SETTLE_NANOS && (d == null || Microphones.typeOf(d) != MicType.BLUETOOTH)) {
+                    closeBluetoothRoute()
+                    onHeadsetLost()
+                }
+            }, null)
+        }
         record.startRecording()
         thread.start()
     }
@@ -125,6 +146,7 @@ class AudioEncoder(private val context: Context, private val buffer: RollingBuff
     }
 
     @Suppress("DEPRECATION")
+    @Synchronized
     private fun closeBluetoothRoute() {
         if (!scoStarted) return
         val am = audioManager ?: return
@@ -152,5 +174,7 @@ class AudioEncoder(private val context: Context, private val buffer: RollingBuff
     companion object {
         private const val TAG = "MomentsAudio"
         private const val SAMPLE_RATE = 44_100
+        /** The call link takes a moment to come up; routing flips during it don't count as a drop. */
+        private const val SETTLE_NANOS = 4_000_000_000L
     }
 }
