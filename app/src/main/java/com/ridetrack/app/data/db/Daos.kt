@@ -36,7 +36,7 @@ interface BikeDao {
 
 @Dao
 interface RideDao {
-    @Query("SELECT * FROM rides WHERE status = 'COMPLETED' ORDER BY startTimeMillis DESC")
+    @Query("SELECT * FROM rides WHERE status = 'COMPLETED' AND deletedAtMillis IS NULL ORDER BY startTimeMillis DESC")
     fun observeCompleted(): Flow<List<RideEntity>>
 
     @Query("SELECT * FROM rides WHERE id = :id")
@@ -45,21 +45,21 @@ interface RideDao {
     @Query("SELECT * FROM rides WHERE id = :id")
     suspend fun get(id: String): RideEntity?
 
-    @Query("SELECT * FROM rides WHERE status = 'IN_PROGRESS' ORDER BY startTimeMillis DESC")
+    @Query("SELECT * FROM rides WHERE status = 'IN_PROGRESS' AND deletedAtMillis IS NULL ORDER BY startTimeMillis DESC")
     fun observeInProgress(): Flow<List<RideEntity>>
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(ride: RideEntity)
 
     /** What Drive backup keeps: finished, real rides (not demo, not in progress). */
-    @Query("SELECT * FROM rides WHERE status = 'COMPLETED' AND source != 'DEMO'")
+    @Query("SELECT * FROM rides WHERE status = 'COMPLETED' AND source != 'DEMO' AND deletedAtMillis IS NULL")
     suspend fun backupable(): List<RideEntity>
 
     @Query("SELECT id FROM rides")
     suspend fun allIds(): List<String>
 
     /** Every finished ride, demo ones included (Keppo Journal's testing switch). */
-    @Query("SELECT * FROM rides WHERE status = 'COMPLETED'")
+    @Query("SELECT * FROM rides WHERE status = 'COMPLETED' AND deletedAtMillis IS NULL")
     suspend fun completed(): List<RideEntity>
 
     @Query(
@@ -90,6 +90,20 @@ interface RideDao {
     @Query("DELETE FROM rides WHERE id = :id")
     suspend fun delete(id: String)
 
+    // ---- Recently deleted ----
+
+    @Query("UPDATE rides SET deletedAtMillis = :at WHERE id = :id AND deletedAtMillis IS NULL")
+    suspend fun softDelete(id: String, at: Long): Int
+
+    @Query("UPDATE rides SET deletedAtMillis = NULL WHERE id = :id AND deletedAtMillis IS NOT NULL")
+    suspend fun restore(id: String): Int
+
+    @Query("SELECT * FROM rides WHERE deletedAtMillis IS NOT NULL ORDER BY deletedAtMillis DESC")
+    fun observeDeleted(): Flow<List<RideEntity>>
+
+    @Query("SELECT * FROM rides WHERE deletedAtMillis IS NOT NULL AND deletedAtMillis <= :before")
+    suspend fun deletedBefore(before: Long): List<RideEntity>
+
     @Insert
     suspend fun insertSamples(samples: List<SampleEntity>)
 
@@ -111,20 +125,20 @@ data class BikeMomentCount(val bikeId: String?, val count: Int)
 
 @Dao
 interface MomentDao {
-    @Query("SELECT * FROM moments WHERE rideId = :rideId ORDER BY timeMillis ASC")
+    @Query("SELECT * FROM moments WHERE rideId = :rideId AND deletedAtMillis IS NULL ORDER BY timeMillis ASC")
     fun observeForRide(rideId: String): Flow<List<MomentEntity>>
 
-    @Query("SELECT * FROM moments WHERE rideId = :rideId ORDER BY timeMillis ASC")
+    @Query("SELECT * FROM moments WHERE rideId = :rideId AND deletedAtMillis IS NULL ORDER BY timeMillis ASC")
     suspend fun forRide(rideId: String): List<MomentEntity>
 
-    @Query("SELECT * FROM moments")
+    @Query("SELECT m.* FROM moments m JOIN rides r ON r.id = m.rideId WHERE m.deletedAtMillis IS NULL AND r.deletedAtMillis IS NULL")
     suspend fun all(): List<MomentEntity>
 
     @Query("SELECT id FROM moments")
     suspend fun allIds(): List<String>
 
     /** Moments per bike, through the ride each was captured on. */
-    @Query("SELECT r.bikeId AS bikeId, COUNT(m.id) AS count FROM moments m JOIN rides r ON r.id = m.rideId GROUP BY r.bikeId")
+    @Query("SELECT r.bikeId AS bikeId, COUNT(m.id) AS count FROM moments m JOIN rides r ON r.id = m.rideId WHERE m.deletedAtMillis IS NULL AND r.deletedAtMillis IS NULL GROUP BY r.bikeId")
     fun observeCountsByBike(): Flow<List<BikeMomentCount>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -136,6 +150,29 @@ interface MomentDao {
     @Query("DELETE FROM moments WHERE id = :id")
     suspend fun delete(id: String)
 
-    @Query("DELETE FROM moments")
-    suspend fun deleteAll()
+    @Query("SELECT * FROM moments WHERE id = :id")
+    suspend fun get(id: String): MomentEntity?
+
+    /** Every moment of a ride, including ones in Recently deleted (for purging and for undo). */
+    @Query("SELECT * FROM moments WHERE rideId = :rideId")
+    suspend fun allForRide(rideId: String): List<MomentEntity>
+
+    // ---- Recently deleted ----
+
+    @Query("UPDATE moments SET deletedAtMillis = :at WHERE id = :id AND deletedAtMillis IS NULL")
+    suspend fun softDelete(id: String, at: Long): Int
+
+    /** "Delete all moments": every live moment of every live ride moves to Recently deleted. */
+    @Query("SELECT m.* FROM moments m JOIN rides r ON r.id = m.rideId WHERE m.deletedAtMillis IS NULL AND r.deletedAtMillis IS NULL")
+    suspend fun allLive(): List<MomentEntity>
+
+    @Query("UPDATE moments SET deletedAtMillis = NULL WHERE id = :id AND deletedAtMillis IS NOT NULL")
+    suspend fun restore(id: String): Int
+
+    /** Moments deleted on their own (their ride is still live). */
+    @Query("SELECT m.* FROM moments m JOIN rides r ON r.id = m.rideId WHERE m.deletedAtMillis IS NOT NULL AND r.deletedAtMillis IS NULL ORDER BY m.deletedAtMillis DESC")
+    fun observeDeleted(): Flow<List<MomentEntity>>
+
+    @Query("SELECT * FROM moments WHERE deletedAtMillis IS NOT NULL AND deletedAtMillis <= :before")
+    suspend fun deletedBefore(before: Long): List<MomentEntity>
 }

@@ -74,24 +74,6 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
 
     suspend fun setStarred(id: String, starred: Boolean) = dao.setStarred(id, starred)
 
-    suspend fun delete(m: Moment) {
-        dao.delete(m.id)
-        withContext(Dispatchers.IO) {
-            m.file.delete()
-            m.thumb?.delete()
-        }
-    }
-
-    /** Removes a ride's files; its rows go with the ride (foreign-key cascade). */
-    suspend fun deleteFilesForRide(rideId: String) = withContext(Dispatchers.IO) {
-        File(File(context.filesDir, "moments"), rideId).deleteRecursively()
-    }
-
-    suspend fun deleteAll() {
-        dao.deleteAll()
-        withContext(Dispatchers.IO) { File(context.filesDir, "moments").deleteRecursively() }
-    }
-
     suspend fun bytesUsed(): Long = withContext(Dispatchers.IO) {
         File(context.filesDir, "moments").walkTopDown().filter { it.isFile }.sumOf { it.length() }
     }

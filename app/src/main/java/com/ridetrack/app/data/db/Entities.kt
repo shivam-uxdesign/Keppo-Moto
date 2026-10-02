@@ -56,6 +56,8 @@ data class RideEntity(
     val brakeEvents: Int,
     val accelEvents: Int,
     val leanEvents: Int,
+    /** Set while the ride is in Recently deleted (purged for good 30 days later). */
+    val deletedAtMillis: Long? = null,
 )
 
 @Entity(
@@ -122,4 +124,6 @@ data class MomentEntity(
     val clipStartMillis: Long? = null,
     /** MANUAL or GPS_LOST for videos filmed on purpose; null = cut around an event. */
     val source: String? = null,
+    /** Set while this moment alone is in Recently deleted (a deleted ride hides its moments with it). */
+    val deletedAtMillis: Long? = null,
 )

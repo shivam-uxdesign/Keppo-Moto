@@ -178,7 +178,7 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Delete all moments?") },
-            text = { Text("Every saved clip and photo from all rides will be removed. Rides themselves are kept.") },
+            text = { Text("Every clip and photo from all rides moves to Recently deleted, where you can restore them for 30 days. Rides themselves are kept.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false

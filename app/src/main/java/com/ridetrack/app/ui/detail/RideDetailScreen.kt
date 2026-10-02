@@ -443,7 +443,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Delete ride?") },
-            text = { Text("This ride and all of its telemetry will be permanently deleted.") },
+            text = { Text("It moves to Recently deleted with its moments. You can restore it there for 30 days; after that it's gone for good.") },
             confirmButton = {
                 TextButton(onClick = { confirmDelete = false; vm.delete(onBack) }) { Text("Delete", color = RtColors.Error) }
             },

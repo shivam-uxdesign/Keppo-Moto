@@ -6,7 +6,9 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import android.content.Intent
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ridetrack.app.data.AppTheme
@@ -14,12 +16,16 @@ import com.ridetrack.app.ui.nav.RideTrackNavHost
 import com.ridetrack.app.ui.theme.RideTrackTheme
 
 class MainActivity : ComponentActivity() {
+    /** A ride to open, from Keppo Journal's OPEN_RIDE (see docs/keppo-ride-format.md). */
+    private val openRide = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) openRide.value = rideToOpen(intent)
         val settings = (application as RideTrackApp).container.settings.settings
         setContent {
             // Wait for the stored choice (a few ms) so the app doesn't flash the wrong theme.
@@ -36,8 +42,20 @@ class MainActivity : ComponentActivity() {
                 enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
             }
             RideTrackTheme(dark = dark) {
-                RideTrackNavHost()
+                RideTrackNavHost(openRideId = openRide.value, onOpenRideHandled = { openRide.value = null })
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        rideToOpen(intent)?.let { openRide.value = it }
+    }
+
+    private fun rideToOpen(intent: Intent?): String? =
+        intent?.takeIf { it.action == ACTION_OPEN_RIDE }?.getStringExtra("rideId")?.takeIf { it.isNotBlank() }
+
+    companion object {
+        const val ACTION_OPEN_RIDE = "com.keppo.action.OPEN_RIDE"
     }
 }

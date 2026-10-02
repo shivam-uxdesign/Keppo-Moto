@@ -1,5 +1,6 @@
 package com.ridetrack.app
 
+import com.ridetrack.app.trash.RecentlyDeleted
 import com.ridetrack.app.journal.JournalSource
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
@@ -55,7 +56,8 @@ class AppContainer(context: Context) {
     )
 
     val journal = JournalSource(appContext, database, settings)
-    val backup = BackupRepository(appContext, database, settings, journal::routePng)
+    val backup = BackupRepository(appContext, database, settings, journal::routePng) { journal.onRideSaved(null) }
+    val trash = RecentlyDeleted(appContext, database, journal) { backUpSoon() }
 
     /** Queues a Drive backup if Drive is connected (Wi-Fi only unless the rider allowed mobile data). */
     fun backUpSoon() {

@@ -1,5 +1,6 @@
 package com.ridetrack.app
 
+import com.ridetrack.app.trash.PurgeWorker
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import com.ridetrack.app.backup.BackupWorker
@@ -20,6 +21,8 @@ class RideTrackApp : Application() {
         createNotificationChannel()
         container.hud.start()
         container.crashAlerts.start()
+        PurgeWorker.schedule(this)
+        container.appScope.launch { container.trash.purgeExpired() }
         container.appScope.launch {
             val b = container.settings.settings.first().backup
             if (b.connected) BackupWorker.scheduleDaily(this@RideTrackApp, b.allowMobileData)

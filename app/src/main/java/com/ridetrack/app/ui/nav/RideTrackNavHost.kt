@@ -1,5 +1,9 @@
 package com.ridetrack.app.ui.nav
 
+import com.ridetrack.app.data.RideLookup
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import com.ridetrack.app.ui.trash.RecentlyDeletedScreen
 import com.ridetrack.app.ui.theme.RideDark
 import com.ridetrack.app.ui.theme.LocalRtPalette
 import com.ridetrack.app.ui.theme.DarkPalette
@@ -76,6 +80,8 @@ object Routes {
     const val BIKE_EDIT = "bike/edit?bikeId={bikeId}"
     const val CALIBRATE = "calibrate/{bikeId}"
     const val HUD_SETTINGS = "hud-settings"
+    const val RECENTLY_DELETED = "recently-deleted?rideId={rideId}"
+    fun recentlyDeleted(rideId: String? = null) = if (rideId == null) "recently-deleted" else "recently-deleted?rideId=$rideId"
     const val RIDES_MAP = "rides-map"
     const val SHARE = "share/{rideId}"
     fun share(id: String) = "share/$id"
@@ -100,9 +106,11 @@ private val tabs = listOf(
 )
 
 @Composable
-fun RideTrackNavHost() {
+fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit = {}) {
     val nav = rememberNavController()
-    val session = appContainer().session
+    val container = appContainer()
+    val session = container.session
+    val context = LocalContext.current
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
     val showBottomBar = tabs.any { it.route == route }
@@ -110,6 +118,21 @@ fun RideTrackNavHost() {
     // If a ride is in progress (e.g. the activity was recreated), go straight back to it.
     LaunchedEffect(Unit) {
         if (session.state.value.isActive) nav.navigate(Routes.LIVE) { launchSingleTop = true }
+    }
+
+    // OPEN_RIDE from Keppo Journal (or any app): the ride, Recently deleted, or the rides list.
+    LaunchedEffect(openRideId) {
+        val id = openRideId ?: return@LaunchedEffect
+        onOpenRideHandled()
+        if (session.state.value.isActive) return@LaunchedEffect
+        when (container.rides.lookup(id)) {
+            RideLookup.LIVE -> nav.navigate(Routes.detail(id))
+            RideLookup.DELETED -> nav.navigate(Routes.recentlyDeleted(id))
+            RideLookup.MISSING -> {
+                nav.navigate(Routes.RIDES) { popUpTo(Routes.HOME); launchSingleTop = true }
+                Toast.makeText(context, "That ride isn't on this phone", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     Scaffold(
@@ -155,7 +178,18 @@ fun RideTrackNavHost() {
                         onCalibrate = { nav.navigate(Routes.calibrate(it)) },
                     )
                 }
-                composable(Routes.PROFILE) { ProfileScreen(onOpenHudSettings = { nav.navigate(Routes.HUD_SETTINGS) }) }
+                composable(Routes.PROFILE) {
+                    ProfileScreen(
+                        onOpenHudSettings = { nav.navigate(Routes.HUD_SETTINGS) },
+                        onOpenRecentlyDeleted = { nav.navigate(Routes.recentlyDeleted()) },
+                    )
+                }
+                composable(
+                    Routes.RECENTLY_DELETED,
+                    arguments = listOf(navArgument("rideId") { type = NavType.StringType; nullable = true; defaultValue = null }),
+                ) { entry ->
+                    RecentlyDeletedScreen(focusRideId = entry.arguments?.getString("rideId"), onBack = { nav.popBackStack() })
+                }
                 composable(Routes.HUD_SETTINGS) { HudSettingsScreen(onBack = { nav.popBackStack() }) }
                 composable(
                     Routes.LIVE,

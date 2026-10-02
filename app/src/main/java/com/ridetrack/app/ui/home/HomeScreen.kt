@@ -164,7 +164,7 @@ fun HomeScreen(
         AlertDialog(
             onDismissRequest = { confirmDiscard = null },
             title = { Text("Discard unfinished ride?") },
-            text = { Text("The recorded route and telemetry for this ride will be permanently deleted.") },
+            text = { Text("It moves to Recently deleted. You can restore it there for 30 days; after that it's gone for good.") },
             confirmButton = {
                 TextButton(onClick = { vm.discardUnfinished(ride); confirmDiscard = null }) { Text("Discard", color = RtColors.Error) }
             },

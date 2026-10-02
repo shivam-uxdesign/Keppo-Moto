@@ -291,8 +291,7 @@ class RideDetailViewModel(private val c: AppContainer, private val rideId: Strin
 
     fun delete(onDeleted: () -> Unit) {
         viewModelScope.launch {
-            c.rides.delete(rideId)
-            c.moments.deleteFilesForRide(rideId)
+            c.trash.deleteRide(rideId)
             onDeleted()
         }
     }

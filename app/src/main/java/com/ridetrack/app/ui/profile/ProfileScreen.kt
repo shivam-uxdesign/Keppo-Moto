@@ -52,7 +52,7 @@ import com.ridetrack.app.ui.theme.RtType
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ProfileScreen(onOpenHudSettings: () -> Unit) {
+fun ProfileScreen(onOpenHudSettings: () -> Unit, onOpenRecentlyDeleted: () -> Unit) {
     val vm = appViewModel { ProfileViewModel(it) }
     val s by vm.state.collectAsStateWithLifecycle()
 
@@ -186,6 +186,16 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit) {
         JournalSection(s, vm)
 
         BackupSection(s, vm)
+
+        RtCard(onClick = onOpenRecentlyDeleted) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Recently deleted", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+                    Text("Rides and moments you deleted, kept for 30 days", style = RtType.caption, color = RtColors.TextSecondary)
+                }
+                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = RtColors.TextSecondary)
+            }
+        }
 
         SectionHeader("Developer")
         RtCard {

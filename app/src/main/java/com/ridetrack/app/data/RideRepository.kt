@@ -55,10 +55,16 @@ class RideRepository(private val dao: RideDao) {
 
     suspend fun rename(rideId: String, name: String) = dao.rename(rideId, name.trim())
 
-    suspend fun delete(rideId: String) = dao.delete(rideId)
-
     suspend fun track(rideId: String): RideTrack = RideTrack(
         samples = dao.samples(rideId).map { it.toModel() },
         events = dao.events(rideId).mapNotNull { it.toModelOrNull() },
     )
+
+    /** Where a ride is, for links from outside (Keppo Journal's OPEN_RIDE). */
+    suspend fun lookup(id: String): RideLookup {
+        val e = dao.get(id) ?: return RideLookup.MISSING
+        return if (e.deletedAtMillis != null) RideLookup.DELETED else RideLookup.LIVE
+    }
 }
+
+enum class RideLookup { LIVE, DELETED, MISSING }

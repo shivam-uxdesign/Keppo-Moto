@@ -46,6 +46,22 @@ class JournalSource(
 
     fun momentFile(rideId: String, name: String): File = File(momentsDir(rideId), name)
 
+    /**
+     * The picture to show for a file in lists: a clip's saved thumbnail frame, a photo or
+     * thumbnail itself, or the route picture. Null for files without one (ride.json).
+     */
+    suspend fun thumbnail(rideId: String, name: String): File? {
+        if (name == JournalTree.ROUTE_PNG) return ride(rideId)?.let { routePng(it) }
+        val dir = momentsDir(rideId)
+        val clip = db.momentDao().forRide(rideId).firstOrNull { it.file == name && it.kind == "CLIP" }
+        val f = when {
+            clip != null -> clip.thumbFile?.let { File(dir, it) }
+            name.endsWith(".jpg") || name.endsWith(".jpeg") -> File(dir, name)
+            else -> null
+        }
+        return f?.takeIf { it.isFile }
+    }
+
     /** `ride.json`, regenerated when the ride or its moments changed. */
     suspend fun rideJson(ride: RideEntity): File {
         val moments = db.momentDao().forRide(ride.id)
@@ -77,13 +93,26 @@ class JournalSource(
         settings.setJournalLastRead(now)
     }
 
-    /** A ride was saved: tell the file picker, and tap Keppo Journal on the shoulder. */
-    suspend fun onRideSaved(rideId: String) {
-        if (!enabled()) return
+    /**
+     * A ride was saved or restored: tell the file picker, and tap Keppo Journal on the shoulder.
+     * No [rideId] means "several rides changed, check everything" (after a Drive restore).
+     */
+    suspend fun onRideSaved(rideId: String?) = signal(ACTION_RIDE_SAVED, rideId)
+
+    /** A ride moved to Recently deleted. `deleted.json` records it too, in case this is missed. */
+    suspend fun onRideDeleted(rideId: String) = signal(ACTION_RIDE_DELETED, rideId)
+
+    /** Something inside the folder changed (a moment deleted or restored): refresh listings only. */
+    fun onContentsChanged() {
         context.contentResolver.notifyChange(DocumentsContract.buildChildDocumentsUri(authority(context), JournalTree.ROOT), null)
-        context.sendBroadcast(
-            Intent(ACTION_RIDE_SAVED).setPackage(JOURNAL_PACKAGE).putExtra(EXTRA_RIDE_ID, rideId).addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES),
-        )
+    }
+
+    private suspend fun signal(action: String, rideId: String?) {
+        if (!enabled()) return
+        onContentsChanged()
+        val intent = Intent(action).setPackage(JOURNAL_PACKAGE).addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+        if (rideId != null) intent.putExtra(EXTRA_RIDE_ID, rideId)
+        context.sendBroadcast(intent)
     }
 
     /** Sharing turned on or off: the "Keppo Moto" root appears in, or leaves, the file picker. */
@@ -98,6 +127,7 @@ class JournalSource(
     companion object {
         const val JOURNAL_PACKAGE = "com.keppo.journal"
         const val ACTION_RIDE_SAVED = "com.keppo.action.RIDE_SAVED"
+        const val ACTION_RIDE_DELETED = "com.keppo.action.RIDE_DELETED"
         /** Keppo Journal's one-tap connect; handled by [ShareRidesActivity]. */
         const val ACTION_SHARE_RIDES = "com.keppo.action.SHARE_RIDES"
         const val EXTRA_RIDE_ID = "rideId"

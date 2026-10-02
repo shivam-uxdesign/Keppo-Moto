@@ -1,5 +1,7 @@
 package com.ridetrack.app.journal
 
+import android.graphics.Point
+import android.content.res.AssetFileDescriptor
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.os.CancellationSignal
@@ -48,7 +50,8 @@ class RideDocumentsProvider : DocumentsProvider() {
                 val ride = source.ride(doc.rideId) ?: throw FileNotFoundException(documentId)
                 folderRow(c, documentId, JournalTree.rideFolderName(ride.startTimeMillis, ride.name), ride.lastUpdateMillis)
             }
-            is JournalTree.Doc.File -> fileRow(c, doc, file(doc))
+            is JournalTree.Doc.File -> fileRow(c, documentId, doc.name, file(doc), thumbnail = source.thumbnail(doc.rideId, doc.name) != null)
+            JournalTree.Doc.Deletions -> fileRow(c, documentId, JournalTree.DELETED_JSON, deletions(), thumbnail = false)
         }
         source.markRead()
         c
@@ -58,12 +61,17 @@ class RideDocumentsProvider : DocumentsProvider() {
         val c = MatrixCursor(projection ?: DOC_COLUMNS)
         if (!source.enabled()) return@runBlocking c
         when (val doc = JournalTree.parse(parentDocumentId)) {
-            JournalTree.Doc.Root -> source.rides().forEach { r ->
-                folderRow(c, JournalTree.id(JournalTree.Doc.Ride(r.id)), JournalTree.rideFolderName(r.startTimeMillis, r.name), r.lastUpdateMillis)
+            JournalTree.Doc.Root -> {
+                fileRow(c, JournalTree.DELETED_JSON, JournalTree.DELETED_JSON, deletions(), thumbnail = false)
+                source.rides().forEach { r ->
+                    folderRow(c, JournalTree.id(JournalTree.Doc.Ride(r.id)), JournalTree.rideFolderName(r.startTimeMillis, r.name), r.lastUpdateMillis)
+                }
             }
             is JournalTree.Doc.Ride -> {
                 val names = source.momentFiles(doc.rideId).map { it.name }
-                JournalTree.rideChildren(doc.rideId, names).forEach { f -> runCatching { fileRow(c, f, file(f)) } }
+                JournalTree.rideChildren(doc.rideId, names).forEach { f ->
+                    runCatching { fileRow(c, JournalTree.id(f), f.name, file(f), thumbnail = source.thumbnail(f.rideId, f.name) != null) }
+                }
             }
             else -> Unit
         }
@@ -74,12 +82,26 @@ class RideDocumentsProvider : DocumentsProvider() {
 
     override fun openDocument(documentId: String, mode: String, signal: CancellationSignal?): ParcelFileDescriptor {
         if (mode != "r") throw UnsupportedOperationException("Keppo Moto shares rides read-only")
+        val f = runBlocking {
+            if (!source.enabled()) throw FileNotFoundException(documentId)
+            when (val doc = JournalTree.parse(documentId)) {
+                is JournalTree.Doc.File -> file(doc)
+                JournalTree.Doc.Deletions -> deletions()
+                else -> throw FileNotFoundException(documentId)
+            }.also { source.markRead() }
+        }
+        return ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY)
+    }
+
+    /** Small pictures for the journal's lists: a clip's thumbnail frame, or the photo / route picture itself. */
+    override fun openDocumentThumbnail(documentId: String, sizeHint: Point?, signal: CancellationSignal?): AssetFileDescriptor {
         val doc = JournalTree.parse(documentId) as? JournalTree.Doc.File ?: throw FileNotFoundException(documentId)
         val f = runBlocking {
             if (!source.enabled()) throw FileNotFoundException(documentId)
-            file(doc).also { source.markRead() }
-        }
-        return ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY)
+            source.thumbnail(doc.rideId, doc.name)
+        } ?: throw FileNotFoundException(documentId)
+        val pfd = ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY)
+        return AssetFileDescriptor(pfd, 0, AssetFileDescriptor.UNKNOWN_LENGTH)
     }
 
     override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean =
@@ -87,6 +109,7 @@ class RideDocumentsProvider : DocumentsProvider() {
 
     override fun getDocumentType(documentId: String): String = when (val doc = JournalTree.parse(documentId)) {
         is JournalTree.Doc.File -> JournalTree.mime(doc.name)
+        JournalTree.Doc.Deletions -> "application/json"
         null -> throw FileNotFoundException(documentId)
         else -> Document.MIME_TYPE_DIR
     }
@@ -113,12 +136,15 @@ class RideDocumentsProvider : DocumentsProvider() {
         }
     }
 
-    private fun fileRow(c: MatrixCursor, doc: JournalTree.Doc.File, f: File) {
+    /** `deleted.json`, kept by Recently deleted. */
+    private fun deletions(): File = (context!!.applicationContext as RideTrackApp).container.trash.log.fileForReading()
+
+    private fun fileRow(c: MatrixCursor, id: String, name: String, f: File, thumbnail: Boolean) {
         c.newRow().apply {
-            add(Document.COLUMN_DOCUMENT_ID, JournalTree.id(doc))
-            add(Document.COLUMN_DISPLAY_NAME, doc.name)
-            add(Document.COLUMN_MIME_TYPE, JournalTree.mime(doc.name))
-            add(Document.COLUMN_FLAGS, 0)
+            add(Document.COLUMN_DOCUMENT_ID, id)
+            add(Document.COLUMN_DISPLAY_NAME, name)
+            add(Document.COLUMN_MIME_TYPE, JournalTree.mime(name))
+            add(Document.COLUMN_FLAGS, if (thumbnail) Document.FLAG_SUPPORTS_THUMBNAIL else 0)
             add(Document.COLUMN_SIZE, f.length())
             add(Document.COLUMN_LAST_MODIFIED, f.lastModified())
         }

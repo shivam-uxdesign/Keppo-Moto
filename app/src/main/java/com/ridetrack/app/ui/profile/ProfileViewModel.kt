@@ -66,7 +66,7 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
 
     fun deleteAllMoments() {
         viewModelScope.launch {
-            c.moments.deleteAll()
+            c.trash.deleteAllMoments()
             refreshMomentsStorage()
         }
     }

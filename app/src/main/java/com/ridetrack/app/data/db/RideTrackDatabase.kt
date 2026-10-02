@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [BikeEntity::class, RideEntity::class, SampleEntity::class, EventEntity::class, MomentEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class RideTrackDatabase : RoomDatabase() {
@@ -22,7 +22,7 @@ abstract class RideTrackDatabase : RoomDatabase() {
             Room.databaseBuilder(context, RideTrackDatabase::class.java, "ridetrack.db")
                 // WAL keeps frequent small ride writes cheap and durable.
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
 
         /** Bike photo + redline, and OBD engine data per sample. Existing rows get NULL (unknown). */
@@ -62,6 +62,14 @@ abstract class RideTrackDatabase : RoomDatabase() {
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE moments ADD COLUMN source TEXT")
+            }
+        }
+
+        /** Recently deleted: rides and moments get a "deleted at" time instead of vanishing at once. */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE rides ADD COLUMN deletedAtMillis INTEGER")
+                db.execSQL("ALTER TABLE moments ADD COLUMN deletedAtMillis INTEGER")
             }
         }
 

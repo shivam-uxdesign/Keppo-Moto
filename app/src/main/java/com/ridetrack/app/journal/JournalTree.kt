@@ -12,28 +12,34 @@ import java.time.format.DateTimeFormatter
  * root                       "Keppo Moto"
  * ride:<rideId>              "2026-10-01 Sunday at Nahan"
  * file:<rideId>/<name>       ride.json, route.png, moment files
+ * deleted.json               what was deleted, restored or purged (keppo.deleted)
  * ```
  */
 object JournalTree {
     const val ROOT = "root"
     const val RIDE_JSON = "ride.json"
     const val ROUTE_PNG = "route.png"
+    const val DELETED_JSON = "deleted.json"
 
     sealed interface Doc {
         data object Root : Doc
         data class Ride(val rideId: String) : Doc
         data class File(val rideId: String, val name: String) : Doc
+        /** `deleted.json` at the root. */
+        data object Deletions : Doc
     }
 
     fun id(doc: Doc): String = when (doc) {
         Doc.Root -> ROOT
         is Doc.Ride -> "ride:${doc.rideId}"
         is Doc.File -> "file:${doc.rideId}/${doc.name}"
+        Doc.Deletions -> DELETED_JSON
     }
 
     /** Null for anything we didn't hand out (or that tries to climb out of a ride folder). */
     fun parse(id: String): Doc? = when {
         id == ROOT -> Doc.Root
+        id == DELETED_JSON -> Doc.Deletions
         id.startsWith("ride:") -> id.removePrefix("ride:").takeIf(::safe)?.let { Doc.Ride(it) }
         id.startsWith("file:") -> {
             val rest = id.removePrefix("file:")
@@ -66,7 +72,7 @@ object JournalTree {
         return when (parent) {
             Doc.Root -> child != Doc.Root
             is Doc.Ride -> child is Doc.File && child.rideId == parent.rideId
-            is Doc.File -> false
+            is Doc.File, Doc.Deletions -> false
         }
     }
 

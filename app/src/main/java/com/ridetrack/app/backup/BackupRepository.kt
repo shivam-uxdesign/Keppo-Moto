@@ -44,6 +44,8 @@ class BackupRepository(
     private val settings: SettingsRepository,
     /** Draws a ride's `route.png` (the Keppo Journal cover); shared with the on-phone journal link. */
     private val routePng: suspend (RideEntity) -> File,
+    /** Rides came back from Drive: tell Keppo Journal once to check everything. */
+    private val onRidesRestored: suspend () -> Unit = {},
 ) {
     private val auth = DriveAuth(context)
     private val drive = DriveApi { auth.token() }
@@ -241,6 +243,7 @@ class BackupRepository(
             }
             settings.setBackupAdopted(true)
             _status.update { it.copy(foundRides = null) }
+            if (todo.isNotEmpty()) onRidesRestored()
         }
     }
 

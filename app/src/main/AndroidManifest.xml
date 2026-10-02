@@ -65,6 +65,11 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Keppo Journal (or any app) opens a ride's page: extra "rideId". -->
+            <intent-filter>
+                <action android:name="com.keppo.action.OPEN_RIDE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <!-- Shares ride graphics, and (BETA) ride export ZIPs. Keep when removing the export tool. -->
@@ -98,6 +103,18 @@
             android:theme="@style/Theme.RideTrack.Translucent">
             <intent-filter>
                 <action android:name="com.keppo.action.SHARE_RIDES" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Keppo Journal asks to delete a ride: Moto confirms, then moves it to Recently deleted. -->
+        <activity
+            android:name=".journal.DeleteRideActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.RideTrack.Translucent">
+            <intent-filter>
+                <action android:name="com.keppo.action.DELETE_RIDE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>

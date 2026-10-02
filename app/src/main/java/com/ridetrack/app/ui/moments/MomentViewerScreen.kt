@@ -115,7 +115,7 @@ class MomentViewerViewModel(private val c: AppContainer, rideId: String) : ViewM
     }
 
     fun delete(m: Moment) {
-        viewModelScope.launch { c.moments.delete(m) }
+        viewModelScope.launch { c.trash.deleteMoment(m.id) }
     }
 }
 
@@ -298,7 +298,7 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
             title = { Text(if (m.kind == MomentKind.CLIP) "Delete this clip?" else "Delete this photo?") },
-            text = { Text("It will be removed from this phone.") },
+            text = { Text("It moves to Recently deleted. You can restore it there for 30 days.") },
             confirmButton = {
                 TextButton(onClick = {
                     vm.delete(m)
