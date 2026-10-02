@@ -61,6 +61,12 @@ class AppContainer(context: Context) {
     val backup = BackupRepository(appContext, database, settings, journal::routePng) { journal.onRideSaved(null) }
     val trash = RecentlyDeleted(appContext, database, journal) { backUpSoon() }
 
+    /** A ride was renamed: Keppo Journal re-reads its ride.json, and Drive gets the new one. */
+    fun onRideRenamed(id: String) {
+        backUpSoon()
+        appScope.launch { journal.onRideSaved(id) }
+    }
+
     /** Queues a Drive backup if Drive is connected (Wi-Fi only unless the rider allowed mobile data). */
     fun backUpSoon() {
         appScope.launch {

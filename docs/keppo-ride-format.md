@@ -115,6 +115,12 @@ Keppo Journal shows ride files straight from Keppo Moto's provider through its p
 - Photo and clip files support thumbnails (`FLAG_SUPPORTS_THUMBNAIL`, `openDocumentThumbnail`); use them for lists.
 - Keppo Moto never deletes files on its own. Low storage only stops new recordings. Files are removed only after 30 days in Keppo Moto's Recently deleted, or when the rider chooses "Delete now" there.
 
+### Renames
+
+Renaming a ride in Keppo Moto rewrites its `ride.json` (`name`) and sends `RIDE_SAVED` with that `rideId`. On Drive, the backup re-uploads `ride.json`. The ride's id and document ids don't change.
+
+The journal updates the entry's title to the new `name`, unless the rider has renamed the entry in the journal; once they have, the journal keeps its own title. The journal only reads names: it never renames rides in Keppo Moto.
+
 ### Open a ride
 
 | | |

@@ -286,7 +286,10 @@ class RideDetailViewModel(private val c: AppContainer, private val rideId: Strin
 
     fun rename(name: String) {
         if (name.isBlank()) return
-        viewModelScope.launch { c.rides.rename(rideId, name) }
+        viewModelScope.launch {
+            c.rides.rename(rideId, name)
+            c.onRideRenamed(rideId)
+        }
     }
 
     fun delete(onDeleted: () -> Unit) {
