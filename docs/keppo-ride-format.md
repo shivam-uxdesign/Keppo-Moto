@@ -102,3 +102,65 @@ The broadcast carries only the id. The journal reads the ride through the folder
 ## De-duplication
 
 A ride is identified only by `ride.json` → `id`. Whichever path delivers it first creates the journal entry; the other path then only fills in missing moment files. Deleting in Moto never deletes from the journal, and a re-sync never overwrites what the rider wrote in the journal.
+
+## Reading rides in place (keppo.ride v1 additions)
+
+Keppo Journal shows ride files straight from Keppo Moto's provider through its persisted tree grant; it does not copy them.
+
+- Document ids are opaque. Take them only from listings: `root`, `ride:<rideId>`, `file:<rideId>/<file name>`, and `deleted.json`. They stay the same after an app update and after a restore from Google Drive. A reinstall without a restore removes the rides.
+- Files are never moved or renamed after they're saved. Moments can be added to a ride later.
+- `ride.json` and `route.png` are generated: their ids stay the same but their contents can change (a renamed ride, a better route picture). Re-read them when `COLUMN_LAST_MODIFIED` changes.
+- Photo and clip files support thumbnails (`FLAG_SUPPORTS_THUMBNAIL`, `openDocumentThumbnail`); use them for lists.
+- Keppo Moto never deletes files on its own. Low storage only stops new recordings. Files are removed only after 30 days in Keppo Moto's Recently deleted, or when the rider chooses "Delete now" there.
+
+### Open a ride
+
+| | |
+|---|---|
+| package | `com.keppo.moto` |
+| action | `com.keppo.action.OPEN_RIDE` |
+| extra | `rideId` (String) |
+
+Any caller may use it. Opens that ride's page. A ride in Recently deleted opens Recently deleted. An unknown or permanently deleted ride opens the rides list with a short message.
+
+### Delete a ride from the journal
+
+| | |
+|---|---|
+| package | `com.keppo.moto` |
+| action | `com.keppo.action.DELETE_RIDE` (start for a result) |
+| extra | `rideId` (String) |
+
+Keppo Moto answers only if the caller is `com.keppo.journal`. It shows its own confirmation ("Delete this ride? It moves to Recently deleted in Keppo Moto, with its N videos and M photos, for 30 days. After that it's gone for good."). It finishes with `RESULT_OK` if the ride moved to Recently deleted, otherwise `RESULT_CANCELED` (cancelled, unknown or already deleted ride, or any other caller). The journal treats `RESULT_OK` as done and hides the entry.
+
+The journal can also remove a ride's entry from the journal only, without calling `DELETE_RIDE`. That ride stays in Keppo Moto and is never imported into the journal again, whatever happens to it in Keppo Moto later (including a restore).
+
+### Deletions
+
+Recently deleted belongs to Keppo Moto. The journal mirrors it and never restores a Moto ride itself.
+
+When a ride is deleted in Keppo Moto (by the rider or through `DELETE_RIDE`), Moto sends an explicit broadcast:
+
+| | |
+|---|---|
+| package | `com.keppo.journal` |
+| action | `com.keppo.action.RIDE_DELETED` |
+| extra | `rideId` (String) |
+
+Because broadcasts can be missed, the provider root also holds `deleted.json` (document id `deleted.json`):
+
+    { "format": "keppo.deleted", "v": 1,
+      "rides":   { "<rideId>":   { "deletedAt": <millis>, "restoredAt": <millis or null>, "purgedAt": <millis or null> } },
+      "moments": { "<momentId>": { "rideId": "<rideId>", "deletedAt": <millis>, "restoredAt": <millis or null>, "purgedAt": <millis or null> } } }
+
+- Entries are never removed. Deleting again updates `deletedAt`; restoring sets `restoredAt`; the permanent deletion after 30 days (or "Delete now") sets `purgedAt`.
+- A ride or moment is deleted while `deletedAt` is later than `restoredAt` (or `restoredAt` is null): the journal hides it. When restored, the journal shows it again with the rider's notes. When `purgedAt` is set, the journal deletes the entry (or the moment) for good; it never appears in the journal's Recently deleted.
+- Restoring a ride from Keppo Moto's Recently deleted also sends `RIDE_SAVED` with that `rideId`.
+
+### Restores from Google Drive
+
+Rides restored from Drive appear in the folder like any other ride. After a restore Keppo Moto sends one `RIDE_SAVED` **without** a `rideId` extra, meaning "several rides changed, check everything". A restore brings back every ride in the rider's backup that isn't on this phone, but only when the rider chooses Restore.
+
+### Without Keppo Moto
+
+If Keppo Moto isn't installed, the journal can offer "Sync from Google Drive": it reads Keppo Moto's backup folder (the folder whose `appProperties` has `keppo = moto`, its `manifest.json` and `rides/<rideId>/…`) and copies the media into the journal. Rides marked `deletedAt` in the manifest are skipped.
