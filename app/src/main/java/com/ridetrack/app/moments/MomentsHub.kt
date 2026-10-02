@@ -68,6 +68,12 @@ data class MomentState(
     /** An event is being filmed (its after-window is running) or a clip is being written. */
     val saving: Boolean = false,
     val saved: Int = 0,
+    /** Start (with look-back) of the event clip being filmed; the HUD counts from here. */
+    val clipStartMillis: Long? = null,
+    /** A periodic photo is coming at this time (the HUD counts 3 · 2 · 1). */
+    val photoAtMillis: Long? = null,
+    /** When the last photo was taken (the HUD says "photo" briefly). */
+    val photoTakenAtMillis: Long? = null,
 )
 
 /**
@@ -143,9 +149,18 @@ class MomentsHub {
     @Synchronized
     fun drainQueued(): List<MomentRequest> = queue.toList().also { queue.clear() }
 
-    fun setEventPending(pending: Boolean) {
+    fun setEventPending(pending: Boolean, clipStartMillis: Long? = null) {
         eventPending.value = pending
+        if (pending && clipStartMillis != null) clipStart = clipStartMillis
         publish()
+    }
+
+    fun setPhotoCountdown(atMillis: Long?) {
+        _state.value = _state.value.copy(photoAtMillis = atMillis)
+    }
+
+    fun onPhotoTaken(atMillis: Long) {
+        _state.value = _state.value.copy(photoAtMillis = null, photoTakenAtMillis = atMillis)
     }
 
     fun setWriting(w: Boolean) {
@@ -165,6 +180,7 @@ class MomentsHub {
     fun reset() {
         eventPending.value = false
         writing = false
+        clipStart = null
         _state.value = MomentState()
         _live.value = null
         _viewfinder.value = null
@@ -172,6 +188,11 @@ class MomentsHub {
 
     private fun publish() {
         val s = _state.value
-        _state.value = s.copy(saving = s.status == MomentStatus.ARMED && (eventPending.value || writing))
+        val saving = s.status == MomentStatus.ARMED && (eventPending.value || writing)
+        if (!saving) clipStart = null
+        _state.value = s.copy(saving = saving, clipStartMillis = clipStart)
     }
+
+    /** Kept until the clip is written, so the HUD keeps counting through the save. */
+    private var clipStart: Long? = null
 }

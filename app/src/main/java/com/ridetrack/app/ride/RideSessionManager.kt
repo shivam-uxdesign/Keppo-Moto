@@ -298,7 +298,7 @@ class RideSessionManager(
         rec.planner?.let { planner ->
             rec.pipeline.takeMomentEvents().forEach { (event, at) -> planner.add(event, at) }
             planner.due(frame.timeMillis).forEach { momentsHub.submit(MomentRequest.Clip(rec.rideId, it)) }
-            momentsHub.setEventPending(planner.hasPending)
+            momentsHub.setEventPending(planner.hasPending, planner.pendingStartMillis)
         }
         rec.gpsVideo?.let { g ->
             // LOST = had a fix and it went away (not the wait for a first fix at the start).
@@ -312,8 +312,15 @@ class RideSessionManager(
             }
         }
         rec.photos?.let { photos ->
-            if (photos.onTick(frame.timeMillis, frame.stats.movingMillis, frame.isStopped)) {
+            // A photo is announced 3 · 2 · 1 on the HUD, then taken.
+            val at = rec.photoAt
+            if (at == null && photos.onTick(frame.timeMillis, frame.stats.movingMillis, frame.isStopped)) {
+                rec.photoAt = frame.timeMillis + PHOTO_COUNTDOWN_MILLIS
+                momentsHub.setPhotoCountdown(rec.photoAt)
+            } else if (at != null && frame.timeMillis >= at) {
+                rec.photoAt = null
                 momentsHub.submit(MomentRequest.Photo(rec.rideId, frame.timeMillis, frame.latitude, frame.longitude, frame.speedMps))
+                momentsHub.onPhotoTaken(frame.timeMillis)
             }
         }
     }
@@ -468,6 +475,7 @@ class RideSessionManager(
     ) {
         val pendingSamples = ArrayList<TelemetrySample>()
         val pendingEvents = ArrayList<RideEvent>()
+        var photoAt: Long? = null
     }
 
     companion object {
@@ -477,5 +485,6 @@ class RideSessionManager(
         private const val FLUSH_EVERY_TICKS = 10L // every 2 s
         /** The clip buffer holds ~45 s; a GPS-lost video starts at most this far back. */
         private const val MAX_LEAD_IN_MILLIS = 30_000L
+        private const val PHOTO_COUNTDOWN_MILLIS = 3_000L
     }
 }

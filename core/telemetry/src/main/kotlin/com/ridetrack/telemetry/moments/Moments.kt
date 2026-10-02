@@ -84,6 +84,9 @@ class MomentPlanner(
 
     val hasPending: Boolean get() = pending != null
 
+    /** Where the clip being filmed starts (including its look-back), or null. */
+    val pendingStartMillis: Long? get() = pending?.startMillis
+
     /** [episodeEndMillis] = when the detector reported the event (the episode's end). */
     fun add(event: RideEvent, episodeEndMillis: Long) {
         val start = event.timeMillis

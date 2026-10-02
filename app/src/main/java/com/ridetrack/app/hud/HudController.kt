@@ -122,6 +122,9 @@ class HudController(
             savedNote = moments.liveSaved.value?.takeIf { now - it.atMillis < SAVED_NOTE_MILLIS }?.let { saved ->
                 (if (saved.source == MomentSource.GPS_LOST) "GPS back · saved · " else "Saved to moments · ") + Format.clock(saved.lengthMillis)
             } ?: note.value?.takeIf { now - it.second < SAVED_NOTE_MILLIS }?.first,
+            moments = moments.state.value,
+            // Clip and photo times come from ride frames, so count on the same clock.
+            nowMillis = session.frame.value?.timeMillis ?: now,
         )
     }
 

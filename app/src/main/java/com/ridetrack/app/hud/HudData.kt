@@ -55,6 +55,13 @@ data class HudData(
     val video: HudVideo? = null,
     /** "Saved to moments · 0:42" for a moment after a video stops. */
     val savedNote: String? = null,
+    /** Start (with look-back) of the event clip being filmed. */
+    val clipStartMillis: Long? = null,
+    /** A photo is coming at this time. */
+    val photoAtMillis: Long? = null,
+    val photoTakenAtMillis: Long? = null,
+    /** The clock the three above are on (the ride's). */
+    val nowMillis: Long = 0,
 ) {
     companion object {
         fun from(
@@ -66,6 +73,8 @@ data class HudData(
             manuallyPaused: Boolean = false,
             video: HudVideo? = null,
             savedNote: String? = null,
+            moments: MomentState? = null,
+            nowMillis: Long = frame?.timeMillis ?: 0,
         ): HudData {
             val stats = frame?.stats
             val left = stats?.maxLeftLeanDeg
@@ -107,6 +116,10 @@ data class HudData(
                 camera = camera,
                 video = video,
                 savedNote = savedNote,
+                clipStartMillis = moments?.clipStartMillis,
+                photoAtMillis = moments?.photoAtMillis,
+                photoTakenAtMillis = moments?.photoTakenAtMillis,
+                nowMillis = nowMillis,
             )
         }
     }

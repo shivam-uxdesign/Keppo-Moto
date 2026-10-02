@@ -38,6 +38,7 @@ import com.ridetrack.app.data.HudTheme
 import com.ridetrack.app.hud.CameraIndicator
 import com.ridetrack.app.hud.HudData
 import com.ridetrack.app.hud.HudStatus
+import com.ridetrack.app.hud.HudTopRow
 import com.ridetrack.app.ui.components.RevBar
 import com.ridetrack.app.ui.components.leanColor
 import com.ridetrack.app.ui.format.Format
@@ -84,7 +85,7 @@ fun HudCard(data: HudData, settings: HudSettings, modifier: Modifier = Modifier)
             },
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        StatusRow(data, c, compact = settings.layout == HudLayout.MINIMAL)
+        StatusRow(data, c)
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 Format.speedKmh(data.speedMps),
@@ -145,48 +146,37 @@ fun HudCard(data: HudData, settings: HudSettings, modifier: Modifier = Modifier)
 }
 
 /**
- * Left: GPS, which never changes with the ride state. Right: the ride state itself:
- * RECORDING with the ride time, PAUSED (by the rider) or STOPPED (auto-pause).
+ * Left: the ride ("Riding 00:00", "Stopped 00:00", amber "GPS lost" while lost).
+ * Right: the camera ("cam", "cam 00:12" while filming, 3 · 2 · 1 then "photo"). See [HudTopRow].
  */
 @Composable
-private fun StatusRow(data: HudData, c: HudColors, compact: Boolean) {
-    val label = hudLabel.copy(letterSpacing = 0.6.sp)
+private fun StatusRow(data: HudData, c: HudColors) {
+    val label = hudLabel.copy(letterSpacing = 0.4.sp, fontFeatureSettings = "tnum")
     Row(verticalAlignment = Alignment.CenterVertically) {
-        val gpsLost = data.status == HudStatus.GPS_LOST
-        val gpsColor = when {
-            data.demo -> RtColors.Warning
-            gpsLost -> RtColors.Warning
-            else -> RtColors.Ok
-        }
-        if (gpsLost) {
-            Icon(Icons.Outlined.GpsOff, contentDescription = null, tint = gpsColor, modifier = Modifier.size(12.dp))
-        } else {
-            Box(Modifier.size(6.dp).background(gpsColor, CircleShape))
-        }
-        Spacer(Modifier.width(6.dp))
-        Text(
-            when {
-                data.demo -> "SIMULATED"
-                gpsLost -> "GPS LOST"
-                else -> "GPS ON"
-            },
-            style = label,
-            color = if (gpsLost || data.demo) gpsColor else c.muted,
-            maxLines = 1,
-        )
-        Spacer(Modifier.weight(1f))
-        val time = data.elapsedMillis?.let { " · " + Format.clock(it) } ?: ""
-        val (text, color) = when (data.status) {
-            HudStatus.RECORDING, HudStatus.GPS_LOST -> (if (compact) "REC$time" else "RECORDING$time") to RtColors.Error
-            HudStatus.PAUSED -> "PAUSED$time" to RtColors.Warning
-            HudStatus.STOPPED -> "STOPPED" + (data.stoppedForMillis?.let { " · " + Format.clock(it) } ?: "") to RtColors.Paused
-        }
-        if (data.status == HudStatus.RECORDING || data.status == HudStatus.GPS_LOST) {
-            Box(Modifier.size(6.dp).background(color, CircleShape))
+        val left = HudTopRow.left(data)
+        if (data.status == HudStatus.GPS_LOST) {
+            Icon(Icons.Outlined.GpsOff, contentDescription = null, tint = toneColor(left.tone, c), modifier = Modifier.size(12.dp))
             Spacer(Modifier.width(4.dp))
         }
-        Text(text, style = label, color = color, maxLines = 1, softWrap = false)
+        Text(left.text, style = label, color = toneColor(left.tone, c), maxLines = 1, softWrap = false)
+        Spacer(Modifier.weight(1f))
+        val right = HudTopRow.right(data)
+        if (right.tone == HudTopRow.Tone.REC) {
+            Box(Modifier.size(6.dp).background(RtColors.Error, CircleShape))
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(right.text, style = label, color = toneColor(right.tone, c), maxLines = 1, softWrap = false)
     }
+}
+
+private fun toneColor(t: HudTopRow.Tone, c: HudColors): Color = when (t) {
+    HudTopRow.Tone.TEXT -> c.text
+    HudTopRow.Tone.MUTED -> c.muted
+    HudTopRow.Tone.DIM -> c.muted.copy(alpha = 0.45f)
+    HudTopRow.Tone.WARNING -> DarkPalette.warning
+    HudTopRow.Tone.PAUSED -> DarkPalette.paused
+    HudTopRow.Tone.REC -> DarkPalette.error
+    HudTopRow.Tone.ACCENT -> DarkPalette.primary
 }
 
 /** Tiny camera state: a dim dot + CAM while buffering, red dot + REC while saving. */
@@ -282,6 +272,12 @@ fun HudBubble(data: HudData, settings: HudSettings, modifier: Modifier = Modifie
         verticalArrangement = Arrangement.Center,
     ) {
         Text(Format.speedKmh(data.speedMps), style = hudNumber.copy(fontSize = 30.sp, lineHeight = 30.sp), color = c.text)
-        Text("km/h", fontSize = 10.sp, color = c.muted, modifier = Modifier.offset(y = (-2).dp))
+        // The camera row's right side, when it has something to say; otherwise the unit.
+        val cam = HudTopRow.right(data)
+        if (cam.tone == HudTopRow.Tone.REC || cam.tone == HudTopRow.Tone.ACCENT || cam.tone == HudTopRow.Tone.WARNING) {
+            Text(cam.text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = toneColor(cam.tone, c), maxLines = 1, modifier = Modifier.offset(y = (-2).dp))
+        } else {
+            Text("km/h", fontSize = 10.sp, color = c.muted, modifier = Modifier.offset(y = (-2).dp))
+        }
     }
 }
