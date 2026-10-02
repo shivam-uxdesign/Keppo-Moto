@@ -106,7 +106,10 @@ class ShareRidesActivity : ComponentActivity() {
             val tree = DocumentsContract.buildTreeDocumentUri(JournalSource.authority(this@ShareRidesActivity), JournalTree.ROOT)
             setResult(
                 RESULT_OK,
-                Intent().setData(tree).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),
+                // PREFIX makes the grant cover everything inside the folder, not just the root URI.
+                Intent().setData(tree).addFlags(
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION,
+                ),
             )
             finish()
         }
