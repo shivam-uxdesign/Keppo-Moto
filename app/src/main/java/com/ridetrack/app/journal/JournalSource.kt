@@ -28,9 +28,14 @@ class JournalSource(
 
     suspend fun enabled(): Boolean = settings.settings.first().journalSharing
 
-    suspend fun rides(): List<RideEntity> = db.rideDao().backupable().sortedByDescending { it.startTimeMillis }
+    /** Finished, real rides; demo ones too while the Developer testing switch is on. */
+    suspend fun rides(): List<RideEntity> =
+        (if (shareDemo()) db.rideDao().completed() else db.rideDao().backupable()).sortedByDescending { it.startTimeMillis }
 
-    suspend fun ride(id: String): RideEntity? = db.rideDao().get(id)?.takeIf { it.status == "COMPLETED" && it.source != "DEMO" }
+    suspend fun ride(id: String): RideEntity? =
+        db.rideDao().get(id)?.takeIf { it.status == "COMPLETED" && (it.source != "DEMO" || shareDemo()) }
+
+    private suspend fun shareDemo() = settings.settings.first().journalShareDemo
 
     /** Moment files present on the phone for [rideId] (clips, photos, thumbnails). */
     suspend fun momentFiles(rideId: String): List<File> {
@@ -84,6 +89,7 @@ class JournalSource(
     /** Sharing turned on or off: the "Keppo Moto" root appears in, or leaves, the file picker. */
     fun onSharingChanged() {
         context.contentResolver.notifyChange(DocumentsContract.buildRootsUri(authority(context)), null)
+        context.contentResolver.notifyChange(DocumentsContract.buildChildDocumentsUri(authority(context), JournalTree.ROOT), null)
     }
 
     private fun momentsDir(rideId: String) = File(File(context.filesDir, "moments"), rideId)

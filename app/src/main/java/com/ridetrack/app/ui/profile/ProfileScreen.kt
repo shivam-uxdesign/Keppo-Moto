@@ -206,6 +206,12 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit) {
                     enabled = !s.rideActive,
                 )
             }
+            ToggleRow(
+                "Share demo rides with Keppo Journal",
+                "For testing: demo rides appear in Keppo Journal (marked DEMO in ride.json). Drive backup still skips them.",
+                s.settings.journalShareDemo,
+                vm::setJournalShareDemo,
+            )
         }
 
         if (BuildConfig.DEBUG) BetaExportSection()

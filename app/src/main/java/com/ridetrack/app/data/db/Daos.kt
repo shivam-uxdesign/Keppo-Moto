@@ -58,6 +58,10 @@ interface RideDao {
     @Query("SELECT id FROM rides")
     suspend fun allIds(): List<String>
 
+    /** Every finished ride, demo ones included (Keppo Journal's testing switch). */
+    @Query("SELECT * FROM rides WHERE status = 'COMPLETED'")
+    suspend fun completed(): List<RideEntity>
+
     @Query(
         """
         UPDATE rides SET lastUpdateMillis = :now, distanceM = :distanceM, movingMillis = :movingMillis,

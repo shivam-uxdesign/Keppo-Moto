@@ -107,6 +107,13 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
         }
     }
 
+    fun setJournalShareDemo(on: Boolean) {
+        c.appScope.launch {
+            c.settings.setJournalShareDemo(on)
+            c.journal.onSharingChanged()
+        }
+    }
+
     fun journalInstalled(): Boolean =
         runCatching { c.appContext.packageManager.getPackageInfo(JournalSource.JOURNAL_PACKAGE, 0) }.isSuccess
 

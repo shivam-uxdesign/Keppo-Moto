@@ -158,6 +158,8 @@ data class Settings(
     val journalLastReadMillis: Long? = null,
     /** When Keppo Journal was allowed in (its one-tap Connect); null = not connected. */
     val journalConnectedMillis: Long? = null,
+    /** Testing only: demo rides are shared with Keppo Journal too (never backed up). */
+    val journalShareDemo: Boolean = false,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -206,6 +208,7 @@ class SettingsRepository(private val context: Context) {
         val journalSharing = booleanPreferencesKey("journal_sharing")
         val journalLastRead = longPreferencesKey("journal_last_read")
         val journalConnected = longPreferencesKey("journal_connected")
+        val journalShareDemo = booleanPreferencesKey("journal_share_demo")
         val backupEmail = stringPreferencesKey("backup_email")
         val backupMobileData = booleanPreferencesKey("backup_mobile_data")
         val backupVideosCharging = booleanPreferencesKey("backup_videos_charging")
@@ -274,6 +277,7 @@ class SettingsRepository(private val context: Context) {
             journalSharing = p[Keys.journalSharing] ?: false,
             journalLastReadMillis = p[Keys.journalLastRead],
             journalConnectedMillis = p[Keys.journalConnected],
+            journalShareDemo = p[Keys.journalShareDemo] ?: false,
             backup = BackupSettings(
                 email = p[Keys.backupEmail],
                 allowMobileData = p[Keys.backupMobileData] ?: false,
@@ -323,6 +327,7 @@ class SettingsRepository(private val context: Context) {
             it.remove(Keys.journalLastRead)
         }
     }
+    suspend fun setJournalShareDemo(on: Boolean) = context.dataStore.edit { it[Keys.journalShareDemo] = on }
     suspend fun setJournalConnected(atMillis: Long) = context.dataStore.edit { it[Keys.journalConnected] = atMillis }
     suspend fun setJournalLastRead(atMillis: Long) = context.dataStore.edit { it[Keys.journalLastRead] = atMillis }
 
