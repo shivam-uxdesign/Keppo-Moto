@@ -101,6 +101,7 @@ class ShareRidesActivity : ComponentActivity() {
         val container = (application as RideTrackApp).container
         lifecycleScope.launch {
             container.settings.setJournalSharing(true)
+            container.settings.setJournalConnected(System.currentTimeMillis())
             container.journal.onSharingChanged()
             val tree = DocumentsContract.buildTreeDocumentUri(JournalSource.authority(this@ShareRidesActivity), JournalTree.ROOT)
             setResult(

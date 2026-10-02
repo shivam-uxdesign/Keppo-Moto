@@ -32,6 +32,7 @@ internal fun JournalSection(s: ProfileUiState, vm: ProfileViewModel) {
             Text(
                 when {
                     last != null -> "Keppo Journal last read your rides ${DateUtils.getRelativeTimeSpanString(last)}."
+                    s.settings.journalConnectedMillis != null -> "Connected. Keppo Journal hasn't read your rides yet."
                     installed -> "Not connected yet. In Keppo Journal, open Settings › Connected apps › Keppo Moto."
                     else -> "Install Keppo Journal, then connect it in Settings › Connected apps › Keppo Moto."
                 },

@@ -156,6 +156,8 @@ data class Settings(
     val journalSharing: Boolean = false,
     /** When Keppo Journal last read the shared rides; null = never. */
     val journalLastReadMillis: Long? = null,
+    /** When Keppo Journal was allowed in (its one-tap Connect); null = not connected. */
+    val journalConnectedMillis: Long? = null,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -203,6 +205,7 @@ class SettingsRepository(private val context: Context) {
         val safetyName = stringPreferencesKey("safety_name")
         val journalSharing = booleanPreferencesKey("journal_sharing")
         val journalLastRead = longPreferencesKey("journal_last_read")
+        val journalConnected = longPreferencesKey("journal_connected")
         val backupEmail = stringPreferencesKey("backup_email")
         val backupMobileData = booleanPreferencesKey("backup_mobile_data")
         val backupVideosCharging = booleanPreferencesKey("backup_videos_charging")
@@ -270,6 +273,7 @@ class SettingsRepository(private val context: Context) {
             ),
             journalSharing = p[Keys.journalSharing] ?: false,
             journalLastReadMillis = p[Keys.journalLastRead],
+            journalConnectedMillis = p[Keys.journalConnected],
             backup = BackupSettings(
                 email = p[Keys.backupEmail],
                 allowMobileData = p[Keys.backupMobileData] ?: false,
@@ -311,7 +315,15 @@ class SettingsRepository(private val context: Context) {
         it[Keys.backupLastSuccess] = atMillis
         it[Keys.backupLastBytes] = bytes
     }
-    suspend fun setJournalSharing(on: Boolean) = context.dataStore.edit { it[Keys.journalSharing] = on }
+    /** Turning sharing off also forgets the connection; the journal has to connect again. */
+    suspend fun setJournalSharing(on: Boolean) = context.dataStore.edit {
+        it[Keys.journalSharing] = on
+        if (!on) {
+            it.remove(Keys.journalConnected)
+            it.remove(Keys.journalLastRead)
+        }
+    }
+    suspend fun setJournalConnected(atMillis: Long) = context.dataStore.edit { it[Keys.journalConnected] = atMillis }
     suspend fun setJournalLastRead(atMillis: Long) = context.dataStore.edit { it[Keys.journalLastRead] = atMillis }
 
     suspend fun dismissRestoreCard() = context.dataStore.edit { it[Keys.backupRestoreDismissed] = true }
