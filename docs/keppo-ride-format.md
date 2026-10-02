@@ -8,7 +8,7 @@ Keep this file identical in both repos. Change it only by **adding** fields: v1 
 
 ## A ride
 
-Each finished, real ride (never demo or in-progress) is a folder:
+Each finished, real ride (never in-progress) is a folder. Demo rides are left out, except while Keppo Moto's testing switch (Profile › Developer › "Share demo rides with Keppo Journal") is on: then they appear too, with `"source": "DEMO"` in `ride.json`. The journal imports them like any ride and labels the entry "Demo". Drive backup never includes demo rides.
 
 | File | What |
 |---|---|
