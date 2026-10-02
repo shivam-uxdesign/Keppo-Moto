@@ -103,6 +103,8 @@ The broadcast carries only the id. The journal reads the ride through the folder
 
 A ride is identified only by `ride.json` → `id`. Whichever path delivers it first creates the journal entry; the other path then only fills in missing moment files. Deleting in Moto never deletes from the journal, and a re-sync never overwrites what the rider wrote in the journal.
 
+For deletions, this is superseded by "Reading rides in place" below.
+
 ## Reading rides in place (keppo.ride v1 additions)
 
 Keppo Journal shows ride files straight from Keppo Moto's provider through its persisted tree grant; it does not copy them.
