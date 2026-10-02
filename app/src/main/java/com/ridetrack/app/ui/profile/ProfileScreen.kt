@@ -228,7 +228,7 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit) {
 
         SectionHeader("About")
         RtCard {
-            InfoRow("Version", BuildConfig.VERSION_NAME)
+            InfoRow("Version", "${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TAG})")
         }
         Spacer(Modifier.height(RtDimens.lg))
     }

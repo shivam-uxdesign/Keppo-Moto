@@ -1,3 +1,6 @@
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.Properties
 
 plugins {
@@ -14,6 +17,13 @@ val localProperties = Properties().apply {
 }
 val mapTilerKey: String = (localProperties.getProperty("MAPTILER_KEY") ?: System.getenv("MAPTILER_KEY") ?: "").trim()
 
+// Which build this is, shown in Profile › About: git commit + build date (e.g. "ad42a92 · 2 Oct").
+val gitSha: String = providers.exec {
+    commandLine("git", "rev-parse", "--short", "HEAD")
+    isIgnoreExitValue = true
+}.standardOutput.asText.map { it.trim() }.getOrElse("").ifEmpty { "local" }
+val buildTag: String = "$gitSha · " + LocalDate.now().format(DateTimeFormatter.ofPattern("d MMM", Locale.US))
+
 android {
     namespace = "com.ridetrack.app"
     compileSdk = 35
@@ -25,6 +35,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         buildConfigField("String", "MAPTILER_KEY", "\"$mapTilerKey\"")
+        buildConfigField("String", "BUILD_TAG", "\"$buildTag\"")
         // Optional: `-PabiFilter=arm64-v8a` builds a smaller APK for modern phones only.
         providers.gradleProperty("abiFilter").orNull?.let { abis ->
             ndk { abiFilters += abis.split(",").map(String::trim) }
