@@ -90,6 +90,18 @@
             </intent-filter>
         </provider>
 
+        <!-- Keppo Journal's one-tap "Connect": asks the rider, then hands the journal a read grant on the shared rides. -->
+        <activity
+            android:name=".journal.ShareRidesActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.RideTrack.Translucent">
+            <intent-filter>
+                <action android:name="com.keppo.action.SHARE_RIDES" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <!-- Crash alert: over the lock screen, its own task so it never mixes with the app's back stack. -->
         <activity
             android:name=".safety.CrashAlertActivity"

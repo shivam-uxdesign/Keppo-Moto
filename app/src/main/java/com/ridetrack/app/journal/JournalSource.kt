@@ -92,6 +92,8 @@ class JournalSource(
     companion object {
         const val JOURNAL_PACKAGE = "com.keppo.journal"
         const val ACTION_RIDE_SAVED = "com.keppo.action.RIDE_SAVED"
+        /** Keppo Journal's one-tap connect; handled by [ShareRidesActivity]. */
+        const val ACTION_SHARE_RIDES = "com.keppo.action.SHARE_RIDES"
         const val EXTRA_RIDE_ID = "rideId"
 
         fun authority(context: Context) = "${context.packageName}.rides"

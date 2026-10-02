@@ -6,6 +6,13 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
+    <!-- Small screens drawn over the calling app (Keppo Journal's "Share your rides?"). Compose draws the dim. -->
+    <style name="Theme.RideTrack.Translucent">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+
     <!-- Riding surfaces (crash alert): dark in every theme. -->
     <style name="Theme.RideTrack.Ride">
         <item name="android:windowBackground">@color/black</item>

@@ -63,6 +63,16 @@ On Drive, moment files sit in a `moments/` subfolder of the ride folder. On the 
 - **Read-only:** opening anything for writing fails.
 - **Connecting:** the journal asks once with the system folder picker (Storage Access Framework `ACTION_OPEN_DOCUMENT_TREE`), with the initial location `content://com.keppo.moto.rides/document/root`, and keeps the persisted permission.
 
+### Connecting in one tap
+
+The journal connects without the file picker. Keppo Moto hands over the permission itself:
+
+1. The journal starts an activity for a result: action com.keppo.action.SHARE_RIDES, package com.keppo.moto.
+2. Keppo Moto answers only if the caller is com.keppo.journal. It asks "Share your rides with Keppo Journal?" (Allow / Not now). On Allow it turns on Profile › Keppo Journal › "Share rides with Keppo Journal", then finishes with RESULT_OK and a result intent whose data is the root tree URI content://com.keppo.moto.rides/tree/root (DocumentsContract.buildTreeDocumentUri("com.keppo.moto.rides", "root")), with flags FLAG_GRANT_READ_URI_PERMISSION | FLAG_GRANT_PERSISTABLE_URI_PERMISSION. On Not now it finishes with RESULT_CANCELED.
+3. The journal keeps the persisted permission, exactly as if the picker had granted it.
+
+For this, the provider declares android:grantUriPermissions="true", and its root supports tree access (Root.FLAG_SUPPORTS_IS_CHILD and isChildDocument). A Keppo Moto without this activity still works: the journal falls back to the picker above.
+
 ### "Ride saved" signal
 
 When a ride is saved and sharing is on, Keppo Moto sends an explicit broadcast:
