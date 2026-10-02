@@ -1,5 +1,6 @@
 package com.ridetrack.app.backup
 
+import com.ridetrack.app.data.db.RideEntity
 import android.content.Context
 import android.os.BatteryManager
 import android.util.Log
@@ -41,6 +42,8 @@ class BackupRepository(
     private val context: Context,
     private val db: RideTrackDatabase,
     private val settings: SettingsRepository,
+    /** Draws a ride's `route.png` (the Keppo Journal cover); shared with the on-phone journal link. */
+    private val routePng: suspend (RideEntity) -> File,
 ) {
     private val auth = DriveAuth(context)
     private val drive = DriveApi { auth.token() }
@@ -135,6 +138,11 @@ class BackupRepository(
                     drive.putLarge(folder, SAMPLES, samples, "application/gzip", existing[SAMPLES]?.id)
                 } finally {
                     samples.delete()
+                }
+                db.rideDao().get(id)?.let { ride ->
+                    runCatching { routePng(ride) }.getOrNull()?.let { png ->
+                        drive.putLarge(folder, ROUTE, png, "image/png", existing[ROUTE]?.id)
+                    }
                 }
                 rides[id] = (rides[id] ?: ManifestRide(snap.ride.fingerprint, device)).copy(fingerprint = snap.ride.fingerprint, device = device, deletedAt = null)
             }
@@ -368,6 +376,7 @@ class BackupRepository(
         private const val BIKES = "bikes.json"
         private const val RIDE = "ride.json"
         private const val SAMPLES = "samples.jsonl.gz"
+        private const val ROUTE = "route.png"
         private const val GARAGE = "garage"
         private const val RIDES = "rides"
         private const val MOMENTS = "moments"

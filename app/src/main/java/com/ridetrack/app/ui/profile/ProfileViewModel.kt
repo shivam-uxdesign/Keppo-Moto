@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.profile
 
+import com.ridetrack.app.journal.JournalSource
 import kotlinx.coroutines.flow.first
 import com.ridetrack.app.backup.DriveAuth
 import com.ridetrack.app.backup.BackupWorker
@@ -96,6 +97,18 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
     fun hasCallPermissions(): Boolean = listOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.CALL_PHONE).all {
         ContextCompat.checkSelfPermission(c.appContext, it) == PackageManager.PERMISSION_GRANTED
     }
+
+    // ---- Keppo Journal ----
+
+    fun setJournalSharing(on: Boolean) {
+        c.appScope.launch {
+            c.settings.setJournalSharing(on)
+            c.journal.onSharingChanged()
+        }
+    }
+
+    fun journalInstalled(): Boolean =
+        runCatching { c.appContext.packageManager.getPackageInfo(JournalSource.JOURNAL_PACKAGE, 0) }.isSuccess
 
     // ---- Google Drive backup ----
 

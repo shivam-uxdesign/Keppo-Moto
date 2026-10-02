@@ -468,6 +468,16 @@ class ShareCardRenderer(context: Context) {
         centered(c, "MAX LEAN", cy + 50f, semibold, 22f, if (shadow) WHITE else MUTED, tracking = 0.2f, shadow = shadow)
     }
 
+    /** A square route picture (heat line on Keppo ink), the cover for a ride in Keppo Journal. */
+    fun renderRoute(data: ShareCardData, size: Int = 1080): Bitmap {
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawColor(BG)
+        val pad = size * 0.12f
+        drawRoute(c, data.route, RectF(pad, pad, size - pad, size - pad), RouteInk.HEAT, k = size / W.toFloat())
+        return bmp
+    }
+
     private enum class RouteInk { HEAT, WHITE, HEAT_ON_PHOTO, DARK }
 
     private fun drawRoute(c: Canvas, route: List<SharePoint>, box: RectF, overlay: Boolean) =

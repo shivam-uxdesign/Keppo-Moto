@@ -152,6 +152,10 @@ data class Settings(
     val momentShareLayout: MomentLayout = MomentLayout.MINIMAL,
     val safety: SafetySettings = SafetySettings(),
     val backup: BackupSettings = BackupSettings(),
+    /** Share finished rides with Keppo Journal on this phone (read-only folder + "ride saved" signal). */
+    val journalSharing: Boolean = false,
+    /** When Keppo Journal last read the shared rides; null = never. */
+    val journalLastReadMillis: Long? = null,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -197,6 +201,8 @@ class SettingsRepository(private val context: Context) {
         val safetyAllergies = stringPreferencesKey("safety_allergies")
         val safetyNotes = stringPreferencesKey("safety_notes")
         val safetyName = stringPreferencesKey("safety_name")
+        val journalSharing = booleanPreferencesKey("journal_sharing")
+        val journalLastRead = longPreferencesKey("journal_last_read")
         val backupEmail = stringPreferencesKey("backup_email")
         val backupMobileData = booleanPreferencesKey("backup_mobile_data")
         val backupVideosCharging = booleanPreferencesKey("backup_videos_charging")
@@ -262,6 +268,8 @@ class SettingsRepository(private val context: Context) {
                 ),
                 riderName = p[Keys.safetyName].orEmpty(),
             ),
+            journalSharing = p[Keys.journalSharing] ?: false,
+            journalLastReadMillis = p[Keys.journalLastRead],
             backup = BackupSettings(
                 email = p[Keys.backupEmail],
                 allowMobileData = p[Keys.backupMobileData] ?: false,
@@ -303,6 +311,9 @@ class SettingsRepository(private val context: Context) {
         it[Keys.backupLastSuccess] = atMillis
         it[Keys.backupLastBytes] = bytes
     }
+    suspend fun setJournalSharing(on: Boolean) = context.dataStore.edit { it[Keys.journalSharing] = on }
+    suspend fun setJournalLastRead(atMillis: Long) = context.dataStore.edit { it[Keys.journalLastRead] = atMillis }
+
     suspend fun dismissRestoreCard() = context.dataStore.edit { it[Keys.backupRestoreDismissed] = true }
 
     /** Every stored preference except the backup's own, for `settings.json`. */
