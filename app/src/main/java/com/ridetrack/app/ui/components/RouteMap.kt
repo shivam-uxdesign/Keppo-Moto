@@ -426,6 +426,10 @@ internal object MapTiler {
 internal fun styleBuilder(style: MapStyle): Style.Builder =
     if (MapTiler.available) Style.Builder().fromUri(MapTiler.styleUrl(style)) else Style.Builder().fromJson(DARK_STYLE)
 
+/** Credit line for map pictures drawn without MapLibre's attribution (route snapshots). */
+internal fun mapAttribution(): String =
+    if (MapTiler.available) "© MapTiler © OpenStreetMap contributors" else "© OpenStreetMap contributors © CARTO"
+
 private fun addRouteLayers(s: Style) {
     s.addSource(GeoJsonSource(ROUTE_SOURCE))
     s.addSource(GeoJsonSource(ENDS_SOURCE))

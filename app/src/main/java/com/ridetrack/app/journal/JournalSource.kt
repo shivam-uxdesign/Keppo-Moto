@@ -12,6 +12,7 @@ import com.ridetrack.app.data.db.RideTrackDatabase
 import com.ridetrack.app.data.toModel
 import com.ridetrack.app.share.ShareCardData
 import com.ridetrack.app.share.ShareCardRenderer
+import com.ridetrack.app.share.RouteImages
 import kotlinx.coroutines.flow.first
 import java.io.File
 
@@ -23,6 +24,7 @@ class JournalSource(
     private val context: Context,
     private val db: RideTrackDatabase,
     private val settings: SettingsRepository,
+    private val routeImages: RouteImages,
 ) {
     @Volatile private var lastReadRecorded = 0L
 
@@ -72,8 +74,12 @@ class JournalSource(
         return f
     }
 
-    /** `route.png`, drawn once per ride (the route never changes after the ride ends). */
+    /**
+     * `route.png`: the route on a dark map. Offline, the plain route line instead, swapped for
+     * the map version on a later read once the phone is online.
+     */
     suspend fun routePng(ride: RideEntity): File {
+        routeImages.mapImage(ride, ROUTE_PNG_PX)?.let { return it }
         val f = File(cacheDir(ride.id), JournalTree.ROUTE_PNG)
         if (f.exists() && f.lastModified() >= ride.lastUpdateMillis) return f
         val data = ShareCardData.from(ride.toModel(), null, db.rideDao().samples(ride.id).map { it.toModel() })
@@ -128,6 +134,8 @@ class JournalSource(
         const val JOURNAL_PACKAGE = "com.keppo.journal"
         const val ACTION_RIDE_SAVED = "com.keppo.action.RIDE_SAVED"
         const val ACTION_RIDE_DELETED = "com.keppo.action.RIDE_DELETED"
+        /** `route.png` is this many pixels square. */
+        const val ROUTE_PNG_PX = 1080
         /** Keppo Journal's one-tap connect; handled by [ShareRidesActivity]. */
         const val ACTION_SHARE_RIDES = "com.keppo.action.SHARE_RIDES"
         const val EXTRA_RIDE_ID = "rideId"

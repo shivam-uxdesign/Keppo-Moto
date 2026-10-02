@@ -95,7 +95,7 @@ fun RidesScreen(onOpenRide: (String) -> Unit, onStartRide: () -> Unit, onOpenMap
                 s.groups.forEach { (group, rides) ->
                     item(key = "header-${group.name}") { SectionHeader(group.label) }
                     items(rides, key = { it.id }) { ride ->
-                        RideRow(ride, bikeNames[ride.bikeId], onClick = { onOpenRide(ride.id) }, route = s.routes[ride.id])
+                        RideRow(ride, bikeNames[ride.bikeId], onClick = { onOpenRide(ride.id) }, route = s.routes[ride.id], map = s.maps[ride.id], moments = s.moments[ride.id])
                     }
                 }
             }

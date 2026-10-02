@@ -1,5 +1,11 @@
 package com.ridetrack.app.ui.common
 
+import java.io.File
+import com.ridetrack.app.ui.moments.Thumb
+import com.ridetrack.app.moments.RideMoments
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.draw.rotate
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +48,9 @@ fun RideRow(
     compact: Boolean = false,
     /** Simplified route for the thumbnail; null while loading. */
     route: List<GeoPoint>? = null,
+    /** The route on a dark map, once made; the plain route sketch until then. */
+    map: File? = null,
+    moments: RideMoments? = null,
 ) {
     RtCard(modifier = modifier, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -80,20 +89,20 @@ fun RideRow(
                         Text("Max ${Format.speedWithUnit(ride.stats.maxSpeedMps)}", style = RtType.caption, color = RtColors.TextSecondary)
                     }
                 }
+                momentsLine(moments?.count ?: 0)?.let {
+                    Spacer(Modifier.height(if (compact) 6.dp else 8.dp))
+                    Text(it, style = RtType.caption, color = RtColors.Primary, maxLines = 1)
+                }
             }
             Spacer(Modifier.width(14.dp))
-            Box(
-                Modifier
-                    .size(if (compact) 72.dp else 92.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(RtColors.Background)
-                    .border(1.dp, RtColors.Hairline, RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center,
+            CardStack(
+                size = if (compact) 72.dp else 92.dp,
+                behind = moments?.thumbs.orEmpty(),
             ) {
-                if (route == null) {
-                    Shimmer(Modifier.fillMaxSize(), radius = 16.dp)
-                } else {
-                    RouteThumbnail(
+                when {
+                    map != null -> Thumb(map, Modifier.fillMaxSize(), maxEdge = 320)
+                    route == null -> Shimmer(Modifier.fillMaxSize(), radius = 16.dp)
+                    else -> RouteThumbnail(
                         route,
                         Modifier.fillMaxSize().padding(8.dp),
                         color = if (ride.source == DataSourceKind.DEMO) RtColors.Warning else RtColors.Primary,
@@ -101,5 +110,41 @@ fun RideRow(
                 }
             }
         }
+    }
+}
+
+/** "1 moment captured", "3 moments captured"; nothing for none. Pure, so it is unit-tested. */
+fun momentsLine(count: Int): String? = when {
+    count <= 0 -> null
+    count == 1 -> "1 moment captured"
+    else -> "$count moments captured"
+}
+
+/** The route picture in front, with up to two moment pictures peeking out behind it, tilted. */
+@Composable
+private fun CardStack(size: Dp, behind: List<File>, front: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    // Room for the peeking cards, so they stay inside the ride card.
+    Box(Modifier.padding(start = if (behind.isEmpty()) 0.dp else 12.dp, top = if (behind.isEmpty()) 0.dp else 6.dp)) {
+        behind.take(2).asReversed().forEachIndexed { i, file ->
+            val far = behind.size == 2 && i == 0
+            Box(
+                Modifier
+                    .size(size)
+                    .offset(x = if (far) (-4).dp else (-10).dp, y = if (far) (-6).dp else (-2).dp)
+                    .rotate(if (far) 9f else -8f)
+                    .clip(shape)
+                    .background(RtColors.SurfaceRaised)
+                    .border(1.dp, RtColors.Hairline, shape),
+            ) { Thumb(file, Modifier.fillMaxSize()) }
+        }
+        Box(
+            Modifier
+                .size(size)
+                .clip(shape)
+                .background(RtColors.Background)
+                .border(1.dp, RtColors.Hairline, shape),
+            contentAlignment = Alignment.Center,
+        ) { front() }
     }
 }

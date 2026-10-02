@@ -2,6 +2,7 @@ package com.ridetrack.app
 
 import com.ridetrack.app.trash.RecentlyDeleted
 import com.ridetrack.app.journal.JournalSource
+import com.ridetrack.app.share.RouteImages
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import com.ridetrack.app.backup.BackupWorker
@@ -55,7 +56,8 @@ class AppContainer(context: Context) {
         },
     )
 
-    val journal = JournalSource(appContext, database, settings)
+    val routeImages = RouteImages(appContext, database)
+    val journal = JournalSource(appContext, database, settings, routeImages)
     val backup = BackupRepository(appContext, database, settings, journal::routePng) { journal.onRideSaved(null) }
     val trash = RecentlyDeleted(appContext, database, journal) { backUpSoon() }
 

@@ -1,5 +1,7 @@
 package com.ridetrack.app.ui.rides
 
+import java.io.File
+import com.ridetrack.app.moments.RideMoments
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ridetrack.app.AppContainer
@@ -52,23 +54,30 @@ data class RidesUiState(
     val bikes: List<Bike> = emptyList(),
     val filter: RideFilter = RideFilter(),
     val routes: Map<String, List<GeoPoint>> = emptyMap(),
+    /** Route-on-map pictures, once made (online). */
+    val maps: Map<String, File> = emptyMap(),
+    val moments: Map<String, RideMoments> = emptyMap(),
 )
 
 class RidesViewModel(private val c: AppContainer) : ViewModel() {
     private val filter = MutableStateFlow(RideFilter())
     private val routes = MutableStateFlow<Map<String, List<GeoPoint>>>(emptyMap())
+    private val maps = MutableStateFlow<Map<String, File>>(emptyMap())
     private val requested = mutableSetOf<String>()
 
-    /** Loads route sketches newest-first, in the background. */
+    /** Loads route sketches newest-first, then the map pictures, in the background. */
     private fun requestRoutes(ids: List<String>) {
         val missing = ids.filter { requested.add(it) }
         if (missing.isEmpty()) return
         viewModelScope.launch {
             missing.forEach { id -> routes.update { it + (id to c.routes.route(id)) } }
+            missing.forEach { id -> c.routeImages.mapImage(id, CARD_MAP_PX)?.let { f -> maps.update { it + (id to f) } } }
         }
     }
 
-    val state: StateFlow<RidesUiState> = combine(c.rides.observeCompleted(), c.bikes.observeBikes(), filter, routes) { rides, bikes, f, r ->
+    private val pictures = combine(routes, maps, c.moments.observeCards()) { r, m, mo -> Triple(r, m, mo) }
+
+    val state: StateFlow<RidesUiState> = combine(c.rides.observeCompleted(), c.bikes.observeBikes(), filter, pictures) { rides, bikes, f, (r, m, mo) ->
         requestRoutes(rides.map { it.id })
         RidesUiState(
             loading = false,
@@ -77,6 +86,8 @@ class RidesViewModel(private val c: AppContainer) : ViewModel() {
             bikes = bikes,
             filter = f,
             routes = r,
+            maps = m,
+            moments = mo,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RidesUiState())
 
@@ -110,5 +121,9 @@ class RidesViewModel(private val c: AppContainer) : ViewModel() {
                 else -> RideGroup.EARLIER
             }
         }.toList().sortedBy { it.first.ordinal }
+    }
+
+    private companion object {
+        const val CARD_MAP_PX = 320
     }
 }

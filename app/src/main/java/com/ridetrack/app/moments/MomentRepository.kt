@@ -42,6 +42,9 @@ data class Moment(
             .firstOrNull { it in types }
 }
 
+/** What a ride card shows of its moments. */
+data class RideMoments(val count: Int, val thumbs: List<File>)
+
 class MomentRepository(private val context: Context, private val dao: MomentDao) {
     fun dir(rideId: String): File = File(File(context.filesDir, "moments"), rideId).apply { mkdirs() }
 
@@ -51,6 +54,19 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
     fun observeCountsByBike(): Flow<Map<String, Int>> = dao.observeCountsByBike().map { rows -> rows.mapNotNull { r -> r.bikeId?.let { it to r.count } }.toMap() }
 
     suspend fun forRide(rideId: String): List<Moment> = dao.forRide(rideId).map { it.toModel() }
+
+    /** Per ride: how many moments it has and up to [max] pictures for its card (starred first). */
+    fun observeCards(max: Int = 2): Flow<Map<String, RideMoments>> = dao.observeAllLive().map { all ->
+        all.groupBy { it.rideId }.mapValues { (rideId, ms) ->
+            val base = File(File(context.filesDir, "moments"), rideId)
+            RideMoments(
+                count = ms.size,
+                thumbs = ms.sortedByDescending { it.starred }
+                    .mapNotNull { m -> (m.thumbFile ?: m.file.takeIf { m.kind == "PHOTO" })?.let { File(base, it) } }
+                    .take(max),
+            )
+        }
+    }
 
     suspend fun add(m: Moment) = dao.insert(
         MomentEntity(

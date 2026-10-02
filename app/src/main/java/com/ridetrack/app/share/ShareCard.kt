@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PointF
 import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
@@ -500,9 +501,27 @@ class ShareCardRenderer(context: Context) {
         val scale = minOf(box.width() / spanX, box.height() / spanY)
         val offX = box.left + (box.width() - spanX * scale) / 2
         val offY = box.top + (box.height() - spanY * scale) / 2
-        fun x(p: SharePoint) = (offX + (p.longitude - minLon) * latScale * scale).toFloat()
-        fun y(p: SharePoint) = (offY + (maxLat - p.latitude) * scale).toFloat()
+        drawRouteLine(
+            c, route, ink, k,
+            x = { p -> (offX + (p.longitude - minLon) * latScale * scale).toFloat() },
+            y = { p -> (offY + (maxLat - p.latitude) * scale).toFloat() },
+        )
+    }
 
+    /**
+     * The heat line over a map picture, placed by [project] (bitmap pixels). [k] scales the
+     * strokes as in [renderRoute]. Draws on [base] and returns it.
+     */
+    fun renderRouteOn(base: Bitmap, data: ShareCardData, project: (SharePoint) -> PointF): Bitmap {
+        if (data.route.size < 2) return base
+        val c = Canvas(base)
+        val pts = java.util.IdentityHashMap<SharePoint, PointF>().apply { data.route.forEach { put(it, project(it)) } }
+        drawRouteLine(c, data.route, RouteInk.HEAT, base.width / W.toFloat(), x = { pts.getValue(it).x }, y = { pts.getValue(it).y })
+        return base
+    }
+
+    private fun drawRouteLine(c: Canvas, route: List<SharePoint>, ink: RouteInk, k: Float, x: (SharePoint) -> Float, y: (SharePoint) -> Float) {
+        val overlay = ink != RouteInk.HEAT
         val path = Path().apply {
             moveTo(x(route[0]), y(route[0]))
             for (i in 1 until route.size) lineTo(x(route[i]), y(route[i]))

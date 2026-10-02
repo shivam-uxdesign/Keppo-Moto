@@ -13,7 +13,7 @@ Each finished, real ride (never in-progress) is a folder. Demo rides are left ou
 | File | What |
 |---|---|
 | `ride.json` | The ride: metadata, stats, events and the list of moments (below) |
-| `route.png` | 1080×1080 route picture (speed-coloured line on Keppo ink `#0A0A0B`), for the journal entry's cover |
+| `route.png` | 1080×1080 route picture: the speed-coloured line on a dark map, or on Keppo ink `#0A0A0B` until the map can be fetched (then replaced). The journal entry's cover |
 | moment files | Clips (`.mp4`), photos and thumbnails (`.jpg`), named exactly as in `ride.json` |
 | `samples.jsonl.gz` | **Drive only.** Full telemetry for Moto's own restore; the journal can ignore it |
 

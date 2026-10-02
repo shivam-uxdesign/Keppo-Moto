@@ -134,6 +134,10 @@ interface MomentDao {
     @Query("SELECT m.* FROM moments m JOIN rides r ON r.id = m.rideId WHERE m.deletedAtMillis IS NULL AND r.deletedAtMillis IS NULL")
     suspend fun all(): List<MomentEntity>
 
+    /** Every live moment of a live ride, for the ride cards. */
+    @Query("SELECT m.* FROM moments m JOIN rides r ON r.id = m.rideId WHERE m.deletedAtMillis IS NULL AND r.deletedAtMillis IS NULL ORDER BY m.timeMillis ASC")
+    fun observeAllLive(): Flow<List<MomentEntity>>
+
     @Query("SELECT id FROM moments")
     suspend fun allIds(): List<String>
 
