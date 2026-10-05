@@ -1,5 +1,9 @@
 package com.ridetrack.app.ui.detail
 
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import com.ridetrack.app.ui.theme.LocalRtPalette
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
@@ -169,13 +173,39 @@ fun RideTracks(
             }
             Text(Format.timeOfDay(winEnd), style = RtType.caption.copy(fontSize = 11.sp), color = RtColors.TextTertiary)
         }
-        Canvas(Modifier.fillMaxWidth().padding(top = 6.dp).height(3.dp)) {
-            val r = CornerRadius(size.height / 2)
-            drawRoundRect(rt.hairline, cornerRadius = r)
+        // Zoomed in, the bar scrolls the view: drag the highlight along the ride, or tap to jump.
+        val current = rememberUpdatedState(window)
+        val zoomed = window.isZoomed
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp)
+                .height(if (zoomed) 24.dp else 7.dp)
+                .then(
+                    if (!zoomed) Modifier else Modifier
+                        .semantics { contentDescription = "Zoomed part of the ride. Drag to scroll." }
+                        .pointerInput(Unit) {
+                            detectHorizontalDragGestures { change, dx ->
+                                change.consume()
+                                onWindow(current.value.pan(dx / size.width))
+                            }
+                        }
+                        .pointerInput(Unit) {
+                            detectTapGestures { pos ->
+                                val w = current.value
+                                onWindow(ChartWindow.of(pos.x / size.width - w.span / 2, w.span))
+                            }
+                        },
+                ),
+        ) {
+            val barH = if (zoomed) 6.dp.toPx() else 3.dp.toPx()
+            val top = (size.height - barH) / 2
+            val r = CornerRadius(barH / 2)
+            drawRoundRect(rt.hairline, topLeft = Offset(0f, top), size = Size(size.width, barH), cornerRadius = r)
             drawRoundRect(
                 rt.primary,
-                topLeft = Offset(window.start * size.width, 0f),
-                size = Size((window.span * size.width).coerceAtLeast(size.height), size.height),
+                topLeft = Offset(window.start * size.width, top),
+                size = Size((window.span * size.width).coerceAtLeast(barH), barH),
                 cornerRadius = r,
             )
         }
