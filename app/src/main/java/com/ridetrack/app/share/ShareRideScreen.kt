@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -166,6 +167,7 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
     val style = choices[pager.currentPage]
     LaunchedEffect(pager.settledPage, s.loading) { if (!s.loading) vm.select(choices[pager.settledPage]) }
     var toast by remember { mutableStateOf<String?>(null) }
+    var video by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(toast) {
         if (toast != null) {
             delay(2_200)
@@ -181,6 +183,12 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
             .padding(horizontal = RtDimens.screenPadding),
     ) {
         ScreenHeader("Share ride", onBack = onBack)
+        ModeSwitch(video) { video = it }
+        Spacer(Modifier.height(12.dp))
+        if (video) {
+            RideVideoPanel(rideId, Modifier.weight(1f))
+            return@Column
+        }
         LayoutPicker(s.thumbs, style, onSelect = { c -> scope.launch { pager.animateScrollToPage(choices.indexOf(c)) } })
         Spacer(Modifier.height(12.dp))
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -255,6 +263,34 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
                         toast = if (ok) "Copied. Paste it onto your story" else "Couldn't copy"
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Story card (an image) or the ride as a 3D video. */
+@Composable
+private fun ModeSwitch(video: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(50))
+            .background(RtColors.Surface)
+            .border(1.dp, RtColors.Hairline, RoundedCornerShape(50))
+            .padding(3.dp),
+    ) {
+        listOf(false to "Story card", true to "3D video").forEach { (v, label) ->
+            val on = v == video
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(if (on) RtColors.SurfaceRaised else Color.Transparent)
+                    .clickable(role = Role.Tab) { onChange(v) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label, style = RtType.button, color = if (on) RtColors.TextPrimary else RtColors.TextSecondary)
             }
         }
     }
