@@ -6,6 +6,9 @@ import android.net.Uri
 import com.ridetrack.app.AppContainer
 import com.ridetrack.app.data.BikePhotos
 import com.ridetrack.app.ui.common.Odometer
+import com.ridetrack.app.ui.home.BikeCare
+import com.ridetrack.app.ui.home.CareItem
+import com.ridetrack.app.ui.home.CareStatus
 import com.ridetrack.telemetry.model.Bike
 import com.ridetrack.telemetry.model.FuelType
 import com.ridetrack.telemetry.model.MountOrientation
@@ -34,6 +37,8 @@ data class BikesUiState(
     val odometers: Map<String, Double?> = emptyMap(),
     /** "Ridden today" etc. per bike id. */
     val lastRidden: Map<String, String> = emptyMap(),
+    /** Bike care reminders per bike id, most due first. */
+    val care: Map<String, List<CareStatus>> = emptyMap(),
 )
 
 class BikesViewModel(private val c: AppContainer) : ViewModel() {
@@ -51,8 +56,22 @@ class BikesViewModel(private val c: AppContainer) : ViewModel() {
             sensors = c.sensorInventory.availability(),
             hasGps = c.sensorInventory.hasGpsHardware(),
             message = msg,
+            care = BikeCare.decode(settings.bikeCare).groupBy { it.bikeId }.mapValues { (id, items) ->
+                BikeCare.sorted(items, bikes.firstOrNull { it.id == id }?.let { Odometer.readingKm(it, rides) }, System.currentTimeMillis())
+            },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BikesUiState())
+
+    init {
+        // Start km reminders counting once the bike has an odometer.
+        viewModelScope.launch {
+            state.collect { st ->
+                if (st.loading) return@collect
+                val settings = c.settings.settings.first()
+                BikeCare.anchor(BikeCare.decode(settings.bikeCare), st.odometers)?.let { c.settings.setBikeCare(BikeCare.encode(it)) }
+            }
+        }
+    }
 
     fun select(id: String) {
         viewModelScope.launch { c.settings.setSelectedBike(id) }
@@ -68,6 +87,24 @@ class BikesViewModel(private val c: AppContainer) : ViewModel() {
 
     fun dismissMessage() {
         message.value = null
+    }
+
+    /** Adds [item], or replaces the one with its id. */
+    fun saveCare(item: CareItem) = editCare { list -> if (list.any { it.id == item.id }) list.map { if (it.id == item.id) item else it } else list + item }
+
+    fun deleteCare(id: String) = editCare { list -> list.filterNot { it.id == id } }
+
+    /** Done today, at the bike's current odometer: the countdown starts again. */
+    fun markCareDone(item: CareItem) = editCare { list ->
+        val odo = state.value.odometers[item.bikeId]
+        list.map { if (it.id == item.id) it.copy(doneAtKm = odo, doneAtMillis = System.currentTimeMillis()) else it }
+    }
+
+    private fun editCare(change: (List<CareItem>) -> List<CareItem>) {
+        viewModelScope.launch {
+            val now = BikeCare.decode(c.settings.settings.first().bikeCare)
+            c.settings.setBikeCare(BikeCare.encode(change(now)))
+        }
     }
 }
 

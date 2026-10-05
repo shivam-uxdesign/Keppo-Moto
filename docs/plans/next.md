@@ -1,10 +1,10 @@
 # Next build: Keppo Moto
 
-Planned with the rider, not built yet. Build in this order, one commit each, then a single APK (`keppo-moto-<sha>.apk`) at the end.
+Planned with the rider; all four steps are now built. Built in this order, one commit each, then a single APK (`keppo-moto-<sha>.apk`) at the end.
 
 Prototypes (private Artifacts):
 - Phone mic pop-up: https://claude.ai/artifact/4bme3EbpVK5g5RpUNVbtoM (version 3 is the approved look)
-- New Home: https://claude.ai/artifact/HTjce3tXh5FqiEJ1xgSeAw (waiting for the rider's feedback)
+- New Home: https://claude.ai/artifact/HTjce3tXh5FqiEJ1xgSeAw
 - 3D ride video share: https://claude.ai/artifact/1gbRDXH81Kh9rst4XonTj6 (version 2: big, centred moment card)
 
 Already done and pushed (in the next APK): the zoom bar under the ride-detail timeline scrolls when zoomed (commit 1e5f110).
@@ -103,7 +103,7 @@ Rider's choices: pick by **speed** (16× / 30× / 60× / 120×). At moments the 
   - render 30 s of the Monday ride at 30× with 5 s clips
   - check the length, the clip order, the sound, and Share and Save
 
-## 4. New Home (prototype waiting for feedback; build only once approved)
+## 4. New Home
 
 - **Readiness above Start:**
   - One quiet line "✓ Ready to ride · DJI mic · GPS · mount" when everything's fine.
@@ -117,6 +117,12 @@ Rider's choices: pick by **speed** (16× / 30× / 60× / 120×). At moments the 
 - **Milestones:** new top speed, longest ride, distance totals, shown as they happen.
 - **This week:** one line, e.g. "1 ride · 29.8 km · 44 min".
 - **Moves out:** the Today / Week / Month charts move off Home (details stay in Rides and Profile › Statistics).
+- **As built:**
+  - Start stays the slide on the bike card; readiness sits just above it.
+  - Mic, GPS, mount, camera and pop-up are checked only when they matter (moments / pop-up on). Low battery is fine while charging.
+  - "Just after a ride" lasts 12 hours, or until closed with ×.
+  - Reminders are stored in settings (`bike_care`), so they're in the Drive backup.
+  - Milestones: top speed, deepest lean, longest ride and distance totals, shown for a week.
 - **Later:** "on the bike" hints (charging from the bike, DJI plugged in, phone at the mount angle) to expand readiness automatically.
 
 ## Verification (whole batch)

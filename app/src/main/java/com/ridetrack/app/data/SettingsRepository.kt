@@ -169,6 +169,10 @@ data class Settings(
     val journalConnectedMillis: Long? = null,
     /** Testing only: demo rides are shared with Keppo Journal too (never backed up). */
     val journalShareDemo: Boolean = false,
+    /** Bike care reminders, as BikeCare.encode(). */
+    val bikeCare: String? = null,
+    /** The ride the rider closed on Home's "just after a ride" card. */
+    val homeDismissedRide: String? = null,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -221,6 +225,8 @@ class SettingsRepository(private val context: Context) {
         val journalLastRead = longPreferencesKey("journal_last_read")
         val journalConnected = longPreferencesKey("journal_connected")
         val journalShareDemo = booleanPreferencesKey("journal_share_demo")
+        val bikeCare = stringPreferencesKey("bike_care")
+        val homeDismissedRide = stringPreferencesKey("home_dismissed_ride")
         val backupEmail = stringPreferencesKey("backup_email")
         val backupMobileData = booleanPreferencesKey("backup_mobile_data")
         val backupVideosCharging = booleanPreferencesKey("backup_videos_charging")
@@ -293,6 +299,8 @@ class SettingsRepository(private val context: Context) {
             journalLastReadMillis = p[Keys.journalLastRead],
             journalConnectedMillis = p[Keys.journalConnected],
             journalShareDemo = p[Keys.journalShareDemo] ?: false,
+            bikeCare = p[Keys.bikeCare],
+            homeDismissedRide = p[Keys.homeDismissedRide],
             backup = BackupSettings(
                 email = p[Keys.backupEmail],
                 allowMobileData = p[Keys.backupMobileData] ?: false,
@@ -345,6 +353,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun setJournalShareDemo(on: Boolean) = context.dataStore.edit { it[Keys.journalShareDemo] = on }
     suspend fun setJournalConnected(atMillis: Long) = context.dataStore.edit { it[Keys.journalConnected] = atMillis }
     suspend fun setJournalLastRead(atMillis: Long) = context.dataStore.edit { it[Keys.journalLastRead] = atMillis }
+
+    suspend fun setBikeCare(encoded: String) = context.dataStore.edit { it[Keys.bikeCare] = encoded }
+    suspend fun dismissHomeRide(rideId: String) = context.dataStore.edit { it[Keys.homeDismissedRide] = rideId }
 
     suspend fun dismissRestoreCard() = context.dataStore.edit { it[Keys.backupRestoreDismissed] = true }
 

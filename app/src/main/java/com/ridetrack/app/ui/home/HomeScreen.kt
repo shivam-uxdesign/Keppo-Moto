@@ -1,7 +1,15 @@
 package com.ridetrack.app.ui.home
 
 import com.ridetrack.app.ui.components.KeppoWordmark
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.ridetrack.app.hud.OverlayPermission
+import kotlinx.coroutines.delay
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -55,8 +63,6 @@ import com.ridetrack.app.ui.components.DemoBadge
 import com.ridetrack.app.ui.components.EmptyState
 import com.ridetrack.app.ui.components.PrimaryButton
 import com.ridetrack.app.ui.components.SecondaryButton
-import com.ridetrack.app.ui.components.StatusIndicator
-import com.ridetrack.app.ui.components.StatusLevel
 import com.ridetrack.app.ui.components.riseIn
 import com.ridetrack.app.ui.format.Format
 import com.ridetrack.app.ui.theme.RtColors
@@ -74,11 +80,25 @@ fun HomeScreen(
     onOpenProfile: () -> Unit,
     onAddBike: () -> Unit,
     onEditBike: (String) -> Unit,
+    onOpenRide: (String) -> Unit,
+    onShareRide: (String) -> Unit,
+    onOpenMoment: (rideId: String, momentId: String) -> Unit,
+    onOpenBike: () -> Unit,
 ) {
     val vm = appViewModel { HomeViewModel(it) }
     val s by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshEnvironment() }
+    // Mics get plugged in and the battery drains while Home is open.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(5_000)
+                vm.refreshEnvironment()
+            }
+        }
+    }
     var confirmDiscard by remember { mutableStateOf<Ride?>(null) }
     var pendingBike by remember { mutableStateOf<Bike?>(null) }
     var permissionDenied by remember { mutableStateOf(false) }
@@ -119,8 +139,36 @@ fun HomeScreen(
             Spacer(Modifier.height(RtDimens.md))
         }
 
+        val last = s.lastRide
+        val lastCard: @Composable (Int) -> Unit = { order ->
+            if (last != null) {
+                LastRideCard(
+                    last = last,
+                    justRode = s.justRode,
+                    onOpen = { onOpenRide(last.ride.id) },
+                    onShare = { onShareRide(last.ride.id) },
+                    onOpenMoment = { onOpenMoment(last.ride.id, it) },
+                    onClose = { vm.dismissJustRode(last.ride.id) },
+                    modifier = Modifier.riseIn(order),
+                )
+                Spacer(Modifier.height(14.dp))
+            }
+        }
+        // Just after a ride, the ride and what it set lead; otherwise readiness and Start do.
+        if (s.justRode) {
+            lastCard(0)
+            if (s.milestones.isNotEmpty()) {
+                MilestonesCard(s.milestones, Modifier.riseIn(0))
+                Spacer(Modifier.height(14.dp))
+            }
+        }
+
         val bike = s.bike
         if (bike != null) {
+            if (!s.rideState.isActive) {
+                ReadinessCard(s.checks, onFix = { fix(context, it) }, Modifier.riseIn(0))
+                Spacer(Modifier.height(10.dp))
+            }
             GarageStack(
                 bikes = s.bikes,
                 selected = bike,
@@ -144,16 +192,25 @@ fun HomeScreen(
         }
 
         if (!s.loading) {
-            val stats = s.stats
-            if (s.totals != null && stats != null) {
+            Spacer(Modifier.height(14.dp))
+            if (!s.justRode) lastCard(1)
+            if (bike != null) {
+                BikeCareCard(bike.displayName, s.odometers[bike.id], s.care, onOpenBike, Modifier.riseIn(2))
                 Spacer(Modifier.height(14.dp))
-                StatsCard(stats, s.trace, Modifier.riseIn(1))
-            } else if (s.hasBikes) {
+            }
+            if (!s.justRode && s.milestones.isNotEmpty()) {
+                MilestonesCard(s.milestones, Modifier.riseIn(3))
+                Spacer(Modifier.height(14.dp))
+            }
+            val week = s.week
+            if (s.totals != null && week != null) {
+                WeekLine(week, Modifier.riseIn(3))
+            } else if (s.hasBikes && last == null) {
                 EmptyState(
                     title = "No rides yet",
-                    message = "Slide to ride to record your first one. Your stats build up here.",
+                    message = "Slide to ride to record your first one. It shows up here with its route and moments.",
                     icon = Icons.Outlined.Route,
-                    modifier = Modifier.padding(top = RtDimens.lg),
+                    modifier = Modifier.padding(top = RtDimens.sm),
                 )
             }
         }
@@ -190,6 +247,17 @@ fun HomeScreen(
     }
 }
 
+/** Opens the screen that fixes a readiness problem. */
+private fun fix(context: Context, f: ReadyFix) {
+    when (f) {
+        ReadyFix.LOCATION_SETTINGS -> runCatching {
+            context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+        ReadyFix.APP_SETTINGS -> Permissions.openAppSettings(context)
+        ReadyFix.OVERLAY -> OverlayPermission.request(context)
+    }
+}
+
 private fun greeting(): String = when (LocalTime.now().hour) {
     in 5..11 -> "Good morning"
     in 12..16 -> "Good afternoon"
@@ -203,27 +271,6 @@ private fun Header(s: HomeUiState, onOpenProfile: () -> Unit) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             KeppoWordmark(Modifier.padding(bottom = 10.dp))
             Text(greeting(), style = RtType.title.copy(fontSize = 26.sp, lineHeight = 30.sp), color = RtColors.TextPrimary)
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                if (s.demoMode) {
-                    StatusIndicator("GPS", "simulated", StatusLevel.WARNING)
-                } else {
-                    // Only what's knowable before recording: permission and the location switch.
-                    val (text, level) = when (s.gps) {
-                        GpsReadiness.READY -> "ready" to StatusLevel.OK
-                        GpsReadiness.PERMISSION_NEEDED -> "asks when you start" to StatusLevel.WARNING
-                        GpsReadiness.DISABLED -> "off" to StatusLevel.ERROR
-                        GpsReadiness.NO_HARDWARE -> "unavailable" to StatusLevel.ERROR
-                    }
-                    StatusIndicator("GPS", text, level)
-                }
-                val (motion, motionLevel) = when {
-                    s.demoMode -> "simulated" to StatusLevel.WARNING
-                    s.sensors.canEstimateLean -> "ready" to StatusLevel.OK
-                    s.sensors.accelerometer -> "no gyroscope" to StatusLevel.WARNING
-                    else -> "unavailable" to StatusLevel.ERROR
-                }
-                StatusIndicator("Sensors", motion, motionLevel)
-            }
         }
         if (s.demoMode) DemoBadge(Modifier.padding(end = RtDimens.xs))
         val interaction = remember { MutableInteractionSource() }

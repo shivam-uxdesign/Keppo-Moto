@@ -92,6 +92,16 @@ fun BikeScreen(onAddBike: () -> Unit, onEditBike: (String) -> Unit, onCalibrate:
         if (s.bikes.isNotEmpty()) {
             SecondaryButton("Add bike", onAddBike, icon = Icons.Outlined.Add)
         }
+        s.bikes.firstOrNull { it.id == s.selectedId }?.let { bike ->
+            BikeCareSection(
+                bike = bike,
+                odometerKm = s.odometers[bike.id],
+                care = s.care[bike.id].orEmpty(),
+                onSave = vm::saveCare,
+                onDelete = vm::deleteCare,
+                onDone = vm::markCareDone,
+            )
+        }
 
         SectionHeader("Phone sensors")
         RtCard {
