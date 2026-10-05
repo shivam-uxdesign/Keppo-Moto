@@ -162,8 +162,9 @@ private fun StatusRow(data: HudData, c: HudColors) {
         Text(left.text, style = label, color = toneColor(left.tone, c), maxLines = 1, softWrap = false)
         Spacer(Modifier.weight(1f))
         val right = HudTopRow.right(data)
-        if (right.tone == HudTopRow.Tone.REC) {
-            Box(Modifier.size(6.dp).background(RtColors.Error, CircleShape))
+        val filming = data.video != null || data.clipStartMillis != null
+        if (right.tone == HudTopRow.Tone.REC || (right.tone == HudTopRow.Tone.PHONE && filming)) {
+            Box(Modifier.size(6.dp).background(toneColor(right.tone, c), CircleShape))
             Spacer(Modifier.width(4.dp))
         }
         Text(right.text, style = label, color = toneColor(right.tone, c), maxLines = 1, softWrap = false)
@@ -178,7 +179,11 @@ private fun toneColor(t: HudTopRow.Tone, c: HudColors): Color = when (t) {
     HudTopRow.Tone.PAUSED -> DarkPalette.paused
     HudTopRow.Tone.REC -> DarkPalette.error
     HudTopRow.Tone.ACCENT -> DarkPalette.primary
+    HudTopRow.Tone.PHONE -> PHONE_MIC_BLUE
 }
+
+/** The phone's own mic is recording: blue, so it stands apart from the DJI's grey and red. */
+private val PHONE_MIC_BLUE = Color(0xFF60A5FA)
 
 /**
  * "Start filming when I speak": the mic level as a slim bar, with a tick at the threshold.
@@ -317,8 +322,9 @@ fun HudBubble(data: HudData, settings: HudSettings, modifier: Modifier = Modifie
         Text(Format.speedKmh(data.speedMps), style = hudNumber.copy(fontSize = 30.sp, lineHeight = 30.sp), color = c.text)
         // The camera row's right side, when it has something to say; otherwise the unit.
         val cam = HudTopRow.right(data)
-        if (cam.tone == HudTopRow.Tone.REC || cam.tone == HudTopRow.Tone.ACCENT || cam.tone == HudTopRow.Tone.WARNING) {
-            Text(cam.text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = toneColor(cam.tone, c), maxLines = 1, modifier = Modifier.offset(y = (-2).dp))
+        if (cam.tone == HudTopRow.Tone.REC || cam.tone == HudTopRow.Tone.ACCENT || cam.tone == HudTopRow.Tone.WARNING || cam.tone == HudTopRow.Tone.PHONE) {
+            // "cam · phone" is too wide for the bubble: just "phone".
+            Text(if (cam.text == "cam · phone") "phone" else cam.text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = toneColor(cam.tone, c), maxLines = 1, modifier = Modifier.offset(y = (-2).dp))
         } else {
             Text("km/h", fontSize = 10.sp, color = c.muted, modifier = Modifier.offset(y = (-2).dp))
         }

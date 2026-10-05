@@ -38,7 +38,9 @@ class HudTopRowTest {
     fun `idle camera is a plain cam, grey when off`() {
         assertEquals(HudTopRow.Label("cam", Tone.MUTED), HudTopRow.right(data()))
         assertEquals(HudTopRow.Label("cam", Tone.DIM), HudTopRow.right(data(camera = CameraIndicator.OFF)))
-        assertEquals(HudTopRow.Label("cam · phone mic", Tone.WARNING), HudTopRow.right(data().copy(micFallback = "Wireless Mic Rx")))
+        assertEquals(HudTopRow.Label("cam · phone", Tone.PHONE), HudTopRow.right(data().copy(phoneMic = true)))
+        // The DJI (or any external mic) looks as before.
+        assertEquals(HudTopRow.Label("cam", Tone.MUTED), HudTopRow.right(data().copy(phoneMic = false, micFallback = null)))
     }
 
     @Test
@@ -69,5 +71,13 @@ class HudTopRowTest {
         assertEquals("00:00", HudTopRow.clock(0))
         assertEquals("59:59", HudTopRow.clock(3_599_000))
         assertEquals("1:00:05", HudTopRow.clock(3_605_000))
+    }
+
+    @Test
+    fun `filming with the phone mic counts in blue, with the DJI in red`() {
+        val v = HudVideo(MomentSource.MANUAL, starting = false, paused = false, elapsedMillis = 12_000)
+        assertEquals(HudTopRow.Label("cam 00:12", Tone.PHONE), HudTopRow.right(data(video = v).copy(phoneMic = true)))
+        assertEquals(HudTopRow.Label("cam 00:12", Tone.REC), HudTopRow.right(data(video = v)))
+        assertEquals(Tone.PHONE, HudTopRow.right(data(clipStart = 90_000).copy(phoneMic = true)).tone)
     }
 }

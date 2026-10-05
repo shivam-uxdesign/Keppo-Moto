@@ -5,13 +5,14 @@ import java.util.Locale
 /**
  * The pop-up's top row, as text. Pure, so it is unit-tested.
  *
- * Left is the ride: "Riding 00:00", "Stopped 00:00", "Paused 00:00", "On a break 05:00", or amber "GPS lost" while
- * it is lost. Right is the camera: "cam" when idle, "cam 00:12" while filming (an event clip
- * counts from its look-back), "3", "2", "1" before a photo, then "photo"; "cam · phone mic" in
- * amber when the chosen mic dropped out.
+ * Left is the ride: "Riding 00:00", "Stopped 00:00", "Paused 00:00", "On a break 05:00", or amber
+ * "GPS lost" while it is lost. Right is the camera: "cam" when idle, "cam 00:12" while filming
+ * (an event clip counts from its look-back), "3", "2", "1" before a photo, then "photo".
+ * With the phone's own mic recording, it's blue: "cam · phone" when idle and a blue timer while
+ * filming, so it's clear the sound isn't from the DJI.
  */
 object HudTopRow {
-    enum class Tone { TEXT, MUTED, DIM, WARNING, PAUSED, REC, ACCENT }
+    enum class Tone { TEXT, MUTED, DIM, WARNING, PAUSED, REC, ACCENT, PHONE }
 
     data class Label(val text: String, val tone: Tone)
 
@@ -32,13 +33,14 @@ object HudTopRow {
         val clipStart = data.clipStartMillis
         val photoAt = data.photoAtMillis
         val photoTaken = data.photoTakenAtMillis
+        val filming = if (data.phoneMic) Tone.PHONE else Tone.REC
         return when {
-            video != null -> Label("cam " + clock(video.elapsedMillis), if (video.paused) Tone.WARNING else Tone.REC)
-            clipStart != null -> Label("cam " + clock(now - clipStart), Tone.REC)
+            video != null -> Label("cam " + clock(video.elapsedMillis), if (video.paused) Tone.WARNING else filming)
+            clipStart != null -> Label("cam " + clock(now - clipStart), filming)
             photoAt != null && now < photoAt -> Label(((photoAt - now + 999) / 1000).coerceIn(1, 3).toString(), Tone.ACCENT)
             photoTaken != null && now >= photoTaken && now - photoTaken < PHOTO_SHOWN_MILLIS -> Label("photo", Tone.ACCENT)
             data.camera == CameraIndicator.OFF -> Label("cam", Tone.DIM)
-            data.micFallback != null -> Label("cam · phone mic", Tone.WARNING)
+            data.phoneMic -> Label("cam · phone", Tone.PHONE)
             else -> Label("cam", Tone.MUTED)
         }
     }

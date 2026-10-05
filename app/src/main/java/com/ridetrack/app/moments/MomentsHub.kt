@@ -85,6 +85,8 @@ data class MomentState(
     val photoTakenAtMillis: Long? = null,
     /** The chosen mic (its name) is missing, so the phone mic is recording; null when all's well. */
     val micFallback: String? = null,
+    /** The kind of mic recording now; null while no mic is open. */
+    val micType: MicType? = null,
 )
 
 /**
@@ -210,6 +212,10 @@ class MomentsHub {
     val speaking: StateFlow<Boolean> = _speaking.asStateFlow()
     fun setSpeaking(on: Boolean) {
         _speaking.value = on
+    }
+
+    fun setMicType(type: MicType?) {
+        if (_state.value.micType != type) _state.value = _state.value.copy(micType = type)
     }
 
     fun setMicFallback(name: String?) {

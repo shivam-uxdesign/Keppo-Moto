@@ -472,6 +472,7 @@ class MomentRecorder(
                 }
             }).also { enc ->
                 audioMic = mic
+                hub.setMicType(mic.type)
                 if (mic.type != MicType.PHONE) lastExternal = mic
                 hub.setMicFallback(fallbackName(choice, mic))
                 log.log("audio from ${if (device == null) "phone mic" else "${mic.type.label} ${device.productName}"} (setting: ${choice.label})")
@@ -488,6 +489,7 @@ class MomentRecorder(
         audio?.release()
         audio = null
         audioMic = null
+        hub.setMicType(null)
         hub.clearLevel()
     }
 

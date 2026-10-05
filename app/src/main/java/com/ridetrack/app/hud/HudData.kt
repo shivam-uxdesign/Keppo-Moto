@@ -65,6 +65,8 @@ data class HudData(
     val nowMillis: Long = 0,
     /** The chosen mic (its name) dropped out; the phone mic is recording instead. */
     val micFallback: String? = null,
+    /** The phone's own mic is recording (no DJI / external mic): the camera label turns blue. */
+    val phoneMic: Boolean = false,
     /** "Start filming when I speak" is on: show the mic level against [voiceThresholdDb]. */
     val voiceOn: Boolean = false,
     val micLevelDb: Float? = null,
@@ -134,6 +136,7 @@ data class HudData(
                 photoAtMillis = moments?.photoAtMillis,
                 photoTakenAtMillis = moments?.photoTakenAtMillis,
                 micFallback = moments?.micFallback,
+                phoneMic = moments?.micType == com.ridetrack.app.moments.MicType.PHONE,
                 nowMillis = nowMillis,
             )
         }
