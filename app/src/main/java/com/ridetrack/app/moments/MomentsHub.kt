@@ -1,5 +1,7 @@
 package com.ridetrack.app.moments
 
+import com.ridetrack.telemetry.model.RideEventType
+
 import android.graphics.Bitmap
 import com.ridetrack.telemetry.moments.MomentWindow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +29,14 @@ sealed interface MomentRequest {
         val latitude: Double?,
         val longitude: Double?,
         val speedMps: Double?,
+        /** A chain of events filmed as one video: its events so far, strongest value, first event. */
+        val types: Set<RideEventType> = emptySet(),
+        val peakValue: Double? = null,
+        val anchorMillis: Long? = null,
     ) : MomentRequest
+
+    /** More events joined the chain being filmed. */
+    data class LiveEvents(override val rideId: String, val types: Set<RideEventType>, val peakValue: Double?) : MomentRequest
 
     data class LiveControl(override val rideId: String, val action: LiveAction) : MomentRequest
 }

@@ -19,6 +19,35 @@ class MomentsTest {
     private fun ev(type: RideEventType, t: Long, v: Double = 0.6) = RideEvent(type, t, 1.0, 2.0, 10.0, v)
 
     @Test
+    fun `a second event inside the clip is a chain, handed over as a longer video`() {
+        val p = MomentPlanner()
+        // Lean at 0 s, a speed-up at 15 s (the rider's example).
+        assertFalse(p.add(ev(RideEventType.SIGNIFICANT_LEAN, 100_000, 25.0), episodeEndMillis = 102_000))
+        assertTrue(p.add(ev(RideEventType.STRONG_ACCELERATION, 115_000), episodeEndMillis = 116_000))
+        val w = p.promotePending()!!
+        assertEquals(90_000, w.startMillis)
+        assertEquals(setOf(RideEventType.SIGNIFICANT_LEAN, RideEventType.STRONG_ACCELERATION), w.types)
+        assertEquals(100_000, w.anchorMillis)
+        assertFalse(p.hasPending)
+        // Filmed as a video until 170 s: an event inside that isn't clipped again.
+        p.markFilmed(170_000)
+        assertFalse(p.add(ev(RideEventType.HARD_BRAKE, 160_000), episodeEndMillis = 161_000))
+        assertTrue(p.due(200_000).isEmpty())
+    }
+
+    @Test
+    fun `a chain that never started filming is cut from the buffer instead`() {
+        val p = MomentPlanner()
+        p.add(ev(RideEventType.SIGNIFICANT_LEAN, 100_000, 25.0), episodeEndMillis = 102_000)
+        p.add(ev(RideEventType.STRONG_ACCELERATION, 115_000), episodeEndMillis = 116_000)
+        val w = p.promotePending()!!
+        p.restore(w)
+        val clip = p.due(200_000).single()
+        assertEquals(90_000, clip.startMillis)
+        assertEquals(2, clip.types.size)
+    }
+
+    @Test
     fun `window is 10 s either side of the event start`() {
         val p = MomentPlanner()
         p.add(ev(RideEventType.HARD_BRAKE, 100_000), episodeEndMillis = 101_500)

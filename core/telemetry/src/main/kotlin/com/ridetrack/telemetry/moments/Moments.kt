@@ -87,14 +87,18 @@ class MomentPlanner(
     /** Where the clip being filmed starts (including its look-back), or null. */
     val pendingStartMillis: Long? get() = pending?.startMillis
 
-    /** [episodeEndMillis] = when the detector reported the event (the episode's end). */
-    fun add(event: RideEvent, episodeEndMillis: Long) {
+    /**
+     * [episodeEndMillis] = when the detector reported the event (the episode's end).
+     * Returns true when the event landed inside the clip already being filmed (a chain).
+     */
+    fun add(event: RideEvent, episodeEndMillis: Long): Boolean {
         val start = event.timeMillis
-        if (start < lastSavedEnd) return // already on film
+        if (start < lastSavedEnd) return false // already on film
         val clipStart = maxOf(start - beforeMillis, lastSavedEnd)
         val clipEnd = maxOf(start + afterMillis, episodeEndMillis + tailAfterEpisodeMillis)
         val p = pending
-        pending = if (p != null && clipStart <= p.endMillis) {
+        val merged = p != null && clipStart <= p.endMillis
+        pending = if (p != null && merged) {
             val end = minOf(maxOf(p.endMillis, clipEnd), p.startMillis + maxMillis)
             p.copy(endMillis = end, types = p.types + event.type, peakValue = strongest(p.peakValue, event.value))
         } else {
@@ -111,6 +115,29 @@ class MomentPlanner(
                 peakValue = event.value,
             )
         }
+        return merged
+    }
+
+    /**
+     * Hands over the clip being filmed, to be filmed as a longer video instead (a chain of
+     * events). It's no longer cut from the buffer.
+     */
+    fun promotePending(): MomentWindow? = pending.also { pending = null }
+
+    /** A video covered the ride until [endMillis]: events before then are already on film. */
+    fun markFilmed(endMillis: Long) {
+        lastSavedEnd = maxOf(lastSavedEnd, endMillis)
+    }
+
+    /** The longer video never started: cut [w] from the buffer after all. */
+    fun restore(w: MomentWindow) {
+        val p = pending
+        pending = if (p == null) w else p.copy(
+            startMillis = minOf(p.startMillis, w.startMillis),
+            endMillis = maxOf(p.endMillis, w.endMillis),
+            types = p.types + w.types,
+            peakValue = strongest(p.peakValue, w.peakValue),
+        )
     }
 
     private val queued = ArrayList<MomentWindow>()

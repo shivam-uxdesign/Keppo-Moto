@@ -77,7 +77,8 @@ fun HudOverlayContent(
                 val video = data.video
                 when {
                     collapsed && !controlsOpen -> HudBubble(data, settings)
-                    video != null -> ViewfinderCard(data, video, viewfinder)
+                    // A chain of events keeps the normal card: its top row counts the video.
+                    video != null && video.source != MomentSource.EVENT -> ViewfinderCard(data, video, viewfinder)
                     else -> HudCard(data, settings)
                 }
             }

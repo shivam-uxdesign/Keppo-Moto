@@ -119,7 +119,11 @@ class MomentRecorder(
     private var thermalListener: PowerManager.OnThermalStatusChangedListener? = null
 
     /** A long video being filmed (yours, or GPS lost); event clips wait until it stops. */
-    private class Live(val rec: LiveRecording, val request: MomentRequest.StartLive)
+    private class Live(val rec: LiveRecording, val request: MomentRequest.StartLive) {
+        /** Events filmed in a chain video; more join while it runs. */
+        val types = request.types.toMutableSet()
+        var peakValue = request.peakValue
+    }
     @Volatile private var live: Live? = null
     private val liveLock = Mutex()
     /** Show the camera on the HUD: only while you film on purpose. */
@@ -175,7 +179,7 @@ class MomentRecorder(
             }
         }
         hub.attach { r ->
-            if (r is MomentRequest.StartLive || r is MomentRequest.LiveControl) {
+            if (r is MomentRequest.StartLive || r is MomentRequest.LiveControl || r is MomentRequest.LiveEvents) {
                 scope.launch(Dispatchers.IO) { liveLock.withLock { handleLive(r) } }
             } else {
                 requests.trySend(r)
@@ -612,7 +616,7 @@ class MomentRecorder(
             when (r) {
                 is MomentRequest.Clip -> writeClip(r)
                 is MomentRequest.Photo -> takePhoto(r)
-                is MomentRequest.StartLive, is MomentRequest.LiveControl -> Unit
+                is MomentRequest.StartLive, is MomentRequest.LiveControl, is MomentRequest.LiveEvents -> Unit
             }
         } catch (e: Exception) {
             log.error("moment not saved", e)
@@ -748,6 +752,12 @@ class MomentRecorder(
         try {
             when (r) {
                 is MomentRequest.StartLive -> startLive(r)
+                is MomentRequest.LiveEvents -> live?.let { l ->
+                    l.types += r.types
+                    val p = l.peakValue
+                    if (p == null || (r.peakValue != null && kotlin.math.abs(r.peakValue) > kotlin.math.abs(p))) l.peakValue = r.peakValue
+                    log.log("video chain: ${l.types.joinToString("+")}")
+                }
                 is MomentRequest.LiveControl -> when (r.action) {
                     LiveAction.PAUSE -> live?.let { l ->
                         l.rec.pause()
@@ -830,7 +840,9 @@ class MomentRecorder(
             return
         }
         live = Live(recording, r)
-        hub.setLive(LiveState(r.source, segmentStartMillis = System.currentTimeMillis()))
+        // A chain of events counts from the clip's start, look-back included (the HUD's "cam 00:10").
+        val countFrom = if (r.source == MomentSource.EVENT) fromMillis else System.currentTimeMillis()
+        hub.setLive(LiveState(r.source, segmentStartMillis = countFrom))
         log.log("video filming: ${recording.file.name}")
     }
 
@@ -851,20 +863,22 @@ class MomentRecorder(
         }
         val file = l.rec.file
         val start = l.rec.firstFrameMillis ?: System.currentTimeMillis()
-        val thumb = File(file.parentFile, file.nameWithoutExtension + ".jpg")
-        val hasThumb = ClipWriter.videoThumbnail(file, minOf(1_000L, length / 2), thumb)
         val req = l.request
+        // A chain's picture is its first event; other videos use their first second.
+        val anchor = req.anchorMillis?.takeIf { it in start..start + length }
+        val thumb = File(file.parentFile, file.nameWithoutExtension + ".jpg")
+        val hasThumb = ClipWriter.videoThumbnail(file, anchor?.let { it - start } ?: minOf(1_000L, length / 2), thumb)
         repo.add(
             Moment(
                 id = UUID.randomUUID().toString(),
                 rideId = req.rideId,
                 kind = MomentKind.CLIP,
-                types = emptySet(),
-                timeMillis = start,
+                types = l.types,
+                timeMillis = anchor ?: start,
                 latitude = req.latitude,
                 longitude = req.longitude,
                 speedMps = req.speedMps,
-                peakValue = null,
+                peakValue = l.peakValue,
                 file = file,
                 thumb = thumb.takeIf { hasThumb },
                 durationMillis = length,

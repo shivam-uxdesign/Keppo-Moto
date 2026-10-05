@@ -13,6 +13,7 @@ import com.ridetrack.app.moments.MomentSource
 import com.ridetrack.app.moments.MomentsHub
 import com.ridetrack.telemetry.model.MountOrientation
 import com.ridetrack.telemetry.moments.MomentPlanner
+import com.ridetrack.telemetry.moments.MomentWindow
 import com.ridetrack.telemetry.moments.MomentTriggers
 import com.ridetrack.telemetry.moments.PhotoScheduler
 import android.os.SystemClock
@@ -301,7 +302,31 @@ class RideSessionManager(
     /** Decides when to film; the recorder in the service does the filming. */
     private fun captureMoments(rec: Recorder, frame: TelemetryFrame) {
         rec.planner?.let { planner ->
-            rec.pipeline.takeMomentEvents().forEach { (event, at) -> planner.add(event, at) }
+            val chain = rec.chain
+            rec.pipeline.takeMomentEvents().forEach { (event, at) ->
+                if (chain.filming) {
+                    // Another event while the chain is filming: keep going 10 s past it.
+                    chain.extend(event.timeMillis + CHAIN_AFTER_MILLIS)
+                    videoControlEvents(rec, setOf(event.type), event.value)
+                    return@forEach
+                }
+                val merged = planner.add(event, at)
+                // A second event inside the clip being filmed: film it as one longer video,
+                // which can run past what the buffer holds.
+                if (merged && momentsHub.live.value == null) startChain(rec, planner, frame)
+            }
+            when (chain.onTick(frame.timeMillis, running = momentsHub.live.value?.source == MomentSource.EVENT)) {
+                TriggeredVideo.Action.STOP -> {
+                    planner.markFilmed(frame.timeMillis)
+                    stopVideo()
+                }
+                TriggeredVideo.Action.FAILED -> rec.chainWindow?.let { w ->
+                    // The camera wasn't ready: cut what the buffer still has instead.
+                    planner.restore(w.copy(endMillis = maxOf(w.endMillis, chain.holdUntil)))
+                }
+                TriggeredVideo.Action.NONE -> if (!chain.filming && rec.chainWindow != null) planner.markFilmed(frame.timeMillis)
+            }
+            if (!chain.filming) rec.chainWindow = null
             planner.due(frame.timeMillis).forEach { momentsHub.submit(MomentRequest.Clip(rec.rideId, it)) }
             momentsHub.setEventPending(planner.hasPending, planner.pendingStartMillis)
         }
@@ -336,6 +361,28 @@ class RideSessionManager(
                 momentsHub.onPhotoTaken(frame.timeMillis)
             }
         }
+    }
+
+    private fun startChain(rec: Recorder, planner: MomentPlanner, frame: TelemetryFrame) {
+        val w = planner.promotePending() ?: return
+        val now = frame.timeMillis
+        val preRoll = (now - w.startMillis).coerceIn(0L, MAX_LEAD_IN_MILLIS)
+        val ok = momentsHub.submitLive(
+            MomentRequest.StartLive(
+                rec.rideId, MomentSource.EVENT, preRoll, w.latitude, w.longitude, w.speedMps,
+                types = w.types, peakValue = w.peakValue, anchorMillis = w.anchorMillis,
+            ),
+        )
+        if (!ok) {
+            planner.restore(w)
+            return
+        }
+        rec.chainWindow = w
+        rec.chain.start(now, holdUntil = w.endMillis)
+    }
+
+    private fun videoControlEvents(rec: Recorder, types: Set<com.ridetrack.telemetry.model.RideEventType>, peak: Double?) {
+        momentsHub.submitLive(MomentRequest.LiveEvents(rec.rideId, types, peak))
     }
 
     private fun hasCamera() =
@@ -501,6 +548,10 @@ class RideSessionManager(
         var photoAt: Long? = null
         /** When the current stop (or break) began, by the ride's clock. */
         var stoppedAt: Long? = null
+        /** Events chained into one longer video. */
+        val chain = TriggeredVideo()
+        /** The clip that became [chain]'s video, kept in case filming never starts. */
+        var chainWindow: MomentWindow? = null
     }
 
     companion object {
@@ -513,5 +564,7 @@ class RideSessionManager(
         private const val PHOTO_COUNTDOWN_MILLIS = 3_000L
         /** A GPS-lost video only starts while riding or in a short stop. */
         private const val GPS_LOST_MAX_STOP_MILLIS = 30_000L
+        /** A chained video keeps filming this long after its last event. */
+        private const val CHAIN_AFTER_MILLIS = 10_000L
     }
 }
