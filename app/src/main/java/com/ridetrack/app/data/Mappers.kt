@@ -80,6 +80,7 @@ fun RideEntity.toModel() = Ride(
         distanceM = distanceM,
         movingMillis = movingMillis,
         stoppedMillis = stoppedMillis,
+        breakMillis = breakMillis,
         maxSpeedMps = maxSpeedMps,
         maxAccelG = maxAccelG,
         maxBrakeG = maxBrakeG,

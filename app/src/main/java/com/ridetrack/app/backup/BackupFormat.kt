@@ -42,7 +42,8 @@ object BackupFormat {
                 .put("maxSpeedMps", r.maxSpeedMps.orNull()).put("maxAccelG", r.maxAccelG.orNull()).put("maxBrakeG", r.maxBrakeG.orNull())
                 .put("peakG", r.peakG.orNull()).put("maxLeftLeanDeg", r.maxLeftLeanDeg.orNull()).put("maxRightLeanDeg", r.maxRightLeanDeg.orNull())
                 .put("avgLeanDeg", r.avgLeanDeg.orNull()).put("stopCount", r.stopCount).put("leftTurns", r.leftTurns).put("rightTurns", r.rightTurns)
-                .put("brakeEvents", r.brakeEvents).put("accelEvents", r.accelEvents).put("leanEvents", r.leanEvents))
+                .put("brakeEvents", r.brakeEvents).put("accelEvents", r.accelEvents).put("leanEvents", r.leanEvents)
+                .put("breakMillis", r.breakMillis))
             .put("events", JSONArray().apply {
                 b.events.forEach { e ->
                     put(JSONObject().put("type", e.type).put("timeMillis", e.timeMillis).put("latitude", e.latitude.orNull())
@@ -75,6 +76,7 @@ object BackupFormat {
             maxRightLeanDeg = s.doubleOrNull("maxRightLeanDeg"), avgLeanDeg = s.doubleOrNull("avgLeanDeg"), stopCount = s.getInt("stopCount"),
             leftTurns = s.getInt("leftTurns"), rightTurns = s.getInt("rightTurns"), brakeEvents = s.getInt("brakeEvents"),
             accelEvents = s.getInt("accelEvents"), leanEvents = s.getInt("leanEvents"),
+            breakMillis = s.optLong("breakMillis", 0L),
         )
         val events = o.optJSONArray("events").objects().map { e ->
             EventEntity(rideId = id, type = e.getString("type"), timeMillis = e.getLong("timeMillis"), latitude = e.doubleOrNull("latitude"),

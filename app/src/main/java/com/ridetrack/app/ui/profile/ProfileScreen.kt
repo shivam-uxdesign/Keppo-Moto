@@ -109,6 +109,17 @@ fun ProfileScreen(onOpenHudSettings: () -> Unit, onOpenRecentlyDeleted: () -> Un
                 vm::setAutoPause,
             )
             Line()
+            Column(Modifier.padding(vertical = 12.dp)) {
+                Text("Breaks", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+                Text(
+                    "A stop this long counts as a break, kept out of your riding time. Taking the phone off the mount starts a break sooner. It resumes when you ride on.",
+                    style = RtType.caption,
+                    color = RtColors.TextSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                ChoiceRow(listOf(0, 3, 5, 10), s.settings.breakMinutes, { if (it == 0) "Off" else "$it min" }, enabled = true, onPick = vm::setBreakMinutes)
+            }
+            Line()
             ToggleRow("G-force indicator", "Show the G-force dot on the live ride screen.", s.settings.showGForceIndicator, vm::setGIndicator)
             Line()
             Row(

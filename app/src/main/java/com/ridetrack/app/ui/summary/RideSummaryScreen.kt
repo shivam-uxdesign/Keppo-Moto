@@ -118,12 +118,20 @@ fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Un
             Spacer(Modifier.height(24.dp))
             StatRow(
                 listOf(
-                    Stat("Time", Format.duration(ride.durationMillis)),
+                    Stat("Time", Format.duration(ride.durationMillis?.let { (it - ride.stats.breakMillis).coerceAtLeast(0) })),
                     Stat("Avg", Format.speedKmh(ride.stats.avgSpeedMps), "km/h"),
                     Stat("Max", Format.speedKmh(ride.stats.maxSpeedMps), "km/h"),
                 ),
                 modifier = Modifier.riseIn(1),
             )
+            if (ride.stats.breakMillis >= 60_000) {
+                Text(
+                    "Plus ${Format.duration(ride.stats.breakMillis)} on breaks",
+                    style = RtType.caption,
+                    color = RtColors.TextSecondary,
+                    modifier = Modifier.padding(top = 8.dp).riseIn(1),
+                )
+            }
 
             Spacer(Modifier.height(26.dp))
             RouteMap(

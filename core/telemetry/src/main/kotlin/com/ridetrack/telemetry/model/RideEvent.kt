@@ -13,6 +13,12 @@ enum class RideEventType {
     GPS_SIGNAL_LOST,
     GPS_SIGNAL_RESTORED,
     SENSOR_DEGRADED,
+    /** A long stop became a break (the rider got off); timed from the start of the stop. */
+    BREAK_START,
+    BREAK_END,
+    /** The rider paused or resumed by hand. */
+    MANUAL_PAUSE,
+    MANUAL_RESUME,
 }
 
 /**

@@ -31,6 +31,7 @@ class HudTopRowTest {
         assertEquals(HudTopRow.Label("Riding 12:34", Tone.TEXT), HudTopRow.left(data()))
         assertEquals(HudTopRow.Label("Stopped 01:05", Tone.PAUSED), HudTopRow.left(data(HudStatus.STOPPED)))
         assertEquals(HudTopRow.Label("GPS lost", Tone.WARNING), HudTopRow.left(data(HudStatus.GPS_LOST)))
+        assertEquals(HudTopRow.Label("On a break 01:05", Tone.PAUSED), HudTopRow.left(data(HudStatus.BREAK)))
     }
 
     @Test

@@ -5,7 +5,7 @@ import java.util.Locale
 /**
  * The pop-up's top row, as text. Pure, so it is unit-tested.
  *
- * Left is the ride: "Riding 00:00", "Stopped 00:00", "Paused 00:00", or amber "GPS lost" while
+ * Left is the ride: "Riding 00:00", "Stopped 00:00", "Paused 00:00", "On a break 05:00", or amber "GPS lost" while
  * it is lost. Right is the camera: "cam" when idle, "cam 00:12" while filming (an event clip
  * counts from its look-back), "3", "2", "1" before a photo, then "photo".
  */
@@ -20,6 +20,7 @@ object HudTopRow {
     fun left(data: HudData): Label = when (data.status) {
         HudStatus.GPS_LOST -> Label("GPS lost", Tone.WARNING)
         HudStatus.STOPPED -> Label("Stopped " + clock(data.stoppedForMillis ?: 0), Tone.PAUSED)
+        HudStatus.BREAK -> Label("On a break " + clock(data.stoppedForMillis ?: 0), Tone.PAUSED)
         HudStatus.PAUSED -> Label("Paused " + clock(data.elapsedMillis ?: 0), Tone.WARNING)
         HudStatus.RECORDING -> Label("Riding " + clock(data.elapsedMillis ?: 0), Tone.TEXT)
     }

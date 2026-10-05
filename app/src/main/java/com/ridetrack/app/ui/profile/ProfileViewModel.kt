@@ -179,6 +179,10 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
         viewModelScope.launch { c.settings.setAutoPause(v) }
     }
 
+    fun setBreakMinutes(v: Int) {
+        viewModelScope.launch { c.settings.setBreakMinutes(v) }
+    }
+
     /** Demo mode can't change mid-ride, so a ride's data source never switches. */
     fun setDemoMode(v: Boolean) {
         viewModelScope.launch { if (!state.value.rideActive) c.settings.setDemoMode(v) }

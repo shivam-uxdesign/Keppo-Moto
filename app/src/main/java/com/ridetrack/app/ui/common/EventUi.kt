@@ -9,6 +9,7 @@ import androidx.compose.material.icons.automirrored.outlined.AltRoute
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.GpsFixed
 import androidx.compose.material.icons.outlined.GpsOff
+import androidx.compose.material.icons.outlined.LocalCafe
 import androidx.compose.material.icons.outlined.PauseCircle
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.SensorsOff
@@ -56,6 +57,10 @@ fun RideEvent.presentation(): EventPresentation {
         RideEventType.GPS_SIGNAL_LOST -> EventPresentation("GPS signal lost", null, Icons.Outlined.GpsOff, RtColors.Warning)
         RideEventType.GPS_SIGNAL_RESTORED -> EventPresentation("GPS signal restored", null, Icons.Outlined.GpsFixed, RtColors.TextSecondary)
         RideEventType.SENSOR_DEGRADED -> EventPresentation("Motion sensor accuracy degraded", null, Icons.Outlined.SensorsOff, RtColors.Warning)
+        RideEventType.BREAK_START -> EventPresentation("Break", null, Icons.Outlined.LocalCafe, RtColors.Paused)
+        RideEventType.BREAK_END -> EventPresentation("Back on the bike", null, Icons.Outlined.PlayCircle, RtColors.Ok)
+        RideEventType.MANUAL_PAUSE -> EventPresentation("Paused", null, Icons.Outlined.PauseCircle, RtColors.Warning)
+        RideEventType.MANUAL_RESUME -> EventPresentation("Resumed", null, Icons.Outlined.PlayCircle, RtColors.Ok)
     }
 }
 

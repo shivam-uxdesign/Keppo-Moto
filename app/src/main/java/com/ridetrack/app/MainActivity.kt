@@ -25,7 +25,10 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
-        if (savedInstanceState == null) openRide.value = rideToOpen(intent)
+        if (savedInstanceState == null) {
+            openRide.value = rideToOpen(intent)
+            endRideIfAsked(intent)
+        }
         val settings = (application as RideTrackApp).container.settings.settings
         setContent {
             // Wait for the stored choice (a few ms) so the app doesn't flash the wrong theme.
@@ -50,6 +53,12 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         rideToOpen(intent)?.let { openRide.value = it }
+        endRideIfAsked(intent)
+    }
+
+    /** "End ride" on the break notification: the live screen asks to confirm. */
+    private fun endRideIfAsked(intent: Intent?) {
+        if (intent?.action == ACTION_END_RIDE) (application as RideTrackApp).container.session.requestEnd()
     }
 
     private fun rideToOpen(intent: Intent?): String? =
@@ -57,5 +66,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val ACTION_OPEN_RIDE = "com.keppo.action.OPEN_RIDE"
+        const val ACTION_END_RIDE = "com.ridetrack.app.END_RIDE"
     }
 }

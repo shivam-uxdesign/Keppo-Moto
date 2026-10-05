@@ -56,6 +56,19 @@ class LeanEstimator(
 
     val leanDeg: Double? get() = if (enabled) leanRad?.let { Math.toDegrees(it) } else null
 
+    /**
+     * How far (degrees) the phone is tilted from its mounted position, from smoothed gravity.
+     * Large and lasting while stopped = the phone is off the mount (in a pocket or a hand).
+     */
+    val mountTiltDeg: Double?
+        get() {
+            val cal = calibration ?: return null
+            val a = Vec3(accX.value ?: return null, accY.value ?: return null, accZ.value ?: return null)
+            if (a.norm < 1e-3) return null
+            val c = ((a dot cal.up) / (a.norm * cal.up.norm)).coerceIn(-1.0, 1.0)
+            return Math.toDegrees(kotlin.math.acos(c))
+        }
+
     val confidence: LeanConfidence
         get() = when {
             !enabled || leanRad == null -> LeanConfidence.UNAVAILABLE

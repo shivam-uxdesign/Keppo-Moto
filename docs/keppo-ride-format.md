@@ -172,3 +172,13 @@ Rides restored from Drive appear in the folder like any other ride. After a rest
 ### Without Keppo Moto
 
 If Keppo Moto isn't installed, the journal can offer "Sync from Google Drive": it reads Keppo Moto's backup folder (the folder whose `appProperties` has `keppo = moto`, its `manifest.json` and `rides/<rideId>/…`) and copies the media into the journal. Rides marked `deletedAt` in the manifest are skipped.
+
+## Breaks and pauses (keppo.ride v1 additions)
+
+- `stats.breakMillis`: time on breaks, when the rider got off the bike during a long stop. It is not part of `movingMillis` or `stoppedMillis`. Riding time = `endTimeMillis − startTimeMillis − breakMillis`. Older rides don't have the field; read it as `0`.
+- New `events[].type` values:
+  - `BREAK_START`: `timeMillis` is when the stop began (a break is back-dated to it).
+  - `BREAK_END`: the rider rode on.
+  - `MANUAL_PAUSE` and `MANUAL_RESUME`: the rider paused or resumed by hand.
+
+  As always, ignore event types you don't know.

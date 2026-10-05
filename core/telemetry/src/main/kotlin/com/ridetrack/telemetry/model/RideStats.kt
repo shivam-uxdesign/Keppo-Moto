@@ -8,6 +8,8 @@ data class RideStats(
     val distanceM: Double = 0.0,
     val movingMillis: Long = 0,
     val stoppedMillis: Long = 0,
+    /** Time on breaks (long stops off the bike); not part of [movingMillis] or [stoppedMillis]. */
+    val breakMillis: Long = 0,
     val maxSpeedMps: Double? = null,
     val maxAccelG: Double? = null,
     /** Most negative longitudinal G (stored as a negative number). */

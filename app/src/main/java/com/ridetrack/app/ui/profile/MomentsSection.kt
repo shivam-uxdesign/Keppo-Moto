@@ -250,7 +250,7 @@ private fun gText(g: Double): String = String.format(java.util.Locale.US, "%.1f 
 /** A row of chips for a trigger's strength; the lower the value, the more often it fires. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun <T> ChoiceRow(choices: List<T>, selected: T, label: (T) -> String, enabled: Boolean, onPick: (T) -> Unit) {
+internal fun <T> ChoiceRow(choices: List<T>, selected: T, label: (T) -> String, enabled: Boolean, onPick: (T) -> Unit) {
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(RtDimens.xs),
         modifier = Modifier.padding(start = 4.dp, bottom = RtDimens.xs),

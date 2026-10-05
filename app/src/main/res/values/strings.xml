@@ -3,4 +3,6 @@
     <string name="app_name">Keppo Moto</string>
     <string name="notification_channel_ride">Ride recording</string>
     <string name="notification_channel_ride_desc">Shown while a ride is being recorded.</string>
+    <string name="notification_channel_ride_alerts">Ride breaks</string>
+    <string name="notification_channel_ride_alerts_desc">When a ride pauses for a break, and when a break has gone on a long time.</string>
 </resources>

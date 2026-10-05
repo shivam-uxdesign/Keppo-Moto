@@ -23,6 +23,11 @@ data class TelemetryFrame(
     /** Current gear from OBD (0 = neutral); null when the bike doesn't report it. */
     val gear: Int? = null,
     val calibration: CalibrationInfo = CalibrationInfo(),
+    /** On a break (a long stop off the bike), since [breakStartMillis]. */
+    val onBreak: Boolean = false,
+    val breakStartMillis: Long? = null,
+    /** The phone is tilted far from its mount (pocket, hand): lean and photos aren't meaningful. */
+    val offMount: Boolean = false,
 ) {
     val combinedG: Double?
         get() = if (longitudinalG != null && lateralG != null) kotlin.math.hypot(longitudinalG, lateralG) else null

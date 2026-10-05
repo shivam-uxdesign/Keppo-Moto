@@ -21,6 +21,7 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -97,6 +98,15 @@ class HudController(
 
         scope.launch {
             moments.viewfinder.collect { overlay.viewfinder = it?.asImageBitmap() }
+        }
+
+        scope.launch {
+            // Riding off after a break: say so briefly under the pop-up.
+            var wasOnBreak = false
+            session.frame.map { it?.onBreak == true }.distinctUntilChanged().collect { onBreak ->
+                if (wasOnBreak && !onBreak && session.state.value.isActive) note.value = "Break over · ride resumed" to System.currentTimeMillis()
+                wasOnBreak = onBreak
+            }
         }
 
         scope.launch {

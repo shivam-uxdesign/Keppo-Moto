@@ -28,6 +28,9 @@ import com.ridetrack.telemetry.model.TelemetryFrame
 import com.ridetrack.telemetry.state.RideState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 
@@ -42,11 +45,20 @@ class RideRecordingService : LifecycleService() {
     private var started = false
     private var recorder: MomentRecorder? = null
     private var stopping = false
+    private var longBreakPrompted = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACTION_STOP) {
             stopGracefully()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_RESUME) {
+            (application as RideTrackApp).container.session.resume()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_KEEP_BREAK) {
+            NotificationManagerCompat.from(this).cancel(LONG_BREAK_ID)
             return START_NOT_STICKY
         }
         val session = (application as RideTrackApp).container.session
@@ -75,7 +87,14 @@ class RideRecordingService : LifecycleService() {
         recorder = r
         r.start()
         lifecycleScope.launch {
-            session.state.collectLatest { st -> r.setRidePaused(st is RideState.Paused) }
+            session.state.collectLatest { st ->
+                val cause = when {
+                    session.manuallyPaused.value -> "manual"
+                    session.frame.value?.onBreak == true -> "break"
+                    else -> "stop"
+                }
+                r.setRidePaused(st is RideState.Paused, cause)
+            }
         }
     }
 
@@ -127,10 +146,36 @@ class RideRecordingService : LifecycleService() {
             session.state.collectLatest { if (!it.isActive && it !is RideState.Saving) stopGracefully() }
         }
         lifecycleScope.launch {
+            // A break starts or ends: update at once (not on the 5 s cadence), and alert once.
+            session.frame.filterNotNull().map { it.onBreak }.distinctUntilChanged().drop(1).collect { onBreak ->
+                val frame = session.frame.value ?: return@collect
+                if (!Permissions.hasNotifications(this@RideRecordingService)) return@collect
+                val nm = NotificationManagerCompat.from(this@RideRecordingService)
+                try {
+                    nm.notify(NOTIFICATION_ID, buildNotification(frame))
+                    if (onBreak) {
+                        longBreakPrompted = false
+                        nm.notify(BREAK_ALERT_ID, breakAlert(frame))
+                    } else {
+                        nm.cancel(BREAK_ALERT_ID)
+                        nm.cancel(LONG_BREAK_ID)
+                    }
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "Break alert denied", e)
+                }
+            }
+        }
+        lifecycleScope.launch {
             session.frame.filterNotNull().sample(NOTIFICATION_UPDATE_MILLIS).collectLatest { frame ->
                 if (Permissions.hasNotifications(this@RideRecordingService)) {
                     try {
-                        NotificationManagerCompat.from(this@RideRecordingService).notify(NOTIFICATION_ID, buildNotification(frame))
+                        val nm = NotificationManagerCompat.from(this@RideRecordingService)
+                        nm.notify(NOTIFICATION_ID, buildNotification(frame))
+                        val start = frame.breakStartMillis
+                        if (frame.onBreak && start != null && !longBreakPrompted && frame.timeMillis - start >= LONG_BREAK_MILLIS) {
+                            longBreakPrompted = true
+                            nm.notify(LONG_BREAK_ID, longBreakPrompt(start))
+                        }
                     } catch (e: SecurityException) {
                         Log.w(TAG, "Notification update denied", e)
                     }
@@ -139,27 +184,98 @@ class RideRecordingService : LifecycleService() {
         }
     }
 
-    private fun buildNotification(frame: TelemetryFrame?): Notification {
-        val open = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+    private fun openApp(): PendingIntent = PendingIntent.getActivity(
+        this, 0,
+        Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    private fun resumeAction() = NotificationCompat.Action(
+        0, "Resume",
+        PendingIntent.getService(
+            this, 1, Intent(this, RideRecordingService::class.java).setAction(ACTION_RESUME),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        val text = frame?.let {
-            "${Format.distance(it.stats.distanceM)} · ${Format.clock(it.elapsedMillis)}"
-        } ?: "Starting…"
+        ),
+    )
+
+    private fun endRideAction() = NotificationCompat.Action(
+        0, "End ride",
+        PendingIntent.getActivity(
+            this, 2,
+            Intent(this, MainActivity::class.java).setAction(MainActivity.ACTION_END_RIDE).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        ),
+    )
+
+    private fun buildNotification(frame: TelemetryFrame?): Notification {
+        val ridingMillis = frame?.let { (it.elapsedMillis - it.stats.breakMillis).coerceAtLeast(0) }
+        val breakStart = frame?.breakStartMillis?.takeIf { frame.onBreak }
+        val text = when {
+            frame == null -> "Starting…"
+            breakStart != null -> "Since ${Format.timeOfDay(breakStart)} · Resumes when you ride"
+            else -> "${Format.distance(frame.stats.distanceM)} · ${Format.clock(ridingMillis ?: 0)}"
+        }
+        val title = when {
+            breakStart != null -> "On a break"
+            frame?.isStopped == true -> "Ride in progress · stopped"
+            else -> "Ride in progress"
+        }
         return NotificationCompat.Builder(this, RideTrackApp.RIDE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_ride)
-            .setContentTitle(if (frame?.isStopped == true) "Ride in progress · stopped" else "Ride in progress")
+            .setContentTitle(title)
             .setContentText(text)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .setContentIntent(open)
+            .setContentIntent(openApp())
+            .apply {
+                if (breakStart != null) {
+                    addAction(resumeAction())
+                    addAction(endRideAction())
+                }
+            }
             .build()
     }
+
+    /** Once per break: a heads-up, a short buzz, no sound. */
+    private fun breakAlert(frame: TelemetryFrame): Notification {
+        val since = frame.breakStartMillis ?: frame.timeMillis
+        return NotificationCompat.Builder(this, RideTrackApp.RIDE_ALERTS_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_ride)
+            .setContentTitle("Looks like you got off the bike")
+            .setContentText("Ride paused since ${Format.timeOfDay(since)}. It resumes when you ride on.")
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setTimeoutAfter(BREAK_ALERT_TIMEOUT_MILLIS)
+            .setContentIntent(openApp())
+            .addAction(resumeAction())
+            .build()
+    }
+
+    /** A break past [LONG_BREAK_MILLIS]: maybe the ride is really over. It never ends on its own. */
+    private fun longBreakPrompt(since: Long): Notification =
+        NotificationCompat.Builder(this, RideTrackApp.RIDE_ALERTS_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_ride)
+            .setContentTitle("Still on a break?")
+            .setContentText("Ride paused since ${Format.timeOfDay(since)}. End the ride?")
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(openApp())
+            .addAction(endRideAction())
+            .addAction(
+                NotificationCompat.Action(
+                    0, "Keep going",
+                    PendingIntent.getService(
+                        this, 3, Intent(this, RideRecordingService::class.java).setAction(ACTION_KEEP_BREAK),
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                    ),
+                ),
+            )
+            .build()
 
     private fun acquireWakeLock() {
         // Keeps the IMU delivering while the screen is off; released when the ride ends.
@@ -189,6 +305,12 @@ class RideRecordingService : LifecycleService() {
         private const val NOTIFICATION_UPDATE_MILLIS = 5_000L
         private const val MAX_WAKE_LOCK_MILLIS = 12 * 60 * 60 * 1000L
         private const val ACTION_STOP = "com.ridetrack.app.STOP_RECORDING"
+        private const val ACTION_RESUME = "com.ridetrack.app.RESUME_RIDE"
+        private const val ACTION_KEEP_BREAK = "com.ridetrack.app.KEEP_BREAK"
+        private const val BREAK_ALERT_ID = 43
+        private const val LONG_BREAK_ID = 44
+        private const val BREAK_ALERT_TIMEOUT_MILLIS = 2 * 60_000L
+        private const val LONG_BREAK_MILLIS = 45 * 60_000L
 
         fun start(context: Context) {
             // Each foreground type needs its permission: location for GPS, camera for Moments.

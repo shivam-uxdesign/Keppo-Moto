@@ -273,7 +273,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                         listOf(
                             Format.rideDate(it.startTimeMillis),
                             Format.distance(it.stats.distanceM),
-                            Format.duration(it.durationMillis),
+                            Format.duration(it.durationMillis?.let { d -> (d - it.stats.breakMillis).coerceAtLeast(0) }),
                             "${Format.speedKmh(it.stats.maxSpeedMps)} km/h top",
                         ).joinToString(" · ")
                     },

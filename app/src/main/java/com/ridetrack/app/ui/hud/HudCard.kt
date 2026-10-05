@@ -65,7 +65,7 @@ private fun hudColors(s: HudSettings, demo: Boolean): HudColors = when (s.theme)
 
 private fun statusColor(status: HudStatus) = when (status) {
     HudStatus.RECORDING -> DarkPalette.ok
-    HudStatus.STOPPED -> DarkPalette.paused
+    HudStatus.STOPPED, HudStatus.BREAK -> DarkPalette.paused
     HudStatus.PAUSED, HudStatus.GPS_LOST -> DarkPalette.warning
 }
 

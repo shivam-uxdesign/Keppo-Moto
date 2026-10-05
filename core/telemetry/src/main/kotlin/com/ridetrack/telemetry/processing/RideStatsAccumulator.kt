@@ -18,13 +18,21 @@ class RideStatsAccumulator(initial: RideStats = RideStats()) {
         if (meters > 0) stats = stats.copy(distanceM = stats.distanceM + meters)
     }
 
-    fun addTime(millis: Long, stopped: Boolean) {
+    fun addTime(millis: Long, stopped: Boolean, onBreak: Boolean = false) {
         if (millis <= 0) return
-        stats = if (stopped) {
+        stats = if (onBreak) {
+            stats.copy(breakMillis = stats.breakMillis + millis)
+        } else if (stopped) {
             stats.copy(stoppedMillis = stats.stoppedMillis + millis)
         } else {
             stats.copy(movingMillis = stats.movingMillis + millis)
         }
+    }
+
+    /** A stop turned out to be a break: its time so far moves from stopped to break. */
+    fun moveStoppedToBreak(millis: Long) {
+        val m = millis.coerceIn(0, stats.stoppedMillis)
+        if (m > 0) stats = stats.copy(stoppedMillis = stats.stoppedMillis - m, breakMillis = stats.breakMillis + m)
     }
 
     /** Only speeds from trustworthy fixes should be passed here. */

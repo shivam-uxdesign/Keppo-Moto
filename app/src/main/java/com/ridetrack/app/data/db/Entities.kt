@@ -1,5 +1,6 @@
 package com.ridetrack.app.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -58,6 +59,9 @@ data class RideEntity(
     val leanEvents: Int,
     /** Set while the ride is in Recently deleted (purged for good 30 days later). */
     val deletedAtMillis: Long? = null,
+    /** Time on breaks (long stops off the bike). */
+    @ColumnInfo(defaultValue = "0")
+    val breakMillis: Long = 0,
 )
 
 @Entity(

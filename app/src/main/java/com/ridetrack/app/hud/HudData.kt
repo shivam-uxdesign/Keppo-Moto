@@ -9,9 +9,10 @@ import com.ridetrack.telemetry.model.GpsQuality
 import com.ridetrack.telemetry.model.TelemetryFrame
 
 /**
- * What the ride is doing: recording, auto-paused at a stop, paused by the rider, or GPS lost.
+ * What the ride is doing: recording, auto-paused at a stop, paused by the rider, GPS lost,
+ * or on a break (a long stop off the bike).
  */
-enum class HudStatus { RECORDING, STOPPED, PAUSED, GPS_LOST }
+enum class HudStatus { RECORDING, STOPPED, PAUSED, GPS_LOST, BREAK }
 
 /** A video being filmed (your record button, or GPS lost), as the pop-up shows it. */
 data class HudVideo(val source: MomentSource, val starting: Boolean, val paused: Boolean, val elapsedMillis: Long)
@@ -89,11 +90,16 @@ data class HudData(
             return HudData(
                 status = when {
                     manuallyPaused -> HudStatus.PAUSED
+                    frame?.onBreak == true -> HudStatus.BREAK
                     paused -> HudStatus.STOPPED
                     gpsLost -> HudStatus.GPS_LOST
                     else -> HudStatus.RECORDING
                 },
-                stoppedForMillis = stoppedForMillis.takeIf { paused },
+                stoppedForMillis = if (frame?.onBreak == true) {
+                    frame.breakStartMillis?.let { frame.timeMillis - it }
+                } else {
+                    stoppedForMillis.takeIf { paused }
+                },
                 speedMps = frame?.speedMps,
                 leanDeg = frame?.leanDeg,
                 leanNote = when {
@@ -102,7 +108,8 @@ data class HudData(
                     else -> null
                 },
                 distanceM = stats?.distanceM,
-                elapsedMillis = frame?.elapsedMillis,
+                // Riding time: breaks don't count.
+                elapsedMillis = frame?.let { (it.elapsedMillis - it.stats.breakMillis).coerceAtLeast(0) },
                 avgSpeedMps = stats?.avgSpeedMps,
                 maxSpeedMps = stats?.maxSpeedMps,
                 longitudinalG = frame?.longitudinalG,

@@ -26,7 +26,7 @@ object RideExporter {
         sb.append("  \"stats\": {\n")
         val stats = listOf(
             "distanceM" to num(s.distanceM), "durationMs" to num(ride.durationMillis), "movingMs" to num(s.movingMillis),
-            "stoppedMs" to num(s.stoppedMillis), "avgSpeedMps" to num(s.avgSpeedMps), "maxSpeedMps" to num(s.maxSpeedMps),
+            "stoppedMs" to num(s.stoppedMillis), "breakMs" to num(s.breakMillis), "avgSpeedMps" to num(s.avgSpeedMps), "maxSpeedMps" to num(s.maxSpeedMps),
             "maxAccelG" to num(s.maxAccelG), "maxBrakeG" to num(s.maxBrakeG), "peakG" to num(s.peakG),
             "maxLeftLeanDeg" to num(s.maxLeftLeanDeg), "maxRightLeanDeg" to num(s.maxRightLeanDeg), "avgLeanDeg" to num(s.avgLeanDeg),
             "stops" to num(s.stopCount), "leftTurns" to num(s.leftTurns), "rightTurns" to num(s.rightTurns),
@@ -99,7 +99,7 @@ object RideExporter {
     }
 
     fun summaryCsv(rides: List<Pair<Ride, String?>>): String {
-        val sb = StringBuilder("id,name,bike,source,start_iso,duration_s,distance_km,moving_s,stopped_s,avg_kmh,max_kmh,max_left_lean_deg,max_right_lean_deg,max_accel_g,max_brake_g,peak_g,stops,left_turns,right_turns,brake_events\n")
+        val sb = StringBuilder("id,name,bike,source,start_iso,duration_s,distance_km,moving_s,stopped_s,avg_kmh,max_kmh,max_left_lean_deg,max_right_lean_deg,max_accel_g,max_brake_g,peak_g,stops,left_turns,right_turns,brake_events,break_s\n")
         rides.forEach { (r, bike) ->
             val s = r.stats
             sb.append(r.id).append(',').append(csvText(r.name)).append(',').append(csvText(bike)).append(',').append(r.source.name).append(',')
@@ -109,7 +109,8 @@ object RideExporter {
                 .append(fmt(s.maxSpeedMps?.times(3.6), 1)).append(',').append(fmt(s.maxLeftLeanDeg, 1)).append(',')
                 .append(fmt(s.maxRightLeanDeg, 1)).append(',').append(fmt(s.maxAccelG, 3)).append(',')
                 .append(fmt(s.maxBrakeG, 3)).append(',').append(fmt(s.peakG, 3)).append(',')
-                .append(s.stopCount).append(',').append(s.leftTurns).append(',').append(s.rightTurns).append(',').append(s.brakeEvents).append('\n')
+                .append(s.stopCount).append(',').append(s.leftTurns).append(',').append(s.rightTurns).append(',').append(s.brakeEvents).append(',')
+                .append(fmt(s.breakMillis / 1000.0, 0)).append('\n')
         }
         return sb.toString()
     }

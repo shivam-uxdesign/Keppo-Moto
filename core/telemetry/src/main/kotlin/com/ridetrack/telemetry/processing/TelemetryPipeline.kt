@@ -42,7 +42,13 @@ class TelemetryPipeline(
     momentTriggers: MomentTriggers? = null,
     /** Impact (g) that starts crash detection; null = off. */
     crashImpactG: Double? = null,
+    /** A stop this long becomes a break; 0 = only when the phone leaves the mount or the engine stops; null = no breaks. */
+    breakAfterMillis: Long? = 5 * 60_000L,
 ) {
+    private val breaks = breakAfterMillis?.let { BreakDetector(afterMillis = it) }
+    /** When the current counted stop began; null while moving or before the bike first moved. */
+    private var stoppedSinceMillis: Long? = null
+
     private val crash = crashImpactG?.let { CrashDetector(impactG = it) }
     private var pendingCrash: Pair<CrashSuspected, EventContext>? = null
 
@@ -78,9 +84,18 @@ class TelemetryPipeline(
     private var gpsLostReported = false
 
     val stats: RideStats get() = accumulator.stats
-    val isStopped: Boolean get() = autoPause.isStopped
-    /** Stopped after moving; the ride can be shown as paused. */
-    val isPausedStop: Boolean get() = autoPause.isCountedStop
+    val isStopped: Boolean get() = autoPause.isStopped || onBreak
+    /** Stopped after moving, or on a break; the ride can be shown as paused. */
+    val isPausedStop: Boolean get() = autoPause.isCountedStop || onBreak
+
+    /** On a break: a long stop off the bike, timed from the start of the stop. */
+    val onBreak: Boolean get() = breaks?.onBreak == true
+    val breakStartMillis: Long? get() = breaks?.breakStartMillis
+    /** Why the current break started ("stopped 5 min", "phone off the mount", "engine off"). */
+    val breakReason: String? get() = breaks?.reason
+
+    /** Not counting: paused by hand or on a break. */
+    private val notCounting: Boolean get() = manuallyPaused || onBreak
 
     /**
      * The rider paused the ride: samples keep being recorded, but distance, moving time,
@@ -176,7 +191,7 @@ class TelemetryPipeline(
         val out = ArrayList<RideEvent>()
         val wasLost = gpsLostReported
         val travelled = gps.onLocation(r)
-        if (!manuallyPaused) accumulator.addDistance(travelled)
+        if (!notCounting) accumulator.addDistance(travelled)
         val ctx = context(r.timeNanos)
         if (wasLost && gps.quality.hasFix) {
             gpsLostReported = false
@@ -189,7 +204,7 @@ class TelemetryPipeline(
         lastGpsNanos = r.timeNanos
         dynamics.onGpsAccel(gps.accelMps2, dt)
         val goodFix = gps.quality == GpsQuality.GOOD || gps.quality == GpsQuality.EXCELLENT
-        if (speed != null && goodFix && !manuallyPaused) {
+        if (speed != null && goodFix && !notCounting) {
             accumulator.onReliableSpeed(speed)
         }
         val accel = gps.accelMps2
@@ -203,12 +218,15 @@ class TelemetryPipeline(
                 out += detector.flush()
                 moments?.flush()?.forEach { momentEvents += it to ctx.timeMillis }
                 if (autoPause.isCountedStop) {
-                    out += RideEvent(RideEventType.STOP, ctx.timeMillis, ctx.latitude, ctx.longitude, speed)
+                    stoppedSinceMillis = ctx.timeMillis
+                    // Walking about on a break isn't a new stop.
+                    if (!onBreak) out += RideEvent(RideEventType.STOP, ctx.timeMillis, ctx.latitude, ctx.longitude, speed)
                 }
             }
-            AutoPauseDetector.Transition.RESUMED, null -> Unit
+            AutoPauseDetector.Transition.RESUMED -> stoppedSinceMillis = null
+            null -> Unit
         }
-        if (!autoPause.isStopped && !manuallyPaused) out += detector.onHeading(ctx, gps.headingDeg)
+        if (!autoPause.isStopped && !notCounting) out += detector.onHeading(ctx, gps.headingDeg)
         return out.map(::record)
     }
 
@@ -220,7 +238,7 @@ class TelemetryPipeline(
         crash?.onAccel(r.timeNanos, Units.mps2ToG(sqrt(r.x * r.x + r.y * r.y + r.z * r.z)), gps.speedMps, lean.leanDeg)
             ?.let { pendingCrash = it to context(it.impactNanos) }
         val speed = gps.speedMps
-        val moving = !autoPause.isStopped && !manuallyPaused && speed != null && speed >= 2.0
+        val moving = !autoPause.isStopped && !notCounting && speed != null && speed >= 2.0
         if (!moving) return emptyList()
 
         val leanDeg = lean.leanDeg?.takeIf { lean.confidence == LeanConfidence.GOOD }
@@ -273,6 +291,7 @@ class TelemetryPipeline(
             autoCal.steady = false
             events += reportGpsLost(context(nowNanos)).map(::record)
         }
+        events += updateBreak(nowNanos).map(::record)
         accountTime(nowNanos)
         val frame = TelemetryFrame(
             timeMillis = wallMillis(nowNanos),
@@ -287,15 +306,72 @@ class TelemetryPipeline(
             altitudeM = gps.altitudeM.takeIf { gps.quality.hasFix },
             gpsQuality = gps.quality,
             gpsAccuracyM = gps.accuracyM.takeIf { gps.quality.hasFix },
-            isStopped = autoPause.isStopped,
+            isStopped = isStopped,
             latitude = gps.latitude.takeIf { gps.quality.hasFix },
             longitude = gps.longitude.takeIf { gps.quality.hasFix },
             source = sourceKind,
             rpm = engineRpm(nowNanos),
             gear = engineGear(nowNanos),
             calibration = CalibrationInfo(calibrationStatus, capture?.progress, lastCapture),
+            onBreak = onBreak,
+            breakStartMillis = breakStartMillis,
+            offMount = offMount(),
         )
         return frame to events
+    }
+
+    /**
+     * The phone is tilted far from its mount (pocket, hand). Only judged when slow: braking
+     * and accelerating tilt the felt gravity too. Unknown = on the mount.
+     */
+    fun offMount(): Boolean = (currentSpeed() ?: 0.0) < 2.0 && (lean.mountTiltDeg ?: 0.0) >= OFF_MOUNT_TILT_DEG
+
+    private fun updateBreak(nowNanos: Long): List<RideEvent> {
+        val b = breaks ?: return emptyList()
+        val now = wallMillis(nowNanos)
+        val fix = gps.quality.hasFix
+        val input = BreakDetector.Input(
+            nowMillis = now,
+            stoppedSinceMillis = stoppedSinceMillis.takeIf { autoPause.isCountedStop && !manuallyPaused },
+            mountTiltDeg = lean.mountTiltDeg,
+            engineRunning = engineRpm(nowNanos)?.let { it >= ENGINE_RUNNING_RPM },
+            speedMps = currentSpeed(),
+            accuracyM = gps.accuracyM.takeIf { fix },
+            latitude = gps.latitude.takeIf { fix },
+            longitude = gps.longitude.takeIf { fix },
+            crashSuspected = crash?.impactPending == true,
+        )
+        return when (b.update(input)) {
+            BreakDetector.Transition.STARTED -> {
+                val start = b.breakStartMillis ?: now
+                accumulator.moveStoppedToBreak(now - start)
+                listOf(RideEvent(RideEventType.BREAK_START, start, gps.latitude, gps.longitude, 0.0))
+            }
+            BreakDetector.Transition.ENDED -> {
+                stoppedSinceMillis = null
+                listOf(RideEvent(RideEventType.BREAK_END, now, gps.latitude, gps.longitude, currentSpeed()))
+            }
+            null -> emptyList()
+        }
+    }
+
+    /** "Resume" pressed while on a break. */
+    fun endBreak(nowNanos: Long): RideEvent? {
+        val b = breaks ?: return null
+        if (!b.onBreak) return null
+        accountTime(nowNanos)
+        b.endNow()
+        stoppedSinceMillis = null
+        return record(RideEvent(RideEventType.BREAK_END, wallMillis(nowNanos), gps.latitude, gps.longitude, currentSpeed()))
+    }
+
+    /** The rider paused or resumed by hand; the change is kept as an event for the export. */
+    fun setManualPause(paused: Boolean, nowNanos: Long): RideEvent? {
+        if (paused == manuallyPaused) return null
+        accountTime(nowNanos)
+        manuallyPaused = paused
+        val type = if (paused) RideEventType.MANUAL_PAUSE else RideEventType.MANUAL_RESUME
+        return record(RideEvent(type, wallMillis(nowNanos), gps.latitude, gps.longitude, currentSpeed()))
     }
 
     fun sample(nowNanos: Long): TelemetrySample {
@@ -327,7 +403,7 @@ class TelemetryPipeline(
     private fun accountTime(nowNanos: Long) {
         val dtMillis = (nowNanos - lastAccountedNanos) / 1_000_000L
         if (dtMillis > 0) {
-            accumulator.addTime(dtMillis, autoPause.isStopped || manuallyPaused)
+            accumulator.addTime(dtMillis, autoPause.isStopped || manuallyPaused, onBreak)
             lastAccountedNanos += dtMillis * 1_000_000L
         }
     }
@@ -358,5 +434,8 @@ class TelemetryPipeline(
         /** ~22 km/h: slow enough for town riding, fast enough that the bike is self-upright. */
         const val AUTO_CAL_MIN_SPEED_MPS = 6.0
         private const val ENGINE_STALE_NANOS = 3_000_000_000L
+        private const val ENGINE_RUNNING_RPM = 300.0
+        /** Further than this from the mounted position = off the mount (side stand is ~10–15°). */
+        const val OFF_MOUNT_TILT_DEG = 35.0
     }
 }

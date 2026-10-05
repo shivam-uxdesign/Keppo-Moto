@@ -35,7 +35,7 @@ class RideRepository(private val dao: RideDao) {
             maxBrakeG = stats.maxBrakeG, peakG = stats.peakG, maxLeftLeanDeg = stats.maxLeftLeanDeg,
             maxRightLeanDeg = stats.maxRightLeanDeg, avgLeanDeg = stats.avgLeanDeg, stopCount = stats.stopCount,
             leftTurns = stats.leftTurns, rightTurns = stats.rightTurns, brakeEvents = stats.brakeEvents,
-            accelEvents = stats.accelEvents, leanEvents = stats.leanEvents,
+            accelEvents = stats.accelEvents, leanEvents = stats.leanEvents, breakMillis = stats.breakMillis,
         )
     }
 

@@ -39,9 +39,23 @@ class RideTrackApp : Application() {
             setShowBadge(false)
         }
         getSystemService<NotificationManager>()?.createNotificationChannel(channel)
+        // Breaks: a heads-up the rider sees once, with a short buzz and no sound.
+        val alerts = NotificationChannel(
+            RIDE_ALERTS_CHANNEL_ID,
+            getString(R.string.notification_channel_ride_alerts),
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+            description = getString(R.string.notification_channel_ride_alerts_desc)
+            setSound(null, null)
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 120)
+            setShowBadge(false)
+        }
+        getSystemService<NotificationManager>()?.createNotificationChannel(alerts)
     }
 
     companion object {
         const val RIDE_CHANNEL_ID = "ride_recording"
+        const val RIDE_ALERTS_CHANNEL_ID = "ride_alerts"
     }
 }

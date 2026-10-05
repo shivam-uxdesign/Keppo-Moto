@@ -69,7 +69,7 @@ interface RideDao {
             maxBrakeG = :maxBrakeG, peakG = :peakG, maxLeftLeanDeg = :maxLeftLeanDeg,
             maxRightLeanDeg = :maxRightLeanDeg, avgLeanDeg = :avgLeanDeg, stopCount = :stopCount,
             leftTurns = :leftTurns, rightTurns = :rightTurns, brakeEvents = :brakeEvents,
-            accelEvents = :accelEvents, leanEvents = :leanEvents
+            accelEvents = :accelEvents, leanEvents = :leanEvents, breakMillis = :breakMillis
         WHERE id = :id AND status = 'IN_PROGRESS'
         """,
     )
@@ -77,7 +77,7 @@ interface RideDao {
         id: String, now: Long, distanceM: Double, movingMillis: Long, stoppedMillis: Long,
         maxSpeedMps: Double?, maxAccelG: Double?, maxBrakeG: Double?, peakG: Double?,
         maxLeftLeanDeg: Double?, maxRightLeanDeg: Double?, avgLeanDeg: Double?, stopCount: Int,
-        leftTurns: Int, rightTurns: Int, brakeEvents: Int, accelEvents: Int, leanEvents: Int,
+        leftTurns: Int, rightTurns: Int, brakeEvents: Int, accelEvents: Int, leanEvents: Int, breakMillis: Long,
     ): Int
 
     /** Idempotent: only an in-progress ride can be completed, so a ride can't be saved twice. */

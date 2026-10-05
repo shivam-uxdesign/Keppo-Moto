@@ -137,6 +137,8 @@ data class BackupSettings(
 
 data class Settings(
     val autoPause: Boolean = true,
+    /** A stop this long (minutes) becomes a break, out of riding time; 0 = no breaks. */
+    val breakMinutes: Int = 5,
     val demoMode: Boolean = false,
     /** Demo rides also simulate an OBD link (RPM + gear) to exercise the rev meter. */
     val demoObd: Boolean = true,
@@ -169,6 +171,7 @@ private const val BACKUP_PREFIX = "backup_"
 class SettingsRepository(private val context: Context) {
     private object Keys {
         val autoPause = booleanPreferencesKey("auto_pause")
+        val breakMinutes = intPreferencesKey("break_minutes")
         val demoMode = booleanPreferencesKey("demo_mode")
         val demoObd = booleanPreferencesKey("demo_obd")
         val liveMetrics = stringSetPreferencesKey("live_metrics")
@@ -224,6 +227,7 @@ class SettingsRepository(private val context: Context) {
     val settings: Flow<Settings> = context.dataStore.data.map { p ->
         Settings(
             autoPause = p[Keys.autoPause] ?: true,
+            breakMinutes = p[Keys.breakMinutes] ?: 5,
             demoMode = p[Keys.demoMode] ?: false,
             demoObd = p[Keys.demoObd] ?: true,
             liveMetrics = p[Keys.liveMetrics]
@@ -355,6 +359,8 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setAutoPause(enabled: Boolean) = context.dataStore.edit { it[Keys.autoPause] = enabled }
+
+    suspend fun setBreakMinutes(minutes: Int) = context.dataStore.edit { it[Keys.breakMinutes] = minutes }
     suspend fun setDemoMode(enabled: Boolean) = context.dataStore.edit { it[Keys.demoMode] = enabled }
     suspend fun setDemoObd(enabled: Boolean) = context.dataStore.edit { it[Keys.demoObd] = enabled }
     suspend fun setGForceIndicator(enabled: Boolean) = context.dataStore.edit { it[Keys.gIndicator] = enabled }

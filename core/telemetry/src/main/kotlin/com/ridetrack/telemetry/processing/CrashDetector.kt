@@ -17,6 +17,9 @@ class CrashDetector(
     private val movingMps: Double = 15.0 / 3.6,
     private val downLeanDeg: Double = 60.0,
 ) {
+    /** An impact is being judged: a stop right now may be a crash, not a break. */
+    val impactPending: Boolean get() = impactNanos != null
+
     private var lastMovingNanos: Long? = null
     private var lastMovingSpeed: Double? = null
     private var impactNanos: Long? = null

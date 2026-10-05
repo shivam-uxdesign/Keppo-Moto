@@ -170,9 +170,11 @@ class MomentRecorder(
     }
 
     /** Auto-pause: keep filming for 20 s (an event's after-window may still be running), then idle. */
-    fun setRidePaused(paused: Boolean) {
+    /** [cause]: "manual", "stop" or "break", for the log. */
+    fun setRidePaused(paused: Boolean, cause: String = "stop") {
         idleJob?.cancel()
         if (paused) {
+            log.log("ride paused ($cause)")
             idleJob = scope.launch {
                 delay(20_000)
                 setReason(PauseReason.RIDE_PAUSED, true)

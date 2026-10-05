@@ -179,7 +179,12 @@ class RideSessionManager(
         }
         // Crash detection only on real rides: a simulated one must never text anybody.
         val crashG = prefs.safety.takeIf { it.crashDetection && !demo }?.sensitivity?.impactG
-        val pipeline = TelemetryPipeline(source.kind, calibration, source.sensors, startNanos, startWall, momentTriggers = triggers, crashImpactG = crashG)
+        val pipeline = TelemetryPipeline(
+            source.kind, calibration, source.sensors, startNanos, startWall,
+            momentTriggers = triggers,
+            crashImpactG = crashG,
+            breakAfterMillis = prefs.breakMinutes.takeIf { it > 0 }?.let { it * 60_000L },
+        )
         val rec = Recorder(
             rideId,
             pipeline,
@@ -300,9 +305,13 @@ class RideSessionManager(
             planner.due(frame.timeMillis).forEach { momentsHub.submit(MomentRequest.Clip(rec.rideId, it)) }
             momentsHub.setEventPending(planner.hasPending, planner.pendingStartMillis)
         }
+        rec.stoppedAt = if (frame.isStopped) rec.stoppedAt ?: frame.timeMillis else null
+        // A phone in a pocket, or on a break: losing GPS is expected, and nothing worth filming.
+        val camUseless = frame.onBreak || frame.offMount
         rec.gpsVideo?.let { g ->
             // LOST = had a fix and it went away (not the wait for a first fix at the start).
-            val lost = frame.gpsQuality == GpsQuality.LOST
+            val longStop = rec.stoppedAt?.let { frame.timeMillis - it >= GPS_LOST_MAX_STOP_MILLIS } == true
+            val lost = frame.gpsQuality == GpsQuality.LOST && !camUseless && !longStop
             val live = momentsHub.live.value
             val ours = live?.source == MomentSource.GPS_LOST
             when (g.onTick(frame.timeMillis, lost, ourVideoRunning = ours, otherVideoRunning = live != null && !ours)) {
@@ -314,7 +323,11 @@ class RideSessionManager(
         rec.photos?.let { photos ->
             // A photo is announced 3 · 2 · 1 on the HUD, then taken.
             val at = rec.photoAt
-            if (at == null && photos.onTick(frame.timeMillis, frame.stats.movingMillis, frame.isStopped)) {
+            if (camUseless && at != null) {
+                // Off the mount mid-countdown: a pocket photo is just black.
+                rec.photoAt = null
+                momentsHub.setPhotoCountdown(null)
+            } else if (at == null && photos.onTick(frame.timeMillis, frame.stats.movingMillis, frame.isStopped) && !camUseless) {
                 rec.photoAt = frame.timeMillis + PHOTO_COUNTDOWN_MILLIS
                 momentsHub.setPhotoCountdown(rec.photoAt)
             } else if (at != null && frame.timeMillis >= at) {
@@ -329,7 +342,8 @@ class RideSessionManager(
         ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
     private fun syncAutoPause(rec: Recorder) {
-        val shouldPause = _manuallyPaused.value || (autoPauseEnabled.value && rec.pipeline.isPausedStop)
+        // A break pauses even with auto pause off: the rider is off the bike.
+        val shouldPause = _manuallyPaused.value || rec.pipeline.onBreak || (autoPauseEnabled.value && rec.pipeline.isPausedStop)
         val s = _state.value
         if (shouldPause && s is RideState.Recording) dispatch(RideAction.AutoPause)
         if (!shouldPause && (s is RideState.Paused || (s is RideState.EndingRide && s.wasPaused))) {
@@ -360,16 +374,25 @@ class RideSessionManager(
     fun pause() {
         val rec = recorder ?: return
         if (!_state.value.isActive) return
-        rec.pipeline.manuallyPaused = true
         _manuallyPaused.value = true
-        syncAutoPause(rec)
+        setManualPause(rec, true)
     }
 
+    /** Resumes a manual pause, or ends a break early (the notification's Resume). */
     fun resume() {
         val rec = recorder ?: return
-        rec.pipeline.manuallyPaused = false
         _manuallyPaused.value = false
-        syncAutoPause(rec)
+        setManualPause(rec, false)
+    }
+
+    // The pipeline is fed on the recording thread only.
+    private fun setManualPause(rec: Recorder, paused: Boolean) {
+        scope.launch(recordingDispatcher) {
+            val now = SystemClock.elapsedRealtimeNanos()
+            rec.pipeline.setManualPause(paused, now)?.let { rec.pendingEvents += it }
+            if (!paused) rec.pipeline.endBreak(now)?.let { rec.pendingEvents += it }
+            syncAutoPause(rec)
+        }
     }
 
     /** Films a video now (the HUD's record button); it's saved as a moment when stopped. */
@@ -476,6 +499,8 @@ class RideSessionManager(
         val pendingSamples = ArrayList<TelemetrySample>()
         val pendingEvents = ArrayList<RideEvent>()
         var photoAt: Long? = null
+        /** When the current stop (or break) began, by the ride's clock. */
+        var stoppedAt: Long? = null
     }
 
     companion object {
@@ -486,5 +511,7 @@ class RideSessionManager(
         /** The clip buffer holds ~45 s; a GPS-lost video starts at most this far back. */
         private const val MAX_LEAD_IN_MILLIS = 30_000L
         private const val PHOTO_COUNTDOWN_MILLIS = 3_000L
+        /** A GPS-lost video only starts while riding or in a short stop. */
+        private const val GPS_LOST_MAX_STOP_MILLIS = 30_000L
     }
 }
