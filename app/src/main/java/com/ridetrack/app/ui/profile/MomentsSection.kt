@@ -66,7 +66,7 @@ import java.util.Locale
 /** Opt-in background capture of clips and photos. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel) {
+internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel, showHeader: Boolean = true) {
     val context = LocalContext.current
     val m = s.settings.moments
     var explain by remember { mutableStateOf(false) }
@@ -81,7 +81,7 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel) {
         if (camera) vm.setMoments(m.copy(enabled = true)) else denied = true
     }
 
-    SectionHeader("Moments")
+    if (showHeader) SectionHeader("Moments")
     RtCard {
         ToggleRow(
             "Capture moments",

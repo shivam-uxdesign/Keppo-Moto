@@ -70,7 +70,7 @@ import com.ridetrack.app.ui.theme.RtType
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun SafetySection(s: ProfileUiState, vm: ProfileViewModel) {
+internal fun SafetySection(s: ProfileUiState, vm: ProfileViewModel, showHeader: Boolean = true) {
     val context = LocalContext.current
     val safety = s.settings.safety
     val save: (SafetySettings) -> Unit = vm::setSafety
@@ -99,7 +99,7 @@ internal fun SafetySection(s: ProfileUiState, vm: ProfileViewModel) {
     }
     val askPermissions = { smsPermission.launch(arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE, Manifest.permission.CALL_PHONE)) }
 
-    SectionHeader("Safety")
+    if (showHeader) SectionHeader("Safety")
     RtCard {
         Text(
             "If it looks like you've crashed, Keppo Moto asks if you're OK. No answer in 30 seconds and it texts your contacts where you are.",

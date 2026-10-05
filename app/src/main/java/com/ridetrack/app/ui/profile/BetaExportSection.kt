@@ -25,14 +25,14 @@ import kotlinx.coroutines.launch
 
 /** BETA TOOL — shown only in debug/beta builds. Delete with `data/export`. */
 @Composable
-fun BetaExportSection() {
+fun BetaExportSection(showHeader: Boolean = true) {
     val context = LocalContext.current
     val container = appContainer()
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
-    SectionHeader("Beta tools")
+    if (showHeader) SectionHeader("Beta tools")
     RtCard {
         Text("Export ride data", style = RtType.bodyStrong, color = RtColors.TextPrimary)
         Text(

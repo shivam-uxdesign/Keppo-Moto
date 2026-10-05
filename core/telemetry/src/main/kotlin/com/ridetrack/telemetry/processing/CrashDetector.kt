@@ -6,10 +6,11 @@ import kotlin.math.abs
 data class CrashSuspected(val impactNanos: Long, val speedBeforeMps: Double?, val peakG: Double)
 
 /**
- * Looks for a crash in the accelerometer: a hard impact while riding, then the bike down
- * (lean held past [downLeanDeg]) or not moving at all. A pothole or kerb hit at speed is
- * followed by more riding, and a dropped phone at a standstill has no ride before it, so
- * neither counts. Fed at sensor rate; [onAccel] returns a report once per crash.
+ * Looks for a crash: a hard impact while riding, or the bike sliding (lean past [downLeanDeg]
+ * while still moving, which normal riding never reaches), then the bike down (lean held past
+ * [downLeanDeg]) or not moving at all. A pothole or kerb hit at speed is followed by more
+ * riding, and a dropped phone or a phone pulled off the mount at a standstill has no ride
+ * before it, so neither counts. Fed at sensor rate; [onAccel] returns a report once per crash.
  */
 class CrashDetector(
     /** Total acceleration (including gravity) that counts as an impact. */
@@ -22,6 +23,8 @@ class CrashDetector(
 
     private var lastMovingNanos: Long? = null
     private var lastMovingSpeed: Double? = null
+    /** Leaning past [downLeanDeg] at speed since: a slide (lowside) with no big impact. */
+    private var slideSince: Long? = null
     private var impactNanos: Long? = null
     private var impactSpeed: Double? = null
     private var peak = 0.0
@@ -37,6 +40,19 @@ class CrashDetector(
         val impact = impactNanos
         if (impact == null) {
             val moving = lastMovingNanos?.let { nanos - it <= MOVING_BEFORE_NS } == true
+            val sliding = speedMps != null && speedMps >= movingMps && leanDeg != null && abs(leanDeg) >= downLeanDeg
+            slideSince = if (sliding) slideSince ?: nanos else null
+            val slid = slideSince?.let { nanos - it >= SLIDE_HOLD_NS } == true
+            if (slid) {
+                // Judged from when the slide began, exactly like an impact.
+                impactNanos = slideSince
+                impactSpeed = lastMovingSpeed
+                peak = accelG
+                downSince = null
+                stillSince = null
+                slideSince = null
+                return null
+            }
             if (accelG >= impactG && moving) {
                 impactNanos = nanos
                 impactSpeed = lastMovingSpeed
@@ -48,8 +64,10 @@ class CrashDetector(
         }
         val since = nanos - impact
         if (accelG > peak && since < SETTLE_NS) peak = accelG
-        // Riding on normally after the hit: a pothole or a kerb, not a crash.
-        if (since > SETTLE_NS && speedMps != null && speedMps >= RIDING_ON_MPS) return reset()
+        // Riding on normally after the hit: a pothole or a kerb, not a crash. Still sliding
+        // on its side (moving, but leaning past the limit) isn't riding on.
+        val upright = leanDeg == null || abs(leanDeg) < downLeanDeg
+        if (since > SETTLE_NS && speedMps != null && speedMps >= RIDING_ON_MPS && upright) return reset()
         if (since > WINDOW_NS) return reset()
         if (since < SETTLE_NS) return null
         val slow = speedMps == null || speedMps < SLOW_MPS
@@ -91,5 +109,7 @@ class CrashDetector(
         const val SLOW_MPS = 2.0
         const val RIDING_ON_MPS = 3.0
         const val STILL_TOLERANCE_G = 0.15
+        /** Lean past the limit at speed for this long = sliding, not a sensor blip. */
+        const val SLIDE_HOLD_NS = 1_000 * MS
     }
 }

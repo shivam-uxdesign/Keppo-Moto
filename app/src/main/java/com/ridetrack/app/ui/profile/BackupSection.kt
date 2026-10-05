@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 
 /** Profile › Backup: Google Drive backup and restore. Free, no account; files go to the rider's own Drive. */
 @Composable
-internal fun BackupSection(s: ProfileUiState, vm: ProfileViewModel) {
+internal fun BackupSection(s: ProfileUiState, vm: ProfileViewModel, showHeader: Boolean = true) {
     val b = s.settings.backup
     val status by vm.backupStatus.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -54,7 +54,7 @@ internal fun BackupSection(s: ProfileUiState, vm: ProfileViewModel) {
         }
     }
 
-    SectionHeader("Backup")
+    if (showHeader) SectionHeader("Backup")
     RtCard {
         if (!b.connected) {
             Text("Google Drive backup", style = RtType.bodyStrong, color = RtColors.TextPrimary)

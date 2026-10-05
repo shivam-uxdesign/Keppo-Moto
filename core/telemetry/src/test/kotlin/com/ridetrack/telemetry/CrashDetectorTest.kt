@@ -75,4 +75,29 @@ class CrashDetectorTest {
         assertNotNull(d.feed(5_020, 15_000, { t -> if (t < 5_100) 6.0 else 1.0 }, { 0.0 }, { 80.0 }))
         assertNull(d.feed(15_020, 40_000, { t -> if (t in 20_000..20_040) 6.0 else 1.0 }, { 0.0 }, { 80.0 }))
     }
+
+    @Test
+    fun `a slide with no big impact, ending with the bike down, is a crash`() {
+        val d = CrashDetector()
+        d.feed(0, 5_000, { 1.0 }, { 14.0 }, { 25.0 })
+        // Lowside: lean goes past 60° while GPS still says 12 m/s, no spike over 2 g.
+        val r = d.feed(5_020, 25_000, { 1.4 }, { t -> if (t < 8_000) 12.0 else 0.0 }, { t -> if (t < 5_300) 45.0 else 80.0 })
+        assertNotNull(r)
+    }
+
+    @Test
+    fun `hard braking then pulling the phone off the mount is not a crash`() {
+        val d = CrashDetector()
+        d.feed(0, 5_000, { 1.0 }, { 15.0 }, { 5.0 })
+        // 0.9 g stop (|a| ~1.35 g), stopped by 7 s, then the phone tilted and pocketed (not still).
+        val r = d.feed(5_020, 30_000, { t -> if (t < 7_000) 1.35 else if (t < 15_000) 1.0 + (t % 400) / 1000.0 else 1.25 }, { t -> if (t < 7_000) 15.0 - (t - 5_000) / 140.0 else 0.0 }, { t -> if (t > 8_000) -70.0 else 3.0 })
+        assertNull(r)
+    }
+
+    @Test
+    fun `a brief lean blip at speed is not a slide`() {
+        val d = CrashDetector()
+        val r = d.feed(0, 20_000, { 1.0 }, { 15.0 }, { t -> if (t in 5_000..5_600) 65.0 else 20.0 })
+        assertNull(r)
+    }
 }

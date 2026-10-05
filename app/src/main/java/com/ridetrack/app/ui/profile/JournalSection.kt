@@ -15,9 +15,9 @@ import com.ridetrack.app.ui.theme.RtType
 
 /** Profile › Keppo Journal: share finished rides with the journal on this phone. */
 @Composable
-internal fun JournalSection(s: ProfileUiState, vm: ProfileViewModel) {
+internal fun JournalSection(s: ProfileUiState, vm: ProfileViewModel, showHeader: Boolean = true) {
     val installed = remember { vm.journalInstalled() }
-    SectionHeader("Keppo Journal")
+    if (showHeader) SectionHeader("Keppo Journal")
     RtCard {
         ToggleRow(
             "Share rides with Keppo Journal",

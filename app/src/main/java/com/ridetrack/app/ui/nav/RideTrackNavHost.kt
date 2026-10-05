@@ -60,6 +60,8 @@ import com.ridetrack.app.ui.home.HomeScreen
 import com.ridetrack.app.ui.hud.HudSettingsScreen
 import com.ridetrack.app.ui.live.LiveRideScreen
 import com.ridetrack.app.ui.profile.ProfileScreen
+import com.ridetrack.app.ui.profile.ProfilePageScreen
+import com.ridetrack.app.ui.profile.ProfilePage
 import com.ridetrack.app.share.MomentShareScreen
 import com.ridetrack.app.share.ShareRideScreen
 import com.ridetrack.app.ui.moments.MomentViewerScreen
@@ -80,6 +82,8 @@ object Routes {
     const val BIKE_EDIT = "bike/edit?bikeId={bikeId}"
     const val CALIBRATE = "calibrate/{bikeId}"
     const val HUD_SETTINGS = "hud-settings"
+    const val PROFILE_PAGE = "profile/{page}"
+    fun profilePage(page: ProfilePage) = "profile/${page.route}"
     const val RECENTLY_DELETED = "recently-deleted?rideId={rideId}"
     fun recentlyDeleted(rideId: String? = null) = if (rideId == null) "recently-deleted" else "recently-deleted?rideId=$rideId"
     const val RIDES_MAP = "rides-map"
@@ -180,6 +184,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                 }
                 composable(Routes.PROFILE) {
                     ProfileScreen(
+                        onOpenPage = { nav.navigate(Routes.profilePage(it)) },
                         onOpenHudSettings = { nav.navigate(Routes.HUD_SETTINGS) },
                         onOpenRecentlyDeleted = { nav.navigate(Routes.recentlyDeleted()) },
                     )
@@ -191,6 +196,14 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                     RecentlyDeletedScreen(focusRideId = entry.arguments?.getString("rideId"), onBack = { nav.popBackStack() })
                 }
                 composable(Routes.HUD_SETTINGS) { HudSettingsScreen(onBack = { nav.popBackStack() }) }
+                composable(Routes.PROFILE_PAGE, arguments = listOf(navArgument("page") { type = NavType.StringType })) { entry ->
+                    val page = ProfilePage.of(entry.arguments?.getString("page"))
+                    if (page == null) {
+                        LaunchedEffect(Unit) { nav.popBackStack() }
+                    } else {
+                        ProfilePageScreen(page, onBack = { nav.popBackStack() })
+                    }
+                }
                 composable(
                     Routes.LIVE,
                     // The start button "opens up" into the live screen.
