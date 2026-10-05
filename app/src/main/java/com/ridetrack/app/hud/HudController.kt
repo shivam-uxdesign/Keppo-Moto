@@ -3,6 +3,7 @@ package com.ridetrack.app.hud
 import android.content.Context
 import androidx.compose.ui.graphics.asImageBitmap
 import com.ridetrack.app.moments.MomentSource
+import com.ridetrack.app.moments.MomentStatus
 import com.ridetrack.app.moments.MomentsHub
 import com.ridetrack.app.ui.format.Format
 import android.content.Intent
@@ -56,6 +57,10 @@ class HudController(
         override fun pauseVideo() = session.pauseVideo()
         override fun resumeVideo() = session.resumeVideo()
         override fun stopVideo() = session.stopVideo()
+        override fun reconnectMic() {
+            moments.reconnectMic()
+            overlay.closeControls()
+        }
     }
 
     private val overlay: HudOverlay = HudOverlay(
@@ -98,6 +103,19 @@ class HudController(
 
         scope.launch {
             moments.viewfinder.collect { overlay.viewfinder = it?.asImageBitmap() }
+        }
+
+        scope.launch {
+            // The chosen mic dropping out (or coming back): say so once under the pop-up.
+            var missing: String? = null
+            moments.state.map { it.micFallback }.distinctUntilChanged().collect { name ->
+                val now = System.currentTimeMillis()
+                when {
+                    name != null && missing == null -> note.value = "$name disconnected · recording with the phone mic" to now
+                    name == null && missing != null && moments.state.value.status != MomentStatus.OFF -> note.value = "$missing back" to now
+                }
+                missing = name
+            }
         }
 
         scope.launch {

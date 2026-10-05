@@ -58,6 +58,7 @@ interface HudControlActions {
     fun pauseVideo()
     fun resumeVideo()
     fun stopVideo()
+    fun reconnectMic()
 }
 
 @Composable
@@ -100,6 +101,8 @@ fun HudOverlayContent(
                     onHide = actions::hideForRide,
                     onOpenApp = actions::openApp,
                     onClose = actions::closeControls,
+                    missingMic = data.micFallback,
+                    onReconnectMic = actions::reconnectMic,
                 )
             }
         }

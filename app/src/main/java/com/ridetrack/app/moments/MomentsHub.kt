@@ -74,6 +74,8 @@ data class MomentState(
     val photoAtMillis: Long? = null,
     /** When the last photo was taken (the HUD says "photo" briefly). */
     val photoTakenAtMillis: Long? = null,
+    /** The chosen mic (its name) is missing, so the phone mic is recording; null when all's well. */
+    val micFallback: String? = null,
 )
 
 /**
@@ -171,6 +173,18 @@ class MomentsHub {
     fun setStatus(status: MomentStatus, reason: PauseReason? = null) {
         _state.value = _state.value.copy(status = status, reason = reason)
         publish()
+    }
+
+    fun setMicFallback(name: String?) {
+        if (_state.value.micFallback != name) _state.value = _state.value.copy(micFallback = name)
+    }
+
+    /** Set by the recorder: "Reconnect mic" on the pop-up. */
+    @Volatile
+    var onReconnectMic: (() -> Unit)? = null
+
+    fun reconnectMic() {
+        onReconnectMic?.invoke()
     }
 
     fun onSaved() {

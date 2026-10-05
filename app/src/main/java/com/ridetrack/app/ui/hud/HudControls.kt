@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -56,6 +57,9 @@ fun HudControls(
     onOpenApp: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The chosen mic that dropped out; offers "Reconnect mic" after re-plugging it. */
+    missingMic: String? = null,
+    onReconnectMic: () -> Unit = {},
 ) {
     Column(
         modifier
@@ -68,6 +72,18 @@ fun HudControls(
             Text("Pop-up", style = RtType.headline, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
             IconButton(onClick = onClose) {
                 Icon(Icons.Rounded.Close, contentDescription = "Close controls", tint = RtColors.TextSecondary)
+            }
+        }
+        if (missingMic != null) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("$missingMic disconnected. Recording with the phone mic.", style = RtType.caption, color = RtColors.Warning)
+                OutlinedButton(
+                    onClick = onReconnectMic,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, RtColors.Warning),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = RtColors.TextPrimary),
+                ) { Text("RECONNECT MIC", style = RtType.button) }
             }
         }
         Text("LAYOUT", style = RtType.label, color = RtColors.TextSecondary)

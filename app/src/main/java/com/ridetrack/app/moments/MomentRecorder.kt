@@ -2,6 +2,9 @@ package com.ridetrack.app.moments
 
 import android.Manifest
 import android.content.Context
+import android.content.IntentFilter
+import android.content.Intent
+import android.content.BroadcastReceiver
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
@@ -87,9 +90,20 @@ class MomentRecorder(
     private var micCheck: Job? = null
     private var inCall = false
     private val deviceCallback = object : AudioDeviceCallback() {
-        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>?) = micsChanged()
-        override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) = micsChanged()
+        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>?) {
+            logMics("connected", added)
+            micsChanged()
+        }
+        override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) {
+            logMics("disconnected", removed)
+            micsChanged()
+        }
     }
+    /** A mic that dropped out is only switched back to once it stays connected. */
+    private val micStability = MicStability()
+    /** The external mic used last this ride, so Automatic can say which one went missing. */
+    private var lastExternal: MicChoice? = null
+    private var powerReceiver: BroadcastReceiver? = null
 
     private val reasons = linkedSetOf<PauseReason>()
     private var videoBound = false
@@ -142,6 +156,8 @@ class MomentRecorder(
                 tick++
                 setReason(PauseReason.LOW_STORAGE, lowStorage())
                 noteCalls()
+                // A missed "connected" signal, or a mic waiting out its stability hold.
+                withContext(Dispatchers.Main) { if (audio != null) micsChanged(settleMillis = 0) }
                 if (live != null && lowStorage()) liveLock.withLock { stopLive("storage almost full") }
                 withContext(Dispatchers.Main) { watchdog() }
                 if (tick % 6 == 0) log.log("status: ${hub.state.value.status} reasons=$reasons encoder=${encoderInfo()} ${buffer.describe()} thermal=${thermal()}")
@@ -150,6 +166,14 @@ class MomentRecorder(
         }
         watchThermal()
         context.getSystemService<AudioManager>()?.registerAudioDeviceCallback(deviceCallback, android.os.Handler(android.os.Looper.getMainLooper()))
+        watchPower()
+        hub.onReconnectMic = {
+            scope.launch(Dispatchers.Main) {
+                log.log("reconnect mic pressed")
+                micStability.force()
+                micsChanged(settleMillis = 0)
+            }
+        }
         hub.attach { r ->
             if (r is MomentRequest.StartLive || r is MomentRequest.LiveControl) {
                 scope.launch(Dispatchers.IO) { liveLock.withLock { handleLive(r) } }
@@ -201,6 +225,9 @@ class MomentRecorder(
             val pm = context.getSystemService<PowerManager>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) thermalListener?.let { pm?.removeThermalStatusListener(it) }
             context.getSystemService<AudioManager>()?.unregisterAudioDeviceCallback(deviceCallback)
+            powerReceiver?.let { runCatching { context.unregisterReceiver(it) } }
+            powerReceiver = null
+            hub.onReconnectMic = null
             micCheck?.cancel()
         }
         stopAudio()
@@ -427,6 +454,7 @@ class MomentRecorder(
         }
         val choice = MicChoice.decode(settings.mic)
         val mic = pickMic()
+        micStability.onSeen(android.os.SystemClock.elapsedRealtime(), mic.type != MicType.PHONE)
         val device = if (mic.type == MicType.PHONE) null else Microphones.find(context, mic)
         if (choice.type != MicType.AUTO && choice.type != MicType.PHONE && mic.type == MicType.PHONE) {
             log.log("mic ${choice.label} not connected: using the phone mic")
@@ -440,6 +468,8 @@ class MomentRecorder(
                 }
             }).also { enc ->
                 audioMic = mic
+                if (mic.type != MicType.PHONE) lastExternal = mic
+                hub.setMicFallback(fallbackName(choice, mic))
                 log.log("audio from ${if (device == null) "phone mic" else "${mic.type.label} ${device.productName}"} (setting: ${choice.label})")
                 // A mic that drops out (battery, range) falls back to the phone; note it in the log.
                 enc.addOnRoutingChanged { d -> log.log("audio now from ${d?.let { "${Microphones.typeOf(it)?.label ?: it.type} ${it.productName}" } ?: "default mic"}") }
@@ -456,23 +486,66 @@ class MomentRecorder(
         audioMic = null
     }
 
+    /** The mic the rider wanted, when the phone mic is standing in for it; null when all's well. */
+    private fun fallbackName(choice: MicChoice, using: MicChoice): String? {
+        if (using.type != MicType.PHONE) return null
+        val wanted = when (choice.type) {
+            MicType.PHONE -> return null
+            MicType.AUTO -> lastExternal ?: return null
+            else -> choice
+        }
+        // The headset let go on purpose (so its music plays): not a problem to flag.
+        if (wanted.type == MicType.BLUETOOTH && headsetSkipped) return null
+        return wanted.name?.takeIf { it.isNotBlank() } ?: wanted.type.label
+    }
+
+    private fun logMics(what: String, devices: Array<out AudioDeviceInfo>?) {
+        devices.orEmpty().filter { it.isSource && Microphones.typeOf(it) != null && Microphones.typeOf(it) != MicType.PHONE }.forEach {
+            log.log("mic $what: ${Microphones.typeOf(it)?.label} ${it.productName}")
+        }
+    }
+
+    /** Charging coming and going, to match against mic drops in the log. */
+    private fun watchPower() {
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, intent: Intent) {
+                log.log(if (intent.action == Intent.ACTION_POWER_CONNECTED) "power: charging" else "power: not charging")
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
+        }
+        runCatching { ContextCompat.registerReceiver(context, r, filter, ContextCompat.RECEIVER_NOT_EXPORTED) }
+            .onSuccess { powerReceiver = r }
+        val charging = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            ?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0)?.let { it != 0 }
+        log.log("power: ${if (charging == true) "charging" else "not charging"} at start")
+    }
+
     private fun restartAudio() {
         if (audio == null) return
         stopAudio()
         if (videoBound) startAudio()
     }
 
-    /** A mic was plugged in or out: switch if the best one changed (e.g. the DJI receiver went in). */
-    private fun micsChanged() {
+    /**
+     * A mic was plugged in or out (or the periodic check): switch if the best one changed.
+     * Dropping to the phone mic is immediate; going back to a mic that dropped waits until
+     * it has stayed connected ([MicStability]), so a flapping receiver doesn't chop clips.
+     */
+    private fun micsChanged(settleMillis: Long = MIC_SETTLE_MILLIS) {
         micCheck?.cancel()
         micCheck = scope.launch(Dispatchers.Main) {
-            delay(MIC_SETTLE_MILLIS)
+            if (settleMillis > 0) delay(settleMillis)
             val current = audioMic ?: return@launch
+            val now = android.os.SystemClock.elapsedRealtime()
             val best = pickMic()
-            if (best != current) {
-                log.log("mic change: ${current.label} → ${best.label}")
-                restartAudio()
-            }
+            micStability.onSeen(now, best.type != MicType.PHONE)
+            if (best == current) return@launch
+            if (best.type != MicType.PHONE && current.type == MicType.PHONE && !micStability.stable(now)) return@launch
+            log.log("mic change: ${current.label} → ${best.label}")
+            restartAudio()
         }
     }
 

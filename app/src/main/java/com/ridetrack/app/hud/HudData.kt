@@ -63,6 +63,8 @@ data class HudData(
     val photoTakenAtMillis: Long? = null,
     /** The clock the three above are on (the ride's). */
     val nowMillis: Long = 0,
+    /** The chosen mic (its name) dropped out; the phone mic is recording instead. */
+    val micFallback: String? = null,
 ) {
     companion object {
         fun from(
@@ -126,6 +128,7 @@ data class HudData(
                 clipStartMillis = moments?.clipStartMillis,
                 photoAtMillis = moments?.photoAtMillis,
                 photoTakenAtMillis = moments?.photoTakenAtMillis,
+                micFallback = moments?.micFallback,
                 nowMillis = nowMillis,
             )
         }

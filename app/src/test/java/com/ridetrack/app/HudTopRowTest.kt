@@ -38,6 +38,7 @@ class HudTopRowTest {
     fun `idle camera is a plain cam, grey when off`() {
         assertEquals(HudTopRow.Label("cam", Tone.MUTED), HudTopRow.right(data()))
         assertEquals(HudTopRow.Label("cam", Tone.DIM), HudTopRow.right(data(camera = CameraIndicator.OFF)))
+        assertEquals(HudTopRow.Label("cam · phone mic", Tone.WARNING), HudTopRow.right(data().copy(micFallback = "Wireless Mic Rx")))
     }
 
     @Test

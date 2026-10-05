@@ -7,7 +7,8 @@ import java.util.Locale
  *
  * Left is the ride: "Riding 00:00", "Stopped 00:00", "Paused 00:00", "On a break 05:00", or amber "GPS lost" while
  * it is lost. Right is the camera: "cam" when idle, "cam 00:12" while filming (an event clip
- * counts from its look-back), "3", "2", "1" before a photo, then "photo".
+ * counts from its look-back), "3", "2", "1" before a photo, then "photo"; "cam · phone mic" in
+ * amber when the chosen mic dropped out.
  */
 object HudTopRow {
     enum class Tone { TEXT, MUTED, DIM, WARNING, PAUSED, REC, ACCENT }
@@ -37,6 +38,7 @@ object HudTopRow {
             photoAt != null && now < photoAt -> Label(((photoAt - now + 999) / 1000).coerceIn(1, 3).toString(), Tone.ACCENT)
             photoTaken != null && now >= photoTaken && now - photoTaken < PHOTO_SHOWN_MILLIS -> Label("photo", Tone.ACCENT)
             data.camera == CameraIndicator.OFF -> Label("cam", Tone.DIM)
+            data.micFallback != null -> Label("cam · phone mic", Tone.WARNING)
             else -> Label("cam", Tone.MUTED)
         }
     }
