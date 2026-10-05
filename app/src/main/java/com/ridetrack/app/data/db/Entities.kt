@@ -130,4 +130,7 @@ data class MomentEntity(
     val source: String? = null,
     /** Set while this moment alone is in Recently deleted (a deleted ride hides its moments with it). */
     val deletedAtMillis: Long? = null,
+    /** The part to share (ms into the clip); null = the whole clip. The file is never cut. */
+    val trimStartMillis: Long? = null,
+    val trimEndMillis: Long? = null,
 )

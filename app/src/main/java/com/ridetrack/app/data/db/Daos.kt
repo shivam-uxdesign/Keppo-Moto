@@ -151,6 +151,9 @@ interface MomentDao {
     @Query("UPDATE moments SET starred = :starred WHERE id = :id")
     suspend fun setStarred(id: String, starred: Boolean)
 
+    @Query("UPDATE moments SET trimStartMillis = :start, trimEndMillis = :end WHERE id = :id")
+    suspend fun setTrim(id: String, start: Long?, end: Long?)
+
     @Query("DELETE FROM moments WHERE id = :id")
     suspend fun delete(id: String)
 

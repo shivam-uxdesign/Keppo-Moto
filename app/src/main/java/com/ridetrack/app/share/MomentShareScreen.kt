@@ -4,6 +4,15 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.media.MediaMetadataRetriever
 import androidx.compose.foundation.Image
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -104,6 +113,11 @@ data class MomentShareState(
     val exportProgress: Int? = null,
     val exported: File? = null,
     val error: String? = null,
+    /** Clips: the part to share, and frames along the clip for the trim strip. */
+    val trim: TrimRange? = null,
+    val frames: List<Bitmap> = emptyList(),
+    /** Cutting the plain clip for "Original": null = idle, 0..100 = running. */
+    val originalProgress: Int? = null,
 )
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -152,7 +166,59 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
             }
             render()
             renderThumbs()
+            if (moment.kind == MomentKind.CLIP) loadTrim(moment)
         }
+    }
+
+    private suspend fun loadTrim(m: Moment) {
+        val length = m.durationMillis ?: withContext(Dispatchers.IO) { clipLength(m.file) } ?: return
+        _state.update { it.copy(trim = TrimRange.of(length, m.trimStartMillis, m.trimEndMillis)) }
+        val frames = withContext(Dispatchers.IO) { stripFrames(m.file, length) }
+        _state.update { it.copy(frames = frames) }
+    }
+
+    /** Moving a trim handle (while dragging); [saveTrim] when it's let go. */
+    fun setTrimStart(ms: Long) = _state.update { s -> s.copy(trim = s.trim?.withStart(ms), exported = null) }
+    fun setTrimEnd(ms: Long) = _state.update { s -> s.copy(trim = s.trim?.withEnd(ms), exported = null) }
+    fun resetTrim() {
+        _state.update { s -> s.copy(trim = s.trim?.reset(), exported = null) }
+        saveTrim()
+    }
+
+    fun saveTrim() {
+        val t = _state.value.trim ?: return
+        viewModelScope.launch {
+            if (t.isWhole) c.moments.setTrim(momentId, null, null) else c.moments.setTrim(momentId, t.startMillis, t.endMillis)
+        }
+    }
+
+    /**
+     * The plain clip (no overlay) for Share / Save original: the recorded file itself when
+     * untrimmed, else the trimmed part cut into a new file.
+     */
+    suspend fun original(): File? {
+        val s = _state.value
+        val m = s.moment ?: return null
+        val t = s.trim
+        if (t == null || t.isWhole) return m.file
+        // shares/ is cleared for each new file, so an overlay video made earlier is gone.
+        _state.update { it.copy(originalProgress = 0, error = null, exported = null) }
+        val out = File(ShareImages.sharesDir(c.appContext), "keppo-clip-${m.timeMillis}-${t.startMillis / 1000}.mp4")
+        val result = MomentVideoExporter(c.appContext).export(
+            input = m.file,
+            output = out,
+            videoStartMillis = m.videoStartMillis,
+            draw = null,
+            onProgress = { p -> _state.update { it.copy(originalProgress = p) } },
+            trim = t,
+        )
+        _state.update {
+            it.copy(
+                originalProgress = null,
+                error = result.exceptionOrNull()?.let { e -> "Couldn't cut the clip (${e.message ?: e.javaClass.simpleName})" },
+            )
+        }
+        return result.getOrNull()
     }
 
     fun toggle(field: MomentField) = change { it.copy(fields = if (field in it.fields) it.fields - field else it.fields + field) }
@@ -294,6 +360,7 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
                     }
                 },
                 onProgress = { p -> _state.update { it.copy(exportProgress = p) } },
+                trim = s.trim,
             )
             _state.update {
                 it.copy(
@@ -303,6 +370,42 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
                 )
             }
         }
+    }
+}
+
+private fun clipLength(file: File): Long? {
+    val r = MediaMetadataRetriever()
+    return try {
+        r.setDataSource(file.path)
+        r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+    } catch (e: Exception) {
+        null
+    } finally {
+        runCatching { r.release() }
+    }
+}
+
+/** Small frames spread along the clip, for the trim strip. */
+private fun stripFrames(file: File, lengthMillis: Long, count: Int = 8): List<Bitmap> {
+    val r = MediaMetadataRetriever()
+    return try {
+        r.setDataSource(file.path)
+        val rot = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+        (0 until count).mapNotNull { i ->
+            val at = lengthMillis * (2 * i + 1) / (2 * count)
+            val f = r.getFrameAtTime(at * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: return@mapNotNull null
+            val scale = 160f / maxOf(f.width, f.height)
+            val m = Matrix().apply {
+                postScale(scale, scale)
+                // Some phones hand back frames already upright; only turn sideways ones.
+                if (rot % 180 != 0 && f.width > f.height) postRotate(rot.toFloat())
+            }
+            Bitmap.createBitmap(f, 0, 0, f.width, f.height, m, true).also { if (it !== f) f.recycle() }
+        }
+    } catch (e: Exception) {
+        emptyList()
+    } finally {
+        runCatching { r.release() }
     }
 }
 
@@ -390,6 +493,17 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
             }
         }
 
+        s.trim?.let { t ->
+            TrimBar(
+                trim = t,
+                frames = s.frames,
+                onStart = vm::setTrimStart,
+                onEnd = vm::setTrimEnd,
+                onDone = vm::saveTrim,
+                onReset = vm::resetTrim,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+        }
         Text(
             "${s.choice.label} · ${s.choice.note} · swipe for more",
             style = RtType.caption,
@@ -448,6 +562,16 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                isClip && s.originalProgress != null -> Column(Modifier.weight(1f)) {
+                    Text("Cutting the clip… ${s.originalProgress}%", style = RtType.caption, color = RtColors.TextSecondary)
+                    Spacer(Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { (s.originalProgress ?: 0) / 100f },
+                        color = RtColors.Primary,
+                        trackColor = RtColors.Surface,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 isClip && s.exported == null -> Action("Create video", Icons.Outlined.Movie, primary = true, modifier = Modifier.weight(1f)) { vm.exportVideo() }
                 isClip -> {
                     val file = s.exported!!
@@ -481,6 +605,26 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
                 }
             }
         }
+        if (isClip && m != null && s.exportProgress == null && s.originalProgress == null) {
+            // The clip as filmed: no numbers on it (just the trim, if any).
+            Row(Modifier.padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Original", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
+                Action("Share", Icons.Outlined.IosShare) {
+                    scope.launch {
+                        val f = vm.original() ?: return@launch
+                        ShareImages.share(context, ShareImages.uriFor(context, f), "video/mp4")
+                    }
+                }
+                Action("Save", Icons.Outlined.Download) {
+                    scope.launch {
+                        val f = vm.original() ?: return@launch
+                        val ok = ShareImages.saveVideo(context, f, "keppo-clip-${m.timeMillis}")
+                        if (ok) haptics.confirm()
+                        toast = if (ok) "Saved to Movies/Keppo Moto" else "Couldn't save here. Use Share instead."
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -503,3 +647,105 @@ private fun Action(label: String, icon: androidx.compose.ui.graphics.vector.Imag
         Text(label, style = RtType.button, color = fg)
     }
 }
+
+/**
+ * The trim strip: frames along the clip, with a handle at each end. Outside the kept part is
+ * shaded. [onStart]/[onEnd] follow the drag; [onDone] when a handle is let go.
+ */
+@Composable
+private fun TrimBar(
+    trim: TrimRange,
+    frames: List<Bitmap>,
+    onStart: (Long) -> Unit,
+    onEnd: (Long) -> Unit,
+    onDone: () -> Unit,
+    onReset: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
+            Text(
+                if (trim.isWhole) "Trim · whole clip (${Format.clock(trim.lengthMillis)})"
+                else "Trim · ${Format.clock(trim.durationMillis)} of ${Format.clock(trim.lengthMillis)}",
+                style = RtType.caption,
+                color = RtColors.TextSecondary,
+                modifier = Modifier.weight(1f),
+            )
+            if (!trim.isWhole) {
+                Text(
+                    "Reset",
+                    style = RtType.caption,
+                    color = RtColors.Primary,
+                    modifier = Modifier.clickable(role = Role.Button, onClick = onReset).padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+        }
+        BoxWithConstraints(
+            Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(RtColors.Surface),
+        ) {
+            val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+            val length = trim.lengthMillis.coerceAtLeast(1)
+            fun toMs(x: Float) = (x / widthPx * length).toLong()
+            Row(Modifier.fillMaxSize()) {
+                frames.forEach { f ->
+                    Image(f.asImageBitmap(), null, contentScale = ContentScale.Crop, modifier = Modifier.weight(1f).fillMaxHeight())
+                }
+            }
+            val startFrac = trim.startMillis.toFloat() / length
+            val endFrac = trim.endMillis.toFloat() / length
+            val density = LocalDensity.current
+            val startDp = with(density) { (startFrac * widthPx).toDp() }
+            val endDp = with(density) { (endFrac * widthPx).toDp() }
+            // Shade what's cut away.
+            Box(Modifier.width(startDp).fillMaxHeight().background(Color.Black.copy(alpha = 0.6f)))
+            Box(Modifier.offset(x = endDp).width(maxWidth - endDp).fillMaxHeight().background(Color.Black.copy(alpha = 0.6f)))
+            Box(
+                Modifier
+                    .offset(x = startDp)
+                    .width((endDp - startDp).coerceAtLeast(0.dp))
+                    .fillMaxHeight()
+                    .border(2.dp, RtColors.Primary, RoundedCornerShape(10.dp)),
+            )
+            TrimHandle(
+                x = startDp,
+                onDrag = { dx -> onStart(trim.startMillis + toMs(dx)) },
+                onDone = onDone,
+                label = "Trim start",
+            )
+            TrimHandle(
+                x = endDp - 14.dp,
+                onDrag = { dx -> onEnd(trim.endMillis + toMs(dx)) },
+                onDone = onDone,
+                label = "Trim end",
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrimHandle(x: Dp, onDrag: (Float) -> Unit, onDone: () -> Unit, label: String) {
+    val drag = rememberUpdatedState(onDrag)
+    Box(
+        Modifier
+            .offset(x = x)
+            .width(14.dp)
+            .fillMaxHeight()
+            .background(RtColors.Primary, RoundedCornerShape(6.dp))
+            .semantics { contentDescription = label }
+            .pointerInput(Unit) {
+                // Each step moves the handle from where it is now.
+                detectHorizontalDragGestures(onDragEnd = onDone, onDragCancel = onDone) { change, dx ->
+                    change.consume()
+                    drag.value(dx)
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.width(2.dp).height(16.dp).background(RtColors.OnPrimary, RoundedCornerShape(1.dp)))
+    }
+}
+

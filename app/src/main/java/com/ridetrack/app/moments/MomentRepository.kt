@@ -32,6 +32,9 @@ data class Moment(
     val starred: Boolean,
     val clipStartMillis: Long? = null,
     val source: MomentSource = MomentSource.EVENT,
+    /** The part to share, in ms from the clip's start; null = the whole clip. */
+    val trimStartMillis: Long? = null,
+    val trimEndMillis: Long? = null,
 ) {
     /** When the clip's first frame was filmed; estimated for clips saved before this was stored. */
     val videoStartMillis: Long get() = clipStartMillis ?: (timeMillis - 10_000)
@@ -90,6 +93,9 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
 
     suspend fun setStarred(id: String, starred: Boolean) = dao.setStarred(id, starred)
 
+    /** Remembers the part of a clip to share; null, null = the whole clip. */
+    suspend fun setTrim(id: String, startMillis: Long?, endMillis: Long?) = dao.setTrim(id, startMillis, endMillis)
+
     suspend fun bytesUsed(): Long = withContext(Dispatchers.IO) {
         File(context.filesDir, "moments").walkTopDown().filter { it.isFile }.sumOf { it.length() }
     }
@@ -112,6 +118,8 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
             starred = starred,
             clipStartMillis = clipStartMillis,
             source = MomentSource.entries.firstOrNull { it.name == source } ?: MomentSource.EVENT,
+            trimStartMillis = trimStartMillis,
+            trimEndMillis = trimEndMillis,
         )
     }
 }

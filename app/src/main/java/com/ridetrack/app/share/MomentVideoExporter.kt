@@ -29,7 +29,8 @@ import kotlin.coroutines.resume
 /**
  * Burns the moment overlay into a clip, with numbers that follow the footage: the overlay
  * is redrawn about 10 times a second from the ride's telemetry at each frame's time.
- * Audio is kept as is.
+ * Audio is kept as is. With a [TrimRange] only that part is written; with no overlay
+ * ([draw] null) it's the plain clip, cut.
  */
 @UnstableApi
 class MomentVideoExporter(private val context: Context) {
@@ -42,31 +43,46 @@ class MomentVideoExporter(private val context: Context) {
         input: File,
         output: File,
         videoStartMillis: Long,
-        draw: (canvas: Canvas, width: Int, height: Int, timeMillis: Long) -> Unit,
+        draw: ((canvas: Canvas, width: Int, height: Int, timeMillis: Long) -> Unit)?,
         onProgress: (Int) -> Unit,
+        trim: TrimRange? = null,
     ): Result<File> {
         val (w, h) = withContext(Dispatchers.IO) { displaySize(input) } ?: return Result.failure(IllegalStateException("Unreadable clip"))
         output.delete()
-        val overlay = object : BitmapOverlay() {
+        val overlay = draw?.let { paint -> object : BitmapOverlay() {
             // Frames arrive upright at display size (Transformer applies the rotation first),
             // so one frame-sized bitmap covers the video exactly.
             private val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             private val canvas = Canvas(bitmap)
             private var lastBucket = Long.MIN_VALUE
+            /** First frame's timestamp: trimmed frames may or may not start at 0, so count from it. */
+            private var firstUs: Long? = null
 
             override fun getBitmap(presentationTimeUs: Long): Bitmap {
-                val bucket = presentationTimeUs / 100_000 // redraw every 100 ms of video
+                val base = firstUs ?: presentationTimeUs.also { firstUs = it }
+                val sinceStartUs = (presentationTimeUs - base).coerceAtLeast(0)
+                val bucket = sinceStartUs / 100_000 // redraw every 100 ms of video
                 if (bucket != lastBucket) {
                     lastBucket = bucket
                     canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
-                    draw(canvas, w, h, videoStartMillis + presentationTimeUs / 1000)
+                    paint(canvas, w, h, videoStartMillis + (trim?.startMillis ?: 0L) + sinceStartUs / 1000)
                 }
                 return bitmap
             }
-        }
-        val item = EditedMediaItem.Builder(MediaItem.fromUri(android.net.Uri.fromFile(input)))
-            .setEffects(Effects(emptyList(), listOf(OverlayEffect(listOf(overlay)))))
-            .build()
+        } }
+        val media = MediaItem.Builder().setUri(android.net.Uri.fromFile(input)).apply {
+            if (trim != null && !trim.isWhole) {
+                setClippingConfiguration(
+                    MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(trim.startMillis)
+                        .setEndPositionMs(trim.endMillis)
+                        .build(),
+                )
+            }
+        }.build()
+        val item = EditedMediaItem.Builder(media).apply {
+            if (overlay != null) setEffects(Effects(emptyList(), listOf(OverlayEffect(listOf(overlay)))))
+        }.build()
 
         return withContext(Dispatchers.Main) {
             suspendCancellableCoroutine { cont ->
