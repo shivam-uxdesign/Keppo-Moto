@@ -86,6 +86,7 @@ fun HudCard(data: HudData, settings: HudSettings, modifier: Modifier = Modifier)
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         StatusRow(data, c)
+        if (data.voiceOn) VoiceMeter(data, c)
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 Format.speedKmh(data.speedMps),
@@ -178,6 +179,48 @@ private fun toneColor(t: HudTopRow.Tone, c: HudColors): Color = when (t) {
     HudTopRow.Tone.REC -> DarkPalette.error
     HudTopRow.Tone.ACCENT -> DarkPalette.primary
 }
+
+/**
+ * "Start filming when I speak": the mic level as a slim bar, with a tick at the threshold.
+ * It turns the accent colour while it hears you, so the threshold can be tuned by eye.
+ */
+@Composable
+private fun VoiceMeter(data: HudData, c: HudColors) {
+    val level = data.micLevelDb
+    fun frac(db: Float) = ((db - METER_MIN_DB) / (METER_MAX_DB - METER_MIN_DB)).coerceIn(0f, 1f)
+    val fill = level?.let(::frac) ?: 0f
+    val tick = frac(data.voiceThresholdDb.toFloat())
+    val color = if (data.speaking) DarkPalette.primary else c.muted
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) {
+        contentDescription = if (level == null) "Mic off" else "Mic level ${level.toInt()} dB, starts filming at ${data.voiceThresholdDb} dB"
+    }) {
+        Text("MIC", style = hudLabel, color = color)
+        Spacer(Modifier.width(6.dp))
+        Layout(
+            content = {
+                Box(Modifier.background(c.muted.copy(alpha = 0.2f), RoundedCornerShape(2.dp)))
+                Box(Modifier.background(color, RoundedCornerShape(2.dp)))
+                Box(Modifier.background(c.text))
+            },
+            modifier = Modifier.weight(1f).height(8.dp),
+        ) { measurables, constraints ->
+            val w = constraints.maxWidth
+            val h = constraints.maxHeight
+            val bar = 4.dp.roundToPx()
+            val track = measurables[0].measure(androidx.compose.ui.unit.Constraints.fixed(w, bar))
+            val lvl = measurables[1].measure(androidx.compose.ui.unit.Constraints.fixed((w * fill).toInt().coerceAtLeast(0), bar))
+            val mark = measurables[2].measure(androidx.compose.ui.unit.Constraints.fixed(2.dp.roundToPx(), h))
+            layout(w, h) {
+                track.place(0, (h - bar) / 2)
+                lvl.place(0, (h - bar) / 2)
+                mark.place((w * tick).toInt().coerceIn(0, w - mark.width), 0)
+            }
+        }
+    }
+}
+
+private const val METER_MIN_DB = -70f
+private const val METER_MAX_DB = 0f
 
 /** Tiny camera state: a dim dot + CAM while buffering, red dot + REC while saving. */
 @Composable

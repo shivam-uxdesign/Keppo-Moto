@@ -182,3 +182,9 @@ If Keppo Moto isn't installed, the journal can offer "Sync from Google Drive": i
   - `MANUAL_PAUSE` and `MANUAL_RESUME`: the rider paused or resumed by hand.
 
   As always, ignore event types you don't know.
+
+## Moment types (keppo.ride v1 additions)
+
+- `moments[].types` can include `VOICE`: a video filmed because the rider was speaking ("Start filming when I speak"). It can be combined with event types, e.g. `"HARD_BRAKE,VOICE"`.
+- Event moments chained into one longer video keep `"source": null`. Their `durationMillis` can be longer than before (minutes, not seconds). `timeMillis` is the first event; `clipStartMillis` is the first frame.
+

@@ -184,6 +184,34 @@ class MomentsHub {
         publish()
     }
 
+    private val _micLevel = MutableStateFlow<Float?>(null)
+    /** Mic loudness in dBFS (null while no mic is open), for the HUD's meter. */
+    val micLevel: StateFlow<Float?> = _micLevel.asStateFlow()
+    private val levels = ArrayList<Triple<Long, Float, Long>>()
+
+    /** From the audio thread: one chunk's level. The session drains them for speech detection. */
+    fun reportLevel(timeMillis: Long, levelDb: Float, chunkMillis: Long) {
+        _micLevel.value = levelDb
+        synchronized(levels) {
+            levels += Triple(timeMillis, levelDb, chunkMillis)
+            if (levels.size > MAX_LEVELS) levels.subList(0, levels.size - MAX_LEVELS).clear()
+        }
+    }
+
+    fun drainLevels(): List<Triple<Long, Float, Long>> = synchronized(levels) { levels.toList().also { levels.clear() } }
+
+    fun clearLevel() {
+        _micLevel.value = null
+        synchronized(levels) { levels.clear() }
+    }
+
+    private val _speaking = MutableStateFlow(false)
+    /** "Start filming when I speak" hears you now (the HUD's meter lights up). */
+    val speaking: StateFlow<Boolean> = _speaking.asStateFlow()
+    fun setSpeaking(on: Boolean) {
+        _speaking.value = on
+    }
+
     fun setMicFallback(name: String?) {
         if (_state.value.micFallback != name) _state.value = _state.value.copy(micFallback = name)
     }
@@ -205,6 +233,8 @@ class MomentsHub {
         writing = false
         clipStart = null
         _state.value = MomentState()
+        clearLevel()
+        _speaking.value = false
         _live.value = null
         _viewfinder.value = null
     }
@@ -218,4 +248,9 @@ class MomentsHub {
 
     /** Kept until the clip is written, so the HUD keeps counting through the save. */
     private var clipStart: Long? = null
+
+    private companion object {
+        /** ~5 s of chunks: more than a tick ever needs. */
+        const val MAX_LEVELS = 120
+    }
 }

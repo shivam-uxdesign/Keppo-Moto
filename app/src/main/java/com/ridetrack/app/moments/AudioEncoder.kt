@@ -30,7 +30,11 @@ class AudioEncoder(
     private val buffer: RollingBuffer,
     private val device: AudioDeviceInfo? = null,
     private val onHeadsetLost: () -> Unit = {},
+    /** Each chunk's loudness: (wall time, dBFS after a 150 Hz high-pass, chunk length in ms). */
+    private val onLevel: ((Long, Float, Long) -> Unit)? = null,
 ) {
+    private var hpPrevX = 0.0
+    private var hpPrevY = 0.0
     private val audioManager = context.getSystemService<AudioManager>()
     private val bluetooth = device != null && Microphones.typeOf(device) == MicType.BLUETOOTH
     @Volatile private var scoStarted = false
@@ -93,6 +97,10 @@ class AudioEncoder(
                     inBuf.clear()
                     val read = record.read(inBuf, minOf(inBuf.capacity(), 4096))
                     val nowMicros = System.nanoTime() / 1000
+                    if (read > 0) onLevel?.let { report ->
+                        val samples = read / 2
+                        report((nowMicros + offsetMicros) / 1000, levelDb(inBuf, samples), samples * 1000L / SAMPLE_RATE)
+                    }
                     // pts = when the first sample of this chunk was captured.
                     val pts = nowMicros - (read.coerceAtLeast(0) / 2) * 1_000_000L / SAMPLE_RATE
                     codec.queueInputBuffer(inIndex, 0, read.coerceAtLeast(0), pts, 0)
@@ -119,6 +127,24 @@ class AudioEncoder(
         } catch (e: Exception) {
             Log.e(TAG, "Audio capture stopped", e)
         }
+    }
+
+    /**
+     * RMS loudness of [samples] 16-bit samples at the start of [buf], in dBFS, after a
+     * one-pole ~150 Hz high-pass that takes out most wind and engine rumble.
+     */
+    private fun levelDb(buf: java.nio.ByteBuffer, samples: Int): Float {
+        if (samples <= 0) return SILENCE_DB
+        val b = buf.duplicate().order(java.nio.ByteOrder.nativeOrder())
+        var sum = 0.0
+        for (i in 0 until samples) {
+            val x = b.getShort(i * 2) / 32768.0
+            val y = HIGH_PASS_A * (hpPrevY + x - hpPrevX)
+            hpPrevX = x
+            hpPrevY = y
+            sum += y * y
+        }
+        return (10 * kotlin.math.log10(sum / samples + 1e-12)).toFloat().coerceAtLeast(SILENCE_DB)
     }
 
     /** The input actually in use (may differ from the preferred one if it disconnected). */
@@ -174,6 +200,9 @@ class AudioEncoder(
     companion object {
         private const val TAG = "MomentsAudio"
         private const val SAMPLE_RATE = 44_100
+        private const val SILENCE_DB = -90f
+        /** One-pole high-pass at ~150 Hz for 44.1 kHz: RC / (RC + dt). */
+        private const val HIGH_PASS_A = 0.979
         /** The call link takes a moment to come up; routing flips during it don't count as a drop. */
         private const val SETTLE_NANOS = 4_000_000_000L
     }

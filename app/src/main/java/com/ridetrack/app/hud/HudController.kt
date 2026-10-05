@@ -15,6 +15,7 @@ import com.ridetrack.app.MainActivity
 import com.ridetrack.app.data.HudLayout
 import com.ridetrack.app.data.HudSize
 import com.ridetrack.app.data.SettingsRepository
+import com.ridetrack.app.data.MomentSettings
 import com.ridetrack.app.ride.RideSessionManager
 import com.ridetrack.app.ui.hud.HudControlActions
 import com.ridetrack.telemetry.state.RideState
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 
 /**
@@ -30,6 +32,7 @@ import kotlinx.coroutines.launch
  * and removes it when the rider returns, the ride ends, or they hide it for this ride.
  * Its record button films a video (saved as a moment); rides start and end in the app.
  */
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 class HudController(
     private val context: Context,
     private val session: RideSessionManager,
@@ -43,6 +46,8 @@ class HudController(
     private var stoppedSinceMillis: Long? = null
     /** A short note under the buttons (why a video couldn't start), with when it was set. */
     private val note = MutableStateFlow<Pair<String, Long>?>(null)
+    /** "Start filming when I speak" and its threshold, for the pop-up's level meter. */
+    private val voice = MutableStateFlow(false to MomentSettings.DEFAULT_VOICE_DB)
 
     private val actions: HudControlActions = object : HudControlActions {
         override fun setLayout(layout: HudLayout) { scope.launch { settings.setHudLayout(layout) } }
@@ -106,6 +111,15 @@ class HudController(
         }
 
         scope.launch {
+            settings.settings.map { it.moments.voice to it.moments.voiceThresholdDb }.distinctUntilChanged().collect { voice.value = it }
+        }
+
+        scope.launch {
+            // The level meter: ~10 updates a second is plenty to watch.
+            combine(moments.micLevel.sample(100), moments.speaking, voice) { _, _, _ -> Unit }.collect { if (voice.value.first) refreshData() }
+        }
+
+        scope.launch {
             // The chosen mic dropping out (or coming back): say so once under the pop-up.
             var missing: String? = null
             moments.state.map { it.micFallback }.distinctUntilChanged().collect { name ->
@@ -153,6 +167,11 @@ class HudController(
             moments = moments.state.value,
             // Clip and photo times come from ride frames, so count on the same clock.
             nowMillis = session.frame.value?.timeMillis ?: now,
+        ).copy(
+            voiceOn = voice.value.first && session.active.value?.moments != null,
+            micLevelDb = moments.micLevel.value,
+            voiceThresholdDb = voice.value.second,
+            speaking = moments.speaking.value,
         )
     }
 

@@ -13,6 +13,8 @@ import com.ridetrack.app.moments.MomentSource
 import com.ridetrack.app.moments.MomentsHub
 import com.ridetrack.telemetry.model.MountOrientation
 import com.ridetrack.telemetry.moments.MomentPlanner
+import com.ridetrack.telemetry.model.RideEventType
+import com.ridetrack.telemetry.moments.SpeechGate
 import com.ridetrack.telemetry.moments.MomentWindow
 import com.ridetrack.telemetry.moments.MomentTriggers
 import com.ridetrack.telemetry.moments.PhotoScheduler
@@ -120,6 +122,10 @@ class RideSessionManager(
     private val autoPauseEnabled = settings.settings.map { it.autoPause }
         .stateIn(scope, SharingStarted.Eagerly, true)
 
+    /** Read live, so the threshold can be tuned during a ride against the HUD's meter. */
+    private val voiceSettings = settings.settings.map { it.moments.voice to it.moments.voiceThresholdDb }
+        .stateIn(scope, SharingStarted.Eagerly, false to MomentSettings.DEFAULT_VOICE_DB)
+
     private val recordingDispatcher = Dispatchers.Default.limitedParallelism(1)
     private val lifecycleMutex = Mutex()
     private var recordingJob: Job? = null
@@ -192,6 +198,7 @@ class RideSessionManager(
             planner = m?.takeIf { triggers != null }?.let { MomentPlanner(beforeMillis = it.clipSeconds * 1_000L, afterMillis = it.clipSeconds * 1_000L) },
             photos = m?.photos?.takeIf { it.minutes > 0 }?.let { PhotoScheduler(it.minutes * 60_000L) },
             gpsVideo = if (m != null && !demo && prefs.safety.gpsLostVideo) GpsLostVideo() else null,
+            moments = m != null,
         ).also { it.pendingEvents += pipeline.start() }
         momentsHub.reset()
         recorder = rec
@@ -301,8 +308,9 @@ class RideSessionManager(
 
     /** Decides when to film; the recorder in the service does the filming. */
     private fun captureMoments(rec: Recorder, frame: TelemetryFrame) {
-        rec.planner?.let { planner ->
-            val chain = rec.chain
+        val planner = rec.planner
+        val chain = rec.chain
+        planner?.let { p ->
             rec.pipeline.takeMomentEvents().forEach { (event, at) ->
                 if (chain.filming) {
                     // Another event while the chain is filming: keep going 10 s past it.
@@ -310,25 +318,33 @@ class RideSessionManager(
                     videoControlEvents(rec, setOf(event.type), event.value)
                     return@forEach
                 }
-                val merged = planner.add(event, at)
+                val merged = p.add(event, at)
                 // A second event inside the clip being filmed: film it as one longer video,
                 // which can run past what the buffer holds.
-                if (merged && momentsHub.live.value == null) startChain(rec, planner, frame)
+                if (merged && momentsHub.live.value == null) startChain(rec, p, frame)
             }
-            when (chain.onTick(frame.timeMillis, running = momentsHub.live.value?.source == MomentSource.EVENT)) {
-                TriggeredVideo.Action.STOP -> {
-                    planner.markFilmed(frame.timeMillis)
-                    stopVideo()
-                }
-                TriggeredVideo.Action.FAILED -> rec.chainWindow?.let { w ->
-                    // The camera wasn't ready: cut what the buffer still has instead.
-                    planner.restore(w.copy(endMillis = maxOf(w.endMillis, chain.holdUntil)))
-                }
-                TriggeredVideo.Action.NONE -> if (!chain.filming && rec.chainWindow != null) planner.markFilmed(frame.timeMillis)
+        }
+        listenForSpeech(rec, frame)
+        val wasFilming = chain.filming
+        when (chain.onTick(frame.timeMillis, running = momentsHub.live.value?.source == MomentSource.EVENT)) {
+            TriggeredVideo.Action.STOP -> {
+                planner?.markFilmed(frame.timeMillis)
+                stopVideo()
             }
-            if (!chain.filming) rec.chainWindow = null
-            planner.due(frame.timeMillis).forEach { momentsHub.submit(MomentRequest.Clip(rec.rideId, it)) }
-            momentsHub.setEventPending(planner.hasPending, planner.pendingStartMillis)
+            TriggeredVideo.Action.FAILED -> rec.chainWindow?.let { w ->
+                // The camera wasn't ready: cut what the buffer still has instead.
+                planner?.restore(w.copy(endMillis = maxOf(w.endMillis, chain.holdUntil)))
+            }
+            // Stopped by hand from the pop-up: what it filmed is on film.
+            TriggeredVideo.Action.NONE -> if (wasFilming && !chain.filming) planner?.markFilmed(frame.timeMillis)
+        }
+        if (!chain.filming) {
+            rec.chainWindow = null
+            rec.chainHasVoice = false
+        }
+        planner?.let { p ->
+            p.due(frame.timeMillis).forEach { momentsHub.submit(MomentRequest.Clip(rec.rideId, it)) }
+            momentsHub.setEventPending(p.hasPending, p.pendingStartMillis)
         }
         rec.stoppedAt = if (frame.isStopped) rec.stoppedAt ?: frame.timeMillis else null
         // A phone in a pocket, or on a break: losing GPS is expected, and nothing worth filming.
@@ -378,7 +394,59 @@ class RideSessionManager(
             return
         }
         rec.chainWindow = w
+        rec.chainHasVoice = false
         rec.chain.start(now, holdUntil = w.endMillis)
+    }
+
+    /**
+     * "Start filming when I speak": speech starts a video with a 10 s look-back (taking over
+     * an event clip being filmed), and keeps it going until 5 s after the rider stops talking.
+     * Speech during an event video extends it the same way. Off on a break or off the mount.
+     */
+    private fun listenForSpeech(rec: Recorder, frame: TelemetryFrame) {
+        val levels = momentsHub.drainLevels()
+        val (on, threshold) = voiceSettings.value
+        if (!rec.moments || !on || frame.onBreak || frame.offMount) {
+            if (rec.speech.speaking) rec.speech.reset()
+            momentsHub.setSpeaking(false)
+            return
+        }
+        levels.forEach { (t, db, len) -> rec.speech.onLevel(t, db, len, threshold.toFloat()) }
+        momentsHub.setSpeaking(rec.speech.speaking)
+        val last = rec.speech.lastSpeechMillis ?: return
+        if (last <= rec.lastSpeechHandled) return
+        rec.lastSpeechHandled = last
+        val until = last + VOICE_AFTER_MILLIS
+        val chain = rec.chain
+        if (chain.filming) {
+            chain.extend(until)
+            if (!rec.chainHasVoice) {
+                rec.chainHasVoice = true
+                videoControlEvents(rec, setOf(RideEventType.VOICE), null)
+            }
+            return
+        }
+        // Your own video, or the GPS-lost one, already has the camera.
+        if (momentsHub.live.value != null) return
+        val now = frame.timeMillis
+        val pending = rec.planner?.promotePending()
+        val lookBack = maxOf(VOICE_BEFORE_MILLIS, pending?.let { now - it.startMillis } ?: 0L)
+        val ok = momentsHub.submitLive(
+            MomentRequest.StartLive(
+                rec.rideId, MomentSource.EVENT, lookBack.coerceAtMost(MAX_LEAD_IN_MILLIS),
+                pending?.latitude ?: frame.latitude, pending?.longitude ?: frame.longitude, pending?.speedMps ?: frame.speedMps,
+                types = (pending?.types ?: emptySet()) + RideEventType.VOICE,
+                peakValue = pending?.peakValue,
+                anchorMillis = pending?.anchorMillis ?: last,
+            ),
+        )
+        if (!ok) {
+            pending?.let { rec.planner?.restore(it) }
+            return
+        }
+        rec.chainWindow = pending
+        rec.chainHasVoice = true
+        chain.start(now, holdUntil = maxOf(until, pending?.endMillis ?: 0L))
     }
 
     private fun videoControlEvents(rec: Recorder, types: Set<com.ridetrack.telemetry.model.RideEventType>, peak: Double?) {
@@ -542,6 +610,8 @@ class RideSessionManager(
         val planner: MomentPlanner? = null,
         val photos: PhotoScheduler? = null,
         val gpsVideo: GpsLostVideo? = null,
+        /** Moments are on (the camera and mic run): "film when I speak" can work. */
+        val moments: Boolean = false,
     ) {
         val pendingSamples = ArrayList<TelemetrySample>()
         val pendingEvents = ArrayList<RideEvent>()
@@ -552,6 +622,10 @@ class RideSessionManager(
         val chain = TriggeredVideo()
         /** The clip that became [chain]'s video, kept in case filming never starts. */
         var chainWindow: MomentWindow? = null
+        var chainHasVoice = false
+        /** "Start filming when I speak". */
+        val speech = SpeechGate()
+        var lastSpeechHandled = Long.MIN_VALUE
     }
 
     companion object {
@@ -566,5 +640,8 @@ class RideSessionManager(
         private const val GPS_LOST_MAX_STOP_MILLIS = 30_000L
         /** A chained video keeps filming this long after its last event. */
         private const val CHAIN_AFTER_MILLIS = 10_000L
+        /** Speech: film from 10 s before (plus the moment it takes to hear it), until 5 s of quiet. */
+        private const val VOICE_BEFORE_MILLIS = 11_000L
+        private const val VOICE_AFTER_MILLIS = 5_000L
     }
 }

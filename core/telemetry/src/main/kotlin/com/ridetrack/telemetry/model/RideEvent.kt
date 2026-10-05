@@ -19,6 +19,8 @@ enum class RideEventType {
     /** The rider paused or resumed by hand. */
     MANUAL_PAUSE,
     MANUAL_RESUME,
+    /** Moments only: the rider was speaking (a moment's type, not a ride event). */
+    VOICE,
 }
 
 /**

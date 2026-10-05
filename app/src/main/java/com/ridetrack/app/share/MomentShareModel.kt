@@ -62,6 +62,7 @@ data class MomentOverlay(
                     RideEventType.HARD_BRAKE -> "Hard braking"
                     RideEventType.STRONG_ACCELERATION -> "Strong acceleration"
                     RideEventType.SIGNIFICANT_LEAN -> "Deep lean"
+                    RideEventType.VOICE -> "Talking"
                     else -> null
                 }
             }

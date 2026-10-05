@@ -80,6 +80,10 @@ data class MomentSettings(
     val clipSeconds: Int = DEFAULT_CLIP_SECONDS,
     /** Microphone for clips, as MicChoice.encode(); null = Automatic (USB-C, then headset, then phone). */
     val mic: String? = null,
+    /** Start filming when the rider speaks (mic level), until 5 s of silence. */
+    val voice: Boolean = false,
+    /** Mic level (dBFS) that counts as speaking. */
+    val voiceThresholdDb: Int = DEFAULT_VOICE_DB,
 ) {
     val anyTrigger: Boolean get() = braking || acceleration || lean
 
@@ -92,6 +96,9 @@ data class MomentSettings(
         val ACCEL_CHOICES = listOf(0.2, 0.3, 0.4, 0.5, 0.6)
         val LEAN_CHOICES = listOf(15, 20, 25, 30, 35, 40)
         val CLIP_CHOICES = listOf(5, 10, 15)
+        const val DEFAULT_VOICE_DB = -30
+        const val MIN_VOICE_DB = -55
+        const val MAX_VOICE_DB = -10
     }
 }
 
@@ -198,6 +205,8 @@ class SettingsRepository(private val context: Context) {
         val momentsLeanDeg = intPreferencesKey("moments_lean_deg")
         val momentsClipSeconds = intPreferencesKey("moments_clip_seconds")
         val momentsMic = stringPreferencesKey("moments_mic")
+        val momentsVoice = booleanPreferencesKey("moments_voice")
+        val momentsVoiceDb = intPreferencesKey("moments_voice_db")
         val momentShareFields = stringSetPreferencesKey("moment_share_fields")
         val momentShareLayout = stringPreferencesKey("moment_share_layout")
         val safetyCrash = booleanPreferencesKey("safety_crash")
@@ -260,6 +269,8 @@ class SettingsRepository(private val context: Context) {
                 leanDeg = p[Keys.momentsLeanDeg] ?: MomentSettings.DEFAULT_LEAN_DEG,
                 clipSeconds = p[Keys.momentsClipSeconds] ?: MomentSettings.DEFAULT_CLIP_SECONDS,
                 mic = p[Keys.momentsMic],
+                voice = p[Keys.momentsVoice] ?: false,
+                voiceThresholdDb = p[Keys.momentsVoiceDb] ?: MomentSettings.DEFAULT_VOICE_DB,
             ),
             momentShareFields = p[Keys.momentShareFields]
                 ?.mapNotNull { n -> MomentField.entries.firstOrNull { it.name == n } }
@@ -400,5 +411,7 @@ class SettingsRepository(private val context: Context) {
         it[Keys.momentsClipSeconds] = m.clipSeconds
         val mic = m.mic
         if (mic == null) it.remove(Keys.momentsMic) else it[Keys.momentsMic] = mic
+        it[Keys.momentsVoice] = m.voice
+        it[Keys.momentsVoiceDb] = m.voiceThresholdDb
     }
 }

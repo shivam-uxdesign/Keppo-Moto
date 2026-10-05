@@ -464,7 +464,7 @@ class MomentRecorder(
             log.log("mic ${choice.label} not connected: using the phone mic")
         }
         audio = try {
-            AudioEncoder(context, buffer, device, onHeadsetLost = {
+            AudioEncoder(context, buffer, device, onLevel = hub::reportLevel, onHeadsetLost = {
                 scope.launch(Dispatchers.Main) {
                     log.log("headset left call mode: released it (its music can play again); switching mic")
                     headsetSkipped = true
@@ -488,6 +488,7 @@ class MomentRecorder(
         audio?.release()
         audio = null
         audioMic = null
+        hub.clearLevel()
     }
 
     /** The mic the rider wanted, when the phone mic is standing in for it; null when all's well. */

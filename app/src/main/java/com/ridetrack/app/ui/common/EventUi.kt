@@ -10,6 +10,7 @@ import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.GpsFixed
 import androidx.compose.material.icons.outlined.GpsOff
 import androidx.compose.material.icons.outlined.LocalCafe
+import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.PauseCircle
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.SensorsOff
@@ -61,6 +62,7 @@ fun RideEvent.presentation(): EventPresentation {
         RideEventType.BREAK_END -> EventPresentation("Back on the bike", null, Icons.Outlined.PlayCircle, RtColors.Ok)
         RideEventType.MANUAL_PAUSE -> EventPresentation("Paused", null, Icons.Outlined.PauseCircle, RtColors.Warning)
         RideEventType.MANUAL_RESUME -> EventPresentation("Resumed", null, Icons.Outlined.PlayCircle, RtColors.Ok)
+        RideEventType.VOICE -> EventPresentation("Talking", null, Icons.Outlined.RecordVoiceOver, RtColors.Primary)
     }
 }
 

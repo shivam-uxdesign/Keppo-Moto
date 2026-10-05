@@ -65,6 +65,11 @@ data class HudData(
     val nowMillis: Long = 0,
     /** The chosen mic (its name) dropped out; the phone mic is recording instead. */
     val micFallback: String? = null,
+    /** "Start filming when I speak" is on: show the mic level against [voiceThresholdDb]. */
+    val voiceOn: Boolean = false,
+    val micLevelDb: Float? = null,
+    val voiceThresholdDb: Int = 0,
+    val speaking: Boolean = false,
 ) {
     companion object {
         fun from(
