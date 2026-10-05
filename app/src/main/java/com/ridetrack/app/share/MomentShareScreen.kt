@@ -140,6 +140,7 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
 
     init {
         viewModelScope.launch {
+            c.moments.fillTopSpeeds(rideId, c.rides.track(rideId).samples)
             val moment = c.moments.forRide(rideId).firstOrNull { it.id == momentId }
             if (moment == null) {
                 _state.update { it.copy(loading = false) }
@@ -246,6 +247,7 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
         dateText = Format.rideDate(timeMillis).substringBefore(" ·"),
         rideName = rideName,
         point = telemetryAt(samples, timeMillis),
+        topSpeedMps = m.topSpeedMps,
         route = route,
         demo = demo,
     )

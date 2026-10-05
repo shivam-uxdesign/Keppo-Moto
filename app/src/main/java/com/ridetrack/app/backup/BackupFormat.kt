@@ -56,7 +56,8 @@ object BackupFormat {
                         .put("latitude", m.latitude.orNull()).put("longitude", m.longitude.orNull()).put("speedMps", m.speedMps.orNull())
                         .put("peakValue", m.peakValue.orNull()).put("file", m.file).put("thumbFile", m.thumbFile ?: JSONObject.NULL)
                         .put("durationMillis", m.durationMillis.orNull()).put("starred", m.starred)
-                        .put("clipStartMillis", m.clipStartMillis.orNull()).put("source", m.source ?: JSONObject.NULL))
+                        .put("clipStartMillis", m.clipStartMillis.orNull()).put("source", m.source ?: JSONObject.NULL)
+                        .put("topSpeedMps", m.topSpeedMps.orNull()))
                 }
             })
         return o.toString(1)
@@ -89,6 +90,7 @@ object BackupFormat {
                 peakValue = m.doubleOrNull("peakValue"), file = m.getString("file"), thumbFile = m.stringOrNull("thumbFile"),
                 durationMillis = m.longOrNull("durationMillis"), starred = m.optBoolean("starred"),
                 clipStartMillis = m.longOrNull("clipStartMillis"), source = m.stringOrNull("source"),
+                topSpeedMps = m.doubleOrNull("topSpeedMps"),
             )
         }
         return RideBundle(ride, events, moments)

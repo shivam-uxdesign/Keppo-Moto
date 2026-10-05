@@ -248,6 +248,7 @@ class MomentShareRenderer(context: Context) {
 
     private fun valueChips(o: MomentOverlay, on: Set<MomentField>): List<Triple<String, String, Int>> = buildList {
         if (o.shows(MomentField.SPEED, on)) add(Triple(Format.speedKmh(o.speedMps), "km/h", WHITE))
+        if (o.shows(MomentField.TOP_SPEED, on)) add(Triple(Format.speedKmh(o.topSpeedMps), "top km/h", WHITE))
         if (o.shows(MomentField.LEAN, on)) add(Triple(leanText(o.lean), "", if ((o.lean ?: 0.0) < 0) LEFT else RIGHT))
         if (o.shows(MomentField.G_FORCE, on)) add(Triple(gText(o.gForce), "G", if ((o.gForce ?: 0.0) < 0) BRAKE else ACCEL))
     }

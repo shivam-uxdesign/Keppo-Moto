@@ -13,6 +13,7 @@ import com.ridetrack.app.data.toModel
 import com.ridetrack.app.share.ShareCardData
 import com.ridetrack.app.share.ShareCardRenderer
 import com.ridetrack.app.share.RouteImages
+import com.ridetrack.app.moments.MomentRepository
 import kotlinx.coroutines.flow.first
 import java.io.File
 
@@ -66,6 +67,8 @@ class JournalSource(
 
     /** `ride.json`, regenerated when the ride or its moments changed. */
     suspend fun rideJson(ride: RideEntity): File {
+        // Clips get their top speed from the samples the first time they're written out.
+        MomentRepository(context, db.momentDao()).fillTopSpeeds(ride.id, db.rideDao().samples(ride.id).map { it.toModel() })
         val moments = db.momentDao().forRide(ride.id)
         val bike = db.bikeDao().get(ride.bikeId)
         val text = BackupFormat.rideJson(RideBundle(ride, db.rideDao().events(ride.id), moments), bike?.let { "${it.make} ${it.model}".trim() })

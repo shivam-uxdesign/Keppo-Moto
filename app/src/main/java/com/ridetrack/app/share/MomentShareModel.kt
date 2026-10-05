@@ -10,6 +10,7 @@ enum class MomentField(val label: String) {
     TIME("Time"),
     MAP("Map"),
     SPEED("Speed"),
+    TOP_SPEED("Top speed"),
     LEAN("Lean"),
     G_FORCE("G-force"),
     BRAND("Ride name"),
@@ -40,6 +41,8 @@ data class MomentOverlay(
     /** Route of the whole ride, for the mini-map. */
     val route: List<Pair<Double, Double>>,
     val demo: Boolean,
+    /** Clips: the fastest the bike went while it was filmed (m/s). */
+    val topSpeedMps: Double? = null,
 ) {
     val speedMps: Double? get() = point?.speedMps
     val leanDeg: Double? get() = point?.leanDeg
@@ -74,6 +77,7 @@ data class MomentOverlay(
         MomentField.TIME -> true
         MomentField.MAP -> route.size >= 2 && point?.latitude != null && point.longitude != null
         MomentField.SPEED -> speedMps != null
+        MomentField.TOP_SPEED -> topSpeedMps != null
         MomentField.LEAN -> lean != null
         MomentField.G_FORCE -> gForce != null
         MomentField.BRAND -> true

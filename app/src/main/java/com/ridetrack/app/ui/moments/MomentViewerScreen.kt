@@ -107,7 +107,11 @@ class MomentViewerViewModel(private val c: AppContainer, rideId: String) : ViewM
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ViewerState())
 
     init {
-        viewModelScope.launch { samples.value = c.rides.track(rideId).samples }
+        viewModelScope.launch {
+            val s = c.rides.track(rideId).samples
+            samples.value = s
+            c.moments.fillTopSpeeds(rideId, s)
+        }
     }
 
     fun toggleStar(m: Moment) {
@@ -254,6 +258,14 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                 ),
                 style = RtType.metricM,
             )
+            if (clip) current.topSpeedMps?.let { top ->
+                Text(
+                    "Top speed in this clip · ${Format.speedWithUnit(top)}",
+                    style = RtType.caption,
+                    color = RtColors.TextSecondary,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
             if (clip) {
                 PlayerControls(
                     playing = isPlaying,

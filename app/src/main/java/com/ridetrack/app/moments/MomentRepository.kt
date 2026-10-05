@@ -4,6 +4,7 @@ import android.content.Context
 import com.ridetrack.app.data.db.MomentDao
 import com.ridetrack.app.data.db.MomentEntity
 import com.ridetrack.telemetry.model.RideEventType
+import com.ridetrack.telemetry.model.TelemetrySample
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -35,6 +36,8 @@ data class Moment(
     /** The part to share, in ms from the clip's start; null = the whole clip. */
     val trimStartMillis: Long? = null,
     val trimEndMillis: Long? = null,
+    /** Clips: the fastest the bike went while it was filmed (m/s). */
+    val topSpeedMps: Double? = null,
 ) {
     /** When the clip's first frame was filmed; estimated for clips saved before this was stored. */
     val videoStartMillis: Long get() = clipStartMillis ?: (timeMillis - 10_000)
@@ -93,6 +96,26 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
 
     suspend fun setStarred(id: String, starred: Boolean) = dao.setStarred(id, starred)
 
+    /**
+     * Works out and stores the top speed of each clip of [rideId] that doesn't have one yet,
+     * from the ride's [samples]. Returns how many it filled. Cheap when they're all done.
+     */
+    suspend fun fillTopSpeeds(rideId: String, samples: List<TelemetrySample>): Int {
+        if (samples.isEmpty()) return 0
+        var filled = 0
+        dao.forRide(rideId).filter { it.kind == MomentKind.CLIP.name && it.topSpeedMps == null }.forEach { e ->
+            val start = e.clipStartMillis ?: (e.timeMillis - 10_000)
+            val end = start + (e.durationMillis ?: 20_000)
+            // Only once the ride has been recorded past the clip's end.
+            if (samples.last().timeMillis < end) return@forEach
+            MomentTopSpeed.of(samples, start, end)?.let {
+                dao.setTopSpeed(e.id, it)
+                filled++
+            }
+        }
+        return filled
+    }
+
     /** Remembers the part of a clip to share; null, null = the whole clip. */
     suspend fun setTrim(id: String, startMillis: Long?, endMillis: Long?) = dao.setTrim(id, startMillis, endMillis)
 
@@ -120,6 +143,7 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
             source = MomentSource.entries.firstOrNull { it.name == source } ?: MomentSource.EVENT,
             trimStartMillis = trimStartMillis,
             trimEndMillis = trimEndMillis,
+            topSpeedMps = topSpeedMps,
         )
     }
 }

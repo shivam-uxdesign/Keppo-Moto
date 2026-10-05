@@ -133,4 +133,6 @@ data class MomentEntity(
     /** The part to share (ms into the clip); null = the whole clip. The file is never cut. */
     val trimStartMillis: Long? = null,
     val trimEndMillis: Long? = null,
+    /** Clips: the fastest the bike went while it was filmed (m/s); null until worked out. */
+    val topSpeedMps: Double? = null,
 )

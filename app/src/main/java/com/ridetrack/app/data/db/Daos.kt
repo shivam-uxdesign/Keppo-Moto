@@ -154,6 +154,9 @@ interface MomentDao {
     @Query("UPDATE moments SET trimStartMillis = :start, trimEndMillis = :end WHERE id = :id")
     suspend fun setTrim(id: String, start: Long?, end: Long?)
 
+    @Query("UPDATE moments SET topSpeedMps = :speed WHERE id = :id")
+    suspend fun setTopSpeed(id: String, speed: Double)
+
     @Query("DELETE FROM moments WHERE id = :id")
     suspend fun delete(id: String)
 
