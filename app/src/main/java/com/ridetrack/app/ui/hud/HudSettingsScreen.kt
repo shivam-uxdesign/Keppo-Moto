@@ -52,6 +52,12 @@ import com.ridetrack.app.data.HudLayout
 import com.ridetrack.app.data.HudSettings
 import com.ridetrack.app.data.HudSize
 import com.ridetrack.app.data.HudTheme
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import com.ridetrack.app.data.VoiceSensitivity
 import com.ridetrack.app.hud.HudData
 import com.ridetrack.app.hud.HudStatus
 import com.ridetrack.app.hud.OverlayPermission
@@ -72,6 +78,10 @@ import kotlin.math.roundToInt
 class HudSettingsViewModel(private val c: AppContainer) : ViewModel() {
     val hud: StateFlow<HudSettings> = c.settings.settings.map { it.hud }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HudSettings())
+
+    /** "Film when I speak" and its sensitivity: the preview shows the mic meter when it's on. */
+    val voice: StateFlow<Pair<Boolean, VoiceSensitivity>> = c.settings.settings.map { (it.moments.enabled && it.moments.voice) to it.moments.voiceSensitivity }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false to VoiceSensitivity.MEDIUM)
 
     fun setEnabled(v: Boolean) { viewModelScope.launch { c.settings.setHudEnabled(v) } }
     fun setLayout(v: HudLayout) { viewModelScope.launch { c.settings.setHudLayout(v) } }
@@ -95,6 +105,17 @@ private val previewData = HudData(
 fun HudSettingsScreen(onBack: () -> Unit) {
     val vm = appViewModel { HudSettingsViewModel(it) }
     val s by vm.hud.collectAsStateWithLifecycle()
+    val voice by vm.voice.collectAsStateWithLifecycle()
+    // A sample mic level that drifts with the "wind", then rises over the margin as if talking.
+    val phase by rememberInfiniteTransition(label = "mic").animateFloat(
+        0f, 1f, infiniteRepeatable(tween(6_000, easing = LinearEasing)), label = "micPhase",
+    )
+    val sampleLevel = if (phase < 0.55f) 3f + 3f * kotlin.math.sin(phase * 40f) else voice.second.marginDb + 4f + 2f * kotlin.math.sin(phase * 50f)
+    val preview = if (voice.first) {
+        previewData.copy(voiceOn = true, micLevelDb = sampleLevel, voiceMarginDb = voice.second.marginDb, speaking = phase >= 0.65f)
+    } else {
+        previewData
+    }
     val context = LocalContext.current
     var granted by remember { mutableStateOf(OverlayPermission.isGranted(context)) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { granted = OverlayPermission.isGranted(context) }
@@ -112,13 +133,13 @@ fun HudSettingsScreen(onBack: () -> Unit) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(if (s.layout == HudLayout.MINIMAL) 196.dp else 260.dp)
+                .height((if (s.layout == HudLayout.MINIMAL) 196.dp else 260.dp) + if (voice.first) 24.dp else 0.dp)
                 .background(RtColors.Surface, RoundedCornerShape(RtDimens.cardRadius))
                 .border(1.dp, RtColors.SurfaceRaised, RoundedCornerShape(RtDimens.cardRadius)),
         ) {
             Label("Preview", Modifier.align(Alignment.BottomStart).padding(16.dp), color = RtColors.TextTertiary)
             Box(Modifier.align(Alignment.TopEnd).padding(16.dp)) {
-                ScaledBy(minOf(s.size.scale, 1f)) { HudCard(previewData, s) }
+                ScaledBy(minOf(s.size.scale, 1f)) { HudCard(preview, s) }
             }
         }
         Spacer(Modifier.height(RtDimens.cardSpacing))
