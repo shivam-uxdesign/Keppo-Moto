@@ -35,3 +35,12 @@ Already built and pushed, not yet in an APK: the compact Last ride card on Home 
   - "All bikes" is the default.
   - Hidden with only one bike.
 - **Tests:** default colour by order; migration; backup round trip.
+
+## 3. Pop-up HUD settings: mic meter in the preview
+
+- **Bug:** the preview on Profile › Pop-up HUD uses fixed sample data (`previewData` in `HudSettingsScreen`) with `voiceOn = false`. So the mic level meter never shows there, even with "Start filming when I speak" on. The real pop-up during a ride is fine.
+- **Fix:**
+  - When `settings.moments.voice` is on, the preview passes `voiceOn = true`, the rider's own `voiceThresholdDb`, and a sample `micLevelDb`.
+  - The sample level moves gently (a slow loop), sometimes crossing the threshold so `speaking` lights the bar.
+  - When voice filming is off, the preview stays as it is now.
+- Settings screen only; no change to the pop-up itself.
