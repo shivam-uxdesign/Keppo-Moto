@@ -84,6 +84,10 @@ data class MomentSettings(
     val voice: Boolean = false,
     /** How far above the background noise counts as speaking. */
     val voiceSensitivity: VoiceSensitivity = VoiceSensitivity.STRICT,
+    /** Write down what the rider says in talking clips (Gemini, after the ride). */
+    val transcribe: Boolean = false,
+    /** Transcribe only on Wi-Fi. */
+    val transcribeWifiOnly: Boolean = true,
 ) {
     val anyTrigger: Boolean get() = braking || acceleration || lean
 
@@ -224,6 +228,8 @@ class SettingsRepository(private val context: Context) {
         val momentsMic = stringPreferencesKey("moments_mic")
         val momentsVoice = booleanPreferencesKey("moments_voice")
         val momentsVoiceSensitivity = stringPreferencesKey("moments_voice_sensitivity")
+        val momentsTranscribe = booleanPreferencesKey("moments_transcribe")
+        val momentsTranscribeWifi = booleanPreferencesKey("moments_transcribe_wifi")
         val momentShareFields = stringSetPreferencesKey("moment_share_fields")
         val momentShareLayout = stringPreferencesKey("moment_share_layout")
         val safetyCrash = booleanPreferencesKey("safety_crash")
@@ -290,6 +296,8 @@ class SettingsRepository(private val context: Context) {
                 mic = p[Keys.momentsMic],
                 voice = p[Keys.momentsVoice] ?: false,
                 voiceSensitivity = VoiceSensitivity.of(p[Keys.momentsVoiceSensitivity]),
+                transcribe = p[Keys.momentsTranscribe] ?: false,
+                transcribeWifiOnly = p[Keys.momentsTranscribeWifi] ?: true,
             ),
             momentShareFields = p[Keys.momentShareFields]
                 ?.mapNotNull { n -> MomentField.entries.firstOrNull { it.name == n } }
@@ -437,5 +445,7 @@ class SettingsRepository(private val context: Context) {
         if (mic == null) it.remove(Keys.momentsMic) else it[Keys.momentsMic] = mic
         it[Keys.momentsVoice] = m.voice
         it[Keys.momentsVoiceSensitivity] = m.voiceSensitivity.name
+        it[Keys.momentsTranscribe] = m.transcribe
+        it[Keys.momentsTranscribeWifi] = m.transcribeWifiOnly
     }
 }

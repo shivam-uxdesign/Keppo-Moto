@@ -38,6 +38,8 @@ data class Moment(
     val trimEndMillis: Long? = null,
     /** Clips: the fastest the bike went while it was filmed (m/s). */
     val topSpeedMps: Double? = null,
+    /** What the rider said (Hinglish in English letters); "" = no clear speech; null = not yet. */
+    val transcript: String? = null,
 ) {
     /** When the clip's first frame was filmed; estimated for clips saved before this was stored. */
     val videoStartMillis: Long get() = clipStartMillis ?: (timeMillis - 10_000)
@@ -100,6 +102,11 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
      * Works out and stores the top speed of each clip of [rideId] that doesn't have one yet,
      * from the ride's [samples]. Returns how many it filled. Cheap when they're all done.
      */
+    /** Talking clips waiting for a transcript. */
+    suspend fun untranscribed(): List<Moment> = dao.untranscribed().map { it.toModel() }
+
+    suspend fun setTranscript(id: String, text: String) = dao.setTranscript(id, text)
+
     suspend fun fillTopSpeeds(rideId: String, samples: List<TelemetrySample>): Int {
         if (samples.isEmpty()) return 0
         var filled = 0
@@ -144,6 +151,7 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
             trimStartMillis = trimStartMillis,
             trimEndMillis = trimEndMillis,
             topSpeedMps = topSpeedMps,
+            transcript = transcript,
         )
     }
 }

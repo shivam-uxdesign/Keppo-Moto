@@ -188,3 +188,10 @@ If Keppo Moto isn't installed, the journal can offer "Sync from Google Drive": i
 - `moments[].types` can include `VOICE`: a video filmed because the rider was speaking ("Start filming when I speak"). It can be combined with event types, e.g. `"HARD_BRAKE,VOICE"`.
 - Event moments chained into one longer video keep `"source": null`. Their `durationMillis` can be longer than before (minutes, not seconds). `timeMillis` is the first event; `clipStartMillis` is the first frame.
 - `moments[].topSpeedMps`: for clips, the fastest the bike went while the clip was filmed (m/s). `null` until Keppo Moto has worked it out (older clips get it the next time the ride is read).
+
+## Transcripts (keppo.ride v1 additions)
+
+- `moments[].transcript`: what the rider said in a talking clip (`types` includes `VOICE`), written in English letters (Hinglish as it's texted, e.g. "bhai ye road mast hai"). Made after the ride with the rider's own Gemini key, if they turned it on.
+  - `""` means no clear speech.
+  - `null` (or missing) means not transcribed (yet).
+- When transcripts arrive, Keppo Moto sends `RIDE_SAVED` with the `rideId` (and `ride.json` changes), so the journal can add them.

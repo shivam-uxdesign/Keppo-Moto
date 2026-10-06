@@ -258,6 +258,15 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                 ),
                 style = RtType.metricM,
             )
+            // What the rider said (Gemini), in quotes.
+            if (clip) current.transcript?.takeIf { it.isNotBlank() }?.let { said ->
+                Text(
+                    "“$said”",
+                    style = RtType.body,
+                    color = RtColors.TextPrimary,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
             if (clip) current.topSpeedMps?.let { top ->
                 Text(
                     "Top speed in this clip · ${Format.speedWithUnit(top)}",

@@ -136,4 +136,6 @@ data class MomentEntity(
     val trimEndMillis: Long? = null,
     /** Clips: the fastest the bike went while it was filmed (m/s); null until worked out. */
     val topSpeedMps: Double? = null,
+    /** What the rider said in the clip (Hinglish in English letters); "" = no clear speech; null = not transcribed. */
+    val transcript: String? = null,
 )

@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -145,6 +147,7 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel, showHeader:
                 { vm.setMoments(m.copy(voice = it)) },
             )
             if (m.voice) VoiceLevel(m.voiceSensitivity, m.mic, s.rideActive) { vm.setMoments(m.copy(voiceSensitivity = it)) }
+            if (m.voice) TranscribeSettings(m) { vm.setMoments(it) }
             Spacer(Modifier.height(RtDimens.sm))
             Label("Video quality")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
@@ -408,6 +411,62 @@ private fun VoiceLevel(sensitivity: VoiceSensitivity, mic: String?, rideActive: 
             "Strict needs clear, firm talking; Normal also hears quieter speech. Either way it has to sound like a voice, so horns, engines and wind don't film, and it keeps up with the wind as your speed changes.",
             style = RtType.caption,
             color = RtColors.TextTertiary,
+        )
+    }
+}
+
+/**
+ * "Write down what I say": talking clips are transcribed with the rider's own Gemini key after
+ * the ride. The key stays on this phone.
+ */
+@Composable
+private fun TranscribeSettings(m: MomentSettings, onChange: (MomentSettings) -> Unit) {
+    val context = LocalContext.current
+    val container = com.ridetrack.app.ui.appContainer()
+    val t = container.transcripts
+    val status by t.status.collectAsStateWithLifecycle()
+    var key by remember { mutableStateOf(t.apiKey.orEmpty()) }
+    ToggleRow(
+        "Write down what I say",
+        "After the ride, what you say in talking clips is written out in Hinglish (English letters) with Google's Gemini, using your free key. " +
+            "The clips' sound is sent to Google; on the free tier Google may use it to improve its products.",
+        m.transcribe,
+        { on ->
+            onChange(m.copy(transcribe = on))
+            if (on) t.schedule(m.transcribeWifiOnly)
+        },
+    )
+    if (!m.transcribe) return
+    Column(Modifier.fillMaxWidth().padding(bottom = RtDimens.xs), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        OutlinedTextField(
+            value = key,
+            onValueChange = { key = it.trim() },
+            label = { Text("Gemini API key") },
+            singleLine = true,
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
+            Pick("Save key", false, key.isNotBlank() && key != t.apiKey.orEmpty()) {
+                t.apiKey = key
+                t.schedule(m.transcribeWifiOnly)
+            }
+            Pick("Get a free key", false, true) {
+                runCatching {
+                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://aistudio.google.com/apikey")))
+                }
+            }
+        }
+        ToggleRow("Only on Wi-Fi", "Uses no mobile data.", m.transcribeWifiOnly, { onChange(m.copy(transcribeWifiOnly = it)) })
+        Text(
+            when {
+                t.apiKey == null -> "Add your key to start."
+                status.lastError != null -> status.lastError!!
+                status.waiting > 0 -> "${status.waiting} clips waiting to be written out."
+                else -> "Talking clips are written out after each ride."
+            },
+            style = RtType.caption,
+            color = if (status.lastError != null) RtColors.Warning else RtColors.TextTertiary,
         )
     }
 }

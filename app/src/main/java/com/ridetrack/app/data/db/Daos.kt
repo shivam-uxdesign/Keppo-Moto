@@ -160,6 +160,13 @@ interface MomentDao {
     @Query("UPDATE moments SET topSpeedMps = :speed WHERE id = :id")
     suspend fun setTopSpeed(id: String, speed: Double)
 
+    /** Talking clips not yet transcribed, newest first. */
+    @Query("SELECT * FROM moments WHERE kind = 'CLIP' AND transcript IS NULL AND deletedAtMillis IS NULL AND types LIKE '%VOICE%' ORDER BY timeMillis DESC")
+    suspend fun untranscribed(): List<MomentEntity>
+
+    @Query("UPDATE moments SET transcript = :text WHERE id = :id")
+    suspend fun setTranscript(id: String, text: String)
+
     @Query("DELETE FROM moments WHERE id = :id")
     suspend fun delete(id: String)
 

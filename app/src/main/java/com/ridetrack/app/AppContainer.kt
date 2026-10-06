@@ -17,6 +17,7 @@ import com.ridetrack.app.hud.HudController
 import com.ridetrack.app.moments.MomentRepository
 import com.ridetrack.app.moments.MomentsHub
 import com.ridetrack.app.ride.BatteryWatch
+import com.ridetrack.app.transcribe.Transcripts
 import com.ridetrack.app.ride.RideContinuation
 import com.ridetrack.app.ride.RideSessionManager
 import com.ridetrack.app.safety.CrashAlerts
@@ -54,9 +55,21 @@ class AppContainer(context: Context) {
         scope = appScope,
         onRideSaved = { id ->
             backUpSoon()
+            transcribeSoon()
             appScope.launch { journal.onRideSaved(id) }
         },
     )
+
+    /** "Write down what I say": Gemini transcripts of talking clips. */
+    val transcripts = Transcripts(appContext)
+
+    /** Transcribe new talking clips soon, if it's on. */
+    fun transcribeSoon() {
+        appScope.launch {
+            val m = settings.settings.first().moments
+            if (m.transcribe) transcripts.schedule(m.transcribeWifiOnly)
+        }
+    }
 
     /** The battery during a ride: time left, and when to charge. */
     val batteryWatch = BatteryWatch(appContext, battery, moments)
