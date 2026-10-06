@@ -14,3 +14,4 @@ captures/
 
 # The shared debug signing key is intentionally tracked (debug builds only).
 !app/signing/debug.keystore
+keppo-moto-*.zip
