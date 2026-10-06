@@ -83,6 +83,11 @@ class MomentRecorder(
     /** Formats of the stream that's in the buffer; outlive the encoder that made them. */
     @Volatile private var videoFormat: MediaFormat? = null
     private var audio: AudioEncoder? = null
+    /** Silero, loaded once per ride when "Film when I speak" is on. */
+    private val vad: SileroVad? by lazy {
+        if (!settings.voice) null
+        else SileroVad.load(context).also { log.log(if (it != null) "voice detector ready" else "voice detector unavailable: loudness only") }
+    }
     /** The mic [audio] records from. */
     private var audioMic: MicChoice? = null
     /** The headset dropped call mode: skip it until the camera next restarts (no retry loop). */
@@ -237,6 +242,7 @@ class MomentRecorder(
             micCheck?.cancel()
         }
         stopAudio()
+        if (settings.voice) vad?.close()
         analysisExecutor.shutdown()
         encoder?.release()
         encoder = null
@@ -469,7 +475,7 @@ class MomentRecorder(
             log.log("mic ${choice.label} not connected: using the phone mic")
         }
         audio = try {
-            AudioEncoder(context, buffer, device, onLevel = hub::reportLevel, onHeadsetLost = {
+            AudioEncoder(context, buffer, device, onLevel = hub::reportLevel, vad = vad, onHeadsetLost = {
                 scope.launch(Dispatchers.Main) {
                     log.log("headset left call mode: released it (its music can play again); switching mic")
                     headsetSkipped = true

@@ -83,7 +83,7 @@ data class MomentSettings(
     /** Start filming when the rider speaks (mic level), until 5 s of silence. */
     val voice: Boolean = false,
     /** How far above the background noise counts as speaking. */
-    val voiceSensitivity: VoiceSensitivity = VoiceSensitivity.MEDIUM,
+    val voiceSensitivity: VoiceSensitivity = VoiceSensitivity.STRICT,
 ) {
     val anyTrigger: Boolean get() = braking || acceleration || lean
 
@@ -99,9 +99,20 @@ data class MomentSettings(
     }
 }
 
-/** "Film when I speak": how many dB above the background noise (wind, engine) counts as talking. */
+/**
+ * "Film when I speak": how many dB above the background noise (wind, engine) talking has to
+ * be. On a bike anything looser lets the engine through, so these are the only two.
+ */
 enum class VoiceSensitivity(val label: String, val marginDb: Float) {
-    LOW("Low", 12f), MEDIUM("Medium", 9f), HIGH("High", 6f),
+    NORMAL("Normal", 12f), STRICT("Strict", 16f);
+
+    companion object {
+        /** Stored names, including the old Low (= Normal) and Medium / High (now Strict). */
+        fun of(name: String?): VoiceSensitivity = when (name) {
+            NORMAL.name, "LOW" -> NORMAL
+            else -> STRICT
+        }
+    }
 }
 
 /** Floating pop-up HUD shown over other apps during a ride. */
@@ -278,7 +289,7 @@ class SettingsRepository(private val context: Context) {
                 clipSeconds = p[Keys.momentsClipSeconds] ?: MomentSettings.DEFAULT_CLIP_SECONDS,
                 mic = p[Keys.momentsMic],
                 voice = p[Keys.momentsVoice] ?: false,
-                voiceSensitivity = enumOf(p[Keys.momentsVoiceSensitivity], VoiceSensitivity.MEDIUM),
+                voiceSensitivity = VoiceSensitivity.of(p[Keys.momentsVoiceSensitivity]),
             ),
             momentShareFields = p[Keys.momentShareFields]
                 ?.mapNotNull { n -> MomentField.entries.firstOrNull { it.name == n } }

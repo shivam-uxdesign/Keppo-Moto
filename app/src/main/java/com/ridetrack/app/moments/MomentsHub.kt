@@ -195,10 +195,10 @@ class MomentsHub {
     private val levels = ArrayList<VoiceChunk>()
 
     /** From the audio thread: one chunk's level. The session drains them for speech detection. */
-    fun reportLevel(timeMillis: Long, levelDb: Float, chunkMillis: Long) {
+    fun reportLevel(timeMillis: Long, levelDb: Float, chunkMillis: Long, voice: Float) {
         val chunk = synchronized(levels) {
             val bg = background.onLevel(timeMillis, levelDb)
-            VoiceChunk(timeMillis, levelDb, bg, chunkMillis).also {
+            VoiceChunk(timeMillis, levelDb, bg, chunkMillis, voice).also {
                 levels += it
                 if (levels.size > MAX_LEVELS) levels.subList(0, levels.size - MAX_LEVELS).clear()
             }
@@ -276,7 +276,7 @@ class MomentsHub {
     }
 }
 
-/** One audio chunk: its level in the voice range and the background then (dBFS). */
-data class VoiceChunk(val timeMillis: Long, val levelDb: Float, val backgroundDb: Float, val chunkMillis: Long) {
+/** One audio chunk: its level in the voice range and the background then (dBFS), and how voice-like it is (0..1). */
+data class VoiceChunk(val timeMillis: Long, val levelDb: Float, val backgroundDb: Float, val chunkMillis: Long, val voice: Float = 1f) {
     val aboveDb: Float get() = levelDb - backgroundDb
 }

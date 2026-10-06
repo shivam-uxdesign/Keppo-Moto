@@ -1,7 +1,8 @@
 package com.ridetrack.telemetry.moments
 
 /**
- * "The rider is speaking", from how far each audio chunk is above the background (dB).
+ * "The rider is speaking", from how far each audio chunk is above the background (dB) and how
+ * voice-like it is (a horn or an engine can be as loud and as long as talking).
  *
  * Starts after [startMillis] of sustained sound: at least [startFraction] of that time at or
  * above the margin, with no gap longer than [maxGapMillis] (words have small gaps; a breath,
@@ -30,8 +31,9 @@ class SpeechGate(
     var sustainedMillis: Long = 0
         private set
 
-    fun onLevel(timeMillis: Long, aboveDb: Float, chunkMillis: Long, marginDb: Float): Boolean {
-        val loud = aboveDb >= marginDb
+    /** [voice]: how voice-like the chunk is (0..1, from Silero); 1 when there's no detector. */
+    fun onLevel(timeMillis: Long, aboveDb: Float, chunkMillis: Long, marginDb: Float, voice: Float = 1f): Boolean {
+        val loud = aboveDb >= marginDb && voice >= VOICE_MIN
         recent.addLast(Triple(timeMillis, chunkMillis, loud))
         while (recent.isNotEmpty() && timeMillis - recent.first().first >= startMillis) recent.removeFirst()
         val last = lastLoud
@@ -53,6 +55,11 @@ class SpeechGate(
         // The silence timer runs from the last loud chunk, not from when the window empties.
         if (speaking && loud) lastSpeechMillis = timeMillis
         return speaking
+    }
+
+    companion object {
+        /** Silero's own default: at or above this, the chunk counts as a voice. */
+        const val VOICE_MIN = 0.5f
     }
 
     fun reset() {

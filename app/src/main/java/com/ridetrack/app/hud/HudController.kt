@@ -47,7 +47,7 @@ class HudController(
     /** A short note under the buttons (why a video couldn't start), with when it was set. */
     private val note = MutableStateFlow<Pair<String, Long>?>(null)
     /** "Start filming when I speak" and its sensitivity, for the pop-up's level meter. */
-    private val voice = MutableStateFlow(false to VoiceSensitivity.MEDIUM)
+    private val voice = MutableStateFlow(false to VoiceSensitivity.STRICT)
 
     private val actions: HudControlActions = object : HudControlActions {
         override fun setLayout(layout: HudLayout) { scope.launch { settings.setHudLayout(layout) } }

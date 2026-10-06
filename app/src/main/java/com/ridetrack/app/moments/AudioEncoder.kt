@@ -16,6 +16,7 @@ import android.util.Log
 import com.ridetrack.telemetry.moments.EncodedSample
 import com.ridetrack.telemetry.moments.RollingBuffer
 import com.ridetrack.telemetry.moments.VoiceBand
+import com.ridetrack.telemetry.moments.VoiceWindows
 
 /**
  * Microphone → AAC into the [RollingBuffer]. Runs its own thread until [release].
@@ -31,9 +32,13 @@ class AudioEncoder(
     private val buffer: RollingBuffer,
     private val device: AudioDeviceInfo? = null,
     private val onHeadsetLost: () -> Unit = {},
-    /** Each chunk's loudness: (wall time, dBFS in the voice range, chunk length in ms). */
-    private val onLevel: ((Long, Float, Long) -> Unit)? = null,
+    /** Each chunk: (wall time, dBFS in the voice range, chunk length in ms, voice probability 0..1). */
+    private val onLevel: ((Long, Float, Long, Float) -> Unit)? = null,
+    /** Silero, for "Film when I speak"; null = no voice check (probability reads 1). */
+    private val vad: SileroVad? = null,
 ) {
+    private val windows = VoiceWindows(SAMPLE_RATE)
+    private var lastVoice = 0f
     private val voiceBand = VoiceBand(SAMPLE_RATE)
     private val audioManager = context.getSystemService<AudioManager>()
     private val bluetooth = device != null && Microphones.typeOf(device) == MicType.BLUETOOTH
@@ -99,7 +104,7 @@ class AudioEncoder(
                     val nowMicros = System.nanoTime() / 1000
                     if (read > 0) onLevel?.let { report ->
                         val samples = read / 2
-                        report((nowMicros + offsetMicros) / 1000, levelDb(inBuf, samples), samples * 1000L / SAMPLE_RATE)
+                        report((nowMicros + offsetMicros) / 1000, levelDb(inBuf, samples), samples * 1000L / SAMPLE_RATE, voice(inBuf, samples))
                     }
                     // pts = when the first sample of this chunk was captured.
                     val pts = nowMicros - (read.coerceAtLeast(0) / 2) * 1_000_000L / SAMPLE_RATE
@@ -127,6 +132,17 @@ class AudioEncoder(
         } catch (e: Exception) {
             Log.e(TAG, "Audio capture stopped", e)
         }
+    }
+
+    /** The highest voice probability among the 32 ms windows this chunk completed. */
+    private fun voice(buf: java.nio.ByteBuffer, samples: Int): Float {
+        val v = vad ?: return 1f
+        val b = buf.duplicate().order(java.nio.ByteOrder.nativeOrder())
+        var best = -1f
+        windows.feed(samples, { i -> b.getShort(i * 2) / 32768.0 }) { w -> best = maxOf(best, v.probability(w)) }
+        // A chunk too short to finish a window keeps the last reading.
+        if (best >= 0f) lastVoice = best
+        return lastVoice
     }
 
     /** Loudness of [samples] 16-bit samples at the start of [buf], in the voice range (dBFS). */

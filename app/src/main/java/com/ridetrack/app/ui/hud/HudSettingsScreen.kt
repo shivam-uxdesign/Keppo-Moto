@@ -81,7 +81,7 @@ class HudSettingsViewModel(private val c: AppContainer) : ViewModel() {
 
     /** "Film when I speak" and its sensitivity: the preview shows the mic meter when it's on. */
     val voice: StateFlow<Pair<Boolean, VoiceSensitivity>> = c.settings.settings.map { (it.moments.enabled && it.moments.voice) to it.moments.voiceSensitivity }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false to VoiceSensitivity.MEDIUM)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false to VoiceSensitivity.STRICT)
 
     fun setEnabled(v: Boolean) { viewModelScope.launch { c.settings.setHudEnabled(v) } }
     fun setLayout(v: HudLayout) { viewModelScope.launch { c.settings.setHudLayout(v) } }

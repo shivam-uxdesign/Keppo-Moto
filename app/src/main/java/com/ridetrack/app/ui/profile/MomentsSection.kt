@@ -53,6 +53,7 @@ import com.ridetrack.app.data.VideoQuality
 import com.ridetrack.app.data.VoiceSensitivity
 import com.ridetrack.telemetry.moments.BackgroundLevel
 import com.ridetrack.telemetry.moments.SpeechGate
+import com.ridetrack.app.moments.SileroVad
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
@@ -139,7 +140,7 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel, showHeader:
             // Tunable during a ride: watch the pop-up's meter and adjust.
             ToggleRow(
                 "Start filming when I speak",
-                "Films from 10 s before you start talking until 5 s after you stop. Starts after about 1.5 s of talking, so a breath or a horn tap doesn't set it off. Works stopped or paused too.",
+                "Films from 10 s before you start talking until 5 s after you stop. Starts after about 1.5 s of talking, and only for a voice: horns, engines and breathing don't set it off. Works stopped or paused too.",
                 m.voice,
                 { vm.setMoments(m.copy(voice = it)) },
             )
@@ -348,12 +349,13 @@ private fun VoiceLevel(sensitivity: VoiceSensitivity, mic: String?, rideActive: 
     DisposableEffect(rideActive, mic, canListen) {
         val background = BackgroundLevel()
         val gate = SpeechGate()
+        val vad = if (!rideActive && canListen) SileroVad.load(context) else null
         val meter = if (!rideActive && canListen) {
             runCatching {
                 val device = Microphones.resolve(context, MicChoice.decode(mic))
-                AudioEncoder(context, RollingBuffer(2_000_000L), device, onLevel = { t, db, len ->
+                AudioEncoder(context, RollingBuffer(2_000_000L), device, vad = vad, onLevel = { t, db, len, voice ->
                     val above = db - background.onLevel(t, db)
-                    localSpeaking = gate.onLevel(t, above, len, margin)
+                    localSpeaking = gate.onLevel(t, above, len, margin, voice)
                     localLevel = above
                 })
             }.getOrNull()
@@ -362,6 +364,7 @@ private fun VoiceLevel(sensitivity: VoiceSensitivity, mic: String?, rideActive: 
         }
         onDispose {
             meter?.release()
+            vad?.close()
             localLevel = null
             localSpeaking = false
         }
@@ -402,7 +405,7 @@ private fun VoiceLevel(sensitivity: VoiceSensitivity, mic: String?, rideActive: 
             VoiceSensitivity.entries.forEach { v -> Pick(v.label, sensitivity == v, true) { onSensitivity(v) } }
         }
         Text(
-            "Low needs clear, firm talking; High hears quieter speech but more of the wind. Keeps up with the wind as your speed changes.",
+            "Strict needs clear, firm talking; Normal also hears quieter speech. Either way it has to sound like a voice, so horns, engines and wind don't film, and it keeps up with the wind as your speed changes.",
             style = RtType.caption,
             color = RtColors.TextTertiary,
         )

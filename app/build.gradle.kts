@@ -121,6 +121,8 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.maplibre.android)
     implementation(libs.androidx.camera.core)
+    // Silero voice detector for "Film when I speak".
+    implementation(libs.onnxruntime.android)
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.media3.transformer)

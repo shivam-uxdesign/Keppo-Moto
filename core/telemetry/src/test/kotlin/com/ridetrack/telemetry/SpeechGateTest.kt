@@ -62,6 +62,18 @@ class SpeechGateTest {
     }
 
     @Test
+    fun `a horn or an engine as loud and long as talking doesn't count, a voice does`() {
+        var t = 0L
+        val horn = SpeechGate()
+        while (t < 4_000) { horn.onLevel(t, 20f, 46, 16f, voice = 0.02f); t += 46 }
+        assertFalse(horn.speaking)
+        val talk = SpeechGate()
+        t = 0L
+        while (t < 4_000) { talk.onLevel(t, 20f, 46, 16f, voice = 0.9f); t += 46 }
+        assertTrue(talk.speaking)
+    }
+
+    @Test
     fun `the margin decides`() {
         assertFalse(SpeechGate().feed(0, 3_000, margin = 12f) { 10f })
         assertTrue(SpeechGate().feed(0, 3_000, margin = 9f) { 10f })

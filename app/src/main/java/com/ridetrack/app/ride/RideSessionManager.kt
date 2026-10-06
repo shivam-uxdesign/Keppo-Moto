@@ -128,7 +128,7 @@ class RideSessionManager(
 
     /** Read live, so the threshold can be tuned during a ride against the HUD's meter. */
     private val voiceSettings = settings.settings.map { it.moments.voice to it.moments.voiceSensitivity }
-        .stateIn(scope, SharingStarted.Eagerly, false to VoiceSensitivity.MEDIUM)
+        .stateIn(scope, SharingStarted.Eagerly, false to VoiceSensitivity.STRICT)
 
     private val recordingDispatcher = Dispatchers.Default.limitedParallelism(1)
     private val lifecycleMutex = Mutex()
@@ -447,7 +447,7 @@ class RideSessionManager(
         }
         val margin = sensitivity.marginDb
         val wasSpeaking = rec.speech.speaking
-        levels.forEach { c -> rec.speech.onLevel(c.timeMillis, c.aboveDb, c.chunkMillis, margin) }
+        levels.forEach { c -> rec.speech.onLevel(c.timeMillis, c.aboveDb, c.chunkMillis, margin, c.voice) }
         momentsHub.setSpeaking(rec.speech.speaking)
         logVoice(rec, frame, levels, wasSpeaking, margin)
         val last = rec.speech.lastSpeechMillis ?: return
@@ -510,7 +510,8 @@ class RideSessionManager(
         if (speaking && !wasSpeaking && latest != null) {
             momentsHub.log(
                 "voice start: level ${db(latest.levelDb)} · background ${db(latest.backgroundDb)} (+${db(latest.aboveDb, false)}) · " +
-                    "${"%.1f".format(Locale.US, rec.speech.sustainedMillis / 1000.0)} s sustained · margin +${margin.roundToInt()} dB · $speed",
+                    "${"%.1f".format(Locale.US, rec.speech.sustainedMillis / 1000.0)} s sustained · voice ${"%.2f".format(Locale.US, latest.voice)} · " +
+                    "margin +${margin.roundToInt()} dB · $speed",
             )
         } else if (!speaking && wasSpeaking) {
             momentsHub.log("voice stop: quiet · $speed")
@@ -520,7 +521,7 @@ class RideSessionManager(
             val peak = levels.maxOf { it.aboveDb }
             momentsHub.log(
                 "mic: level ${db(latest.levelDb)} · background ${db(latest.backgroundDb)} (+${db(latest.aboveDb, false)}, peak +${db(peak, false)}) · " +
-                    "margin +${margin.roundToInt()} dB · ${if (speaking) "speaking" else "quiet"} · $speed",
+                    "voice ${"%.2f".format(Locale.US, levels.maxOf { it.voice })} · margin +${margin.roundToInt()} dB · ${if (speaking) "speaking" else "quiet"} · $speed",
             )
         }
     }
