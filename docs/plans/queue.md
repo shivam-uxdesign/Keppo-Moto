@@ -79,7 +79,7 @@ Ride of 6 Oct (export 6): 13 voice videos in an 11-min ride, at every speed incl
 
 ---
 
-# Next batch (7 Oct): A–E and the battery estimate BUILT (190acf0, 9495f81, f598338, battery); fuel log and transcripts still to build
+# Next batch (7 Oct): A–E and the battery estimate BUILT (190acf0, 9495f81, f598338, battery); fuel log (2nd commit after f4d8d25) and transcripts (f4d8d25) also BUILT
 
 From the Tuesday Evening Ride export (27½ min, 73 moments, 41 of them with no speech; the process died at 12:44:44).
 
