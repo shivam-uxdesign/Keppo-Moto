@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.rides
 
+import com.ridetrack.app.ui.common.BikeColors
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -53,6 +54,8 @@ fun RidesScreen(onOpenRide: (String) -> Unit, onStartRide: () -> Unit, onOpenMap
     val s by vm.state.collectAsStateWithLifecycle()
     var showFilters by remember { mutableStateOf(false) }
     val bikeNames = s.bikes.associate { it.id to it.displayName }
+    // Colour dots only mean something with more than one bike.
+    val bikeColors = if (s.bikes.size > 1) BikeColors.all(s.bikes) else emptyMap()
 
     Column(
         Modifier
@@ -95,7 +98,7 @@ fun RidesScreen(onOpenRide: (String) -> Unit, onStartRide: () -> Unit, onOpenMap
                 s.groups.forEach { (group, rides) ->
                     item(key = "header-${group.name}") { SectionHeader(group.label) }
                     items(rides, key = { it.id }) { ride ->
-                        RideRow(ride, bikeNames[ride.bikeId], onClick = { onOpenRide(ride.id) }, route = s.routes[ride.id], map = s.maps[ride.id], moments = s.moments[ride.id])
+                        RideRow(ride, bikeNames[ride.bikeId], onClick = { onOpenRide(ride.id) }, route = s.routes[ride.id], map = s.maps[ride.id], moments = s.moments[ride.id], bikeColor = bikeColors[ride.bikeId])
                     }
                 }
             }

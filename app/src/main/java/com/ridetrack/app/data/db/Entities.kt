@@ -25,6 +25,7 @@ data class BikeEntity(
     val photoFile: String? = null,
     val odometerKm: Double? = null,
     val odometerSetAtMillis: Long? = null,
+    val routeColor: Int? = null,
 )
 
 @Entity(

@@ -84,6 +84,16 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.outlined.MyLocation
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.Color
+import com.ridetrack.app.ui.common.BikeColors
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
+import org.maplibre.android.style.expressions.Expression
+import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
@@ -141,6 +151,10 @@ class RidesMapViewModel(private val c: AppContainer) : ViewModel() {
 
 private const val ALL_SOURCE = "all-routes"
 private const val SELECTED_SOURCE = "selected-route"
+private const val ME_SOURCE = "me"
+private const val ME_BLUE = "#3B82F6"
+/** About town level: a few km across. */
+private const val ME_ZOOM = 13.0
 
 /** Every recorded route on one map; tap a line to see that ride. */
 @Composable
@@ -153,7 +167,13 @@ fun RidesMapScreen(onBack: () -> Unit, onOpenRide: (String) -> Unit) {
     LaunchedEffect(mapped) { if (selectedId != null && mapped.none { it.first.id == selectedId }) selectedId = null }
 
     Box(Modifier.fillMaxSize().background(RtColors.Background)) {
-        AllRoutesMap(mapped, selectedId, onSelect = { selectedId = it }, Modifier.fillMaxSize())
+        AllRoutesMap(
+            mapped, selectedId, onSelect = { selectedId = it },
+            colors = BikeColors.all(s.bikes),
+            fitKey = s.bikeId,
+            loading = s.loading,
+            modifier = Modifier.fillMaxSize(),
+        )
 
         Column(
             Modifier
@@ -186,7 +206,7 @@ fun RidesMapScreen(onBack: () -> Unit, onOpenRide: (String) -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     FilterPill("All bikes", s.bikeId == null) { vm.setBike(null) }
-                    s.bikes.forEach { b -> FilterPill(b.displayName, s.bikeId == b.id) { vm.setBike(b.id) } }
+                    s.bikes.forEach { b -> FilterPill(b.displayName, s.bikeId == b.id, BikeColors.of(b, s.bikes)) { vm.setBike(b.id) } }
                 }
             }
         }
@@ -236,19 +256,23 @@ private fun RoundButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun FilterPill(text: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        text,
-        style = RtType.caption,
-        color = if (selected) RtColors.OnPrimary else RtColors.TextPrimary,
-        maxLines = 1,
-        modifier = Modifier
+private fun FilterPill(text: String, selected: Boolean, dot: Color? = null, onClick: () -> Unit) {
+    Row(
+        Modifier
             .clip(RoundedCornerShape(50))
             .background(if (selected) RtColors.Primary else RtColors.Background.copy(alpha = 0.8f))
             .border(1.dp, if (selected) RtColors.Primary else RtColors.Hairline, RoundedCornerShape(50))
             .clickable(role = Role.Tab, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 9.dp),
-    )
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (dot != null) {
+            // The bike's route colour, ringed so it shows on the selected (teal) pill too.
+            Box(Modifier.size(10.dp).background(Color.Black.copy(alpha = 0.35f), CircleShape).padding(1.5.dp).background(dot, CircleShape))
+            Spacer(Modifier.width(7.dp))
+        }
+        Text(text, style = RtType.caption, color = if (selected) RtColors.OnPrimary else RtColors.TextPrimary, maxLines = 1)
+    }
 }
 
 @Composable
@@ -296,6 +320,11 @@ private fun AllRoutesMap(
     routes: List<Pair<Ride, List<GeoPoint>>>,
     selectedId: String?,
     onSelect: (String?) -> Unit,
+    /** Route colour per bike id. */
+    colors: Map<String, Color>,
+    /** The bike filter: the map refits to the routes when it changes. */
+    fitKey: String?,
+    loading: Boolean,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
@@ -359,7 +388,7 @@ private fun AllRoutesMap(
             st.addSource(GeoJsonSource(SELECTED_SOURCE))
             st.addLayer(
                 LineLayer("all-routes", ALL_SOURCE).withProperties(
-                    PropertyFactory.lineColor(hex(DarkPalette.primary)),
+                    PropertyFactory.lineColor(Expression.get("color")),
                     PropertyFactory.lineWidth(3f),
                     PropertyFactory.lineOpacity(0.55f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
@@ -382,26 +411,72 @@ private fun AllRoutesMap(
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                 ),
             )
+            st.addSource(GeoJsonSource(ME_SOURCE))
+            st.addLayer(
+                CircleLayer("me-halo", ME_SOURCE).withProperties(
+                    PropertyFactory.circleRadius(14f),
+                    PropertyFactory.circleColor(ME_BLUE),
+                    PropertyFactory.circleOpacity(0.18f),
+                ),
+            )
+            st.addLayer(
+                CircleLayer("me", ME_SOURCE).withProperties(
+                    PropertyFactory.circleRadius(6.5f),
+                    PropertyFactory.circleColor(ME_BLUE),
+                    PropertyFactory.circleStrokeColor("#FFFFFF"),
+                    PropertyFactory.circleStrokeWidth(2.5f),
+                ),
+            )
             style = st
         }
     }
 
-    LaunchedEffect(style, routes) {
+    // Where the rider is: the last known fix at once, then one fresh fix. GPS isn't kept running.
+    var me by remember { mutableStateOf<LatLng?>(null) }
+    var zoomedToMe by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { MyLocation.get(context) { me = it } }
+    LaunchedEffect(style, me) {
         val st = style ?: return@LaunchedEffect
-        val m = map ?: return@LaunchedEffect
+        val p = me
+        st.getSourceAs<GeoJsonSource>(ME_SOURCE)?.setGeoJson(
+            if (p != null) FeatureCollection.fromFeature(Feature.fromGeometry(Point.fromLngLat(p.longitude, p.latitude)))
+            else FeatureCollection.fromFeatures(emptyList()),
+        )
+    }
+
+    LaunchedEffect(style, routes, colors) {
+        val st = style ?: return@LaunchedEffect
         st.getSourceAs<GeoJsonSource>(ALL_SOURCE)?.setGeoJson(
             FeatureCollection.fromFeatures(
                 routes.map { (ride, pts) ->
                     Feature.fromGeometry(LineString.fromLngLats(pts.map { Point.fromLngLat(it.longitude, it.latitude) })).apply {
                         addStringProperty("id", ride.id)
+                        addStringProperty("color", hex(colors[ride.bikeId] ?: BikeColors.PALETTE[0]))
                     }
                 },
             ),
         )
+    }
+
+    // Fit the routes once they've loaded, and again when the bike filter changes. On opening,
+    // then glide in to where the rider is.
+    LaunchedEffect(style, fitKey, loading) {
+        style ?: return@LaunchedEffect
+        val m = map ?: return@LaunchedEffect
+        if (loading) return@LaunchedEffect
         val all = routes.flatMap { it.second }
         if (all.size >= 2) {
             val bounds = LatLngBounds.Builder().apply { all.forEach { include(LatLng(it.latitude, it.longitude)) } }.build()
             mapView.post { runCatching { m.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, 96)) } }
+        }
+        if (!zoomedToMe) {
+            // Wait briefly for a fix if the last known one wasn't there yet.
+            val p = me ?: withTimeoutOrNull(4_000) { snapshotFlow { me }.filterNotNull().first() }
+            if (p != null) {
+                zoomedToMe = true
+                delay(700)
+                m.animateCamera(CameraUpdateFactory.newLatLngZoom(p, ME_ZOOM), 1_400)
+            }
         }
     }
 
@@ -420,6 +495,32 @@ private fun AllRoutesMap(
 
     Box(modifier.semantics { contentDescription = "Map of all ride routes" }) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+        if (MyLocation.allowed(context)) {
+            val interaction = remember { MutableInteractionSource() }
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 12.dp, bottom = if (selectedId != null) 130.dp else 16.dp)
+                    .size(44.dp)
+                    .pressScale(interaction)
+                    .clip(CircleShape)
+                    .background(RtColors.Background.copy(alpha = 0.85f))
+                    .border(1.dp, RtColors.Hairline, CircleShape)
+                    .clickable(interactionSource = interaction, indication = null, role = Role.Button) {
+                        scope.launch {
+                            MyLocation.get(context) { p ->
+                                me = p
+                                map?.animateCamera(CameraUpdateFactory.newLatLngZoom(p, ME_ZOOM), 900)
+                            }
+                        }
+                    }
+                    .semantics { contentDescription = "Go to my location" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.MyLocation, contentDescription = null, tint = RtColors.TextPrimary, modifier = Modifier.size(20.dp))
+            }
+        }
         if (MapTiler.available) {
             MapStyleToggle(
                 selected = mapStyle,

@@ -130,7 +130,8 @@ object BackupFormat {
                 .put("mountOrientation", b.mountOrientation).put("calibUpX", b.calibUpX.orNull()).put("calibUpY", b.calibUpY.orNull())
                 .put("calibUpZ", b.calibUpZ.orNull()).put("calibratedAtMillis", b.calibratedAtMillis.orNull()).put("createdAtMillis", b.createdAtMillis)
                 .put("redlineRpm", b.redlineRpm.orNull()).put("photoFile", b.photoFile ?: JSONObject.NULL)
-                .put("odometerKm", b.odometerKm.orNull()).put("odometerSetAtMillis", b.odometerSetAtMillis.orNull()))
+                .put("odometerKm", b.odometerKm.orNull()).put("odometerSetAtMillis", b.odometerSetAtMillis.orNull())
+                .put("routeColor", b.routeColor.orNull()))
         }
     }).toString(1)
 
@@ -141,7 +142,7 @@ object BackupFormat {
             mountOrientation = b.getString("mountOrientation"), calibUpX = b.doubleOrNull("calibUpX"), calibUpY = b.doubleOrNull("calibUpY"),
             calibUpZ = b.doubleOrNull("calibUpZ"), calibratedAtMillis = b.longOrNull("calibratedAtMillis"), createdAtMillis = b.getLong("createdAtMillis"),
             redlineRpm = b.intOrNull("redlineRpm"), photoFile = b.stringOrNull("photoFile"), odometerKm = b.doubleOrNull("odometerKm"),
-            odometerSetAtMillis = b.longOrNull("odometerSetAtMillis"),
+            odometerSetAtMillis = b.longOrNull("odometerSetAtMillis"), routeColor = b.intOrNull("routeColor"),
         )
     }
 

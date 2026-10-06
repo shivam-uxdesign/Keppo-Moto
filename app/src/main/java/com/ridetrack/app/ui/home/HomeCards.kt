@@ -164,6 +164,8 @@ private fun ToggleChip(label: String, on: Boolean, icon: androidx.compose.ui.gra
 fun LastRideCard(
     last: LastRide,
     bikeName: String?,
+    /** The bike's route colour. */
+    routeColor: androidx.compose.ui.graphics.Color,
     justRode: Boolean,
     onOpen: () -> Unit,
     onShare: () -> Unit,
@@ -179,7 +181,7 @@ fun LastRideCard(
                     .clip(RoundedCornerShape(14.dp))
                     .background(RtColors.SurfaceRaised),
             ) {
-                RouteThumbnail(last.route, Modifier.fillMaxSize().padding(8.dp))
+                RouteThumbnail(last.route, Modifier.fillMaxSize().padding(8.dp), color = routeColor)
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {

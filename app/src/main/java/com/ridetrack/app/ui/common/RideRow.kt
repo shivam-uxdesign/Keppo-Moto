@@ -1,5 +1,7 @@
 package com.ridetrack.app.ui.common
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
 import java.io.File
 import com.ridetrack.app.ui.moments.Thumb
 import com.ridetrack.app.moments.RideMoments
@@ -51,6 +53,8 @@ fun RideRow(
     /** The route on a dark map, once made; the plain route sketch until then. */
     map: File? = null,
     moments: RideMoments? = null,
+    /** The bike's route colour: a dot by its name, and the route sketch's colour. */
+    bikeColor: Color? = null,
 ) {
     RtCard(modifier = modifier, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -69,13 +73,22 @@ fun RideRow(
                         DemoBadge()
                     }
                 }
-                Text(
-                    listOfNotNull(Format.rideDate(ride.startTimeMillis), bikeName.takeIf { !compact }).joinToString(" · "),
-                    style = RtType.caption,
-                    color = RtColors.TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val bike = bikeName.takeIf { !compact }
+                    Text(
+                        Format.rideDate(ride.startTimeMillis) + if (bike != null) " · " else "",
+                        style = RtType.caption,
+                        color = RtColors.TextSecondary,
+                        maxLines = 1,
+                    )
+                    if (bike != null) {
+                        if (bikeColor != null) {
+                            Box(Modifier.size(7.dp).background(bikeColor, CircleShape))
+                            Spacer(Modifier.width(5.dp))
+                        }
+                        Text(bike, style = RtType.caption, color = RtColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
                 Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.Bottom) {
                     MetricValue(Format.distanceValue(ride.stats.distanceM), "km", RtType.metricM)
@@ -105,7 +118,7 @@ fun RideRow(
                     else -> RouteThumbnail(
                         route,
                         Modifier.fillMaxSize().padding(8.dp),
-                        color = if (ride.source == DataSourceKind.DEMO) RtColors.Warning else RtColors.Primary,
+                        color = if (ride.source == DataSourceKind.DEMO) RtColors.Warning else bikeColor ?: RtColors.Primary,
                     )
                 }
             }

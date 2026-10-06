@@ -24,6 +24,8 @@ data class Bike(
     val odometerKm: Double? = null,
     /** When [odometerKm] was entered; rides after this are added on top of it. */
     val odometerSetAtMillis: Long? = null,
+    /** Route colour (ARGB) the rider picked; null = the default for its place in the garage. */
+    val routeColor: Int? = null,
 ) {
     val displayName: String get() = listOf(make, model).filter { it.isNotBlank() }.joinToString(" ")
 }

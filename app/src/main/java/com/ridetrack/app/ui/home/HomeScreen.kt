@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.ridetrack.app.hud.OverlayPermission
+import com.ridetrack.app.ui.common.BikeColors
 import kotlinx.coroutines.delay
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -153,6 +154,7 @@ fun HomeScreen(
                 LastRideCard(
                     last = last,
                     bikeName = s.bikes.firstOrNull { it.id == last.ride.bikeId }?.displayName,
+                    routeColor = s.bikes.firstOrNull { it.id == last.ride.bikeId }?.let { BikeColors.of(it, s.bikes) } ?: BikeColors.PALETTE[0],
                     justRode = s.justRode,
                     onOpen = { onOpenRide(last.ride.id) },
                     onShare = { onShareRide(last.ride.id) },

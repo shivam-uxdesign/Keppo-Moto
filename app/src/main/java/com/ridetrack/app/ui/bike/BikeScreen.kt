@@ -38,6 +38,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ridetrack.app.ui.appViewModel
+import com.ridetrack.app.ui.common.BikeColors
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import com.ridetrack.app.ui.components.Chip
 import com.ridetrack.app.ui.components.EmptyState
 import com.ridetrack.app.ui.components.InfoRow
@@ -78,6 +82,7 @@ fun BikeScreen(onAddBike: () -> Unit, onEditBike: (String) -> Unit, onCalibrate:
         s.bikes.forEachIndexed { i, bike ->
             BikeCard(
                 bike = bike,
+                routeColor = BikeColors.of(bike, s.bikes),
                 tintIndex = i,
                 odometerKm = s.odometers[bike.id],
                 lastRidden = s.lastRidden[bike.id],
@@ -160,6 +165,7 @@ fun BikeScreen(onAddBike: () -> Unit, onEditBike: (String) -> Unit, onCalibrate:
 @Composable
 private fun BikeCard(
     bike: Bike,
+    routeColor: Color,
     tintIndex: Int,
     odometerKm: Double?,
     lastRidden: String?,
@@ -200,7 +206,12 @@ private fun BikeCard(
             bike.fuelType.name.lowercase().replaceFirstChar { it.titlecase(Locale.getDefault()) },
             bike.mountOrientation.name.lowercase().replaceFirstChar { it.titlecase(Locale.getDefault()) } + " mount",
         ).joinToString(" · ")
-        Text(details, style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(horizontal = 4.dp))
+        Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Its route colour on the maps.
+            Box(Modifier.size(9.dp).background(routeColor, CircleShape))
+            Spacer(Modifier.width(7.dp))
+            Text(details, style = RtType.caption, color = RtColors.TextSecondary)
+        }
         Text(
             bike.calibration?.let { "Calibrated · ${Format.rideDate(it.createdAtMillis)}" } ?: "Calibrates automatically on your next ride",
             style = RtType.caption,

@@ -57,8 +57,11 @@ class BackupTest {
 
     @Test
     fun `bikes and settings round-trip`() {
-        val bikes = listOf(BikeEntity("b1", "KTM", "Duke 390", 2023, 373, 168, "PETROL", "PORTRAIT", 0.1, 0.9, 0.2, 5, 1, 10_500, "b1.jpg", 12_000.0, 7))
+        val bikes = listOf(BikeEntity("b1", "KTM", "Duke 390", 2023, 373, 168, "PETROL", "PORTRAIT", 0.1, 0.9, 0.2, 5, 1, 10_500, "b1.jpg", 12_000.0, 7, 0xFFF59E0B.toInt()))
         assertEquals(bikes, BackupFormat.parseBikes(BackupFormat.bikesJson(bikes)))
+        // Backups from before route colours: no colour, so the default by garage order.
+        val old = BackupFormat.bikesJson(bikes).replace(Regex(",\\s*\"routeColor\":\\s*-?\\d+"), "")
+        assertEquals(null, BackupFormat.parseBikes(old).single().routeColor)
         val prefs = listOf(
             BackupFormat.Pref("auto_pause", true), BackupFormat.Pref("hud_opacity", 90), BackupFormat.Pref("moments_brake_g", 0.5),
             BackupFormat.Pref("safety_contacts", "Mum\t+91 98450 12345"), BackupFormat.Pref("live_metrics", setOf("G_FORCE", "MAX_LEAN")),

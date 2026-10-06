@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import android.net.Uri
 import com.ridetrack.app.AppContainer
 import com.ridetrack.app.data.BikePhotos
+import com.ridetrack.app.ui.common.BikeColors
 import com.ridetrack.app.ui.common.Odometer
 import com.ridetrack.app.ui.home.BikeCare
 import com.ridetrack.app.ui.home.CareItem
@@ -121,7 +122,13 @@ data class BikeForm(
     val photoBusy: Boolean = false,
     /** Whole km; blank = not set. */
     val odometerKm: String = "",
+    /** The picked route colour (ARGB); null = [defaultColor]. */
+    val routeColor: Int? = null,
+    /** What the bike gets without a pick: by its place in the garage. */
+    val defaultColor: Int = BikeColors.argb(BikeColors.PALETTE[0]),
 ) {
+    val shownColor: Int get() = routeColor ?: defaultColor
+
     val odometerError: Boolean get() = odometerKm.isNotBlank() && (odometerKm.toLongOrNull() ?: -1) !in 0..2_000_000
     val redlineError: Boolean get() = redlineRpm.isNotBlank() && (redlineRpm.toIntOrNull() ?: 0) !in 2_000..25_000
     val yearError: Boolean get() = year.isNotBlank() && (year.toIntOrNull() ?: 0) !in 1900..2100
@@ -143,6 +150,13 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
     private var initialOdometer = ""
 
     init {
+        if (bikeId == null) {
+            viewModelScope.launch {
+                // A new bike is the newest in the garage.
+                val n = c.bikes.observeBikes().first().size
+                _form.update { it.copy(defaultColor = BikeColors.argb(BikeColors.PALETTE[n % BikeColors.PALETTE.size])) }
+            }
+        }
         if (bikeId != null) {
             viewModelScope.launch {
                 c.bikes.get(bikeId)?.let { b ->
@@ -160,6 +174,8 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
                         redlineRpm = b.redlineRpm?.toString().orEmpty(),
                         photoFile = b.photoFile,
                         odometerKm = initialOdometer,
+                        routeColor = b.routeColor,
+                        defaultColor = BikeColors.argb(BikeColors.default(b, c.bikes.observeBikes().first())),
                     )
                 }
             }
@@ -214,6 +230,7 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
             photoFile = f.photoFile,
             odometerKm = odometer,
             odometerSetAtMillis = odometerAt,
+            routeColor = f.routeColor,
         )
         viewModelScope.launch {
             c.bikes.save(bike)

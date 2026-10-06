@@ -19,6 +19,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
+import com.ridetrack.app.ui.common.BikeColors
 import androidx.compose.ui.unit.dp
 import com.ridetrack.app.ui.components.BikeImage
 import androidx.compose.foundation.layout.Column
@@ -99,6 +102,27 @@ fun BikeEditScreen(bikeId: String?, onDone: () -> Unit) {
                 Field("Weight (kg)", f.weightKg, "Optional", { v -> vm.update { it.copy(weightKg = v.filter(Char::isDigit).take(4)) } }, Modifier.weight(1f), number = true, error = f.weightError)
                 Field("Redline (rpm)", f.redlineRpm, "Optional", { v -> vm.update { it.copy(redlineRpm = v.filter(Char::isDigit).take(5)) } }, Modifier.weight(1f), number = true, error = f.redlineError)
             }
+            Text("Route colour", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(top = RtDimens.xs, bottom = 8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                BikeColors.PALETTE.forEach { c ->
+                    val argb = BikeColors.argb(c)
+                    val on = f.shownColor == argb
+                    Box(
+                        Modifier
+                            .size(30.dp)
+                            .border(2.dp, if (on) RtColors.TextPrimary else Color.Transparent, CircleShape)
+                            .padding(4.dp)
+                            .background(c, CircleShape)
+                            .clickable(role = Role.RadioButton) { vm.update { it.copy(routeColor = argb) } },
+                    )
+                }
+            }
+            Text(
+                "Its rides show in this colour on the maps.",
+                style = RtType.caption,
+                color = RtColors.TextTertiary,
+                modifier = Modifier.padding(top = 6.dp, bottom = RtDimens.xs),
+            )
             Field("Odometer (km)", f.odometerKm, "Optional", { v -> vm.update { it.copy(odometerKm = v.filter(Char::isDigit).take(7)) } }, number = true, error = f.odometerError)
             Text(
                 "Enter the reading on your bike's odometer. Rides you record on this bike are added to it automatically. " +
