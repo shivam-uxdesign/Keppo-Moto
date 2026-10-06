@@ -113,3 +113,9 @@ From the Tuesday Evening Ride export (27½ min, 73 moments, 41 of them with no s
 - **Sensitivity (rider, 7 Oct):** Medium and High are useless on a bike (engine noise always passes). Proposal for this build: drop them. Keep **Normal** (+12 dB, today's Low) and add **Strict** (+16 dB), default Strict, together with the Silero voice check. Settings stored as Medium/High read as Strict.
 - **Fuel stops from the map (discussion):** stops of 1–15 min are checked against OpenStreetMap fuel stations (`amenity=fuel`, Overpass API, within ~60 m), after the ride or when online. This sends only the stop's coordinates. Then: "Filled up at Indian Oil, Sector 12?", and enter litres (or ₹ and price/L). The rider always fills the tank, so km/l = km since the last fill ÷ litres. Feeds the fuel log (mileage).
 - **Transcripts language:** English + Hinglish. Proposal: Hinglish in Latin script ("bhai ye road mast hai"). Code-mixed speech needs a stronger model than on-device Whisper base, so online transcription is likely; to decide.
+- **Fuel amount from the card SMS (discussion):** the rider pays by credit card and gets an SMS. Options:
+  - (a) READ_SMS, reading messages ±15 min around a pump stop. It's a sensitive permission that Play Protect already flagged once, and Play restricts it, so it risks install blocks.
+  - (b) Share the SMS to Keppo Moto (long-press → Share), and the app reads the ₹ and the merchant. No permission.
+  - (c) Type the ₹ in the pump prompt.
+  - Price per litre is remembered from the last fill and confirmed; litres = ₹ ÷ price.
+- **Transcripts (decided):** on the phone, Whisper (whisper.cpp), Hinglish in English letters (an initial prompt biases it to Latin script). Runs after the ride in the background, best while charging. Try it and judge the results.
