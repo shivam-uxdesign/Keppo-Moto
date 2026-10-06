@@ -82,7 +82,6 @@ fun HomeScreen(
     onEditBike: (String) -> Unit,
     onOpenRide: (String) -> Unit,
     onShareRide: (String) -> Unit,
-    onOpenMoment: (rideId: String, momentId: String) -> Unit,
     onOpenBike: () -> Unit,
 ) {
     val vm = appViewModel { HomeViewModel(it) }
@@ -144,10 +143,10 @@ fun HomeScreen(
             if (last != null) {
                 LastRideCard(
                     last = last,
+                    bikeName = s.bikes.firstOrNull { it.id == last.ride.bikeId }?.displayName,
                     justRode = s.justRode,
                     onOpen = { onOpenRide(last.ride.id) },
                     onShare = { onShareRide(last.ride.id) },
-                    onOpenMoment = { onOpenMoment(last.ride.id, it) },
                     onClose = { vm.dismissJustRode(last.ride.id) },
                     modifier = Modifier.riseIn(order),
                 )

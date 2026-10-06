@@ -165,7 +165,6 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onEditBike = { nav.navigate(Routes.bikeEdit(it)) },
                         onOpenRide = { nav.navigate(Routes.detail(it)) },
                         onShareRide = { nav.navigate(Routes.share(it)) },
-                        onOpenMoment = { ride, moment -> nav.navigate(Routes.moments(ride, moment)) },
                         onOpenBike = { nav.switchTab(Routes.BIKE) },
                     )
                 }

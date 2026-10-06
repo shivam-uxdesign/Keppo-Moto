@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,7 +39,6 @@ import com.ridetrack.app.ui.components.RouteThumbnail
 import com.ridetrack.app.ui.components.RtCard
 import com.ridetrack.app.ui.components.SecondaryButton
 import com.ridetrack.app.ui.format.Format
-import com.ridetrack.app.ui.moments.MomentStrip
 import com.ridetrack.app.ui.theme.RtColors
 import com.ridetrack.app.ui.theme.RtType
 import kotlin.math.abs
@@ -125,50 +123,67 @@ private fun CheckChip(c: ReadyCheck) {
     }
 }
 
-/** The latest ride: route, numbers and moments. [justRode] adds Share and Open, and a close. */
+/**
+ * The latest ride, compact: route thumbnail on the left, name and details on the right, the
+ * numbers underneath. [justRode] adds Share and Open, and a close.
+ */
 @Composable
 fun LastRideCard(
     last: LastRide,
+    bikeName: String?,
     justRode: Boolean,
     onOpen: () -> Unit,
     onShare: () -> Unit,
-    onOpenMoment: (String) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val r = last.ride
     RtCard(modifier, onClick = if (justRode) null else onOpen) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Label(if (justRode) "Just now" else "Last ride", Modifier.weight(1f))
-            Text(Format.rideDate(r.startTimeMillis), style = RtType.caption, color = RtColors.TextTertiary)
-            if (justRode) {
-                Icon(
-                    Icons.Outlined.Close, contentDescription = "Close",
-                    tint = RtColors.TextTertiary,
-                    modifier = Modifier.padding(start = 8.dp).size(18.dp).clickable(role = Role.Button, onClick = onClose),
+            Box(
+                Modifier
+                    .size(80.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(RtColors.SurfaceRaised),
+            ) {
+                RouteThumbnail(last.route, Modifier.fillMaxSize().padding(8.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Label(if (justRode) "Just now" else "Last ride", Modifier.weight(1f))
+                    if (justRode) {
+                        Icon(
+                            Icons.Outlined.Close, contentDescription = "Close",
+                            tint = RtColors.TextTertiary,
+                            modifier = Modifier.size(18.dp).clickable(role = Role.Button, onClick = onClose),
+                        )
+                    }
+                }
+                Text(
+                    r.name,
+                    style = RtType.bodyStrong,
+                    color = RtColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
+                Text(Format.rideDate(r.startTimeMillis), style = RtType.caption, color = RtColors.TextSecondary, maxLines = 1)
+                val details = listOfNotNull(
+                    bikeName,
+                    last.moments.size.takeIf { it > 0 }?.let { "$it ${if (it == 1) "moment" else "moments"}" },
+                ).joinToString(" · ")
+                if (details.isNotEmpty()) {
+                    Text(details, style = RtType.caption, color = RtColors.TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
-        Text(r.name, style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.padding(top = 4.dp))
-        Box(
-            Modifier
-                .padding(top = 10.dp)
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(16.dp))
-                .background(RtColors.SurfaceRaised),
-        ) {
-            RouteThumbnail(last.route, Modifier.fillMaxSize().padding(10.dp))
-        }
         val lean = listOfNotNull(r.stats.maxLeftLeanDeg, r.stats.maxRightLeanDeg).maxOfOrNull { abs(it) }
-        Row(Modifier.padding(top = 12.dp)) {
+        Row(Modifier.padding(top = 14.dp)) {
             Num(Format.distanceValue(r.stats.distanceM), "km")
             Num(Format.duration(r.stats.movingMillis), "riding")
             Num(Format.speedKmh(r.stats.maxSpeedMps), "top km/h")
             Num(Format.leanMagnitude(lean), "max lean")
-        }
-        if (last.moments.isNotEmpty()) {
-            MomentStrip(last.moments, onOpenMoment, Modifier.padding(top = 12.dp))
         }
         if (justRode) {
             Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
