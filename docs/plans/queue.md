@@ -126,3 +126,29 @@ From the Tuesday Evening Ride export (27½ min, 73 moments, 41 of them with no s
   - Groq's free Whisper large-v3.
 - **Fuel SMS toggle (decided):** Bike tab › Fuel log: "Read card SMS at petrol pumps", **off by default**. Turning it on asks for the SMS permission; while off, the amount is typed (c), and READ_SMS is never asked for.
 - **Transcripts (decided):** Gemini API free tier, after the ride on Wi-Fi, talking (VOICE) clips only. Prompt: transcribe in Hinglish, English letters. The rider creates a free Google AI Studio key and pastes it in Profile (stored on the phone only, never backed up). Saved as `moments[].transcript` (ride.json contract addition), shown in the clip viewer, and needs a Keppo Journal note. Re-check the free-tier terms when building.
+
+---
+
+# Keppo Studio (planning; prototype only, not approved to build)
+
+Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds and moment times from the 6 Oct evening ride; footage, captions and songs simulated).
+
+- **Flow:** new Studio tab, then:
+  - Pick a ride, then "Make my video": vibe (Hype / Cinematic / Chill / Vlog, suggested from the ride), music, length 30/45/60.
+  - Extras: intro, outro, map between clips.
+  - Generating steps, then a full-screen draft with Remix / Song / Edit / Share.
+- **Rider's decisions:**
+  - Intro and outro can each be turned on or off (both default on).
+  - Map transitions are optional (default off).
+  - Music: all three: suggested royalty-free tracks, the rider's own song, and no music with a tip to add one in Instagram.
+- **Auto edit:**
+  - The hook moment first, then the ride in order.
+  - Moments scored on speech, speed, lean and events, with variety.
+  - Cuts on the beat, never mid-sentence. Music ducks while the rider talks (level adjustable).
+  - Word-by-word captions in the vibe's style; speed counter and lean gauge.
+  - Stats outro with an optional "made with Keppo Moto" mark.
+- **Edit:**
+  - Clips: tap a clip to change its caption or length, move it earlier or later, remove it, or swap it for another moment.
+  - Caption styles; overlay switches.
+- **Share:** Reels / Shorts / WhatsApp / Save, plus a suggested post caption.
+- **Later phases:** Gemini as director (order, title, post caption); slow-mo; multi-ride compilations; templates; Keppo Journal.
