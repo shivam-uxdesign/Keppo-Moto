@@ -36,13 +36,20 @@ class FirebaseTranscriber {
 
     companion object {
         /** Newest first; a name Google has retired is skipped (its error says so) and the next tried. */
-        val MODELS = listOf("gemini-3-flash", "gemini-2.5-flash", "gemini-2.0-flash")
+        val MODELS = listOf("gemini-3.8-flash", "gemini-3-flash", "gemini-2.5-flash")
 
-        /** The error means this model name doesn't exist (any more) for this project. */
+        /** The error means this model name can't be used (gone, retired, or closed to new projects). */
         fun isMissingModel(e: Throwable): Boolean {
-            val m = (e.message + " " + e.cause?.message).lowercase()
-            return "not found" in m || "404" in m || "is not supported" in m || "unknown model" in m
+            val m = text(e).lowercase()
+            return listOf("not found", "404", "is not supported", "unknown model", "no longer available", "deprecated", "retired", "update your code")
+                .any { it in m }
         }
+
+        /** The model Google's error says to use instead ("… use models/gemini-3.8-flash …"), if any. */
+        fun suggestedModel(e: Throwable, current: String): String? =
+            Regex("models/(gemini-[a-z0-9.\\-]+)").findAll(text(e)).map { it.groupValues[1].trimEnd('.', '-') }.firstOrNull { it != current }
+
+        private fun text(e: Throwable) = "${e.message} ${e.cause?.message}"
     }
 }
 

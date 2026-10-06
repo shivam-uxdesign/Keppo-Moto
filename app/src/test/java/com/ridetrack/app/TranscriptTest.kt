@@ -20,5 +20,10 @@ class TranscriptTest {
         assertTrue(FirebaseTranscriber.isMissingModel(RuntimeException("models/gemini-3-flash is not found for API version v1beta")))
         assertFalse(FirebaseTranscriber.isMissingModel(RuntimeException("App Check token is invalid")))
         assertTrue(FirebaseTranscriber.MODELS.isNotEmpty())
+        val retired = RuntimeException(
+            "This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features and improvements.",
+        )
+        assertTrue(FirebaseTranscriber.isMissingModel(retired))
+        assertEquals("gemini-3.8-flash", FirebaseTranscriber.suggestedModel(retired, "gemini-2.5-flash"))
     }
 }

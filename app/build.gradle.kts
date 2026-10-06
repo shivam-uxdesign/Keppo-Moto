@@ -133,6 +133,7 @@ dependencies {
     // Gemini transcripts through Firebase AI Logic, guarded by App Check.
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.ai)
+    implementation(libs.firebase.config)
     implementation(libs.firebase.appcheck.debug)
     implementation(libs.firebase.appcheck.playintegrity)
     // Silero voice detector for "Film when I speak".

@@ -118,9 +118,24 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     }
 
     /** Tries [models] in order until one exists; tells [onWorking] which one did. */
+    /**
+     * Tries [models] in order until one works, jumping to any replacement Google's error names;
+     * only when all of them fail, the name set in Firebase Remote Config (`gemini_model`).
+     * Tells [onWorking] which one did.
+     */
     private suspend fun transcribe(t: FirebaseTranscriber, models: List<String>, audio: ByteArray, onWorking: (String) -> Unit): String {
+        val queue = ArrayDeque(models)
+        val tried = HashSet<String>()
+        var remoteTried = false
         var last: Exception? = null
-        for (name in models) {
+        while (true) {
+            val name = queue.removeFirstOrNull() ?: if (!remoteTried) {
+                remoteTried = true
+                RemoteModel.get()?.takeIf { it !in tried } ?: continue
+            } else {
+                break
+            }
+            if (!tried.add(name)) continue
             try {
                 return t.transcribe(name, audio, "audio/mp4").also { onWorking(name) }
             } catch (e: FirebaseTranscriber.Busy) {
@@ -128,6 +143,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             } catch (e: Exception) {
                 if (!FirebaseTranscriber.isMissingModel(e)) throw e
                 last = e
+                FirebaseTranscriber.suggestedModel(e, name)?.takeIf { it !in tried }?.let { queue.addFirst(it) }
             }
         }
         throw last ?: IllegalStateException("no Gemini model")
