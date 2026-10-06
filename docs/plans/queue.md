@@ -124,3 +124,5 @@ From the Tuesday Evening Ride export (27½ min, 73 moments, 41 of them with no s
   - Android's built-in speech recognizer (en-IN): free, nothing added to the app, works offline once Google's language pack is downloaded.
   - Gemini API free tier: can be told "Hinglish in Latin script". Needs a free key, and free-tier data may be used by Google.
   - Groq's free Whisper large-v3.
+- **Fuel SMS toggle (decided):** Bike tab › Fuel log: "Read card SMS at petrol pumps", **off by default**. Turning it on asks for the SMS permission; while off, the amount is typed (c), and READ_SMS is never asked for.
+- **Transcripts (decided):** Gemini API free tier, after the ride on Wi-Fi, talking (VOICE) clips only. Prompt: transcribe in Hinglish, English letters. The rider creates a free Google AI Studio key and pastes it in Profile (stored on the phone only, never backed up). Saved as `moments[].transcript` (ride.json contract addition), shown in the clip viewer, and needs a Keppo Journal note. Re-check the free-tier terms when building.
