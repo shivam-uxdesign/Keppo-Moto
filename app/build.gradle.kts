@@ -25,6 +25,11 @@ val gitSha: String = providers.exec {
 val buildTag: String = "$gitSha · " + LocalDate.now().format(DateTimeFormatter.ofPattern("d MMM", Locale.US))
 
 android {
+    // Native libraries (ONNX Runtime for the voice detector is 33 MB raw) are stored compressed:
+    // a much smaller download, unpacked once at install.
+    packaging {
+        jniLibs.useLegacyPackaging = true
+    }
     namespace = "com.ridetrack.app"
     compileSdk = 35
 
