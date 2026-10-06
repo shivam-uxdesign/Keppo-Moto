@@ -1,8 +1,8 @@
 # Keppo Moto: approved, waiting to build
 
-Approved by the rider. **Don't build until the rider says so.** When they do, build these together, one commit each, then one APK (`keppo-moto-<sha>.apk`).
+**Built** (7 Oct batch): compact Last ride card 6160212, voice trigger a751f3a, Home switches, HUD preview 7b0c4e4, map and route colours 50687cc. Notes on what changed while building are at the end.
 
-Already built and pushed, not yet in an APK: the compact Last ride card on Home (6160212).
+New items go below the line at the end; don't build them until the rider says so.
 
 ---
 
@@ -68,3 +68,11 @@ Ride of 6 Oct (export 6): 13 voice videos in an 11-min ride, at every speed incl
   - Keep listening while stopped, paused or on a break (not off the mount). While stopped, the camera wakes on speech: no look-back, about 1 s to start.
   - Moments toggle on Home above the slide card. Still to answer: Moments only, or also "Film when I speak".
 - **After the build:** one ride, the rider sends the export, then tune margins and times from the logged levels.
+
+---
+
+## As built (7 Oct)
+- **Voice start rule:** 60 % of the last 1.5 s loud, not 75 %. Normal speech is loud about 60–70 % of the time, so 75 % missed real talking in tests. Breathing (0.6 s on / 0.6 s off) and a 0.8 s horn still don't start it. Once speaking, 15 % of the last 1.5 s loud keeps it going, so slow talk isn't cut off.
+- **Background:** the 10th percentile of the last 4 s.
+- **Home switches:** both "Moments" and "Film when I speak" (the second shows only while Moments is on). Turning Moments on asks for camera and mic if needed.
+- **Rides list:** its thumbnails are route-on-map pictures coloured by speed, so the bike colour shows as a dot by the bike name. The plain route sketch, shown while the map picture is made, uses the bike colour.
