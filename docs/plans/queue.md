@@ -88,7 +88,7 @@ From the Tuesday Evening Ride export (27½ min, 73 moments, 41 of them with no s
 - **Auto-continue:** if the process dies mid-ride while the phone stays on, the recording service restarts itself and continues the *same* ride (a few seconds' gap; no second ride, nothing to merge).
 - **Auto-save:** an unfinished ride is saved properly on the next launch (no more "save it from the ride page").
 - **Phone switched off (battery died):** it can't record while off, and Android doesn't let a camera/location service start by itself after a reboot. On the next launch the ride is auto-saved. If the phone is back within 30 min, ask "Continue Tuesday Evening Ride?"; continuing merges into the same ride, with the gap shown as a break.
-- **Proposed, to confirm:** low-battery protection. At 15 % (not charging), stop filming. At 5 %, end and save the ride cleanly before the phone dies.
+- **No low-battery cut-off** (the rider charges on the bike): recording never stops because of battery.
 
 ## B. Silero voice detector for "Film when I speak"
 - **Why:** 26 of the 41 no-speech triggers were below 20 km/h. Traffic, horns and engines overlap the voice in both loudness (+3–29 dB vs speech +7–35 dB) and length, so loudness and duration can't separate them.
@@ -101,3 +101,11 @@ From the Tuesday Evening Ride export (27½ min, 73 moments, 41 of them with no s
 
 ## D. Fixes found in the log
 - The `mic:` line every 5 s never logged: `lastMicLog = Long.MIN_VALUE` overflows in `now - last`. Start at 0.
+
+## E. One video, not a hand-off (approved in principle)
+- **Seen 12:24 on 6 Oct:** a voice video ended at 12:24:04.344 and a GPS-lost video started 1 ms later. When GPS came back at 12:24:37, that video ended and a new voice video started at once.
+- **Fix:** one video keeps running while *any* reason wants filming (event chain, voice, GPS lost). Reasons join the running video and add their types (e.g. `VOICE,GPS_LOST`), instead of stopping it and starting another.
+
+## Under discussion (not approved yet)
+- **Mileage (km/l):** no fuel data today. Proposal: a fuel log on the Bike tab (litres, price, full tank?), with the odometer from rides. That gives km/l between full fills, cost per km, and an estimate per ride.
+- **Transcribe moments into Keppo Journal:** speech-to-text of clip audio after the ride (on device, e.g. Whisper), saved as `moments[].transcript` in ride.json (contract addition), shown by the journal. Open questions: language (English / Hindi / mixed), on-device vs cloud.
