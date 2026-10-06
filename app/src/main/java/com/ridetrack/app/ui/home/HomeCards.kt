@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.foundation.selection.toggleable
@@ -194,11 +195,12 @@ fun LastRideCard(
     justRode: Boolean,
     onOpen: () -> Unit,
     onShare: () -> Unit,
+    onReel: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val r = last.ride
-    RtCard(modifier, onClick = if (justRode) null else onOpen) {
+    RtCard(modifier, onClick = if (justRode && last.moments.size < 2) null else onOpen) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier
@@ -248,8 +250,14 @@ fun LastRideCard(
         }
         if (justRode) {
             Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PrimaryButton("Share ride", onShare, Modifier.weight(1f), icon = Icons.Outlined.IosShare)
-                SecondaryButton("Open ride", onOpen, Modifier.weight(1f))
+                // With clips, the Reel leads; the card itself still opens the ride.
+                if (last.moments.size >= 2) {
+                    PrimaryButton("Make a Reel", onReel, Modifier.weight(1f), icon = Icons.Outlined.Movie)
+                    SecondaryButton("Share ride", onShare, Modifier.weight(1f))
+                } else {
+                    PrimaryButton("Share ride", onShare, Modifier.weight(1f), icon = Icons.Outlined.IosShare)
+                    SecondaryButton("Open ride", onOpen, Modifier.weight(1f))
+                }
             }
         }
     }

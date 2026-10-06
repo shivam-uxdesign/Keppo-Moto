@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,7 +67,7 @@ import com.ridetrack.telemetry.model.DataSourceKind
 import com.ridetrack.telemetry.model.Ride
 
 @Composable
-fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Unit, onShare: () -> Unit, onOpenMoment: (String) -> Unit) {
+fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Unit, onShare: () -> Unit, onOpenMoment: (String) -> Unit, onMakeReel: () -> Unit = {}) {
     val rt = LocalRtPalette.current
     val moments = rememberMoments(rideId)
     val vm = appViewModel(key = "summary-$rideId") { RideSummaryViewModel(it, rideId) }
@@ -198,6 +199,19 @@ fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Un
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Outlined.IosShare, contentDescription = null, tint = RtColors.TextPrimary, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(10.dp))
+            Box(
+                Modifier
+                    .size(RtDimens.buttonHeight + 4.dp)
+                    .clip(CircleShape)
+                    .background(RtColors.Surface)
+                    .border(1.dp, RtColors.Hairline, CircleShape)
+                    .clickable(role = Role.Button) { onMakeReel() }
+                    .semantics { contentDescription = "Make a Reel" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.Movie, contentDescription = null, tint = RtColors.TextPrimary, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(10.dp))
             PrimaryButton(

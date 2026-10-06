@@ -156,7 +156,7 @@ private fun topSpeedInstant(ride: com.ridetrack.telemetry.model.Ride, samples: L
 
 /** Strava-style share: a full story card, or a transparent overlay for your own photo. */
 @Composable
-fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
+fun ShareRideScreen(rideId: String, onBack: () -> Unit, startMode: String? = null) {
     val vm = appViewModel(key = "share-$rideId") { ShareRideViewModel(it, rideId) }
     val s by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -167,7 +167,8 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
     val style = choices[pager.currentPage]
     LaunchedEffect(pager.settledPage, s.loading) { if (!s.loading) vm.select(choices[pager.settledPage]) }
     var toast by remember { mutableStateOf<String?>(null) }
-    var video by rememberSaveable { mutableStateOf(false) }
+    // Story card, Reel (Keppo Studio) or 3D video.
+    var mode by rememberSaveable { mutableStateOf(if (startMode == "reel") ShareMode.REEL else ShareMode.CARD) }
     LaunchedEffect(toast) {
         if (toast != null) {
             delay(2_200)
@@ -183,10 +184,14 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
             .padding(horizontal = RtDimens.screenPadding),
     ) {
         ScreenHeader("Share ride", onBack = onBack)
-        ModeSwitch(video) { video = it }
+        ModeSwitch(mode) { mode = it }
         Spacer(Modifier.height(12.dp))
-        if (video) {
+        if (mode == ShareMode.VIDEO) {
             RideVideoPanel(rideId, Modifier.weight(1f))
+            return@Column
+        }
+        if (mode == ShareMode.REEL) {
+            com.ridetrack.app.studio.StudioPanel(rideId, Modifier.weight(1f))
             return@Column
         }
         LayoutPicker(s.thumbs, style, onSelect = { c -> scope.launch { pager.animateScrollToPage(choices.indexOf(c)) } })
@@ -268,9 +273,11 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit) {
     }
 }
 
-/** Story card (an image) or the ride as a 3D video. */
+/** Story card (an image), a Reel from the ride's clips, or the ride as a 3D video. */
+private enum class ShareMode(val label: String) { CARD("Story card"), REEL("Reel"), VIDEO("3D video") }
+
 @Composable
-private fun ModeSwitch(video: Boolean, onChange: (Boolean) -> Unit) {
+private fun ModeSwitch(mode: ShareMode, onChange: (ShareMode) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -279,8 +286,9 @@ private fun ModeSwitch(video: Boolean, onChange: (Boolean) -> Unit) {
             .border(1.dp, RtColors.Hairline, RoundedCornerShape(50))
             .padding(3.dp),
     ) {
-        listOf(false to "Story card", true to "3D video").forEach { (v, label) ->
-            val on = v == video
+        ShareMode.entries.forEach { v ->
+            val label = v.label
+            val on = v == mode
             Box(
                 Modifier
                     .weight(1f)

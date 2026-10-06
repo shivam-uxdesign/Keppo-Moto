@@ -86,6 +86,7 @@ fun HomeScreen(
     onEditBike: (String) -> Unit,
     onOpenRide: (String) -> Unit,
     onShareRide: (String) -> Unit,
+    onMakeReel: (String) -> Unit = {},
     onOpenBike: () -> Unit,
 ) {
     val vm = appViewModel { HomeViewModel(it) }
@@ -174,6 +175,7 @@ fun HomeScreen(
                     justRode = s.justRode,
                     onOpen = { onOpenRide(last.ride.id) },
                     onShare = { onShareRide(last.ride.id) },
+                    onReel = { onMakeReel(last.ride.id) },
                     onClose = { vm.dismissJustRode(last.ride.id) },
                     modifier = Modifier.riseIn(order),
                 )

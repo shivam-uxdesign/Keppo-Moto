@@ -87,8 +87,10 @@ object Routes {
     const val RECENTLY_DELETED = "recently-deleted?rideId={rideId}"
     fun recentlyDeleted(rideId: String? = null) = if (rideId == null) "recently-deleted" else "recently-deleted?rideId=$rideId"
     const val RIDES_MAP = "rides-map"
-    const val SHARE = "share/{rideId}"
+    const val SHARE = "share/{rideId}?mode={mode}"
     fun share(id: String) = "share/$id"
+    /** Share › Reel: Keppo Studio. */
+    fun reel(id: String) = "share/$id?mode=reel"
     const val MOMENTS = "moments/{rideId}/{momentId}"
     fun moments(rideId: String, momentId: String) = "moments/$rideId/$momentId"
     const val MOMENT_SHARE = "moment-share/{rideId}/{momentId}"
@@ -165,6 +167,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onEditBike = { nav.navigate(Routes.bikeEdit(it)) },
                         onOpenRide = { nav.navigate(Routes.detail(it)) },
                         onShareRide = { nav.navigate(Routes.share(it)) },
+                        onMakeReel = { nav.navigate(Routes.reel(it)) },
                         onOpenBike = { nav.switchTab(Routes.BIKE) },
                     )
                 }
@@ -233,6 +236,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onDone = { nav.navigate(Routes.HOME) { popUpTo(Routes.HOME) { inclusive = true } } },
                         onOpenDetail = { nav.navigate(Routes.detail(id)) { popUpTo(Routes.HOME) } },
                         onShare = { nav.navigate(Routes.share(id)) },
+                        onMakeReel = { nav.navigate(Routes.reel(id)) },
                         onOpenMoment = { nav.navigate(Routes.moments(id, it)) },
                     )
                 }
@@ -277,8 +281,20 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         )
                     }
                 }
-                composable(Routes.SHARE, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
-                    DarkRoute { ShareRideScreen(rideId = entry.arguments?.getString("rideId").orEmpty(), onBack = { nav.popBackStack() }) }
+                composable(
+                    Routes.SHARE,
+                    arguments = listOf(
+                        navArgument("rideId") { type = NavType.StringType },
+                        navArgument("mode") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    ),
+                ) { entry ->
+                    DarkRoute {
+                        ShareRideScreen(
+                            rideId = entry.arguments?.getString("rideId").orEmpty(),
+                            onBack = { nav.popBackStack() },
+                            startMode = entry.arguments?.getString("mode"),
+                        )
+                    }
                 }
                 composable(
                     Routes.BIKE_EDIT,

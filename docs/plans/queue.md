@@ -129,7 +129,7 @@ From the Tuesday Evening Ride export (27½ min, 73 moments, 41 of them with no s
 
 ---
 
-# Keppo Studio (planning; prototype only, not approved to build)
+# Keppo Studio (built 6 Oct, first version; testing on the phone)
 
 Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds and moment times from the 6 Oct evening ride; footage, captions and songs simulated).
 
@@ -159,3 +159,14 @@ Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds
   - Map transitions: optional, off.
   - Watermark optional.
   - Gemini director: yes. It gets moment times, speed, lean and transcripts (no video), and returns the order, the hook, the title and the post caption. Fallback: on-device scoring.
+
+- **Built (6 Oct, after the UX audit):** audit https://claude.ai/artifact/Qoism9gPNQ9pyDSr7EAqEz; prototype v6 (real clips, clean motion) is the reference for the look.
+  - Entry: Share ride › **Reel** (new tab next to Story card and 3D video), "Make a Reel" on Home's just-ridden card (rides with 2+ moments) and on the ride summary. No new bottom tab.
+  - Captions: Studio asks Gemini for **timed lines** for the clips likely to have talking (VOICE, filmed on purpose, or with a transcript; at most 12, 4 s apart), saved next to each clip as `<clip>.lines.json` (an empty list = no speech, never asked again). "Skip captions" while it reads; offline or busy → made without captions, with a note.
+  - Director: Gemini (text only) scores the bits, picks the hook, the title and the post caption; the app's own scoring is the fallback.
+  - Plan (`studio/StudioPlan.kt`, unit-tested): speech split into bits at 1.5 s pauses (max 8 s); silent clips give 4 s around the event; bits never reuse the same seconds (clips filmed back to back overlap); the hook first, then ride order (Vlog: ride order, no hook); only lengths the clips can fill are offered.
+  - Video (`studio/StudioRenderer.kt`): Media3 Transformer. Each part of a clip is cropped to 1080×1920 with its camera move (MatrixTransformation), the vibe's grade (contrast, saturation, RGB) and the graphics drawn on top every frame (`studio/StudioArt.kt`, a port of prototype v6). The title and stats play over a clip with its sound off. The rider's own song is a second, looping track that dips to 25 % while they talk (`GainProcessor`).
+  - Music: own song or none (no licensed library yet). Cutting on the song's beats: later.
+  - Fonts bundled: Anton, Instrument Serif (OFL), Permanent Marker (Apache 2.0); licences in assets/licenses.
+- **Also in this build:** a fixed App Check debug token for test builds (`APPCHECK_DEBUG_TOKEN` in local.properties, gitignored), so reinstalling doesn't break transcripts; the transcription job is no longer replaced while running, and a cancelled job isn't shown as an error; App Check refusals get a plain message.
+- **Next / not done:** a list of past Studio videos; fit-with-borders for landscape clips; map flights between clips; beat matching; deleting `.lines.json` with its clip.

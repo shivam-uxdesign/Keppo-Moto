@@ -52,7 +52,9 @@ class Transcripts(private val context: Context) {
             .setConstraints(Constraints.Builder().setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 5, TimeUnit.MINUTES)
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(WORK, ExistingWorkPolicy.REPLACE, req)
+        // KEEP: a job already waiting or running carries on (it picks up every waiting clip);
+        // replacing it would cancel the one in progress.
+        WorkManager.getInstance(context).enqueueUniqueWork(WORK, ExistingWorkPolicy.KEEP, req)
     }
 
     /** The Gemini model that last worked. */
@@ -103,11 +105,17 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             }
             t.setError(null)
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Stopped by the system (or a newer job): not an error, the clips wait for the next run.
+            throw e
         } catch (e: FirebaseTranscriber.Busy) {
             t.setError("Gemini is busy (free-tier limit); trying again later")
             Result.retry()
         } catch (e: Exception) {
-            t.setError("Couldn't transcribe: ${e.message}")
+            t.setError(
+                if (AppCheckSetup.isRejected(e)) "Firebase didn't accept this phone (App Check). Add the debug token shown below in Firebase › App Check › Manage debug tokens."
+                else "Couldn't transcribe: ${e.message}",
+            )
             t.model = null
             Result.retry()
         } finally {

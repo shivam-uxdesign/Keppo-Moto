@@ -20,6 +20,9 @@ val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 val mapTilerKey: String = (localProperties.getProperty("MAPTILER_KEY") ?: System.getenv("MAPTILER_KEY") ?: "").trim()
+// Test builds: one fixed App Check debug token (registered once in Firebase), kept out of git,
+// so reinstalling the app doesn't make a new one that Firebase rejects.
+val appCheckDebugToken: String = (localProperties.getProperty("APPCHECK_DEBUG_TOKEN") ?: System.getenv("APPCHECK_DEBUG_TOKEN") ?: "").trim()
 
 // Which build this is, shown in Profile › About: git commit + build date (e.g. "ad42a92 · 2 Oct").
 val gitSha: String = providers.exec {
@@ -45,6 +48,7 @@ android {
         versionName = "0.1.0"
         buildConfigField("String", "MAPTILER_KEY", "\"$mapTilerKey\"")
         buildConfigField("String", "BUILD_TAG", "\"$buildTag\"")
+        buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"$appCheckDebugToken\"")
         // Optional: `-PabiFilter=arm64-v8a` builds a smaller APK for modern phones only.
         providers.gradleProperty("abiFilter").orNull?.let { abis ->
             ndk { abiFilters += abis.split(",").map(String::trim) }
