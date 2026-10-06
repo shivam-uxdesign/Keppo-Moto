@@ -76,3 +76,28 @@ Ride of 6 Oct (export 6): 13 voice videos in an 11-min ride, at every speed incl
 - **Background:** the 10th percentile of the last 4 s.
 - **Home switches:** both "Moments" and "Film when I speak" (the second shows only while Moments is on). Turning Moments on asks for camera and mic if needed.
 - **Rides list:** its thumbnails are route-on-map pictures coloured by speed, so the bike colour shows as a dot by the bike name. The plain route sketch, shown while the map picture is made, uses the bike colour.
+
+---
+
+# Next batch (approved in discussion, 7 Oct). Build only when the rider says "build"
+
+From the Tuesday Evening Ride export (27½ min, 73 moments, 41 of them with no speech; the process died at 12:44:44).
+
+## A. Ride survives the app dying
+- **Record why the app last stopped:** on launch, read `ActivityManager.getHistoricalProcessExitReasons` (crash + stack trace, low memory, killed by the system, …). Write it to the moments log and the export.
+- **Auto-continue:** if the process dies mid-ride while the phone stays on, the recording service restarts itself and continues the *same* ride (a few seconds' gap; no second ride, nothing to merge).
+- **Auto-save:** an unfinished ride is saved properly on the next launch (no more "save it from the ride page").
+- **Phone switched off (battery died):** it can't record while off, and Android doesn't let a camera/location service start by itself after a reboot. On the next launch the ride is auto-saved. If the phone is back within 30 min, ask "Continue Tuesday Evening Ride?"; continuing merges into the same ride, with the gap shown as a break.
+- **Proposed, to confirm:** low-battery protection. At 15 % (not charging), stop filming. At 5 %, end and save the ride cleanly before the phone dies.
+
+## B. Silero voice detector for "Film when I speak"
+- **Why:** 26 of the 41 no-speech triggers were below 20 km/h. Traffic, horns and engines overlap the voice in both loudness (+3–29 dB vs speech +7–35 dB) and length, so loudness and duration can't separate them.
+- **How:** Silero VAD (ONNX), on-device, run live on the mic audio while recording, resampled to 16 kHz in 32 ms windows. Filming needs loud-above-background **and** voice probability ≥ ~0.6 for the 1.5 s rule.
+- **Cost:** about +6–8 MB APK (onnxruntime + 2 MB model). About 1 ms of CPU per 32 ms of audio, roughly 3 % of one core, so about 2 min of CPU spread over a 1-hour ride. Nothing is processed after the ride.
+- **Logging:** voice probability on the voice start lines.
+
+## C. No overlapping videos
+- A new video's look-back stops where the previous video ended.
+
+## D. Fixes found in the log
+- The `mic:` line every 5 s never logged: `lastMicLog = Long.MIN_VALUE` overflows in `now - last`. Start at 0.
