@@ -29,5 +29,9 @@ Already built and pushed, not yet in an APK: the compact Last ride card on Home 
   - the Last ride card on Home
   - a small dot next to the bike name on the Bike tab
 - **Not used:** the ride page and share images. They stay coloured by speed.
-- **Optional, asked but not yet answered:** bike chips at the top of the map to show one bike's rides at a time.
+- **Bike chips on the map (approved):**
+  - A row at the top of Rides › Map: "All bikes", then one chip per bike with its colour dot.
+  - A tap shows only that bike's rides, and the map zooms to fit them.
+  - "All bikes" is the default.
+  - Hidden with only one bike.
 - **Tests:** default colour by order; migration; backup round trip.
