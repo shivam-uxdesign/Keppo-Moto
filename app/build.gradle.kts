@@ -10,6 +10,10 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Firebase (transcripts via AI Logic) needs app/google-services.json, which is kept out of git.
+// Without it the app still builds; "Write down what I say" then says it isn't available.
+if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
+
 // MapTiler key: local.properties (never committed) or the MAPTILER_KEY env var (CI secret).
 // Empty = the app falls back to a keyless basemap.
 val localProperties = Properties().apply {
@@ -126,6 +130,11 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.maplibre.android)
     implementation(libs.androidx.camera.core)
+    // Gemini transcripts through Firebase AI Logic, guarded by App Check.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.ai)
+    implementation(libs.firebase.appcheck.debug)
+    implementation(libs.firebase.appcheck.playintegrity)
     // Silero voice detector for "Film when I speak".
     implementation(libs.onnxruntime.android)
     implementation(libs.androidx.camera.camera2)

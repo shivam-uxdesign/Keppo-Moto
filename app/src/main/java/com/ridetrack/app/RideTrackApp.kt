@@ -1,6 +1,7 @@
 package com.ridetrack.app
 
 import com.ridetrack.app.ride.RideContinuation
+import com.ridetrack.app.transcribe.AppCheckSetup
 import com.ridetrack.app.trash.PurgeWorker
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
@@ -18,6 +19,7 @@ class RideTrackApp : Application() {
     override fun onCreate() {
         super.onCreate()
         keepCrashTrace()
+        AppCheckSetup.install(this)
         container = AppContainer(this)
         MapLibre.getInstance(this)
         createNotificationChannel()

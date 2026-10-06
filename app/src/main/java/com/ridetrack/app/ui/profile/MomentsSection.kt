@@ -27,8 +27,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -416,51 +414,34 @@ private fun VoiceLevel(sensitivity: VoiceSensitivity, mic: String?, rideActive: 
 }
 
 /**
- * "Write down what I say": talking clips are transcribed with the rider's own Gemini key after
- * the ride. The key stays on this phone.
+ * "Write down what I say": talking clips are transcribed with Gemini (through the app's Firebase
+ * project) after the ride. Test builds show the App Check debug token to register once.
  */
 @Composable
 private fun TranscribeSettings(m: MomentSettings, onChange: (MomentSettings) -> Unit) {
     val context = LocalContext.current
-    val container = com.ridetrack.app.ui.appContainer()
-    val t = container.transcripts
+    val t = com.ridetrack.app.ui.appContainer().transcripts
     val status by t.status.collectAsStateWithLifecycle()
-    var key by remember { mutableStateOf(t.apiKey.orEmpty()) }
     ToggleRow(
         "Write down what I say",
-        "After the ride, what you say in talking clips is written out in Hinglish (English letters) with Google's Gemini, using your free key. " +
-            "The clips' sound is sent to Google; on the free tier Google may use it to improve its products.",
+        "After the ride, what you say in talking clips is written out in Hinglish (English letters) with Google's Gemini. " +
+            "The clips' sound is sent to Google for this; on the free tier Google may use it to improve its products.",
         m.transcribe,
         { on ->
             onChange(m.copy(transcribe = on))
             if (on) t.schedule(m.transcribeWifiOnly)
         },
+        enabled = t.available,
     )
+    if (!t.available) {
+        Text("Not available in this build (it needs the app's Firebase setup).", style = RtType.caption, color = RtColors.TextTertiary)
+        return
+    }
     if (!m.transcribe) return
     Column(Modifier.fillMaxWidth().padding(bottom = RtDimens.xs), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedTextField(
-            value = key,
-            onValueChange = { key = it.trim() },
-            label = { Text("Gemini API key") },
-            singleLine = true,
-            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
-            Pick("Save key", false, key.isNotBlank() && key != t.apiKey.orEmpty()) {
-                t.apiKey = key
-                t.schedule(m.transcribeWifiOnly)
-            }
-            Pick("Get a free key", false, true) {
-                runCatching {
-                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://aistudio.google.com/apikey")))
-                }
-            }
-        }
         ToggleRow("Only on Wi-Fi", "Uses no mobile data.", m.transcribeWifiOnly, { onChange(m.copy(transcribeWifiOnly = it)) })
         Text(
             when {
-                t.apiKey == null -> "Add your key to start."
                 status.lastError != null -> status.lastError!!
                 status.waiting > 0 -> "${status.waiting} clips waiting to be written out."
                 else -> "Talking clips are written out after each ride."
@@ -468,6 +449,15 @@ private fun TranscribeSettings(m: MomentSettings, onChange: (MomentSettings) -> 
             style = RtType.caption,
             color = if (status.lastError != null) RtColors.Warning else RtColors.TextTertiary,
         )
+        // Test builds only: the App Check debug token, added once in the Firebase console.
+        com.ridetrack.app.transcribe.AppCheckSetup.debugToken(context)?.let { token ->
+            Text("App Check test token (add it once in Firebase › App Check › Apps › Manage debug tokens):", style = RtType.caption, color = RtColors.TextSecondary)
+            Text(token, style = RtType.caption, color = RtColors.TextPrimary)
+            Pick("Copy token", false, true) {
+                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText("App Check debug token", token))
+            }
+        }
     }
 }
 

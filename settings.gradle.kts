@@ -6,6 +6,8 @@ pluginManagement {
                 includeGroupByRegex("com\\.google\\.android.*")
                 includeGroupByRegex("com\\.google\\.testing.*")
                 includeGroupByRegex("androidx.*")
+                includeGroupByRegex("com\\.google\\.firebase.*")
+                includeGroupByRegex("com\\.google\\.gms.*")
             }
         }
         mavenCentral()
@@ -22,6 +24,8 @@ dependencyResolutionManagement {
                 includeGroupByRegex("com\\.google\\.android.*")
                 includeGroupByRegex("com\\.google\\.testing.*")
                 includeGroupByRegex("androidx.*")
+                includeGroupByRegex("com\\.google\\.firebase.*")
+                includeGroupByRegex("com\\.google\\.gms.*")
             }
         }
         mavenCentral()
