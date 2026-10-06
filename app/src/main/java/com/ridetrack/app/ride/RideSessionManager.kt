@@ -322,6 +322,12 @@ class RideSessionManager(
                     videoControlEvents(rec, setOf(event.type), event.value)
                     return@forEach
                 }
+                // The GPS-lost video is filming: the event joins it, and it keeps going past it.
+                if (momentsHub.live.value?.source == MomentSource.GPS_LOST) {
+                    chain.start(frame.timeMillis, holdUntil = event.timeMillis + CHAIN_AFTER_MILLIS)
+                    videoControlEvents(rec, setOf(event.type), event.value)
+                    return@forEach
+                }
                 val merged = p.add(event, at)
                 // A second event inside the clip being filmed: film it as one longer video,
                 // which can run past what the buffer holds.
@@ -330,10 +336,12 @@ class RideSessionManager(
         }
         listenForSpeech(rec, frame)
         val wasFilming = chain.filming
-        when (chain.onTick(frame.timeMillis, running = momentsHub.live.value?.source == MomentSource.EVENT)) {
+        val liveSource = momentsHub.live.value?.source
+        when (chain.onTick(frame.timeMillis, running = liveSource == MomentSource.EVENT || liveSource == MomentSource.GPS_LOST)) {
             TriggeredVideo.Action.STOP -> {
                 planner?.markFilmed(frame.timeMillis)
-                stopVideo()
+                // GPS still lost: the same video carries on as the GPS-lost video.
+                if (rec.gpsVideo?.filming != true) stopVideo()
             }
             TriggeredVideo.Action.FAILED -> rec.chainWindow?.let { w ->
                 // The camera wasn't ready: cut what the buffer still has instead.
@@ -345,9 +353,17 @@ class RideSessionManager(
         if (!chain.filming) {
             rec.chainWindow = null
             rec.chainHasVoice = false
+            rec.chainHasGps = false
         }
+        val liveNow = momentsHub.live.value != null
+        if (rec.liveWasRunning && !liveNow) rec.lastVideoEndMillis = frame.timeMillis
+        rec.liveWasRunning = liveNow
         planner?.let { p ->
-            p.due(frame.timeMillis).forEach { momentsHub.submit(MomentRequest.Clip(rec.rideId, it)) }
+            p.due(frame.timeMillis).forEach { w ->
+                // Never save again what the last video already has.
+                val start = maxOf(w.startMillis, rec.lastVideoEndMillis)
+                if (start < w.endMillis - MIN_CLIP_MILLIS) momentsHub.submit(MomentRequest.Clip(rec.rideId, w.copy(startMillis = start)))
+            }
             momentsHub.setEventPending(p.hasPending, p.pendingStartMillis)
         }
         rec.stoppedAt = if (frame.isStopped) rec.stoppedAt ?: frame.timeMillis else null
@@ -359,9 +375,21 @@ class RideSessionManager(
             val lost = frame.gpsQuality == GpsQuality.LOST && !camUseless && !longStop
             val live = momentsHub.live.value
             val ours = live?.source == MomentSource.GPS_LOST
+            // GPS gone while another video films: that video keeps going until it's back.
+            if (lost && rec.chain.filming) {
+                rec.chain.extend(frame.timeMillis + GPS_BACK_MILLIS)
+                if (!rec.chainHasGps) {
+                    rec.chainHasGps = true
+                    videoControlEvents(rec, setOf(RideEventType.GPS_SIGNAL_LOST), null)
+                }
+            }
             when (g.onTick(frame.timeMillis, lost, ourVideoRunning = ours, otherVideoRunning = live != null && !ours)) {
-                GpsLostVideo.Action.START -> startVideo(MomentSource.GPS_LOST, g.leadInMillis(frame.timeMillis).coerceAtMost(MAX_LEAD_IN_MILLIS))
-                GpsLostVideo.Action.STOP -> if (ours) stopVideo()
+                GpsLostVideo.Action.START -> startVideo(
+                    MomentSource.GPS_LOST,
+                    leadIn(rec, frame.timeMillis, g.leadInMillis(frame.timeMillis).coerceAtMost(MAX_LEAD_IN_MILLIS)),
+                )
+                // An event or speech joined it: the chain decides when it ends.
+                GpsLostVideo.Action.STOP -> if (ours && !rec.chain.filming) stopVideo()
                 GpsLostVideo.Action.NONE -> Unit
             }
         }
@@ -386,7 +414,7 @@ class RideSessionManager(
     private fun startChain(rec: Recorder, planner: MomentPlanner, frame: TelemetryFrame) {
         val w = planner.promotePending() ?: return
         val now = frame.timeMillis
-        val preRoll = (now - w.startMillis).coerceIn(0L, MAX_LEAD_IN_MILLIS)
+        val preRoll = leadIn(rec, now, (now - w.startMillis).coerceIn(0L, MAX_LEAD_IN_MILLIS))
         val ok = momentsHub.submitLive(
             MomentRequest.StartLive(
                 rec.rideId, MomentSource.EVENT, preRoll, w.latitude, w.longitude, w.speedMps,
@@ -435,13 +463,20 @@ class RideSessionManager(
             }
             return
         }
-        // Your own video, or the GPS-lost one, already has the camera.
+        // The GPS-lost video is filming: speech joins it and keeps it going.
+        if (momentsHub.live.value?.source == MomentSource.GPS_LOST) {
+            chain.start(frame.timeMillis, holdUntil = until)
+            rec.chainHasVoice = true
+            videoControlEvents(rec, setOf(RideEventType.VOICE), null)
+            return
+        }
+        // Your own video already has the camera.
         if (momentsHub.live.value != null) return
         val now = frame.timeMillis
         val pending = rec.planner?.promotePending()
         // Stopped or paused, the camera rests: it wakes on speech, with nothing to look back on.
         val resting = _state.value is RideState.Paused
-        val lookBack = if (resting) 0L else maxOf(VOICE_BEFORE_MILLIS, pending?.let { now - it.startMillis } ?: 0L)
+        val lookBack = if (resting) 0L else leadIn(rec, now, maxOf(VOICE_BEFORE_MILLIS, pending?.let { now - it.startMillis } ?: 0L))
         val ok = momentsHub.submitLive(
             MomentRequest.StartLive(
                 rec.rideId, MomentSource.EVENT, lookBack.coerceAtMost(MAX_LEAD_IN_MILLIS),
@@ -459,6 +494,10 @@ class RideSessionManager(
         rec.chainHasVoice = true
         chain.start(now, holdUntil = maxOf(until, pending?.endMillis ?: 0L))
     }
+
+    /** A video's look-back, cut so it never reaches back into the previous video. */
+    private fun leadIn(rec: Recorder, now: Long, wanted: Long): Long =
+        wanted.coerceAtMost((now - rec.lastVideoEndMillis).coerceAtLeast(0L))
 
     /**
      * The mic in the moments log: every 5 s the level, the background and the margin; and a
@@ -665,7 +704,11 @@ class RideSessionManager(
         /** "Start filming when I speak". */
         val speech = SpeechGate()
         var lastSpeechHandled = Long.MIN_VALUE
-        var lastMicLog = Long.MIN_VALUE
+        var lastMicLog = 0L
+        var chainHasGps = false
+        var liveWasRunning = false
+        /** When the last video ended (ride clock); new videos and clips start after it. */
+        var lastVideoEndMillis = 0L
     }
 
     companion object {
@@ -684,5 +727,9 @@ class RideSessionManager(
         private const val VOICE_BEFORE_MILLIS = 11_000L
         private const val VOICE_AFTER_MILLIS = 5_000L
         private const val MIC_LOG_MILLIS = 5_000L
+        /** GPS back: a video kept going for it stops this long after. */
+        private const val GPS_BACK_MILLIS = 5_000L
+        /** Shorter than this after trimming the overlap: not worth a clip. */
+        private const val MIN_CLIP_MILLIS = 2_000L
     }
 }
