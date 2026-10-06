@@ -190,6 +190,12 @@ data class Settings(
     val bikeCare: String? = null,
     /** The ride the rider closed on Home's "just after a ride" card. */
     val homeDismissedRide: String? = null,
+    /** Fill-ups, as Fuel.encodeFills(). */
+    val fuelLog: String? = null,
+    /** Petrol pump stops waiting for "Filled up here?", as Fuel.encodePrompts(). */
+    val fuelPrompts: String? = null,
+    /** Read the card SMS around a pump stop for the amount. Off by default. */
+    val fuelReadSms: Boolean = false,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -246,6 +252,9 @@ class SettingsRepository(private val context: Context) {
         val journalShareDemo = booleanPreferencesKey("journal_share_demo")
         val bikeCare = stringPreferencesKey("bike_care")
         val homeDismissedRide = stringPreferencesKey("home_dismissed_ride")
+        val fuelLog = stringPreferencesKey("fuel_log")
+        val fuelPrompts = stringPreferencesKey("fuel_prompts")
+        val fuelReadSms = booleanPreferencesKey("fuel_read_sms")
         val backupEmail = stringPreferencesKey("backup_email")
         val backupMobileData = booleanPreferencesKey("backup_mobile_data")
         val backupVideosCharging = booleanPreferencesKey("backup_videos_charging")
@@ -322,6 +331,9 @@ class SettingsRepository(private val context: Context) {
             journalShareDemo = p[Keys.journalShareDemo] ?: false,
             bikeCare = p[Keys.bikeCare],
             homeDismissedRide = p[Keys.homeDismissedRide],
+            fuelLog = p[Keys.fuelLog],
+            fuelPrompts = p[Keys.fuelPrompts],
+            fuelReadSms = p[Keys.fuelReadSms] ?: false,
             backup = BackupSettings(
                 email = p[Keys.backupEmail],
                 allowMobileData = p[Keys.backupMobileData] ?: false,
@@ -376,6 +388,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun setJournalLastRead(atMillis: Long) = context.dataStore.edit { it[Keys.journalLastRead] = atMillis }
 
     suspend fun setBikeCare(encoded: String) = context.dataStore.edit { it[Keys.bikeCare] = encoded }
+    suspend fun setFuelLog(encoded: String) = context.dataStore.edit { it[Keys.fuelLog] = encoded }
+    suspend fun setFuelPrompts(encoded: String) = context.dataStore.edit { it[Keys.fuelPrompts] = encoded }
+    suspend fun setFuelReadSms(on: Boolean) = context.dataStore.edit { it[Keys.fuelReadSms] = on }
     suspend fun dismissHomeRide(rideId: String) = context.dataStore.edit { it[Keys.homeDismissedRide] = rideId }
 
     suspend fun dismissRestoreCard() = context.dataStore.edit { it[Keys.backupRestoreDismissed] = true }

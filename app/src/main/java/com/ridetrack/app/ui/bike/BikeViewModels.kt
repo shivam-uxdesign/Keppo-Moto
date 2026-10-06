@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import android.net.Uri
 import com.ridetrack.app.AppContainer
 import com.ridetrack.app.data.BikePhotos
+import com.ridetrack.app.fuel.Fuel
+import com.ridetrack.app.fuel.FuelFill
+import com.ridetrack.app.fuel.Mileage
 import com.ridetrack.app.ui.common.BikeColors
 import com.ridetrack.app.ui.common.Odometer
 import com.ridetrack.app.ui.home.BikeCare
@@ -42,7 +45,40 @@ data class BikesUiState(
     val care: Map<String, List<CareStatus>> = emptyMap(),
 )
 
+/** The fuel log on the Bike tab: fill-ups and mileage per bike, and the SMS switch. */
+data class BikeFuel(
+    val fills: Map<String, List<FuelFill>> = emptyMap(),
+    val mileage: Map<String, Mileage> = emptyMap(),
+    val readSms: Boolean = false,
+    val lastPrice: Double? = null,
+)
+
 class BikesViewModel(private val c: AppContainer) : ViewModel() {
+    val fuel: StateFlow<BikeFuel> = combine(c.fuel.fills, c.rides.observeCompleted(), c.settings.settings, c.bikes.observeBikes()) { fills, rides, s, bikes ->
+        BikeFuel(
+            fills = fills.groupBy { it.bikeId }.mapValues { (_, f) -> f.sortedByDescending { it.timeMillis } },
+            mileage = bikes.associate { b -> b.id to c.fuel.mileage(b.id, fills, rides) },
+            readSms = s.fuelReadSms && c.fuel.canReadSms(),
+            lastPrice = fills.sortedBy { it.timeMillis }.lastOrNull { it.pricePerLitre != null }?.pricePerLitre,
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BikeFuel())
+
+    fun addFill(bikeId: String, litres: Double, amount: Double?, price: Double?) {
+        viewModelScope.launch { c.fuel.add(Fuel.newFill(bikeId, System.currentTimeMillis(), litres, amount, price, null, "typed")) }
+    }
+
+    fun deleteFill(id: String) {
+        viewModelScope.launch { c.fuel.delete(id) }
+    }
+
+    fun setReadSms(on: Boolean) {
+        viewModelScope.launch {
+            c.settings.setFuelReadSms(on)
+            // Turned on after a ride: look at recent pump stops again with the SMS.
+            if (on) c.fuel.checkRecent()
+        }
+    }
+
     private val message = MutableStateFlow<String?>(null)
 
     val state: StateFlow<BikesUiState> = combine(c.bikes.observeBikes(), c.settings.settings, message, c.rides.observeCompleted()) { bikes, settings, msg, rides ->

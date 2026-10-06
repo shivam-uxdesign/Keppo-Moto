@@ -26,6 +26,7 @@ class RideTrackApp : Application() {
         PurgeWorker.schedule(this)
         container.appScope.launch { container.trash.purgeExpired() }
         container.transcribeSoon()
+        container.appScope.launch { runCatching { container.fuel.checkRecent() } }
         // Why the app last stopped, into the log of the ride it interrupted.
         container.appScope.launch {
             val prefs = getSharedPreferences(STATE_PREFS_NAME, MODE_PRIVATE)

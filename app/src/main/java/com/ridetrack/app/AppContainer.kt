@@ -16,6 +16,7 @@ import com.ridetrack.app.data.db.RideTrackDatabase
 import com.ridetrack.app.hud.HudController
 import com.ridetrack.app.moments.MomentRepository
 import com.ridetrack.app.moments.MomentsHub
+import com.ridetrack.app.fuel.FuelRepository
 import com.ridetrack.app.ride.BatteryWatch
 import com.ridetrack.app.transcribe.Transcripts
 import com.ridetrack.app.ride.RideContinuation
@@ -56,9 +57,13 @@ class AppContainer(context: Context) {
         onRideSaved = { id ->
             backUpSoon()
             transcribeSoon()
+            appScope.launch { runCatching { fuel.checkRide(id) } }
             appScope.launch { journal.onRideSaved(id) }
         },
     )
+
+    /** Fill-ups, petrol pump stops and mileage. */
+    val fuel = FuelRepository(appContext, settings, rides)
 
     /** "Write down what I say": Gemini transcripts of talking clips. */
     val transcripts = Transcripts(appContext)

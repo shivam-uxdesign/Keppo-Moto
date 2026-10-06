@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import androidx.lifecycle.viewModelScope
 import com.ridetrack.app.AppContainer
+import com.ridetrack.app.fuel.Fuel
+import com.ridetrack.app.fuel.FuelPrompt
 import com.ridetrack.app.ride.RideContinuation
 import com.ridetrack.app.ride.RideNames
 import com.ridetrack.app.sensors.Permissions
@@ -106,7 +108,32 @@ private data class Extras(
     val unfinished: Pair<Ride, Long>?,
 )
 
+/** Fuel on Home: a pump stop to confirm, the last price paid, and the last ride's fuel. */
+data class HomeFuel(val prompt: FuelPrompt? = null, val lastPrice: Double? = null, val lastRide: String? = null)
+
 class HomeViewModel(private val c: AppContainer) : ViewModel() {
+    val fuel: StateFlow<HomeFuel> = combine(c.fuel.fills, c.fuel.prompts, c.rides.observeCompleted()) { fills, prompts, rides ->
+        val last = rides.filter { it.source != DataSourceKind.DEMO }.maxByOrNull { it.startTimeMillis }
+        val estimate = last?.let { r -> c.fuel.mileage(r.bikeId, fills, rides).estimate(r.stats.distanceM / 1000) }
+        HomeFuel(
+            prompt = prompts.maxByOrNull { it.timeMillis },
+            lastPrice = fills.sortedBy { it.timeMillis }.lastOrNull { it.pricePerLitre != null }?.pricePerLitre,
+            lastRide = estimate?.let { (l, cost) -> "≈${String.format(java.util.Locale.US, "%.1f", l)} L" + (cost?.let { " · ${Fuel.money(it)}" } ?: "") },
+        )
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeFuel())
+
+    /** Saves a fill-up from a pump stop prompt. */
+    fun addFill(prompt: FuelPrompt, litres: Double, amount: Double?, price: Double?) {
+        viewModelScope.launch {
+            c.fuel.add(Fuel.newFill(prompt.bikeId, prompt.timeMillis, litres, amount, price, prompt.station, if (prompt.amount != null) "sms" else "typed"))
+            c.fuel.dismiss(prompt)
+        }
+    }
+
+    fun dismissFuel(prompt: FuelPrompt) {
+        viewModelScope.launch { c.fuel.dismiss(prompt) }
+    }
+
     private val environment = MutableStateFlow(readEnvironment())
     private val starting = MutableStateFlow(false)
     /** The newest unfinished ride and when it was last written. */

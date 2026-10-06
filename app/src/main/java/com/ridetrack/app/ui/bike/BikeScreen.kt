@@ -97,6 +97,8 @@ fun BikeScreen(onAddBike: () -> Unit, onEditBike: (String) -> Unit, onCalibrate:
         if (s.bikes.isNotEmpty()) {
             SecondaryButton("Add bike", onAddBike, icon = Icons.Outlined.Add)
         }
+        val fuel by vm.fuel.collectAsStateWithLifecycle()
+        s.bikes.firstOrNull { it.id == s.selectedId }?.let { bike -> FuelSection(bike, fuel, vm) }
         s.bikes.firstOrNull { it.id == s.selectedId }?.let { bike ->
             BikeCareSection(
                 bike = bike,

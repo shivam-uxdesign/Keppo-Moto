@@ -126,6 +126,29 @@ private fun CheckChip(c: ReadyCheck) {
     }
 }
 
+/** A stop at a petrol pump after a ride: was it a fill-up? */
+@Composable
+fun FuelPromptCard(prompt: com.ridetrack.app.fuel.FuelPrompt, onAdd: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    RtCard(modifier) {
+        Label("Fuel")
+        Text(
+            "Filled up at ${prompt.station}?",
+            style = RtType.bodyStrong,
+            color = RtColors.TextPrimary,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Text(
+            Format.timeOfDay(prompt.timeMillis) + (prompt.amount?.let { " · ${com.ridetrack.app.fuel.Fuel.money(it)} on your card" } ?: ""),
+            style = RtType.caption,
+            color = RtColors.TextSecondary,
+        )
+        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PrimaryButton("Add fill-up", onAdd, Modifier.weight(1f))
+            SecondaryButton("Not a fill-up", onDismiss, Modifier.weight(1f))
+        }
+    }
+}
+
 /** Quick switches above Start: Moments, and "Film when I speak" while Moments is on. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -164,6 +187,8 @@ private fun ToggleChip(label: String, on: Boolean, icon: androidx.compose.ui.gra
 fun LastRideCard(
     last: LastRide,
     bikeName: String?,
+    /** "≈0.6 L · ₹57", once the fuel log knows the bike's mileage. */
+    fuelLine: String?,
     /** The bike's route colour. */
     routeColor: androidx.compose.ui.graphics.Color,
     justRode: Boolean,
@@ -206,6 +231,7 @@ fun LastRideCard(
                 Text(Format.rideDate(r.startTimeMillis), style = RtType.caption, color = RtColors.TextSecondary, maxLines = 1)
                 val details = listOfNotNull(
                     bikeName,
+                    fuelLine,
                     last.moments.size.takeIf { it > 0 }?.let { "$it ${if (it == 1) "moment" else "moments"}" },
                 ).joinToString(" · ")
                 if (details.isNotEmpty()) {

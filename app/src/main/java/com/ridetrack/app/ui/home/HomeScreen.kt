@@ -106,6 +106,8 @@ fun HomeScreen(
         }
     }
     var confirmDiscard by remember { mutableStateOf<Ride?>(null) }
+    val fuel by vm.fuel.collectAsStateWithLifecycle()
+    var fillUp by remember { mutableStateOf<com.ridetrack.app.fuel.FuelPrompt?>(null) }
     var pendingBike by remember { mutableStateOf<Bike?>(null) }
     var permissionDenied by remember { mutableStateOf(false) }
 
@@ -146,6 +148,10 @@ fun HomeScreen(
         Header(s, onOpenProfile)
         Spacer(Modifier.height(16.dp))
 
+        fuel.prompt?.let { p ->
+            FuelPromptCard(p, onAdd = { fillUp = p }, onDismiss = { vm.dismissFuel(p) }, modifier = Modifier.riseIn(0))
+            Spacer(Modifier.height(RtDimens.md))
+        }
         s.unfinished?.let { ride ->
             UnfinishedRideCard(
                 ride,
@@ -163,6 +169,7 @@ fun HomeScreen(
                 LastRideCard(
                     last = last,
                     bikeName = s.bikes.firstOrNull { it.id == last.ride.bikeId }?.displayName,
+                    fuelLine = fuel.lastRide,
                     routeColor = s.bikes.firstOrNull { it.id == last.ride.bikeId }?.let { BikeColors.of(it, s.bikes) } ?: BikeColors.PALETTE[0],
                     justRode = s.justRode,
                     onOpen = { onOpenRide(last.ride.id) },
@@ -258,6 +265,20 @@ fun HomeScreen(
             },
             dismissButton = { TextButton(onClick = { confirmDiscard = null }) { Text("Keep") } },
             containerColor = RtColors.SurfaceRaised,
+        )
+    }
+
+    fillUp?.let { p ->
+        com.ridetrack.app.fuel.FillUpDialog(
+            title = "Fill-up",
+            station = "${p.station} · ${Format.timeOfDay(p.timeMillis)}",
+            amount = p.amount,
+            price = fuel.lastPrice,
+            onSave = { litres, amount, price ->
+                vm.addFill(p, litres, amount, price)
+                fillUp = null
+            },
+            onDismiss = { fillUp = null },
         )
     }
 
