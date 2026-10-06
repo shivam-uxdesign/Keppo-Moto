@@ -16,6 +16,7 @@ import com.ridetrack.app.data.db.RideTrackDatabase
 import com.ridetrack.app.hud.HudController
 import com.ridetrack.app.moments.MomentRepository
 import com.ridetrack.app.moments.MomentsHub
+import com.ridetrack.app.ride.RideContinuation
 import com.ridetrack.app.ride.RideSessionManager
 import com.ridetrack.app.safety.CrashAlerts
 import com.ridetrack.app.sensors.BatteryMonitor
@@ -55,6 +56,9 @@ class AppContainer(context: Context) {
             appScope.launch { journal.onRideSaved(id) }
         },
     )
+
+    /** Unfinished rides: carry on, or save; and why the app last stopped. */
+    val continuation = RideContinuation(appContext, rides, bikes, moments, session)
 
     val routeImages = RouteImages(appContext, database)
     val journal = JournalSource(appContext, database, settings, routeImages)

@@ -44,6 +44,10 @@ class TelemetryPipeline(
     crashImpactG: Double? = null,
     /** A stop this long becomes a break; 0 = only when the phone leaves the mount or the engine stops; null = no breaks. */
     breakAfterMillis: Long? = 5 * 60_000L,
+    /** A ride carried on after the app was closed: its stats so far (the gap already counted as a break). */
+    initialStats: RideStats = RideStats(),
+    /** Time is counted from here; later than [startNanos] when carrying on a ride. */
+    accountFromNanos: Long = startNanos,
 ) {
     private val breaks = breakAfterMillis?.let { BreakDetector(afterMillis = it) }
     /** When the current counted stop began; null while moving or before the bike first moved. */
@@ -66,7 +70,7 @@ class TelemetryPipeline(
     private val dynamics = DynamicsProcessor(calibration, sensors)
     private val autoPause = AutoPauseDetector()
     private val detector = EventDetector(thresholds)
-    private val accumulator = RideStatsAccumulator()
+    private val accumulator = RideStatsAccumulator(initialStats)
     private val autoCal = AutoCalibrator()
 
     private var calibrationStatus = if (calibration != null) CalibrationStatus.SAVED else CalibrationStatus.NONE
@@ -78,7 +82,7 @@ class TelemetryPipeline(
     private var gear: Int? = null
     private var lastEngineNanos: Long? = null
 
-    private var lastAccountedNanos = startNanos
+    private var lastAccountedNanos = accountFromNanos
     private var lastGpsNanos: Long? = null
     private var lastDegradedEventMillis: Long? = null
     private var gpsLostReported = false

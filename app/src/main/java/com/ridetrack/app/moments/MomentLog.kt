@@ -10,11 +10,15 @@ import java.io.File
  */
 class MomentLog(private val file: File) {
     private val pending = StringBuilder()
+    private var flushedAt = 0L
 
     @Synchronized
     fun log(message: String) {
         Log.i(TAG, message)
-        pending.append(momentLogLine(System.currentTimeMillis(), message)).append('\n')
+        val now = System.currentTimeMillis()
+        pending.append(momentLogLine(now, message)).append('\n')
+        // Written out every few seconds, so a process that dies loses at most that much.
+        if (now - flushedAt >= FLUSH_EVERY_MILLIS) flush()
     }
 
     fun error(message: String, e: Throwable? = null) =
@@ -27,12 +31,22 @@ class MomentLog(private val file: File) {
             file.parentFile?.mkdirs()
             file.appendText(pending.toString())
             pending.setLength(0)
+            flushedAt = System.currentTimeMillis()
         }
     }
 
     companion object {
         private const val TAG = "Moments"
         const val FILE_NAME = "moments-log.txt"
+        private const val FLUSH_EVERY_MILLIS = 3_000L
+
+        /** Adds a line to a ride's log from outside a ride (e.g. why the app last stopped). */
+        fun append(file: File, message: String) {
+            runCatching {
+                file.parentFile?.mkdirs()
+                file.appendText(momentLogLine(System.currentTimeMillis(), message) + "\n")
+            }
+        }
 
         /** "Moments: 0 clips · 4 photos · last issue: …", for the ride page in debug builds. */
         fun summary(file: File): String? {

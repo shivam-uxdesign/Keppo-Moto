@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import androidx.lifecycle.viewModelScope
 import com.ridetrack.app.AppContainer
+import com.ridetrack.app.ride.RideContinuation
 import com.ridetrack.app.ride.RideNames
 import com.ridetrack.app.sensors.Permissions
 import com.ridetrack.app.ui.common.Odometer
@@ -55,6 +56,8 @@ data class HomeUiState(
     val rideState: RideState = RideState.Idle,
     val totals: RideTotals? = null,
     val unfinished: Ride? = null,
+    /** The unfinished ride stopped recently enough to carry on as the same ride. */
+    val unfinishedRecent: Boolean = false,
     val gps: GpsReadiness = GpsReadiness.READY,
     val sensors: SensorAvailability = SensorAvailability(accelerometer = true, gyroscope = true, magnetometer = true),
     /** This week, for the one-line summary. */
@@ -100,11 +103,14 @@ private data class Extras(
     val starting: Boolean,
     val lastRide: LastRide?,
     val momentCounts: Map<String, Int>,
+    val unfinished: Pair<Ride, Long>?,
 )
 
 class HomeViewModel(private val c: AppContainer) : ViewModel() {
     private val environment = MutableStateFlow(readEnvironment())
     private val starting = MutableStateFlow(false)
+    /** The newest unfinished ride and when it was last written. */
+    private val unfinishedInfo = MutableStateFlow<Pair<Ride, Long>?>(null)
 
     /** The latest ride (demo rides only in demo mode), with its route and moments. */
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -129,8 +135,8 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
         combine(c.rides.observeInProgress(), c.session.active, c.session.state) { inProgress, active, rideState ->
             Triple(inProgress.firstOrNull { it.id != active?.rideId }, rideState, active)
         },
-        combine(environment, starting, lastRide, c.moments.observeCountsByBike()) { e, s, l, m -> Extras(e, s, l, m) },
-    ) { bikes, settings, rides, (unfinished, rideState, _), (env, isStarting, last, momentCounts) ->
+        combine(environment, starting, lastRide, c.moments.observeCountsByBike(), unfinishedInfo) { e, s, l, m, u -> Extras(e, s, l, m, u) },
+    ) { bikes, settings, rides, (unfinished, rideState, _), (env, isStarting, last, momentCounts, unfinishedAt) ->
         val bike = bikes.firstOrNull { it.id == settings.selectedBikeId } ?: bikes.firstOrNull()
         val totals = RideTotals.from(rides)
         val now = ZonedDateTime.now()
@@ -163,6 +169,8 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
             rideState = rideState,
             totals = totals.takeIf { it.rideCount > 0 },
             unfinished = unfinished,
+            unfinishedRecent = unfinished != null && unfinishedAt?.first?.id == unfinished.id &&
+                nowMillis - unfinishedAt.second < RideContinuation.CONTINUE_WINDOW_MILLIS,
             gps = env.gps,
             sensors = env.sensors,
             week = HomeStats.from(rides, now).week,
@@ -205,6 +213,30 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
         environment.value = readEnvironment()
     }
 
+    init {
+        checkUnfinished()
+    }
+
+    /** Saves unfinished rides too old to carry on; remembers the newest for "Continue". */
+    fun checkUnfinished() {
+        viewModelScope.launch {
+            if (c.session.state.value.isActive) return@launch
+            c.continuation.saveStale(RideContinuation.CONTINUE_WINDOW_MILLIS)
+            unfinishedInfo.value = c.continuation.latest()
+        }
+    }
+
+    /** Carries on the unfinished ride as the same ride. */
+    fun continueUnfinished(onStarted: () -> Unit) {
+        if (starting.value) return
+        starting.value = true
+        viewModelScope.launch {
+            val id = c.continuation.continueIfRecent(RideContinuation.CONTINUE_WINDOW_MILLIS, "rider tapped Continue")
+            starting.value = false
+            if (id != null) onStarted() else checkUnfinished()
+        }
+    }
+
     private fun readEnvironment(): Environment {
         val ctx = c.appContext
         val inv = c.sensorInventory
@@ -236,6 +268,8 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
         starting.value = true
         viewModelScope.launch {
             c.settings.setSelectedBike(bike.id)
+            // A new ride: anything left unfinished is saved as it is.
+            c.continuation.saveStale(0L)
             val id = c.session.startNow(bike)
             starting.value = false
             if (id != null || c.session.state.value.isActive) onStarted()

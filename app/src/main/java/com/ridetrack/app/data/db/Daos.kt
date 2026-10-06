@@ -48,6 +48,9 @@ interface RideDao {
     @Query("SELECT * FROM rides WHERE status = 'IN_PROGRESS' AND deletedAtMillis IS NULL ORDER BY startTimeMillis DESC")
     fun observeInProgress(): Flow<List<RideEntity>>
 
+    @Query("SELECT * FROM rides WHERE status = 'IN_PROGRESS' AND deletedAtMillis IS NULL ORDER BY startTimeMillis DESC")
+    suspend fun inProgress(): List<RideEntity>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(ride: RideEntity)
 

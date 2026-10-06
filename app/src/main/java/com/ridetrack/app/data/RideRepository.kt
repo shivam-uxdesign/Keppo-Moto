@@ -53,6 +53,11 @@ class RideRepository(private val dao: RideDao) {
         return dao.complete(ride.id, end, name) > 0
     }
 
+    /** Rides left in progress (the app was closed mid-ride), each with when it was last written. */
+    suspend fun unfinished(): List<Pair<Ride, Long>> = dao.inProgress().map { e ->
+        e.toModel() to maxOf(dao.lastSampleTime(e.id) ?: e.lastUpdateMillis, e.lastUpdateMillis)
+    }
+
     suspend fun rename(rideId: String, name: String) = dao.rename(rideId, name.trim())
 
     suspend fun track(rideId: String): RideTrack = RideTrack(

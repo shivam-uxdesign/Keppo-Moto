@@ -34,6 +34,8 @@ import com.ridetrack.telemetry.model.Bike
 import com.ridetrack.telemetry.model.DataSourceKind
 import com.ridetrack.telemetry.model.MountCalibration
 import com.ridetrack.telemetry.model.RideEvent
+import com.ridetrack.telemetry.model.Ride
+import com.ridetrack.telemetry.model.RideStats
 import com.ridetrack.telemetry.model.SensorAvailability
 import com.ridetrack.telemetry.model.GpsQuality
 import com.ridetrack.telemetry.model.TelemetryFrame
@@ -155,14 +157,34 @@ class RideSessionManager(
         return id
     }
 
+    /**
+     * Carries on [ride], left unfinished when the app was closed (killed, crashed, or the phone
+     * died): same ride id, its stats so far, and the time it wasn't recording counted as a
+     * break. Returns the ride id, or null if it can't (already recording, bike gone).
+     */
+    suspend fun continueRide(ride: Ride, lastWrittenMillis: Long, bike: Bike): String? {
+        if (_state.value.isActive) return null
+        dispatch(RideAction.BeginCheck)
+        dispatch(RideAction.ChecksPassed)
+        val id = start(bike, resume = ride to lastWrittenMillis)
+        if (id == null && _state.value == RideState.Ready) dispatch(RideAction.CancelCheck)
+        return id
+    }
+
     /** Starts recording. Only valid from [RideState.Ready]. Returns the ride id. */
-    suspend fun start(bike: Bike): String? = lifecycleMutex.withLock {
+    suspend fun start(bike: Bike, resume: Pair<Ride, Long>? = null): String? = lifecycleMutex.withLock {
         if (_state.value != RideState.Ready) return null
         val prefs = settings.settings.first()
         val demo = prefs.demoMode
-        val startNanos = SystemClock.elapsedRealtimeNanos()
-        val startWall = System.currentTimeMillis()
-        val rideId = UUID.randomUUID().toString()
+        val nowNanos = SystemClock.elapsedRealtimeNanos()
+        val nowWall = System.currentTimeMillis()
+        val resumed = resume?.first
+        // Carrying on: the clock starts at the ride's real start, so times and elapsed line up.
+        val startWall = resumed?.startTimeMillis ?: nowWall
+        val startNanos = nowNanos - (nowWall - startWall) * 1_000_000L
+        val rideId = resumed?.id ?: UUID.randomUUID().toString()
+        val gapFrom = resume?.second ?: nowWall
+        val gapMillis = (nowWall - gapFrom).coerceAtLeast(0L)
 
         val source: TelemetrySource
         val calibration: MountCalibration?
@@ -177,7 +199,7 @@ class RideSessionManager(
         }
 
         try {
-            rides.create(rideId, bike.id, source.kind, startWall)
+            if (resumed == null) rides.create(rideId, bike.id, source.kind, startWall)
         } catch (e: Exception) {
             Log.e(TAG, "Could not create ride", e)
             dispatch(RideAction.Fail(RideError.STORAGE_FAILURE))
@@ -195,6 +217,8 @@ class RideSessionManager(
             momentTriggers = triggers,
             crashImpactG = crashG,
             breakAfterMillis = prefs.breakMinutes.takeIf { it > 0 }?.let { it * 60_000L },
+            initialStats = resumed?.stats?.let { it.copy(breakMillis = it.breakMillis + gapMillis) } ?: RideStats(),
+            accountFromNanos = nowNanos,
         )
         val rec = Recorder(
             rideId,
@@ -203,7 +227,17 @@ class RideSessionManager(
             photos = m?.photos?.takeIf { it.minutes > 0 }?.let { PhotoScheduler(it.minutes * 60_000L) },
             gpsVideo = if (m != null && !demo && prefs.safety.gpsLostVideo) GpsLostVideo() else null,
             moments = m != null,
-        ).also { it.pendingEvents += pipeline.start() }
+        ).also {
+            it.pendingEvents += if (resumed == null) {
+                listOf(pipeline.start())
+            } else {
+                // The time the app wasn't running shows as a break on the ride.
+                listOf(
+                    RideEvent(RideEventType.BREAK_START, gapFrom, null, null, null),
+                    RideEvent(RideEventType.BREAK_END, nowWall, null, null, null),
+                )
+            }
+        }
         momentsHub.reset()
         recorder = rec
         _manuallyPaused.value = false
@@ -219,7 +253,7 @@ class RideSessionManager(
             moments = m,
             landscapeMount = bike.mountOrientation == MountOrientation.LANDSCAPE,
         )
-        _frame.value = pipeline.frame(startNanos).first
+        _frame.value = pipeline.frame(nowNanos).first
         dispatch(RideAction.Start(rideId))
 
         recordingJob = scope.launch(recordingDispatcher) {

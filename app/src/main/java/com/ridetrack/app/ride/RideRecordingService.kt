@@ -67,7 +67,11 @@ class RideRecordingService : LifecycleService() {
             // Always satisfy the startForegroundService() contract before anything else.
             if (!enterForeground()) return START_NOT_STICKY
             if (!session.state.value.isActive) {
-                // Restarted without a live session (e.g. after process death): nothing to do.
+                if (intent == null) {
+                    // Android restarted us after the app was killed mid-ride: carry the ride on.
+                    carryOn(session)
+                    return START_STICKY
+                }
                 shutdown()
                 return START_NOT_STICKY
             }
@@ -75,7 +79,26 @@ class RideRecordingService : LifecycleService() {
             observe(session)
             startMoments(session)
         }
-        return START_NOT_STICKY
+        // Killed while recording: Android restarts the service, and the ride carries on.
+        return if (session.state.value.isActive) START_STICKY else START_NOT_STICKY
+    }
+
+    private fun carryOn(session: RideSessionManager) {
+        val c = (application as RideTrackApp).container
+        lifecycleScope.launch {
+            val id = c.continuation.continueIfRecent(RideContinuation.RESTART_WINDOW_MILLIS, "restarted by Android")
+            if (id == null) {
+                shutdown()
+                return@launch
+            }
+            // Now the ride is known: camera and mic too, if Android allows them from here.
+            val moments = runCatching {
+                ServiceCompat.startForeground(this@RideRecordingService, NOTIFICATION_ID, buildNotification(null), foregroundTypes())
+            }.isSuccess
+            acquireWakeLock()
+            observe(session)
+            if (moments) startMoments(session)
+        }
     }
 
     /** Filming Moments needs camera/microphone foreground types, declared only when granted. */

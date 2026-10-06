@@ -91,7 +91,10 @@ fun HomeScreen(
     val vm = appViewModel { HomeViewModel(it) }
     val s by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshEnvironment() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        vm.refreshEnvironment()
+        vm.checkUnfinished()
+    }
     // Mics get plugged in and the battery drains while Home is open.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
@@ -144,7 +147,13 @@ fun HomeScreen(
         Spacer(Modifier.height(16.dp))
 
         s.unfinished?.let { ride ->
-            UnfinishedRideCard(ride, onSave = { vm.saveUnfinished(ride) }, onDiscard = { confirmDiscard = ride })
+            UnfinishedRideCard(
+                ride,
+                recent = s.unfinishedRecent,
+                onSave = { vm.saveUnfinished(ride) },
+                onDiscard = { confirmDiscard = ride },
+                onContinue = { vm.continueUnfinished(onRideStarted) },
+            )
             Spacer(Modifier.height(RtDimens.md))
         }
 
@@ -365,7 +374,7 @@ private fun RestoreCard(onRestore: () -> Unit, onDismiss: () -> Unit, modifier: 
 }
 
 @Composable
-private fun UnfinishedRideCard(ride: Ride, onSave: () -> Unit, onDiscard: () -> Unit) {
+private fun UnfinishedRideCard(ride: Ride, recent: Boolean, onSave: () -> Unit, onDiscard: () -> Unit, onContinue: () -> Unit) {
     val shape = RoundedCornerShape(RtDimens.cardRadius)
     Column(
         Modifier
@@ -378,16 +387,31 @@ private fun UnfinishedRideCard(ride: Ride, onSave: () -> Unit, onDiscard: () -> 
         Chip("Unfinished ride", RtColors.Warning)
         Spacer(Modifier.height(RtDimens.sm))
         Text(
-            "A ride started ${Format.rideDate(ride.startTimeMillis)} was interrupted before it was saved. " +
-                "${Format.distance(ride.stats.distanceM)} was recorded.",
+            if (recent) {
+                "${ride.name.ifBlank { "Your ride" }} stopped recording ${Format.timeOfDay(ride.startTimeMillis).let { "(started $it)" }}. " +
+                    "${Format.distance(ride.stats.distanceM)} so far. Carry on as the same ride? The gap shows as a break."
+            } else {
+                "A ride started ${Format.rideDate(ride.startTimeMillis)} was interrupted before it was saved. " +
+                    "${Format.distance(ride.stats.distanceM)} was recorded."
+            },
             style = RtType.body,
             color = RtColors.TextPrimary,
         )
         Spacer(Modifier.height(RtDimens.md))
-        Row {
-            SecondaryButton("Discard", onDiscard, Modifier.weight(1f), contentColor = RtColors.Error)
-            Spacer(Modifier.width(RtDimens.sm))
-            PrimaryButton("Save ride", onSave, Modifier.weight(1f))
+        if (recent) {
+            PrimaryButton("Continue ride", onContinue, Modifier.fillMaxWidth())
+            Spacer(Modifier.height(RtDimens.sm))
+            Row {
+                SecondaryButton("Discard", onDiscard, Modifier.weight(1f), contentColor = RtColors.Error)
+                Spacer(Modifier.width(RtDimens.sm))
+                SecondaryButton("Save as it is", onSave, Modifier.weight(1f))
+            }
+        } else {
+            Row {
+                SecondaryButton("Discard", onDiscard, Modifier.weight(1f), contentColor = RtColors.Error)
+                Spacer(Modifier.width(RtDimens.sm))
+                PrimaryButton("Save ride", onSave, Modifier.weight(1f))
+            }
         }
     }
 }
