@@ -186,7 +186,8 @@ private fun toneColor(t: HudTopRow.Tone, c: HudColors): Color = when (t) {
 private val PHONE_MIC_BLUE = Color(0xFF60A5FA)
 
 /**
- * "Start filming when I speak": the mic level as a slim bar, with a tick at the threshold.
+ * "Start filming when I speak": how far the mic is above the background noise, as a slim bar,
+ * with a tick at the sensitivity margin.
  * It turns the accent colour while it hears you, so the threshold can be tuned by eye.
  */
 @Composable
@@ -194,10 +195,10 @@ private fun VoiceMeter(data: HudData, c: HudColors) {
     val level = data.micLevelDb
     fun frac(db: Float) = ((db - METER_MIN_DB) / (METER_MAX_DB - METER_MIN_DB)).coerceIn(0f, 1f)
     val fill = level?.let(::frac) ?: 0f
-    val tick = frac(data.voiceThresholdDb.toFloat())
+    val tick = frac(data.voiceMarginDb)
     val color = if (data.speaking) DarkPalette.primary else c.muted
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) {
-        contentDescription = if (level == null) "Mic off" else "Mic level ${level.toInt()} dB, starts filming at ${data.voiceThresholdDb} dB"
+        contentDescription = if (level == null) "Mic off" else "Mic ${level.toInt()} dB above background, films at ${data.voiceMarginDb.toInt()} dB"
     }) {
         Text("MIC", style = hudLabel, color = color)
         Spacer(Modifier.width(6.dp))
@@ -224,8 +225,9 @@ private fun VoiceMeter(data: HudData, c: HudColors) {
     }
 }
 
-private const val METER_MIN_DB = -70f
-private const val METER_MAX_DB = 0f
+/** The meter shows dB above the background noise. */
+private const val METER_MIN_DB = 0f
+private const val METER_MAX_DB = 24f
 
 /** Tiny camera state: a dim dot + CAM while buffering, red dot + REC while saving. */
 @Composable

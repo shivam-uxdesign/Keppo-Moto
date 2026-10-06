@@ -15,7 +15,7 @@ import com.ridetrack.app.MainActivity
 import com.ridetrack.app.data.HudLayout
 import com.ridetrack.app.data.HudSize
 import com.ridetrack.app.data.SettingsRepository
-import com.ridetrack.app.data.MomentSettings
+import com.ridetrack.app.data.VoiceSensitivity
 import com.ridetrack.app.ride.RideSessionManager
 import com.ridetrack.app.ui.hud.HudControlActions
 import com.ridetrack.telemetry.state.RideState
@@ -46,8 +46,8 @@ class HudController(
     private var stoppedSinceMillis: Long? = null
     /** A short note under the buttons (why a video couldn't start), with when it was set. */
     private val note = MutableStateFlow<Pair<String, Long>?>(null)
-    /** "Start filming when I speak" and its threshold, for the pop-up's level meter. */
-    private val voice = MutableStateFlow(false to MomentSettings.DEFAULT_VOICE_DB)
+    /** "Start filming when I speak" and its sensitivity, for the pop-up's level meter. */
+    private val voice = MutableStateFlow(false to VoiceSensitivity.MEDIUM)
 
     private val actions: HudControlActions = object : HudControlActions {
         override fun setLayout(layout: HudLayout) { scope.launch { settings.setHudLayout(layout) } }
@@ -111,7 +111,7 @@ class HudController(
         }
 
         scope.launch {
-            settings.settings.map { it.moments.voice to it.moments.voiceThresholdDb }.distinctUntilChanged().collect { voice.value = it }
+            settings.settings.map { it.moments.voice to it.moments.voiceSensitivity }.distinctUntilChanged().collect { voice.value = it }
         }
 
         scope.launch {
@@ -170,7 +170,7 @@ class HudController(
         ).copy(
             voiceOn = voice.value.first && session.active.value?.moments != null,
             micLevelDb = moments.micLevel.value,
-            voiceThresholdDb = voice.value.second,
+            voiceMarginDb = voice.value.second.marginDb,
             speaking = moments.speaking.value,
         )
     }

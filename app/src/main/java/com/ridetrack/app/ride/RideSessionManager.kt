@@ -5,6 +5,10 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import com.ridetrack.app.data.MomentSettings
+import com.ridetrack.app.data.VoiceSensitivity
+import com.ridetrack.app.moments.VoiceChunk
+import java.util.Locale
+import kotlin.math.roundToInt
 import com.ridetrack.app.data.MedicalInfo
 import com.ridetrack.app.moments.LiveAction
 import com.ridetrack.app.safety.CrashReport
@@ -123,8 +127,8 @@ class RideSessionManager(
         .stateIn(scope, SharingStarted.Eagerly, true)
 
     /** Read live, so the threshold can be tuned during a ride against the HUD's meter. */
-    private val voiceSettings = settings.settings.map { it.moments.voice to it.moments.voiceThresholdDb }
-        .stateIn(scope, SharingStarted.Eagerly, false to MomentSettings.DEFAULT_VOICE_DB)
+    private val voiceSettings = settings.settings.map { it.moments.voice to it.moments.voiceSensitivity }
+        .stateIn(scope, SharingStarted.Eagerly, false to VoiceSensitivity.MEDIUM)
 
     private val recordingDispatcher = Dispatchers.Default.limitedParallelism(1)
     private val lifecycleMutex = Mutex()
@@ -401,18 +405,23 @@ class RideSessionManager(
     /**
      * "Start filming when I speak": speech starts a video with a 10 s look-back (taking over
      * an event clip being filmed), and keeps it going until 5 s after the rider stops talking.
-     * Speech during an event video extends it the same way. Off on a break or off the mount.
+     * Speech during an event video extends it the same way. Works riding, stopped, paused or on a
+     * break; off only when the phone is off the mount. Speaking = 1.5 s of sound in the voice
+     * range, clearly above the background noise (see [SpeechGate]).
      */
     private fun listenForSpeech(rec: Recorder, frame: TelemetryFrame) {
         val levels = momentsHub.drainLevels()
-        val (on, threshold) = voiceSettings.value
-        if (!rec.moments || !on || frame.onBreak || frame.offMount) {
+        val (on, sensitivity) = voiceSettings.value
+        if (!rec.moments || !on || frame.offMount) {
             if (rec.speech.speaking) rec.speech.reset()
             momentsHub.setSpeaking(false)
             return
         }
-        levels.forEach { (t, db, len) -> rec.speech.onLevel(t, db, len, threshold.toFloat()) }
+        val margin = sensitivity.marginDb
+        val wasSpeaking = rec.speech.speaking
+        levels.forEach { c -> rec.speech.onLevel(c.timeMillis, c.aboveDb, c.chunkMillis, margin) }
         momentsHub.setSpeaking(rec.speech.speaking)
+        logVoice(rec, frame, levels, wasSpeaking, margin)
         val last = rec.speech.lastSpeechMillis ?: return
         if (last <= rec.lastSpeechHandled) return
         rec.lastSpeechHandled = last
@@ -430,7 +439,9 @@ class RideSessionManager(
         if (momentsHub.live.value != null) return
         val now = frame.timeMillis
         val pending = rec.planner?.promotePending()
-        val lookBack = maxOf(VOICE_BEFORE_MILLIS, pending?.let { now - it.startMillis } ?: 0L)
+        // Stopped or paused, the camera rests: it wakes on speech, with nothing to look back on.
+        val resting = _state.value is RideState.Paused
+        val lookBack = if (resting) 0L else maxOf(VOICE_BEFORE_MILLIS, pending?.let { now - it.startMillis } ?: 0L)
         val ok = momentsHub.submitLive(
             MomentRequest.StartLive(
                 rec.rideId, MomentSource.EVENT, lookBack.coerceAtMost(MAX_LEAD_IN_MILLIS),
@@ -448,6 +459,34 @@ class RideSessionManager(
         rec.chainHasVoice = true
         chain.start(now, holdUntil = maxOf(until, pending?.endMillis ?: 0L))
     }
+
+    /**
+     * The mic in the moments log: every 5 s the level, the background and the margin; and a
+     * line each time speaking starts or stops, so a ride's export shows why a video began.
+     */
+    private fun logVoice(rec: Recorder, frame: TelemetryFrame, levels: List<VoiceChunk>, wasSpeaking: Boolean, margin: Float) {
+        val speed = frame.speedMps?.let { "${(it * 3.6).roundToInt()} km/h" } ?: "no speed"
+        val latest = levels.lastOrNull()
+        val speaking = rec.speech.speaking
+        if (speaking && !wasSpeaking && latest != null) {
+            momentsHub.log(
+                "voice start: level ${db(latest.levelDb)} · background ${db(latest.backgroundDb)} (+${db(latest.aboveDb, false)}) · " +
+                    "${"%.1f".format(Locale.US, rec.speech.sustainedMillis / 1000.0)} s sustained · margin +${margin.roundToInt()} dB · $speed",
+            )
+        } else if (!speaking && wasSpeaking) {
+            momentsHub.log("voice stop: quiet · $speed")
+        }
+        if (latest != null && frame.timeMillis - rec.lastMicLog >= MIC_LOG_MILLIS) {
+            rec.lastMicLog = frame.timeMillis
+            val peak = levels.maxOf { it.aboveDb }
+            momentsHub.log(
+                "mic: level ${db(latest.levelDb)} · background ${db(latest.backgroundDb)} (+${db(latest.aboveDb, false)}, peak +${db(peak, false)}) · " +
+                    "margin +${margin.roundToInt()} dB · ${if (speaking) "speaking" else "quiet"} · $speed",
+            )
+        }
+    }
+
+    private fun db(v: Float, unit: Boolean = true) = "${v.roundToInt()}${if (unit) " dB" else ""}"
 
     private fun videoControlEvents(rec: Recorder, types: Set<com.ridetrack.telemetry.model.RideEventType>, peak: Double?) {
         momentsHub.submitLive(MomentRequest.LiveEvents(rec.rideId, types, peak))
@@ -626,6 +665,7 @@ class RideSessionManager(
         /** "Start filming when I speak". */
         val speech = SpeechGate()
         var lastSpeechHandled = Long.MIN_VALUE
+        var lastMicLog = Long.MIN_VALUE
     }
 
     companion object {
@@ -643,5 +683,6 @@ class RideSessionManager(
         /** Speech: film from 10 s before (plus the moment it takes to hear it), until 5 s of quiet. */
         private const val VOICE_BEFORE_MILLIS = 11_000L
         private const val VOICE_AFTER_MILLIS = 5_000L
+        private const val MIC_LOG_MILLIS = 5_000L
     }
 }

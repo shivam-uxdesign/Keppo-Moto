@@ -1,5 +1,7 @@
 package com.ridetrack.app.moments
 
+import com.ridetrack.telemetry.moments.BackgroundLevel
+
 import com.ridetrack.telemetry.model.RideEventType
 
 import android.graphics.Bitmap
@@ -187,24 +189,37 @@ class MomentsHub {
     }
 
     private val _micLevel = MutableStateFlow<Float?>(null)
-    /** Mic loudness in dBFS (null while no mic is open), for the HUD's meter. */
+    /** Mic loudness in the voice range, in dB above the background noise (null while no mic is open). */
     val micLevel: StateFlow<Float?> = _micLevel.asStateFlow()
-    private val levels = ArrayList<Triple<Long, Float, Long>>()
+    private val background = BackgroundLevel()
+    private val levels = ArrayList<VoiceChunk>()
 
     /** From the audio thread: one chunk's level. The session drains them for speech detection. */
     fun reportLevel(timeMillis: Long, levelDb: Float, chunkMillis: Long) {
-        _micLevel.value = levelDb
-        synchronized(levels) {
-            levels += Triple(timeMillis, levelDb, chunkMillis)
-            if (levels.size > MAX_LEVELS) levels.subList(0, levels.size - MAX_LEVELS).clear()
+        val chunk = synchronized(levels) {
+            val bg = background.onLevel(timeMillis, levelDb)
+            VoiceChunk(timeMillis, levelDb, bg, chunkMillis).also {
+                levels += it
+                if (levels.size > MAX_LEVELS) levels.subList(0, levels.size - MAX_LEVELS).clear()
+            }
         }
+        _micLevel.value = chunk.aboveDb
     }
 
-    fun drainLevels(): List<Triple<Long, Float, Long>> = synchronized(levels) { levels.toList().also { levels.clear() } }
+    fun drainLevels(): List<VoiceChunk> = synchronized(levels) { levels.toList().also { levels.clear() } }
 
     fun clearLevel() {
         _micLevel.value = null
-        synchronized(levels) { levels.clear() }
+        synchronized(levels) {
+            levels.clear()
+            background.reset()
+        }
+    }
+
+    /** Writes a line to the moments log (set by the recorder while a ride runs). */
+    var onLog: ((String) -> Unit)? = null
+    fun log(message: String) {
+        onLog?.invoke(message)
     }
 
     private val _speaking = MutableStateFlow(false)
@@ -259,4 +274,9 @@ class MomentsHub {
         /** ~5 s of chunks: more than a tick ever needs. */
         const val MAX_LEVELS = 120
     }
+}
+
+/** One audio chunk: its level in the voice range and the background then (dBFS). */
+data class VoiceChunk(val timeMillis: Long, val levelDb: Float, val backgroundDb: Float, val chunkMillis: Long) {
+    val aboveDb: Float get() = levelDb - backgroundDb
 }

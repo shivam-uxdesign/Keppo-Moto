@@ -67,10 +67,11 @@ data class HudData(
     val micFallback: String? = null,
     /** The phone's own mic is recording (no DJI / external mic): the camera label turns blue. */
     val phoneMic: Boolean = false,
-    /** "Start filming when I speak" is on: show the mic level against [voiceThresholdDb]. */
+    /** "Start filming when I speak" is on: show the mic level above the background against [voiceMarginDb]. */
     val voiceOn: Boolean = false,
+    /** dB above the background noise. */
     val micLevelDb: Float? = null,
-    val voiceThresholdDb: Int = 0,
+    val voiceMarginDb: Float = 9f,
     val speaking: Boolean = false,
 ) {
     companion object {

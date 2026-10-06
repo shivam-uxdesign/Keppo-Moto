@@ -171,6 +171,7 @@ class MomentRecorder(
         watchThermal()
         context.getSystemService<AudioManager>()?.registerAudioDeviceCallback(deviceCallback, android.os.Handler(android.os.Looper.getMainLooper()))
         watchPower()
+        hub.onLog = { log.log(it) }
         hub.onReconnectMic = {
             scope.launch(Dispatchers.Main) {
                 log.log("reconnect mic pressed")
@@ -232,6 +233,7 @@ class MomentRecorder(
             powerReceiver?.let { runCatching { context.unregisterReceiver(it) } }
             powerReceiver = null
             hub.onReconnectMic = null
+            hub.onLog = null
             micCheck?.cancel()
         }
         stopAudio()
@@ -297,6 +299,9 @@ class MomentRecorder(
             cam.cameraInfo.cameraState.removeObservers(owner)
             cam.cameraInfo.cameraState.observe(owner) { st -> onCameraState(st) }
             if (withVideo) {
+                startAudio()
+            } else if (settings.voice) {
+                // "Film when I speak" keeps listening while the camera rests (stopped, paused, on a break).
                 startAudio()
             } else {
                 stopAudio()

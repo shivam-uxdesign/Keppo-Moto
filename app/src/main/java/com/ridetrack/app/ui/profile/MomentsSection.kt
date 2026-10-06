@@ -12,10 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Slider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.DisposableEffect
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -53,6 +50,13 @@ import com.ridetrack.app.BuildConfig
 import com.ridetrack.app.data.MomentSettings
 import com.ridetrack.app.data.PhotoInterval
 import com.ridetrack.app.data.VideoQuality
+import com.ridetrack.app.data.VoiceSensitivity
+import com.ridetrack.telemetry.moments.BackgroundLevel
+import com.ridetrack.telemetry.moments.SpeechGate
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.rememberUpdatedState
 import com.ridetrack.app.sensors.Permissions
 import com.ridetrack.app.ui.components.Label
 import com.ridetrack.app.ui.components.PrimaryButton
@@ -135,11 +139,11 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel, showHeader:
             // Tunable during a ride: watch the pop-up's meter and adjust.
             ToggleRow(
                 "Start filming when I speak",
-                "Films from 10 s before you start talking until 5 s after you stop. Wind can set it off: use the meter to find a level that ignores it.",
+                "Films from 10 s before you start talking until 5 s after you stop. Starts after about 1.5 s of talking, so a breath or a horn tap doesn't set it off. Works stopped or paused too.",
                 m.voice,
                 { vm.setMoments(m.copy(voice = it)) },
             )
-            if (m.voice) VoiceLevel(m.voiceThresholdDb, m.mic, s.rideActive) { vm.setMoments(m.copy(voiceThresholdDb = it)) }
+            if (m.voice) VoiceLevel(m.voiceSensitivity, m.mic, s.rideActive) { vm.setMoments(m.copy(voiceSensitivity = it)) }
             Spacer(Modifier.height(RtDimens.sm))
             Label("Video quality")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
@@ -325,21 +329,33 @@ private fun MicPicker(saved: String?, enabled: Boolean, onPick: (String?) -> Uni
 }
 
 /**
- * The mic level now, against the speaking threshold, with a slider for it. During a ride the
- * level comes from Moments; otherwise the chosen mic is opened just while this is on screen.
+ * How far the mic is above the background noise right now, against the sensitivity margin,
+ * and the sensitivity choice. During a ride the level comes from Moments; otherwise the
+ * chosen mic is opened just while this is on screen, with the same background tracking and
+ * 1.5 s rule as the ride, so "Films now" here means it would film on the bike.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun VoiceLevel(thresholdDb: Int, mic: String?, rideActive: Boolean, onThreshold: (Int) -> Unit) {
+private fun VoiceLevel(sensitivity: VoiceSensitivity, mic: String?, rideActive: Boolean, onSensitivity: (VoiceSensitivity) -> Unit) {
     val context = LocalContext.current
     val hub = com.ridetrack.app.ui.appContainer().momentsHub
     val rideLevel by hub.micLevel.collectAsStateWithLifecycle()
+    val rideSpeaking by hub.speaking.collectAsStateWithLifecycle()
     var localLevel by remember { mutableStateOf<Float?>(null) }
+    var localSpeaking by remember { mutableStateOf(false) }
+    val margin by rememberUpdatedState(sensitivity.marginDb)
     val canListen = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     DisposableEffect(rideActive, mic, canListen) {
+        val background = BackgroundLevel()
+        val gate = SpeechGate()
         val meter = if (!rideActive && canListen) {
             runCatching {
                 val device = Microphones.resolve(context, MicChoice.decode(mic))
-                AudioEncoder(context, RollingBuffer(2_000_000L), device, onLevel = { _, db, _ -> localLevel = db })
+                AudioEncoder(context, RollingBuffer(2_000_000L), device, onLevel = { t, db, len ->
+                    val above = db - background.onLevel(t, db)
+                    localSpeaking = gate.onLevel(t, above, len, margin)
+                    localLevel = above
+                })
             }.getOrNull()
         } else {
             null
@@ -347,36 +363,52 @@ private fun VoiceLevel(thresholdDb: Int, mic: String?, rideActive: Boolean, onTh
         onDispose {
             meter?.release()
             localLevel = null
+            localSpeaking = false
         }
     }
     val level = if (rideActive) rideLevel else localLevel
-    var threshold by remember(thresholdDb) { mutableFloatStateOf(thresholdDb.toFloat()) }
-    val hearing = level != null && level >= threshold
+    val speaking = if (rideActive) rideSpeaking else localSpeaking
+    val loud = level != null && level >= sensitivity.marginDb
     Column(Modifier.fillMaxWidth().padding(bottom = RtDimens.xs)) {
         Text(
             when {
                 !canListen -> "Allow the microphone to see the level."
-                level == null -> "Starts at ${threshold.roundToInt()} dB"
-                else -> "Now ${level.roundToInt()} dB · starts at ${threshold.roundToInt()} dB"
+                level == null -> "Films at +${sensitivity.marginDb.roundToInt()} dB over the background, held about 1.5 s"
+                speaking -> "Films now · +${level.roundToInt()} dB over the background"
+                else -> "+${level.roundToInt()} dB over the background · films at +${sensitivity.marginDb.roundToInt()} dB, held about 1.5 s"
             },
             style = RtType.caption,
-            color = if (hearing) RtColors.Primary else RtColors.TextSecondary,
+            color = if (speaking) RtColors.Primary else RtColors.TextSecondary,
         )
         Spacer(Modifier.height(6.dp))
-        Box(Modifier.fillMaxWidth().height(8.dp).background(RtColors.Outline.copy(alpha = 0.5f), RoundedCornerShape(4.dp))) {
-            val f = level?.let { ((it - VOICE_METER_MIN) / -VOICE_METER_MIN).coerceIn(0f, 1f) } ?: 0f
-            Box(Modifier.fillMaxWidth(f).fillMaxHeight().background(if (hearing) RtColors.Primary else RtColors.TextTertiary, RoundedCornerShape(4.dp)))
+        BoxWithConstraints(Modifier.fillMaxWidth().height(8.dp).background(RtColors.Outline.copy(alpha = 0.5f), RoundedCornerShape(4.dp))) {
+            val f = level?.let { (it / VOICE_METER_MAX).coerceIn(0f, 1f) } ?: 0f
+            Box(
+                Modifier.fillMaxWidth(f).fillMaxHeight().background(
+                    when {
+                        speaking -> RtColors.Primary
+                        loud -> RtColors.Primary.copy(alpha = 0.5f)
+                        else -> RtColors.TextTertiary
+                    },
+                    RoundedCornerShape(4.dp),
+                ),
+            )
+            // The margin.
+            Box(Modifier.offset(x = maxWidth * (sensitivity.marginDb / VOICE_METER_MAX)).width(2.dp).fillMaxHeight().background(RtColors.TextPrimary))
         }
-        Slider(
-            value = threshold,
-            onValueChange = { threshold = it },
-            onValueChangeFinished = { onThreshold(threshold.roundToInt()) },
-            valueRange = MomentSettings.MIN_VOICE_DB.toFloat()..MomentSettings.MAX_VOICE_DB.toFloat(),
-            colors = SliderDefaults.colors(thumbColor = RtColors.Primary, activeTrackColor = RtColors.Primary, inactiveTrackColor = RtColors.Outline),
+        Spacer(Modifier.height(10.dp))
+        Text("Sensitivity", style = RtType.caption, color = RtColors.TextSecondary)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
+            VoiceSensitivity.entries.forEach { v -> Pick(v.label, sensitivity == v, true) { onSensitivity(v) } }
+        }
+        Text(
+            "Low needs clear, firm talking; High hears quieter speech but more of the wind. Keeps up with the wind as your speed changes.",
+            style = RtType.caption,
+            color = RtColors.TextTertiary,
         )
-        Text("Lower = more sensitive. Speak normally and set it just below your voice, above the wind.", style = RtType.caption, color = RtColors.TextTertiary)
     }
 }
 
-private const val VOICE_METER_MIN = -70f
+/** dB over the background at the right end of the meter. */
+private const val VOICE_METER_MAX = 24f
 
