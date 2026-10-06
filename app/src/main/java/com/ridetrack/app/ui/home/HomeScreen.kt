@@ -1,7 +1,10 @@
 package com.ridetrack.app.ui.home
 
 import com.ridetrack.app.ui.components.KeppoWordmark
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.content.Intent
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -113,6 +116,12 @@ fun HomeScreen(
         }
     }
 
+    // Moments needs the camera (and the mic for sound) before it can be switched on.
+    val momentsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        vm.refreshEnvironment()
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) vm.setMoments(true)
+    }
+
     // Slide on a bike's card → (location permission, first time only) → recording.
     fun go(bike: Bike) {
         if (!s.demoMode && !Permissions.hasFineLocation(context)) {
@@ -166,6 +175,18 @@ fun HomeScreen(
         if (bike != null) {
             if (!s.rideState.isActive) {
                 ReadinessCard(s.checks, onFix = { fix(context, it) }, Modifier.riseIn(0))
+                Spacer(Modifier.height(10.dp))
+                MomentsToggles(
+                    moments = s.momentsOn,
+                    voice = s.voiceOn,
+                    onMoments = { on ->
+                        val missing = listOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+                            .filter { ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }
+                        if (on && missing.isNotEmpty()) momentsPermission.launch(missing.toTypedArray()) else vm.setMoments(on)
+                    },
+                    onVoice = vm::setVoice,
+                    modifier = Modifier.riseIn(0),
+                )
                 Spacer(Modifier.height(10.dp))
             }
             GarageStack(

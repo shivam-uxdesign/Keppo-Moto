@@ -22,6 +22,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Icon
@@ -120,6 +123,36 @@ private fun CheckChip(c: ReadyCheck) {
         Text(if (ok) "✓" else "…", style = RtType.caption, color = if (ok) RtColors.Ok else RtColors.Warning)
         Spacer(Modifier.width(5.dp))
         Text(c.label, style = RtType.caption, color = if (ok) RtColors.TextSecondary else RtColors.Warning)
+    }
+}
+
+/** Quick switches above Start: Moments, and "Film when I speak" while Moments is on. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun MomentsToggles(moments: Boolean, voice: Boolean, onMoments: (Boolean) -> Unit, onVoice: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    FlowRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ToggleChip("Moments", moments, Icons.Outlined.Videocam) { onMoments(!moments) }
+        if (moments) ToggleChip("Film when I speak", voice, Icons.Outlined.Mic) { onVoice(!voice) }
+    }
+}
+
+@Composable
+private fun ToggleChip(label: String, on: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Row(
+        Modifier
+            .clip(shape)
+            .background(if (on) RtColors.Primary.copy(alpha = 0.16f) else RtColors.Surface)
+            .border(1.dp, if (on) RtColors.Primary.copy(alpha = 0.5f) else RtColors.Hairline, shape)
+            .toggleable(value = on, role = Role.Switch, onValueChange = { onClick() })
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = if (on) RtColors.Primary else RtColors.TextTertiary, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = RtType.caption, color = if (on) RtColors.TextPrimary else RtColors.TextSecondary)
+        Spacer(Modifier.width(6.dp))
+        Text(if (on) "On" else "Off", style = RtType.caption, color = if (on) RtColors.Primary else RtColors.TextTertiary)
     }
 }
 

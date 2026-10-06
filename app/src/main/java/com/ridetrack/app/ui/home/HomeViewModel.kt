@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
@@ -71,6 +72,9 @@ data class HomeUiState(
     /** Reminders for the selected bike, most due first. */
     val care: List<CareStatus> = emptyList(),
     val milestones: List<Milestone> = emptyList(),
+    /** Moments and "film when I speak", for the quick toggles above Start. */
+    val momentsOn: Boolean = false,
+    val voiceOn: Boolean = false,
     /** Lifetime numbers per bike id, for the back of the card. */
     val bikeStats: Map<String, BikeStats> = emptyMap(),
     /** A fresh install: offer to bring rides back from Google Drive. */
@@ -169,6 +173,8 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
             justRode = last != null && ended != null && nowMillis - ended < JUST_RODE_MILLIS && settings.homeDismissedRide != last.ride.id,
             care = bike?.let { b -> BikeCare.sorted(BikeCare.decode(settings.bikeCare).filter { it.bikeId == b.id }, odometers[b.id], nowMillis) }.orEmpty(),
             milestones = Milestones.of(rides, nowMillis),
+            momentsOn = settings.moments.enabled,
+            voiceOn = settings.moments.voice,
             bikeStats = bikes.associate { b -> b.id to BikeStats.from(b, rides, momentCounts[b.id] ?: 0) },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
@@ -176,6 +182,14 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
     /** Closes the "just after a ride" card; the ride stays on Home as the last ride. */
     fun dismissJustRode(rideId: String) {
         viewModelScope.launch { c.settings.dismissHomeRide(rideId) }
+    }
+
+    fun setMoments(on: Boolean) = editMoments { it.copy(enabled = on) }
+
+    fun setVoice(on: Boolean) = editMoments { it.copy(voice = on) }
+
+    private fun editMoments(change: (com.ridetrack.app.data.MomentSettings) -> com.ridetrack.app.data.MomentSettings) {
+        viewModelScope.launch { c.settings.setMoments(change(c.settings.settings.first().moments)) }
     }
 
     fun dismissRestore() {
