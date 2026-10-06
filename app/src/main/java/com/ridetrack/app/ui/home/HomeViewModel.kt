@@ -157,6 +157,9 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
             batteryPct = env.batteryPct,
             charging = env.charging,
             freeBytes = env.freeBytes,
+            rideMinutes = env.batteryPct?.takeIf { !env.charging }?.let { pct ->
+                c.batteryWatch.learnedPerHour(settings.moments.enabled)?.let { rate -> (pct / rate * 60).toInt() }
+            },
         )
         HomeUiState(
             loading = false,

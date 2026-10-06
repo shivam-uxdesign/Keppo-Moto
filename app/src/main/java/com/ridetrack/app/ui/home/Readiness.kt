@@ -3,6 +3,7 @@ package com.ridetrack.app.ui.home
 import com.ridetrack.app.moments.MicChoice
 import com.ridetrack.app.moments.MicType
 import com.ridetrack.app.moments.Microphones
+import com.ridetrack.telemetry.processing.BatteryWarnings
 
 /** What a readiness problem's button does. */
 enum class ReadyFix { LOCATION_SETTINGS, APP_SETTINGS, OVERLAY }
@@ -34,6 +35,8 @@ data class ReadyInputs(
     val batteryPct: Int? = null,
     val charging: Boolean = false,
     val freeBytes: Long? = null,
+    /** About how long the battery lasts riding with these settings (past rides); null = not known yet. */
+    val rideMinutes: Int? = null,
 )
 
 object Readiness {
@@ -69,7 +72,7 @@ object Readiness {
                     "Battery $pct%", CheckState.PROBLEM, "Battery $pct%",
                     "GPS${if (i.momentsOn) " and filming" else ""} use a lot. Charge, or plug into the bike.",
                 )
-                else -> ReadyCheck("Battery $pct%", CheckState.OK)
+                else -> ReadyCheck("Battery $pct%" + (i.rideMinutes?.let { " · about ${BatteryWarnings.duration(it)} of riding" } ?: ""), CheckState.OK)
             }
         }
         i.freeBytes?.let { free ->

@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-data class BatteryState(val percent: Int, val charging: Boolean) {
+data class BatteryState(val percent: Int, val charging: Boolean, val temperatureC: Float? = null) {
     val isLow: Boolean get() = !charging && percent <= 20
 }
 
@@ -40,6 +40,7 @@ class BatteryMonitor(private val context: Context) {
         if (level < 0 || scale <= 0) return null
         val status = getIntExtra(BatteryManager.EXTRA_STATUS, -1)
         val charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
-        return BatteryState(percent = level * 100 / scale, charging = charging)
+        val temp = getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }?.let { it / 10f }
+        return BatteryState(percent = level * 100 / scale, charging = charging, temperatureC = temp)
     }
 }

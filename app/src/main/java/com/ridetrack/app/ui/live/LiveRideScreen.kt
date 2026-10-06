@@ -268,8 +268,12 @@ private fun TopBar(chrome: LiveChrome, frame: TelemetryFrame?) {
             CameraBadge(cam, RtColors.TextSecondary)
         }
         chrome.battery?.let { b ->
-            Text("${b.percent}%", style = RtType.caption, color = if (b.isLow) RtColors.Warning else RtColors.TextSecondary)
+            val left = chrome.batteryOutlook?.minutesLeft?.let { " · ${com.ridetrack.telemetry.processing.BatteryWarnings.duration(it)}" } ?: ""
+            Text("${b.percent}%$left", style = RtType.caption, color = if (b.isLow || chrome.batteryOutlook?.warning != null) RtColors.Warning else RtColors.TextSecondary)
         }
+    }
+    chrome.batteryOutlook?.warning?.let {
+        Text(it, style = RtType.caption, color = RtColors.Warning, modifier = Modifier.padding(top = 4.dp))
     }
     // Moments were requested but can't film right now: say why, once, quietly.
     val m = chrome.moments

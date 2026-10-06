@@ -30,6 +30,8 @@ data class LiveChrome(
     val hudPromptDismissed: Boolean = true,
     val location: LocationEnv = LocationEnv(),
     val moments: MomentState = MomentState(),
+    /** Time left on the battery, and a warning when it's time to charge. */
+    val batteryOutlook: com.ridetrack.app.ride.BatteryOutlook? = null,
 )
 
 /** Whether the phone can deliver GPS at all right now (independent of signal). */
@@ -46,6 +48,7 @@ class LiveRideViewModel(private val c: AppContainer) : ViewModel() {
         c.battery.observe(),
         location,
         c.momentsHub.state,
+        c.batteryWatch.outlook,
     ) { values ->
         val state = values[0] as RideState
         val active = values[1] as ActiveRide?
@@ -64,6 +67,7 @@ class LiveRideViewModel(private val c: AppContainer) : ViewModel() {
             hudPromptDismissed = settings.hud.promptDismissed,
             location = loc,
             moments = moments,
+            batteryOutlook = values[6] as com.ridetrack.app.ride.BatteryOutlook?,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LiveChrome(rideState = c.session.state.value, active = c.session.active.value))
 

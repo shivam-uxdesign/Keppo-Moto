@@ -165,6 +165,15 @@ class RideRecordingService : LifecycleService() {
     // Notification permission is checked via Permissions.hasNotifications before notify().
     @SuppressLint("MissingPermission")
     private fun observe(session: RideSessionManager) {
+        val c = (application as RideTrackApp).container
+        session.active.value?.let { active ->
+            c.batteryWatch.start(active.rideId, active.moments != null, lifecycleScope) { warning ->
+                c.hud.showNote(warning)
+                if (Permissions.hasNotifications(this)) {
+                    runCatching { NotificationManagerCompat.from(this).notify(BATTERY_ALERT_ID, batteryAlert(warning)) }
+                }
+            }
+        }
         lifecycleScope.launch {
             session.state.collectLatest { if (!it.isActive && it !is RideState.Saving) stopGracefully() }
         }
@@ -278,6 +287,18 @@ class RideRecordingService : LifecycleService() {
             .build()
     }
 
+    private fun batteryAlert(text: String): Notification =
+        NotificationCompat.Builder(this, RideTrackApp.RIDE_ALERTS_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_ride)
+            .setContentTitle("Charge your phone soon")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(openApp())
+            .build()
+
     /** A break past [LONG_BREAK_MILLIS]: maybe the ride is really over. It never ends on its own. */
     private fun longBreakPrompt(since: Long): Notification =
         NotificationCompat.Builder(this, RideTrackApp.RIDE_ALERTS_CHANNEL_ID)
@@ -311,6 +332,7 @@ class RideRecordingService : LifecycleService() {
     }
 
     private fun shutdown() {
+        (application as RideTrackApp).container.batteryWatch.stop()
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = null
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -332,6 +354,7 @@ class RideRecordingService : LifecycleService() {
         private const val ACTION_KEEP_BREAK = "com.ridetrack.app.KEEP_BREAK"
         private const val BREAK_ALERT_ID = 43
         private const val LONG_BREAK_ID = 44
+        private const val BATTERY_ALERT_ID = 45
         private const val BREAK_ALERT_TIMEOUT_MILLIS = 2 * 60_000L
         private const val LONG_BREAK_MILLIS = 45 * 60_000L
 

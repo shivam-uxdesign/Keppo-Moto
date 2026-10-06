@@ -46,6 +46,12 @@ class HudController(
     private var stoppedSinceMillis: Long? = null
     /** A short note under the buttons (why a video couldn't start), with when it was set. */
     private val note = MutableStateFlow<Pair<String, Long>?>(null)
+
+    /** A short note on the pop-up for a few seconds (e.g. a battery warning). */
+    fun showNote(text: String, showMillis: Long = 10_000L) {
+        // Notes show for SAVED_NOTE_MILLIS from their time: set it ahead to show this one longer.
+        note.value = text to System.currentTimeMillis() + (showMillis - SAVED_NOTE_MILLIS).coerceAtLeast(0L)
+    }
     /** "Start filming when I speak" and its sensitivity, for the pop-up's level meter. */
     private val voice = MutableStateFlow(false to VoiceSensitivity.STRICT)
 
