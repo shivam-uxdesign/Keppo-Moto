@@ -152,3 +152,10 @@ Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds
   - Caption styles; overlay switches.
 - **Share:** Reels / Shorts / WhatsApp / Save, plus a suggested post caption.
 - **Later phases:** Gemini as director (order, title, post caption); slow-mo; multi-ride compilations; templates; Keppo Journal.
+- **Rider's decisions (7 Oct, after the prototype):**
+  - Studio flow approved.
+  - The 3D map stays very limited: a 2-second route sketch in the intro and faintly behind the stats.
+  - One "Map" switch before creating removes it completely; the intro then puts the title over the first clip.
+  - Map transitions: optional, off.
+  - Watermark optional.
+  - Gemini director: yes. It gets moment times, speed, lean and transcripts (no video), and returns the order, the hook, the title and the post caption. Fallback: on-device scoring.
