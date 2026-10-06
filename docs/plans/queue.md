@@ -119,3 +119,8 @@ From the Tuesday Evening Ride export (27½ min, 73 moments, 41 of them with no s
   - (c) Type the ₹ in the pump prompt.
   - Price per litre is remembered from the last fill and confirmed; litres = ₹ ÷ price.
 - **Transcripts (decided):** on the phone, Whisper (whisper.cpp), Hinglish in English letters (an initial prompt biases it to Latin script). Runs after the ride in the background, best while charging. Try it and judge the results.
+- **Fuel SMS (decided):** (a) READ_SMS. After a pump stop, read bank or card SMS from about 15 min before to 30 min after, and parse the ₹ amount and merchant (fuel names: Indian Oil, HP, BPCL, Shell, Nayara…). (c) Typing the amount is the backup. The rider accepts the Play Protect risk. The permission is asked for only when the fuel log is first used.
+- **Transcripts (revisit):** the 60–150 MB model is too big. Free online options to compare:
+  - Android's built-in speech recognizer (en-IN): free, nothing added to the app, works offline once Google's language pack is downloaded.
+  - Gemini API free tier: can be told "Hinglish in Latin script". Needs a free key, and free-tier data may be used by Google.
+  - Groq's free Whisper large-v3.
