@@ -1110,7 +1110,16 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     fun undo() { history?.undo(); _state.update { it.copy(pick = null) }; publish(reload = true) }
     fun redo() { history?.redo(); _state.update { it.copy(pick = null) }; publish(reload = true) }
 
-    fun addText(text: String) = change("Add text") { TimelineEdits.addText(it, playheadMs, text, newTextId()) }
+    /** New text, in the look of the last text the rider styled (in this Reel). */
+    fun addText(text: String) {
+        val id = newTextId()
+        change("Add text") { p ->
+            val added = TimelineEdits.addText(p, playheadMs, text, id)
+            val like = p.texts.lastOrNull { it.look != TextLook.STYLE || it.color != null || it.animIn != TextAnim.FADE }
+            added.copy(texts = added.texts.map { if (it.id == id) TextTools.styled(it, like) else it })
+        }
+        _state.update { it.copy(pick = TimelinePick.Text(id)) }
+    }
     fun addCaption(text: String) = change("Add caption") { TimelineEdits.addCaption(it, playheadMs, text) }
     fun insert(b: Bit) = change("Add clip") { TimelineEdits.insert(it, b, playheadMs) }
 
@@ -1170,6 +1179,34 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     }
 
     fun replace(i: Int, b: Bit) = change("Replace clip") { ClipTools.replace(it, i, b) }
+
+    /** Gemini reads one clip's words again (one request); its captions in the edit are replaced. */
+    fun readAgain(momentId: String) {
+        if (!c.transcripts.available) return say("Gemini isn't in this build")
+        val key = engine.captionKey(momentId) ?: return say("Can't read that clip again")
+        viewModelScope.launch {
+            say("Reading the clip again…")
+            val before = withContext(Dispatchers.IO) { StudioText.load(key) }
+            engine.forget(momentId)
+            val read = runCatching { engine.readCaptions() }.getOrNull()
+            val lines = withContext(Dispatchers.IO) { StudioText.load(key) }
+            if (lines == null) {
+                // Didn't work: keep the words it had.
+                before?.let { withContext(Dispatchers.IO) { StudioText.save(key, it) } }
+                return@launch say(read?.note ?: "Couldn't read it again")
+            }
+            change("Read again") { TextTools.relines(it, momentId, lines) }
+            say(if (lines.isEmpty()) "No clear words in that clip" else "Read again · ${lines.size} line${if (lines.size > 1) "s" else ""}")
+        }
+    }
+
+    // ---- text style that carries on, and stickers ---------------------------------------------
+
+    fun addSticker(kind: StickerKind, text: String = "") {
+        val id = newId("s")
+        change("Add sticker") { TextTools.addSticker(it, kind, playheadMs, id, text) }
+        _state.update { it.copy(pick = TimelinePick.Sticker(id)) }
+    }
 
     // ---- export -------------------------------------------------------------------------------
 

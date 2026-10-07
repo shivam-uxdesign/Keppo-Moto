@@ -12,7 +12,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -134,6 +133,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var historyOpen by remember { mutableStateOf(false) }
     var clipTab by remember { mutableStateOf(ClipTab.EDIT) }
     var colourOpen by remember { mutableStateOf<Int?>(null) }
+    var addSticker by remember { mutableStateOf(false) }
+    var captionsOpen by remember { mutableStateOf(false) }
     var compare by remember { mutableStateOf(false) }
     var discard by remember { mutableStateOf(false) }
     val pxPerMs = with(density) { 64.dp.toPx() } * zoom / 1000f
@@ -242,23 +243,40 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     Text(l.text, style = style.copy(fontSize = (fontPx * 0.8f).sp), modifier = Modifier.align(Alignment.TopCenter).offset(y = boxH * 0.66f).padding(horizontal = 12.dp))
                 }
                 // Text on the timeline; the selected one can be dragged up or down.
+                // Text and stickers: drag anywhere, pinch to size and turn (the selected one). In the exact
+                // preview they're in the video already: only the selected one's frame shows, to move it.
                 plan.texts.filter { pos in it.startMs until it.endMs && (!exactOn || (s.pick as? TimelinePick.Text)?.id == it.id) }.forEach { t ->
                     val selected = (s.pick as? TimelinePick.Text)?.id == t.id
-                    var dy by remember(t.id, t.y) { mutableFloatStateOf(0f) }
-                    Text(
-                        t.text,
-                        // In the exact preview the text is in the video: only its outline, to drag.
-                        style = if (exactOn && dy == 0f) style.copy(color = Color.Transparent, shadow = null) else style,
-                        modifier = Modifier.align(Alignment.TopCenter).offset { IntOffset(0, ((boxH * t.y - (fontPx / 1.5f).dp).toPx() + dy).roundToInt()) }
-                            .then(if (selected) Modifier.border(1.dp, RtColors.Primary, RoundedCornerShape(4.dp)) else Modifier)
-                            .pointerInput(t.id, selected) {
-                                if (!selected) return@pointerInput
-                                detectVerticalDragGestures(
-                                    onDragEnd = { val moved = dy / with(density) { boxH.toPx() }; vm.change("Move text") { p -> TimelineEdits.placeText(p, t.id, t.y + moved) }; dy = 0f },
-                                ) { ch, d -> ch.consume(); dy += d }
-                            }
-                            .padding(horizontal = 12.dp, vertical = 2.dp),
-                    )
+                    Placed(
+                        t.x, t.y, t.size, t.rotation, selected,
+                        onSelect = { vm.pick(TimelinePick.Text(t.id)) },
+                        onDone = { dx, dy, z, r -> vm.change("Move text") { p -> TextTools.rotate(TextTools.scale(TextTools.place(p, t.id, t.x + dx, t.y + dy), t.id, z), t.id, r) } },
+                    ) {
+                        val look = when (t.look) {
+                            TextLook.HAND -> style.copy(fontFamily = VibeFonts[Vibe.CHILL])
+                            TextLook.OUTLINE -> style.copy(fontFamily = VibeFonts[Vibe.HYPE])
+                            TextLook.PLAIN, TextLook.BOX -> style.copy(fontFamily = VibeFonts[Vibe.VLOG])
+                            TextLook.STYLE -> style
+                        }.let { st -> t.color?.let { st.copy(color = Color(it)) } ?: st }
+                        Text(
+                            t.text,
+                            style = if (exactOn) look.copy(color = Color.Transparent, shadow = null) else look,
+                            modifier = Modifier
+                                .then(if (t.look == TextLook.BOX && !exactOn) Modifier.background(Color(t.color ?: android.graphics.Color.WHITE), RoundedCornerShape(10.dp)) else Modifier)
+                                .then(if (selected) Modifier.border(1.dp, RtColors.Primary, RoundedCornerShape(4.dp)) else Modifier)
+                                .padding(horizontal = 10.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+                plan.stickers.filter { pos in it.startMs until it.endMs && (!exactOn || (s.pick as? TimelinePick.Sticker)?.id == it.id) }.forEach { st ->
+                    val selected = (s.pick as? TimelinePick.Sticker)?.id == st.id
+                    Placed(
+                        st.x, st.y, st.size, st.rotation, selected,
+                        onSelect = { vm.pick(TimelinePick.Sticker(st.id)) },
+                        onDone = { dx, dy, z, r -> vm.change("Move sticker") { p -> TextTools.rotateSticker(TextTools.scaleSticker(TextTools.placeSticker(p, st.id, st.x + dx, st.y + dy), st.id, z), st.id, r) } },
+                    ) {
+                        StickerPreview(st, hidden = exactOn, selected = selected, unit = boxW.value / 540f)
+                    }
                 }
                 if (safe) SafeZones()
                 if (!playing) {
@@ -371,6 +389,17 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                     val selected = (s.pick as? TimelinePick.Text)?.id == t.id
                                     Block("T  ${t.text}", t.startMs, t.endMs - t.startMs, pxPerMs, Color(0x55FFC83D), selected) {
                                         vm.pick(if (selected) null else TimelinePick.Text(t.id))
+                                    }
+                                }
+                            }
+                            // Stickers
+                            if (plan.stickers.isNotEmpty()) {
+                                Box(Modifier.fillMaxWidth().height(20.dp)) {
+                                    plan.stickers.forEach { st ->
+                                        val selected = (s.pick as? TimelinePick.Sticker)?.id == st.id
+                                        Block(if (st.kind == StickerKind.EMOJI) st.text else st.kind.label, st.startMs, st.endMs - st.startMs, pxPerMs, Color(0x55F472B6), selected) {
+                                            vm.pick(if (selected) null else TimelinePick.Sticker(st.id))
+                                        }
                                     }
                                 }
                             }
@@ -548,21 +577,50 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         Choice("Earlier", false) { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, -200) } }
                         Choice("Later", false) { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, 200) } }
                         Choice("Delete", false) { vm.change("Delete caption") { TimelineEdits.caption(it, p.index, p.line, "") }; vm.pick(null) }
+                        (plan.segments.getOrNull(p.index) as? ClipSegment)?.let { seg -> Choice("Read clip again", false) { vm.readAgain(seg.bit.momentId) } }
+                        Choice("Captions look", false) { captionsOpen = true }
                     }
                     is TimelinePick.Text -> {
                         val t = plan.texts.firstOrNull { it.id == p.id }
                         Choice("Edit", false) { ask = TextAsk.EditText(p.id, t?.text.orEmpty()) }
+                        TextLook.entries.forEach { l -> Choice(l.label, t?.look == l) { vm.change("Text look") { TextTools.look(it, p.id, l) } } }
+                        Spacer(Modifier.width(8.dp))
+                        TEXT_COLOURS.forEach { (name, col) -> Choice(name, t?.color == col) { vm.change("Text colour") { TextTools.color(it, p.id, col) } } }
+                        Spacer(Modifier.width(8.dp))
+                        Choice("Smaller", false) { vm.change("Text size") { TextTools.scale(it, p.id, 0.85f) } }
+                        Choice("Bigger", false) { vm.change("Text size") { TextTools.scale(it, p.id, 1.18f) } }
+                        Choice("Turn", false) { vm.change("Turn text") { TextTools.rotate(it, p.id, 10f) } }
+                        val al = t?.align ?: TextAlignment.CENTER
+                        Choice(al.label, false) { vm.change("Align") { TextTools.align(it, p.id, TextAlignment.entries[(al.ordinal + 1) % TextAlignment.entries.size]) } }
+                        val ai = t?.animIn ?: TextAnim.FADE
+                        Choice("In: ${ai.label}", false) { vm.change("Text in") { TextTools.anim(it, p.id, animIn = TextAnim.entries[(ai.ordinal + 1) % TextAnim.entries.size]) } }
+                        val ao = t?.animOut ?: TextAnim.FADE
+                        Choice("Out: ${ao.label}", false) { vm.change("Text out") { TextTools.anim(it, p.id, animOut = TextAnim.entries[(ao.ordinal + 1) % TextAnim.entries.size]) } }
                         Choice("Earlier", false) { vm.change("Text time") { TimelineEdits.moveText(it, p.id, -500) } }
                         Choice("Later", false) { vm.change("Text time") { TimelineEdits.moveText(it, p.id, 500) } }
                         Choice("Shorter", false) { vm.change("Text length") { TimelineEdits.resizeText(it, p.id, -500) } }
                         Choice("Longer", false) { vm.change("Text length") { TimelineEdits.resizeText(it, p.id, 500) } }
                         Choice("Delete", false) { vm.change("Delete text") { TimelineEdits.deleteText(it, p.id) }; vm.pick(null) }
                     }
+                    is TimelinePick.Sticker -> {
+                        val st = plan.stickers.firstOrNull { it.id == p.id }
+                        if (st?.kind == StickerKind.EMOJI) Choice("Change emoji", false) { addSticker = true }
+                        Choice("Smaller", false) { vm.change("Sticker size") { TextTools.scaleSticker(it, p.id, 0.85f) } }
+                        Choice("Bigger", false) { vm.change("Sticker size") { TextTools.scaleSticker(it, p.id, 1.18f) } }
+                        Choice("Turn", false) { vm.change("Turn sticker") { TextTools.rotateSticker(it, p.id, 15f) } }
+                        Choice("Earlier", false) { vm.change("Sticker time") { TextTools.shiftSticker(it, p.id, -500) } }
+                        Choice("Later", false) { vm.change("Sticker time") { TextTools.shiftSticker(it, p.id, 500) } }
+                        Choice("Shorter", false) { vm.change("Sticker length") { TextTools.resizeStickerTime(it, p.id, -500) } }
+                        Choice("Longer", false) { vm.change("Sticker length") { TextTools.resizeStickerTime(it, p.id, 500) } }
+                        Choice("Delete", false) { vm.change("Delete sticker") { TextTools.deleteSticker(it, p.id) }; vm.pick(null) }
+                    }
                     null -> {
                         Choice("+ Text", false) { ask = TextAsk.NewText }
                         Choice("+ Caption", false) { ask = TextAsk.NewCaption }
                         Choice("+ Clip", false) { adding = AddWhat.CLIP }
                         Choice("+ Layer", false) { adding = AddWhat.LAYER }
+                        Choice("+ Sticker", false) { addSticker = true }
+                        Choice("Captions", false) { captionsOpen = true }
                         Choice("Freeze", false) { vm.freeze() }
                         if (s.engineFiles.isNotEmpty() && plan.audio.none { it.kind == TrackKind.ENGINE }) Choice("+ Engine sound", false) { vm.addEngine() }
                         Choice("Sound", false) { mixer = true }
@@ -668,6 +726,19 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     }
     if (mixer) MixerSheet(vm, s, plan) { mixer = false }
     colourOpen?.let { i -> ColourSheet(vm, plan, i) { colourOpen = null } }
+    if (captionsOpen) CaptionSheet(vm, plan) { captionsOpen = false }
+    if (addSticker) StickerSheet(
+        onPick = { kind, text ->
+            val sel = (s.pick as? TimelinePick.Sticker)?.id?.let { id -> plan.stickers.firstOrNull { it.id == id } }
+            if (sel?.kind == StickerKind.EMOJI && kind == StickerKind.EMOJI) {
+                vm.change("Change emoji") { p -> p.copy(stickers = p.stickers.map { if (it.id == sel.id) it.copy(text = text) else it }) }
+            } else {
+                vm.addSticker(kind, text)
+            }
+            addSticker = false
+        },
+        onClose = { addSticker = false },
+    )
     if (historyOpen) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { historyOpen = false }) {
             Column(
@@ -701,6 +772,74 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             confirmButton = { TextButton(onClick = { discard = false; vm.closeEdit() }) { Text("Discard", color = RtColors.Error) } },
             dismissButton = { TextButton(onClick = { discard = false }) { Text("Keep editing") } },
         )
+    }
+}
+
+/**
+ * Something placed on the video at [x], [y] (0..1), [scale] and [rotation]: tap selects it; the
+ * selected one drags, pinches and turns, and [onDone] gets the move (fractions), zoom and turn.
+ */
+@Composable
+private fun Placed(
+    x: Float,
+    y: Float,
+    scale: Float,
+    rotation: Float,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onDone: (dx: Float, dy: Float, zoom: Float, turn: Float) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wPx = constraints.maxWidth.toFloat()
+        val hPx = constraints.maxHeight.toFloat()
+        var dx by remember(x, y) { mutableFloatStateOf(0f) }
+        var dy by remember(x, y) { mutableFloatStateOf(0f) }
+        var z by remember(scale) { mutableFloatStateOf(1f) }
+        var r by remember(rotation) { mutableFloatStateOf(0f) }
+        Box(
+            Modifier.align(Alignment.Center)
+                .offset { IntOffset(((x - 0.5f) * wPx + dx).roundToInt(), ((y - 0.5f) * hPx + dy).roundToInt()) }
+                .graphicsLayer { scaleX = scale * z; scaleY = scale * z; rotationZ = rotation + r }
+                .clickable(role = Role.Button, onClickLabel = "Select", onClick = onSelect)
+                .pointerInput(selected) {
+                    if (!selected) return@pointerInput
+                    detectTransformGestures { _, pan, zoom, turn ->
+                        dx += pan.x * scale * z
+                        dy += pan.y * scale * z
+                        z = (z * zoom).coerceIn(0.2f, 5f)
+                        r += turn
+                    }
+                }
+                .pointerInput(selected, "end") {
+                    if (!selected) return@pointerInput
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        do {
+                            val e = awaitPointerEvent()
+                        } while (e.changes.any { it.pressed })
+                        if (dx != 0f || dy != 0f || z != 1f || r != 0f) onDone(dx / wPx, dy / hPx, z, r)
+                    }
+                },
+        ) { content() }
+    }
+}
+
+/** A sticker as the editor shows it (the made video draws it properly, with live numbers). */
+@Composable
+private fun StickerPreview(st: StickerItem, hidden: Boolean, selected: Boolean, unit: Float) {
+    val frame = if (selected) Modifier.border(2.dp, RtColors.Primary, RoundedCornerShape(8.dp)) else Modifier
+    val ink = if (hidden) Color.Transparent else Color.White
+    when (st.kind) {
+        StickerKind.SPEED, StickerKind.LEAN -> Box(
+            frame.size((184 * unit).dp).clip(CircleShape).background(if (hidden) Color.Transparent else Color.Black.copy(alpha = 0.55f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(if (st.kind == StickerKind.SPEED) "62\nKM/H" else "32°", style = RtType.bodyStrong.copy(fontSize = (28 * unit).sp, textAlign = TextAlign.Center), color = ink)
+        }
+        StickerKind.EMOJI -> Text(st.text.ifEmpty { "🔥" }, style = TextStyle(fontSize = (110 * unit).sp, color = if (hidden) Color.Transparent else Color.Unspecified), modifier = frame)
+        StickerKind.ARROW -> Text("➜", style = TextStyle(fontSize = (140 * unit).sp, color = ink), modifier = frame)
+        StickerKind.CIRCLE -> Box(frame.size((240 * unit).dp).border((5 * unit).dp, if (hidden) Color.Transparent else Color(0xFFFFD60A), CircleShape))
     }
 }
 
@@ -851,6 +990,92 @@ private fun ColourSheet(vm: StudioViewModel, plan: StudioPlan, i: Int, onClose: 
 }
 
 private fun speedLabel(v: Float): String = if (v == v.toInt().toFloat()) "${v.toInt()}×" else "${v}×"
+
+/** Colours for text: the look's own, then a few. */
+private val TEXT_COLOURS: List<Pair<String, Int?>> = listOf(
+    "Own colour" to null,
+    "White" to android.graphics.Color.WHITE,
+    "Yellow" to 0xFFFFD60A.toInt(),
+    "Black" to 0xFF0B0B0D.toInt(),
+    "Pink" to 0xFFFF5D8F.toInt(),
+    "Blue" to 0xFF60A5FA.toInt(),
+    "Green" to 0xFF34D399.toInt(),
+)
+
+/** Emoji a rider reaches for; any other can be typed. */
+private val RIDE_EMOJI = listOf("🏍️", "🔥", "💨", "😂", "👀", "🤯", "🌧️", "⛰️", "🌅", "👍", "🙏", "⚡", "🛣️", "😎", "❤️", "🏁")
+
+/** Add a sticker: live speed or lean, an emoji, an arrow or a circle. */
+@Composable
+private fun StickerSheet(onPick: (StickerKind, String) -> Unit, onClose: () -> Unit) {
+    var typed by remember { mutableStateOf("") }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.SurfaceRaised).padding(14.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Sticker", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Choice("Speed", false) { onPick(StickerKind.SPEED, "") }
+                Choice("Lean", false) { onPick(StickerKind.LEAN, "") }
+                Choice("Arrow", false) { onPick(StickerKind.ARROW, "") }
+                Choice("Circle", false) { onPick(StickerKind.CIRCLE, "") }
+            }
+            Text("Speed and lean show the ride's numbers as the video plays.", style = RtType.caption, color = RtColors.TextTertiary)
+            Text("Emoji", style = RtType.caption, color = RtColors.TextSecondary)
+            RIDE_EMOJI.chunked(8).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    row.forEach { e -> Text(e, fontSize = 26.sp, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { onPick(StickerKind.EMOJI, e) }.padding(4.dp)) }
+                }
+            }
+            OutlinedTextField(
+                value = typed,
+                onValueChange = { typed = it.take(8) },
+                placeholder = { Text("Or type any emoji", style = RtType.body, color = RtColors.TextTertiary) },
+                singleLine = true,
+                textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+            )
+            if (typed.isNotBlank()) Small("Add", on = true) { onPick(StickerKind.EMOJI, typed.trim()) }
+        }
+    }
+}
+
+/** The captions' look for the whole Reel: style, size, height and the word lighting up. */
+@Composable
+private fun CaptionSheet(vm: StudioViewModel, plan: StudioPlan, onClose: () -> Unit) {
+    val look = plan.captionLook
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.SurfaceRaised).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Captions", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                CaptionKind.entries.forEach { k -> Choice(k.label, look.kind == k) { vm.change("Captions look") { TextTools.captionLook(it) { l -> l.copy(kind = k) } } } }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Size ${(look.size * 100).roundToInt()}%", style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
+                Small("−") { vm.change("Captions size") { TextTools.captionLook(it) { l -> l.copy(size = l.size - 0.1f) } } }
+                Small("+") { vm.change("Captions size") { TextTools.captionLook(it) { l -> l.copy(size = l.size + 0.1f) } } }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(look.y?.let { "Height ${(it * 100).roundToInt()}%" } ?: "Height: the style's", style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
+                Small("Higher") { vm.change("Captions height") { TextTools.captionLook(it) { l -> l.copy(y = (l.y ?: 0.68f) - 0.05f) } } }
+                Small("Lower") { vm.change("Captions height") { TextTools.captionLook(it) { l -> l.copy(y = (l.y ?: 0.68f) + 0.05f) } } }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Light up each word", style = RtType.body, color = RtColors.TextPrimary)
+                    Text("As it's said (karaoke). Plain captions show the whole line when off.", style = RtType.caption, color = RtColors.TextSecondary)
+                }
+                Switch(checked = look.karaoke, onCheckedChange = { on -> vm.change("Captions words") { TextTools.captionLook(it) { l -> l.copy(karaoke = on) } } })
+            }
+            Text("Tap a caption on the timeline to fix a word or read its clip again.", style = RtType.caption, color = RtColors.TextTertiary)
+            Small("Done", on = true, onClick = onClose)
+        }
+    }
+}
 
 /** A small text button. */
 @Composable

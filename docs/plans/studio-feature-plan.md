@@ -345,7 +345,11 @@ Each build ends with one APK to test on the phone before the next starts.
    - Not covered: stabilise (dropped). The simple preview plays speed changes at normal speed; the exact preview and the saved video play them right.
    - Speed and ramps, freeze frame, reverse, reframe with keyframes, colour, crop and rotate, reuse another part.
    - Transitions per cut; export quality, fps and presets per platform.
-5. **Text, captions and stickers** (D6, D7). Medium.
+5. **Text, captions and stickers** (D6, D7). Medium. **Built 7 Oct.**
+   - Built: text looks (the style's own, Plain, Outline, Box, Handwritten), colours, size, turn, alignment; drag anywhere and pinch to size and turn; animations in and out (Fade, Pop, Type on, Slide, Bounce, None); new text takes the last styled text's look (answers the D6 question: per Reel for now).
+   - Built: the captions' look for the whole Reel: any style's captions or Plain, size, height, and lighting up each word as it's said (karaoke) or the whole line; fix a word (Edit words) and read one clip again (one Gemini request).
+   - Built: stickers: live speed gauge and lean (from the ride's numbers), any phone emoji (a ride set to pick from, or type one), an arrow and a pulsing circle; drag, pinch, turn, each with its own time on a stickers track.
+   - Not yet: Giphy (later, as decided); route, G-force, weather and place stickers.
    - Text styles and animations; karaoke captions and fixing single words.
    - Speed and lean stickers; phone emoji.
 6. **Styles** (E1–E7). Large.

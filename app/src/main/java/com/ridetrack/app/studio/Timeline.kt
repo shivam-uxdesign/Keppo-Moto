@@ -12,6 +12,7 @@ sealed interface TimelinePick {
     /** Several clips selected together (to move, delete or paste settings). */
     data class Clips(val indices: Set<Int>) : TimelinePick
     data class Marker(val id: String) : TimelinePick
+    data class Sticker(val id: String) : TimelinePick
 }
 
 /**

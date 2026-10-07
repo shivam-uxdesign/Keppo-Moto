@@ -145,6 +145,16 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         return gallery + moments
     }
 
+    /** Where a clip's words are kept: the moment's file, or the gallery video's key; null when unknown. */
+    fun captionKey(momentId: String): File? =
+        (clips + borrowed.values).firstOrNull { it.id == momentId }?.file ?: phone[momentId]?.let { PhoneVideos.captionKey(c.appContext, it.id) }
+
+    /** Forgets a clip's words, so the next reading reads it again. */
+    fun forget(momentId: String) {
+        captionKey(momentId)?.let { StudioText.linesFile(it).delete() }
+        captionsTried = false
+    }
+
     /** Clips whose words haven't been read yet. */
     fun unreadCount(): Int = unread().size
 
@@ -316,6 +326,7 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
             card = baseCard.copy(title = s.title.ifBlank { baseCard.title }),
             options = s.options,
             speedAt = { StudioNumbers.speedAt(ride, it) },
+            leanAt = { StudioNumbers.leanAt(ride, it) },
             clockAt = { Format.timeOfDay(it).lowercase(Locale.getDefault()) },
             music = s.musicUri,
             opener = StudioArt.Opener(label = if (s.options.intro) s.label.takeIf { s.series.isNotBlank() } else s.label, hookLine = s.hookLine.ifBlank { null }),

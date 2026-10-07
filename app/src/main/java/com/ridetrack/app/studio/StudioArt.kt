@@ -155,7 +155,7 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
      * A clip's graphics. [lines] are the captions in ms from the segment start (the clip's words and
      * any voice-over); [opener] shows on the Reel's first clip: the title label and the hook line.
      */
-    fun drawClip(c: Canvas, f: FrameAt, lines: List<CaptionLine>, kmh: Int, clock: String, captions: Boolean, opener: Opener? = null) {
+    fun drawClip(c: Canvas, f: FrameAt, lines: List<CaptionLine>, kmh: Int, clock: String, captions: Boolean, opener: Opener? = null, look: CaptionLook = CaptionLook()) {
         vignette(c)
         if (f.vibe == Vibe.CINE) {
             p.reset(); p.color = Color.BLACK
@@ -163,7 +163,7 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
         }
         speedBadge(c, f.vibe, kmh, clock)
         opener?.let { opening(c, f.vibe, it, f.localMs / 1000f) }
-        if (captions) caption(c, f.vibe, lines, f.localMs / 1000f)
+        if (captions) caption(c, f.vibe, lines, f.localMs / 1000f, look)
         edge(f)?.let { transition(c, f, it) }
     }
 
@@ -366,14 +366,54 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
         return Line(words, words.indices.map { l.startMs / 1000f + it * per }, l.endMs / 1000f)
     }
 
-    fun caption(c: Canvas, vibe: Vibe, lines: List<CaptionLine>, t: Float) {
+    fun caption(c: Canvas, vibe: Vibe, lines: List<CaptionLine>, t: Float, look: CaptionLook = CaptionLook()) {
         if (lines.isEmpty()) return
-        when (vibe) {
-            Vibe.HYPE -> punch(c, lines, t)
-            Vibe.CINE -> serifRise(c, lines, t)
-            Vibe.CHILL -> label(c, lines, t)
-            Vibe.VLOG -> chat(c, lines, t)
+        val kind = when (look.kind) {
+            CaptionKind.STYLE -> when (vibe) { Vibe.HYPE -> CaptionKind.PUNCH; Vibe.CINE -> CaptionKind.SERIF; Vibe.CHILL -> CaptionKind.LABEL; Vibe.VLOG -> CaptionKind.CHAT }
+            else -> look.kind
         }
+        // Each look's own height; the rider's size and height on top.
+        val baseY = when (kind) { CaptionKind.PUNCH -> 0.64f; CaptionKind.SERIF -> 0.735f; CaptionKind.LABEL -> 0.68f; CaptionKind.CHAT -> 0.71f; else -> 0.72f }
+        c.save()
+        look.y?.let { c.translate(0f, (it - baseY) * H) }
+        if (look.size != 1f) c.scale(look.size, look.size, W / 2, baseY * H)
+        when (kind) {
+            CaptionKind.PUNCH -> punch(c, lines, t)
+            CaptionKind.SERIF -> serifRise(c, lines, t)
+            CaptionKind.LABEL -> label(c, lines, t)
+            CaptionKind.CHAT -> chat(c, lines, t)
+            else -> plainCaption(c, lines, t, look.karaoke, baseY)
+        }
+        c.restore()
+    }
+
+    /** Plain captions: white words with a dark edge, two rows at most; the word being said lights up yellow. */
+    private fun plainCaption(c: Canvas, lines: List<CaptionLine>, t: Float, karaoke: Boolean, y: Float) {
+        val cur = current(lines, t) ?: return
+        text(geist, 46 * s, Color.WHITE, Paint.Align.LEFT)
+        val rows = wrap(cur.words, W * 0.82f).takeLast(2)
+        val skipped = cur.words.size - rows.sumOf { it.size }
+        val lh = 58 * s
+        val sp = p.measureText(" ")
+        var wi = skipped
+        rows.forEachIndexed { ri, row ->
+            val total = p.measureText(row.joinToString(" "))
+            var x = W / 2 - total / 2
+            val by = H * y + (ri - (rows.size - 1) / 2f) * lh
+            row.forEach { w ->
+                val said = cur.times[wi] <= t
+                val active = karaoke && said && (wi == cur.words.lastIndex || t < cur.times[wi + 1])
+                // A dark edge so it reads on any frame.
+                p.style = Paint.Style.STROKE; p.strokeWidth = 7 * s; p.color = Color.argb(200, 0, 0, 0)
+                c.drawText(w, x, mid(by), p)
+                p.style = Paint.Style.FILL
+                p.color = when { active -> YELLOW; karaoke && !said -> Color.argb(150, 255, 255, 255); else -> Color.WHITE }
+                c.drawText(w, x, mid(by), p)
+                x += p.measureText(w) + sp
+                wi++
+            }
+        }
+        p.style = Paint.Style.FILL
     }
 
     /** Up to 3 bold words at a time; the one being said sits on yellow; numbers and big words are yellow. */
@@ -609,12 +649,122 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
         c.restore()
     }
 
-    /** Timeline text: in and out over 0.2 s, at height [y] (0 top … 1 bottom). */
-    fun drawTextItem(c: Canvas, vibe: Vibe, text: String, y: Float, localMs: Long, durMs: Long) {
-        val a = (cl(localMs / 200f) * cl((durMs - localMs) / 200f) * 255).toInt()
-        if (a <= 0) return
+    /** Timeline text: in its look, place, size and angle, with its animations in and out. */
+    fun drawTextItem(c: Canvas, vibe: Vibe, t: TextItem, localMs: Long, durMs: Long) {
+        val f = TextTools.animate(t, localMs, durMs, t.text.length)
+        val a = (f.alpha * 255).toInt()
+        if (a <= 0 || f.chars == 0) return
+        val shown = t.text.take(f.chars)
+        val px = W * t.x
+        val py = H * (t.y + f.dy)
         c.saveLayerAlpha(0f, 0f, W, H, a)
-        drawCoverText(c, vibe, text, cy = H * y.coerceIn(0.08f, 0.92f), shade = false)
+        c.rotate(t.rotation, px, py)
+        val k = t.size * f.scale
+        c.scale(k, k, px, py)
+        when (t.look) {
+            TextLook.STYLE -> { c.translate(px - W / 2, 0f); drawCoverText(c, vibe, shown, cy = py, shade = false) }
+            TextLook.PLAIN -> styledText(c, shown, px, py, t.align, geist, 52 * s, t.color ?: Color.WHITE, shadow = true)
+            TextLook.OUTLINE -> styledText(c, shown.uppercase(), px, py, t.align, anton, 72 * s, t.color ?: Color.WHITE, outline = true)
+            TextLook.HAND -> styledText(c, shown, px, py, t.align, marker, 58 * s, t.color ?: Color.WHITE, shadow = true)
+            TextLook.BOX -> {
+                val bg = t.color ?: Color.WHITE
+                val ink = if (Color.luminance(bg) > 0.5f) INK else Color.WHITE
+                text(geist, 44 * s, ink, Paint.Align.CENTER)
+                val rows = wrap(shown.split(Regex("\\s+")), W * 0.8f)
+                val lh = 58 * s
+                val bw = rows.maxOf { p.measureText(it.joinToString(" ")) } + 44 * s
+                val bh = rows.size * lh + 28 * s
+                val left = when (t.align) { TextAlignment.LEFT -> px; TextAlignment.CENTER -> px - bw / 2; TextAlignment.RIGHT -> px - bw }
+                p.color = bg; c.drawRoundRect(RectF(left, py - bh / 2, left + bw, py + bh / 2), 22 * s, 22 * s, p)
+                p.color = ink
+                rows.forEachIndexed { i, row -> c.drawText(row.joinToString(" "), left + bw / 2, mid(py + (i - (rows.size - 1) / 2f) * lh), p) }
+            }
+        }
+        c.restore()
+    }
+
+    /** Text in rows around ([x], [y]), aligned, with a shadow or a dark outline. */
+    private fun styledText(c: Canvas, line: String, x: Float, y: Float, align: TextAlignment, face: Typeface, size: Float, color: Int, shadow: Boolean = false, outline: Boolean = false) {
+        val pAlign = when (align) { TextAlignment.LEFT -> Paint.Align.LEFT; TextAlignment.CENTER -> Paint.Align.CENTER; TextAlignment.RIGHT -> Paint.Align.RIGHT }
+        text(face, size, color, pAlign)
+        val rows = wrap(line.split(Regex("\\s+")).filter { it.isNotEmpty() }, W * 0.84f)
+        val lh = size * 1.12f
+        rows.forEachIndexed { i, row ->
+            val by = mid(y + (i - (rows.size - 1) / 2f) * lh)
+            val txt = row.joinToString(" ")
+            if (outline) {
+                p.style = Paint.Style.STROKE; p.strokeWidth = size * 0.12f; p.color = INK
+                c.drawText(txt, x, by, p)
+                p.style = Paint.Style.FILL; p.color = color
+            }
+            if (shadow) p.setShadowLayer(10 * s, 0f, 2 * s, Color.argb(170, 0, 0, 0))
+            c.drawText(txt, x, by, p)
+            p.clearShadowLayer()
+        }
+    }
+
+    /** A sticker: live speed or lean, an emoji, an arrow or a circle; in and out over 0.2 s. */
+    fun drawSticker(c: Canvas, st: StickerItem, localMs: Long, kmh: Int, lean: Int?) {
+        val dur = st.endMs - st.startMs
+        val a = cl(localMs / 200f) * cl((dur - localMs) / 200f)
+        if (a <= 0f) return
+        val px = W * st.x
+        val py = H * st.y
+        c.saveLayerAlpha(0f, 0f, W, H, (a * 255).toInt())
+        c.rotate(st.rotation, px, py)
+        c.scale(st.size, st.size, px, py)
+        when (st.kind) {
+            StickerKind.SPEED -> {
+                val r = 92 * s
+                p.reset(); p.isAntiAlias = true
+                p.color = Color.argb(150, 0, 0, 0); c.drawCircle(px, py, r, p)
+                p.style = Paint.Style.STROKE; p.strokeWidth = 12 * s; p.strokeCap = Paint.Cap.ROUND
+                p.color = Color.argb(70, 255, 255, 255); c.drawArc(RectF(px - r + 14 * s, py - r + 14 * s, px + r - 14 * s, py + r - 14 * s), 135f, 270f, false, p)
+                p.color = YELLOW
+                val sweep = 270f * (kmh.coerceAtLeast(0) / 160f).coerceIn(0f, 1f)
+                c.drawArc(RectF(px - r + 14 * s, py - r + 14 * s, px + r - 14 * s, py + r - 14 * s), 135f, sweep, false, p)
+                p.style = Paint.Style.FILL
+                text(anton, 64 * s, Color.WHITE, Paint.Align.CENTER)
+                c.drawText(if (kmh >= 0) "$kmh" else "–", px, mid(py - 4 * s), p)
+                text(geistMed, 16 * s, Color.WHITE, Paint.Align.CENTER, 0.2f)
+                c.drawText("KM/H", px, py + 46 * s, p)
+            }
+            StickerKind.LEAN -> {
+                val r = 92 * s
+                p.reset(); p.isAntiAlias = true
+                p.color = Color.argb(150, 0, 0, 0); c.drawCircle(px, py, r, p)
+                val deg = (lean ?: 0).coerceIn(-60, 60)
+                // A little bike leaning with the ride.
+                c.save(); c.rotate(deg.toFloat(), px, py + 40 * s)
+                p.color = Color.WHITE; p.strokeWidth = 10 * s; p.strokeCap = Paint.Cap.ROUND
+                c.drawLine(px, py + 40 * s, px, py - 46 * s, p)
+                c.drawCircle(px, py - 54 * s, 10 * s, p)
+                c.restore()
+                text(anton, 34 * s, YELLOW, Paint.Align.CENTER)
+                c.drawText(if (lean != null) "${kotlin.math.abs(deg)}°" else "–", px, py + 72 * s, p)
+            }
+            StickerKind.EMOJI -> {
+                text(Typeface.DEFAULT, 150 * s, Color.WHITE, Paint.Align.CENTER)
+                c.drawText(st.text.ifEmpty { "🔥" }, px, mid(py), p)
+            }
+            StickerKind.ARROW -> {
+                p.reset(); p.isAntiAlias = true; p.color = Color.WHITE
+                p.setShadowLayer(10 * s, 0f, 2 * s, Color.argb(150, 0, 0, 0))
+                val path = Path().apply {
+                    moveTo(px - 110 * s, py - 18 * s); lineTo(px + 30 * s, py - 18 * s); lineTo(px + 30 * s, py - 52 * s)
+                    lineTo(px + 110 * s, py); lineTo(px + 30 * s, py + 52 * s); lineTo(px + 30 * s, py + 18 * s); lineTo(px - 110 * s, py + 18 * s); close()
+                }
+                c.drawPath(path, p)
+                p.clearShadowLayer()
+            }
+            StickerKind.CIRCLE -> {
+                // A ring that pulses, to point at something.
+                val pulse = 1f + 0.06f * kotlin.math.sin(localMs / 160f)
+                p.reset(); p.isAntiAlias = true; p.style = Paint.Style.STROKE; p.strokeWidth = 10 * s; p.color = YELLOW
+                c.drawCircle(px, py, 120 * s * pulse, p)
+                p.style = Paint.Style.FILL
+            }
+        }
         c.restore()
     }
 

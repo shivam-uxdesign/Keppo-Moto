@@ -12,6 +12,19 @@ object StudioNumbers {
     data class Summary(val distanceM: Double, val movingMs: Long, val topKmh: Double)
 
     /** km/h at [wall], from the nearest sample within 3 s; -1 when there's none (a GPS gap). */
+    /** Lean in degrees at [wall] (the nearest sample within 2 s); null when unknown. */
+    fun leanAt(samples: List<TelemetrySample>, wall: Long): Int? {
+        if (samples.isEmpty()) return null
+        var lo = 0
+        var hi = samples.lastIndex
+        while (lo < hi) { val mid = (lo + hi) / 2; if (samples[mid].timeMillis < wall) lo = mid + 1 else hi = mid }
+        return listOfNotNull(samples.getOrNull(lo), samples.getOrNull(lo - 1))
+            .filter { it.leanDeg != null }
+            .minByOrNull { kotlin.math.abs(it.timeMillis - wall) }
+            ?.takeIf { kotlin.math.abs(it.timeMillis - wall) < 2_000 }
+            ?.leanDeg?.let { kotlin.math.round(it).toInt() }
+    }
+
     fun speedAt(samples: List<TelemetrySample>, wall: Long): Int {
         if (samples.isEmpty()) return -1
         var lo = 0

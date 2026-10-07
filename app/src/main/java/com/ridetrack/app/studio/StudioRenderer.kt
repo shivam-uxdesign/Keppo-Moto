@@ -62,6 +62,8 @@ data class RenderInput(
     val voiceLines: List<CaptionLine> = emptyList(),
     /** Size, frame rate and bitrate to write; null = the Reel as usual (1080p, 30 fps). */
     val output: OutputSpec? = null,
+    /** Lean (degrees, + right) at a wall time; null where it isn't known. */
+    val leanAt: (Long) -> Int? = { null },
 )
 
 /**
@@ -349,25 +351,31 @@ class StudioRenderer(private val context: Context) {
         val clipStart = clip.bit.atMillis - clip.bit.inMs
         val overlay = SegmentOverlay(overlayBitmap(art.w, art.h), clock) { c, localMs ->
             val f = frameAt(localMs)
+            var wallNow: Long? = null
+            var kmhNow = -1
             when (seg) {
                 is ClipSegment -> {
-                    val wall = clipStart + from + localMs
+                    // The clip's own time runs at its speed; a freeze holds its moment.
+                    val wall = clipStart + from + if (cs?.still != null) 0 else localMs * srcLen / dur.coerceAtLeast(1)
                     // Clips from other rides have no samples here: their own speed.
                     // No speed for that moment (a GPS gap, another ride, a phone video): the bit's own
                     // speed if it has one, else no badge (-1) rather than a wrong "0".
                     val kmh = input.speedAt(wall).takeIf { it >= 0 && seg.bit.fromRide == null }
                         ?: seg.bit.speedKmh.toInt().takeIf { it > 0 } ?: -1
-                    art.drawClip(c, f, if (seg.tail) emptyList() else lines, kmh, input.clockAt(wall), o.captions, opener)
+                    wallNow = wall
+                    kmhNow = kmh
+                    art.drawClip(c, f, if (seg.tail) emptyList() else lines, kmh, input.clockAt(wall), o.captions, opener, plan.captionLook)
                     seg.text?.let { t -> art.drawSectionText(c, plan.vibe, t, localMs) }
                 }
                 is TitleSegment -> art.drawTitle(c, f, input.card, o.map)
                 is StatsSegment -> art.drawStats(c, f, input.card, o.map, o.watermark)
             }
-            // Text the rider placed on the timeline, in Reel time.
             val global = segStart + localMs
-            plan.texts.forEach { t -> if (global in t.startMs until t.endMs) art.drawTextItem(c, plan.vibe, t.text, t.y, global - t.startMs, t.endMs - t.startMs) }
             // Layers drawn frame by frame (the slower way), under the text.
             drawer?.draw(c, global)
+            // Text and stickers the rider placed on the timeline, in Reel time.
+            plan.texts.forEach { t -> if (global in t.startMs until t.endMs) art.drawTextItem(c, plan.vibe, t, global - t.startMs, t.endMs - t.startMs) }
+            plan.stickers.forEach { st -> if (global in st.startMs until st.endMs) art.drawSticker(c, st, global - st.startMs, kmhNow, wallNow?.let(input.leanAt)) }
         }
         val video = ArrayList<Effect>()
         // Speed first, so everything after sees the Reel's own time.
