@@ -243,3 +243,81 @@ Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds
 - **Send to Journal** on each Reel (and **Send all** for a ride): the Reel and its cover go into that ride's shared folder (like moments) and the RIDE_SAVED signal fires. The latest sent Reel's cover becomes the Journal entry's cover; any Reel can be marked "Use as Journal cover". **Remove from Journal** takes it out (cover falls back to the previous Reel's, then route.png). Reels show an "In Journal" label.
 - **Contract additions** (keppo.ride v1, docs/keppo-ride-format.md): `reels[]` = `{file, cover, title, durationMs, createdAt, postCaption}`; top-level `cover` (file name) used instead of `route.png` when present. Additive: the current Journal ignores them.
 - **Keppo Journal note** (separate app, needs its own update): use `cover` as the entry's cover, falling back to `route.png`; list and play `reels[]` (files in the ride folder, with thumbnails via the provider); re-read on RIDE_SAVED / COLUMN_LAST_MODIFIED as for other generated files.
+
+---
+
+# Studio, rethought: script first (planned 7 Oct; discuss only, build when the rider says "build")
+
+The rider's notes on the first real Reel (Tuesday Evening Ride, 30 s, Hype; shared as VID-20261007-WA0005): too many cuts, no storyline, feels abrupt; wants to approve a script and have Studio learn how they like stories written; not happy with the outcome, partly because there wasn't much footage.
+
+## What was wrong with that Reel (frame-by-frame review)
+- ~16 cuts in 30 s (one every ~1.8 s): the Hype beat grid applied to mostly silent 2–4 s riding bits.
+- Every shot is the same selfie angle under the flyover, so fast cuts read as jitter, not editing.
+- The first 6 s have no voice and no text: no hook.
+- Speech cut into fragments ("Arre yaar, ye toh thoda…", "Paani nahi piya…", "Ek detailed report…", "I think you… bhool…"), each cut before it ends.
+- The best hook, a long "Tooooooo" at 20–23 s, was buried mid-Reel.
+- No captions (likely skipped: Gemini limit), so nothing ties the shots together on mute.
+- Why, in the code: the planner fills the length with the best-scored pieces (cut at 1.5 s pauses, silent bits 2–4 s, on the vibe's beat). Gemini's "story" only boosts a list of clips; nothing decides what's first, middle or last, or why. The teaser, a transition on every cut, the stats card and the loop tail add more jumps.
+
+## New approach: Gemini writes a script, the rider approves it, then the video is made
+
+### Sections: each has a job and several forms, with its own length
+Gemini picks the form and length per section from what was actually filmed. Sections are optional and their order can change.
+1. **Hook** (0.5–8 s, stop the scroll): a word or sound ("Fhit!", "No…", "Aaaahhh", "Tooooo"); a line that raises a question; a 5–8 s monologue when the opening is the story; picture-led (fastest or prettiest shot plus a text question); a flash-forward ("3 hours earlier…"); the number ("98 km/h" on the moment).
+2. **Setup** (0–8 s, where and why; often skipped at 15 s): one line from the rider; text over the road ("Sunday · Nahan · 86 km"); a 1–2 s route sketch; the rider's voice from a later clip over the road; nothing.
+3. **Journey / build** (0–15 s): a quick montage (3–5 shots × 1–2 s, only if the shots look different); one long calm road shot (6–12 s) under voice or text; a "conversation" of 2–3 of the rider's lines with road between them; a speed build (shots shorten, km/h counts up). Skipped when content is thin: never padding.
+4. **Peak** (2–12 s): one long uncut clip (a story, a reaction, a lean); the reaction close-up; the event with its numbers (hard brake, "0.8 G", a beat of slow-mo); face then road (back camera).
+5. **Turn / twist** (optional, 1–5 s): a contradiction ("Actually nahi…"); a surprise (rain, closed road, a dog); a blooper. Only when it's really in the footage.
+6. **Payoff** (1–6 s): the line that answers the hook; a reaction (laugh, "worth it"); the result on screen ("Made it · 2 h 40 min").
+7. **Ending** (0.5–3 s): a loop back to the hook; stats; a sign-off line; a question for comments; cut to black on a word.
+
+### Story shapes (overall arrangement Gemini chooses)
+- Straight story: hook → setup → build → peak → payoff.
+- Cold open: peak first → "earlier…" → build → payoff.
+- One take: hook → one long clip → ending (a great 10–12 s monologue).
+- Problem → solution: hook (problem) → turn → payoff.
+- Reaction-led: several short reactions → peak → payoff.
+- Mood piece: long road shots with 2–3 lines or text (little talking, good footage).
+- Countdown / list: "3 things on this ride…" → 3 mini-peaks.
+
+### Shot lengths and the length the rider picks
+- Mixed shot lengths, matched to the moment: quick 1–2 s, medium 3–6 s, long 8–12 s (one 10–12 s shot in a 30 s Reel is fine).
+- The chosen length (15/30/45/60) is a time budget, not a template: Gemini spends it where the content is strong. 15 s is often a hook plus one peak, or one long clip; 30 s has room for a 10–12 s peak or a short build; 60 s has room for a turn and two chapters.
+- If the footage can't fill the length well, Studio suggests a shorter Reel instead of padding.
+
+### What Gemini gets and returns (one request per script, plus one per "Try another")
+- Gets: every clip with timed words; reaction sounds marked as such (long vowels, "aaah", "toooo", "fhit": ask Gemini to flag them even when it isn't sure of the words); speed, events, time of day, which camera; how alike clips look (same selfie angle vs road/phone); the rider's style rules and last few before/after edits.
+- Returns: the shape, then each section with its form, clip and exact in/out, on-screen text, and a one-line reason.
+- Uses the main model (scripts need it), not the lite one; well within 20 a day.
+
+### Guardrails the app enforces (a Gemini mistake can't break the video)
+- Never cut a sentence in the middle; never run past a clip's end; total within ~1 s of the chosen length; never reuse the same seconds (except a flash-forward hook).
+- Similar-looking shots in a row become one longer shot, not several short ones; quick montages only with visually different shots (back camera, phone videos, other rides).
+- Mostly plain cuts; the vibe's transition effect only between sections. The flash-forward teaser is off by default (Gemini can choose it as a hook form).
+- A broken section is fixed quietly (trimmed, extended or swapped), not a failure.
+- Without Gemini (offline or out of allowance): fewer, longer shots with text cards, not a fast montage.
+
+### Script approval
+- Before any video is made: the script as section cards (form, length, clip thumbnail, the words, the on-screen text, Gemini's reason).
+- Edit text, change a shot's length, swap the clip, reorder or remove sections, change the hook; "Try another script"; then **Approve & make**. Changing the script costs no rendering.
+- Open question: approve every time, or only when wanted with "Make it straight away" kept.
+
+### Learning the rider's style
+- Each approved script saves the draft, the rider's final version and an optional one-line note ("too formal", "more Hinglish").
+- Studio turns repeated edits into style rules ("prefers one-word reaction hooks", "keeps long monologues"); the rider can see and edit them (Studio › Your style).
+- The next scripts get the rules plus the last few before/after pairs.
+- Export the whole log (before/after/note) to share with the developer, to improve Studio's instructions.
+
+### When there isn't much footage
+- Before writing, Studio says what the ride has: "40 s of you talking, 3 good moments: enough for a 15 s Reel."
+- When it's thin, it offers formats that work with little: **One moment** (one 10–15 s clip done well, captions and the route); **Voice-over story** (Studio suggests 2–3 lines to say over riding footage; works with no talking clips).
+- The next-ride shot list gets specific ("say why you're riding today, at the start"; "film the road with the back camera once").
+
+### Applied to the reviewed Reel (what it would have been)
+Hook: "Tooooooo" plus the text "3 hours. No water." (3 s) → Setup: "Arre yaar, ye toh thoda…" in full (3 s) → Peak: "Paani nahi piya…" and the next line, one uncut clip with captions (8–10 s) → Build: one calm flyover shot under the voice (6 s) → Payoff/ending: "I think you… bhool…" then loop to "Tooooo" (4 s). About 5 shots instead of 16; a 15 s version offered too.
+
+## Bugs found in that Reel (fix with this batch)
+1. Stats card says "Top 22 km/h" while the speed badge shows up to 54 km/h: one of them is wrong.
+2. "6.6 km · 6 minutes" means ~66 km/h average, which doesn't fit a top of 22: the card's numbers disagree.
+3. "0 km/h" shown at 2–3 s while moving (a gap in the speed data): hide the badge when there's no speed instead.
+4. Hype transitions show mostly black for a moment (around 5, 11, 19 s) with a yellow slash: looks like a dropout, not an effect.
