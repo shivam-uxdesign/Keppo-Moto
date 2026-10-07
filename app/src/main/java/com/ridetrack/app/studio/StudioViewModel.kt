@@ -453,6 +453,8 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
                     g.captions(audio)
                 }
                 StudioText.save(m.file, lines)
+                // The words also become the clip's transcript (shown in the ride and the clip viewer).
+                if (m.transcript == null) c.moments.setTranscript(m.id, lines.joinToString(" ") { it.text })
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

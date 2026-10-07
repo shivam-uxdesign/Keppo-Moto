@@ -86,7 +86,10 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
                 },
             )
             try {
-                return block(model).also { onWorking(name) }
+                // A hung request would leave Studio waiting forever.
+                val reply = kotlinx.coroutines.withTimeoutOrNull(REQUEST_TIMEOUT_MS) { block(model) }
+                    ?: throw java.io.IOException("Gemini didn't answer within a minute")
+                return reply.also { onWorking(name) }
             } catch (e: QuotaExceededException) {
                 throw FirebaseTranscriber.Busy(e.message)
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -100,6 +103,8 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         throw last ?: IllegalStateException("no Gemini model")
     }
 }
+
+private const val REQUEST_TIMEOUT_MS = 60_000L
 
 /** Prompts, and reading Gemini's replies (pure, unit-tested). */
 object StudioText {

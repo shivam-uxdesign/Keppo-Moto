@@ -444,7 +444,7 @@ private fun TranscribeSettings(m: MomentSettings, onChange: (MomentSettings) -> 
             when {
                 status.lastError != null -> status.lastError!!
                 status.waiting > 0 -> "${status.waiting} clips waiting to be written out."
-                else -> "Talking clips are written out after each ride."
+                else -> "Talking clips are written out after each ride (clips from before this was turned on are skipped)."
             },
             style = RtType.caption,
             color = if (status.lastError != null) RtColors.Warning else RtColors.TextTertiary,

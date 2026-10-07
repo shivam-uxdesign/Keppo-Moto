@@ -389,6 +389,31 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                         }
                     }
                 }
+                // What the rider said in this ride's clips (Gemini), in ride order; tap one to watch it.
+                val said = moments.filter { !it.transcript.isNullOrBlank() }.sortedBy { it.timeMillis }
+                if (said.isNotEmpty()) {
+                    Spacer(Modifier.height(18.dp))
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.Surface).padding(horizontal = 16.dp, vertical = 14.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("What you said", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+                            Text("  ·  ${said.size}", style = RtType.body, color = RtColors.TextTertiary)
+                        }
+                        said.forEachIndexed { i, m ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable(role = Role.Button, onClickLabel = "Watch this clip") { vm.pause(); onOpenMoment(m.id) }
+                                    .padding(vertical = 10.dp),
+                            ) {
+                                Text(Format.timeOfDay(m.timeMillis), style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.width(64.dp).padding(top = 2.dp))
+                                Text("“${m.transcript}”", style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
+                            }
+                            if (i < said.lastIndex) HairlineDivider()
+                        }
+                    }
+                }
                 if (BuildConfig.DEBUG) MomentsDiagnostics(rideId)
                 Spacer(Modifier.height(RtDimens.lg))
             }
