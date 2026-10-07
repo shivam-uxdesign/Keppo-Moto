@@ -114,8 +114,12 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     val plan = s.timeline ?: return
     val context = LocalContext.current
     val density = LocalDensity.current
-    val preview = remember { PreviewPlayer(context) }
+    val simple = remember { PreviewPlayer(context) }
+    // The exact preview (as the made video) when this phone can play it; the simple one otherwise.
+    var exactOn by remember { mutableStateOf(ExactPreview.works) }
+    val exact = remember { ExactPreview(context) { e -> exactOn = false; vm.previewFailed(e) } }
     val files = remember { vm.previewFiles() }
+    val active: Player = if (exactOn) exact.player else simple.player
     var playing by remember { mutableStateOf(false) }
     var pos by remember { mutableLongStateOf(0L) }
     var zoom by remember { mutableFloatStateOf(1f) }
@@ -133,16 +137,26 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
 
     DisposableEffect(Unit) {
         val l = object : Player.Listener { override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying } }
-        preview.player.addListener(l)
-        onDispose { preview.player.removeListener(l); preview.release() }
+        simple.player.addListener(l)
+        exact.player.addListener(l)
+        onDispose { simple.player.removeListener(l); exact.player.removeListener(l); simple.release(); exact.release() }
     }
-    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { preview.player.pause() }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { active.pause() }
     // A change (not mid-drag): play the new edit from where the playhead is.
-    LaunchedEffect(s.timelineVersion) { preview.load(current, files, pos) }
+    LaunchedEffect(s.timelineVersion, exactOn) {
+        if (exactOn) {
+            simple.player.pause()
+            val input = vm.previewInput(current)
+            if (input != null) exact.load(input, pos) else exactOn = false
+        } else {
+            exact.player.pause()
+            simple.load(current, files, pos)
+        }
+    }
     // Playing: the timeline follows the video.
     LaunchedEffect(playing, pxPerMs) {
         while (playing) {
-            pos = preview.positionMs().coerceIn(0, current.totalMs)
+            pos = (if (exactOn) exact.positionMs() else simple.positionMs()).coerceIn(0, current.totalMs)
             vm.playheadMs = pos
             scroll.scrollTo((pos * pxPerMs).roundToInt())
             delay(33)
@@ -153,17 +167,17 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     LaunchedEffect(pxPerMs) {
         scroll.scrollTo((pos * pxPerMs).roundToInt())
         snapshotFlow { scroll.value }.collect { v ->
-            if (!preview.player.isPlaying) {
+            if (!active.isPlaying) {
                 pos = (v / pxPerMs).toLong().coerceIn(0, current.totalMs)
                 vm.playheadMs = pos
-                preview.seek(pos)
+                if (exactOn) exact.seek(pos) else simple.seek(pos)
             }
         }
     }
     // Let go near a cut or a marker: the playhead snaps to it.
     LaunchedEffect(dragged) {
         if (dragged) {
-            preview.player.pause()
+            active.pause()
         } else {
             delay(250)
             val snap = (TimelineEdits.snap(current, pos) ?: current.markers.map { it.atMs }.minByOrNull { abs(it - pos) }?.takeIf { abs(it - pos) <= 150 })
@@ -173,11 +187,11 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     BackHandler { if (s.canUndo) discard = true else vm.closeEdit() }
 
     fun seekTo(ms: Long) {
-        preview.player.pause()
+        active.pause()
         val t = ms.coerceIn(0, current.totalMs)
         pos = t
         vm.playheadMs = t
-        preview.seek(t)
+        if (exactOn) exact.seek(t) else simple.seek(t)
     }
 
     Column(modifier) {
@@ -193,7 +207,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 "Save",
                 style = RtType.button,
                 color = RtColors.OnPrimary,
-                modifier = Modifier.clip(RoundedCornerShape(50)).background(RtColors.Primary).clickable(role = Role.Button) { preview.player.pause(); vm.saveEdit() }.padding(horizontal = 14.dp, vertical = 6.dp),
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(RtColors.Primary).clickable(role = Role.Button) { active.pause(); vm.saveEdit() }.padding(horizontal = 14.dp, vertical = 6.dp),
             )
         }
 
@@ -201,10 +215,11 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             BoxWithConstraints(
                 Modifier.fillMaxHeight().aspectRatio(9f / 16f).clip(RoundedCornerShape(14.dp)).background(Color.Black)
-                    .clickable(role = Role.Button, onClickLabel = "Play or pause") { if (preview.player.isPlaying) preview.player.pause() else preview.player.play() },
+                    .clickable(role = Role.Button, onClickLabel = "Play or pause") { if (active.isPlaying) active.pause() else active.play() },
             ) {
                 AndroidView(
-                    factory = { ctx -> PlayerView(ctx).apply { useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM; player = preview.player } },
+                    factory = { ctx -> PlayerView(ctx).apply { useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM; player = active } },
+                    update = { v -> if (v.player !== active) v.player = active },
                     modifier = Modifier.fillMaxSize(),
                 )
                 val boxW = maxWidth
@@ -218,16 +233,17 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 val style = TextStyle(fontFamily = font, fontSize = fontPx.sp, color = Color.White, textAlign = TextAlign.Center, shadow = Shadow(Color.Black, blurRadius = 8f))
                 // The caption being said.
                 val (si, local) = TimelineEdits.at(plan, pos)
-                (plan.segments.getOrNull(si) as? ClipSegment)?.lines?.firstOrNull { local in it.startMs until it.endMs }?.let { l ->
+                if (!exactOn) (plan.segments.getOrNull(si) as? ClipSegment)?.lines?.firstOrNull { local in it.startMs until it.endMs }?.let { l ->
                     Text(l.text, style = style.copy(fontSize = (fontPx * 0.8f).sp), modifier = Modifier.align(Alignment.TopCenter).offset(y = boxH * 0.66f).padding(horizontal = 12.dp))
                 }
                 // Text on the timeline; the selected one can be dragged up or down.
-                plan.texts.filter { pos in it.startMs until it.endMs }.forEach { t ->
+                plan.texts.filter { pos in it.startMs until it.endMs && (!exactOn || (s.pick as? TimelinePick.Text)?.id == it.id) }.forEach { t ->
                     val selected = (s.pick as? TimelinePick.Text)?.id == t.id
                     var dy by remember(t.id, t.y) { mutableFloatStateOf(0f) }
                     Text(
                         t.text,
-                        style = style,
+                        // In the exact preview the text is in the video: only its outline, to drag.
+                        style = if (exactOn && dy == 0f) style.copy(color = Color.Transparent, shadow = null) else style,
                         modifier = Modifier.align(Alignment.TopCenter).offset { IntOffset(0, ((boxH * t.y - (fontPx / 1.5f).dp).toPx() + dy).roundToInt()) }
                             .then(if (selected) Modifier.border(1.dp, RtColors.Primary, RoundedCornerShape(4.dp)) else Modifier)
                             .pointerInput(t.id, selected) {
@@ -243,7 +259,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 if (!playing) {
                     Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.align(Alignment.Center).size(48.dp))
                 }
-                Text(
+                if (!exactOn) Text(
                     "Simple preview",
                     style = RtType.caption,
                     color = Color.White.copy(alpha = 0.8f),
@@ -257,13 +273,13 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                 contentDescription = if (playing) "Pause" else "Play",
                 tint = RtColors.TextPrimary,
-                modifier = Modifier.size(28.dp).clickable(role = Role.Button) { if (playing) preview.player.pause() else preview.player.play() },
+                modifier = Modifier.size(28.dp).clickable(role = Role.Button) { if (playing) active.pause() else active.play() },
             )
             Text("‹", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "One frame back") { seekTo(pos - FRAME_MS) }.padding(horizontal = 10.dp))
             Text("›", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "One frame on") { seekTo(pos + FRAME_MS) }.padding(horizontal = 10.dp))
             Text("${clock(pos)} / ${clock(plan.totalMs)}", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
             Small("Mark") { vm.addMarker() }
-            if (s.video != null) Small("Before") { preview.player.pause(); compare = true }
+            if (s.video != null) Small("Before") { active.pause(); compare = true }
             Small(if (full) "Tracks" else "Full") { full = !full }
         }
 
@@ -503,7 +519,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     is TimelinePick.Layer -> "Drag the layer on the video to move it, pinch to resize. Move here marks where it is now, so it glides there."
                     is TimelinePick.Audio -> "A detached sound can run past its cut. Dip here and Full here shape its volume."
                     is TimelinePick.Text -> "Drag the text up or down on the video to place it."
-                    else -> "Scroll the timeline to scrub; pinch it to zoom. Mark drops a marker. Colours, camera moves and layer moves show in the saved video."
+                    else -> if (exactOn) "Scroll the timeline to scrub; pinch it to zoom. Mark drops a marker. Layers show as stills here; they play in the saved video."
+                    else "Scroll the timeline to scrub; pinch it to zoom. Mark drops a marker. Simple preview: colours, camera moves and layers show in the saved video."
                 },
                 style = RtType.caption,
                 color = RtColors.TextTertiary,

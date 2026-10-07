@@ -1119,6 +1119,21 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         return saved.filter { it.momentId !in used } + bits.filter { it.momentId !in used } + _state.value.otherBits.filter { it.momentId !in used }
     }
 
+    /** What the exact preview plays for [plan]: the same as the made video (the voice-over mixed in). */
+    suspend fun previewInput(plan: StudioPlan): RenderInput? {
+        val s = _state.value
+        val cd = card ?: return null
+        val voice = s.takes.takeIf { it.isNotEmpty() }?.let { takes ->
+            withContext(Dispatchers.IO) { VoiceRecorder.mix(takes, plan.totalMs, File(c.appContext.cacheDir, "studio-preview-voice.wav")) }
+        }
+        return renderInput(plan, s, cd, voice)
+    }
+
+    /** The exact preview didn't work here: kept as a warning, the simple one is used. */
+    fun previewFailed(e: Throwable) {
+        c.errors.warn("Studio preview", "The exact preview didn't play on this phone: using the simple preview", e)
+    }
+
     /** Everything that can go over the edit as a layer: saved clips, this ride's parts (used ones too), other rides'. */
     fun layerable(): List<Bit> = c.savedClips.clips.value.map(c.savedClips::bit) + bits + _state.value.otherBits
 

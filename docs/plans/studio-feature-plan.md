@@ -329,7 +329,12 @@ Each build ends with one APK to test on the phone before the next starts.
    - A ride's own Studio page; the Studio tab with "Ready for you" and ride states; quick prompts.
    - Saved clips with auto tags; drafts.
    - Record both DJI channels and keep them, with the two-mic test; headset mic off by default. (So the next ride already captures voice and engine separately.)
-3. **Editor foundation: layers and tracks** (D1, D2, D8, D9). Large; the biggest build.
+3. **Editor foundation: layers and tracks** (D1, D2, D8, D9). Large; the biggest build. **Built 7 Oct.**
+   - Built: layers (Corner, Top half, Bottom half, Below left and right for the stack, Full), dragged and pinched on the preview, move points that glide, shape (square, rounded, circle), frame, opacity, rotate, its own sound. Made with Media3's compositor; if a phone can't, they're drawn frame by frame (slower) and the Reel says so.
+   - Built: sound tracks: detached clip sound (J and L cuts), the engine mic track from two-mic clips (follows its clips), voice-over, music, layers' sound; volume points and fades; a mixer with volume, mute and solo per track, the dip under your voice, and a voice clean-up (high-pass).
+   - Built: pinch to zoom the timeline, snapping to cuts and markers, select several clips to move, delete or paste settings, copy a clip's settings, markers, a History list, frame stepping, full-screen preview, Before (compare), and autosave that carries on after the app closes.
+   - Built: an exact preview (Media3's composition player) with graphics, colour, camera moves and the mix; layers show as stills in it. If a phone can't play it, the simple preview is used, labelled, and a warning is logged.
+   - Not yet: small preview copies of clips for long Reels; stills instead of moving layers in the preview.
    - The edit becomes multi-track: video layers (free size, side by side, 3-stack) and audio tracks (voice, engine, voice-over, music) with volume curves, auto-duck and detached sound.
    - Pinch zoom, snapping, no gaps, multi-select, copy and paste settings, markers, autosave.
    - A preview that plays the real composition (Media3's composition player), with small preview copies of clips.

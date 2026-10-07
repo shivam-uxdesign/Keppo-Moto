@@ -164,6 +164,18 @@ class StudioRenderer(private val context: Context) {
         }
     }
 
+    /** True while building the editor's preview (frames may start anywhere). */
+    private var preview = false
+
+    /**
+     * The edit as the made video would be, for the editor's exact preview: graphics, colour,
+     * camera moves and every sound track. Layers aren't in it (the editor shows them as stills).
+     */
+    fun previewComposition(input: RenderInput): Composition {
+        preview = true
+        return composition(input, Attempt(inAppMuxer = true, extraTracks = true, sound = true, note = null, layers = LayerMode.NONE))
+    }
+
     private fun composition(input: RenderInput, a: Attempt): Composition {
         val plan = input.plan
         val segs = plan.segments
@@ -273,8 +285,8 @@ class StudioRenderer(private val context: Context) {
             .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setStartPositionMs(from).setEndPositionMs(from + dur).build())
             .build()
 
-        val clock = ItemClock()
         val segStart = plan.startOf(i)
+        val clock = ItemClock(segStart, from, dur, preview)
         // Voice-over captions that fall in this segment, timed from its start.
         val voLines = input.voiceLines.filter { it.endMs > segStart && it.startMs < segStart + dur }.map { it.copy(startMs = it.startMs - segStart, endMs = it.endMs - segStart) }
         val lines = if (seg is ClipSegment) (seg.lines + voLines).sortedBy { it.startMs } else voLines
@@ -366,11 +378,34 @@ class StudioRenderer(private val context: Context) {
     }
 
     /** Ms since the item's first frame (frames may be stamped from the clip start or the composition). */
-    private class ItemClock {
+    /**
+     * Ms into a segment from a frame's timestamp. Frames can be stamped from the composition's
+     * start, the item's start, or the clip's own time; in a made video the first frame shows
+     * which (it's the segment's first), and that's remembered for the preview, which can start
+     * anywhere.
+     */
+    private inner class ItemClock(private val segStartMs: Long, private val fromMs: Long, private val durMs: Long, private val preview: Boolean) {
+        @Volatile private var mode = -1
         @Volatile private var firstUs: Long? = null
+
         fun localMs(us: Long): Long {
-            val base = firstUs ?: synchronized(this) { firstUs ?: us.also { firstUs = it } }
-            return ((us - base) / 1000).coerceAtLeast(0)
+            val t = us / 1000
+            val cand = longArrayOf(t - segStartMs, t, t - fromMs)
+            if (!preview) {
+                // Exporting: the first frame is the segment's first.
+                val first = firstUs ?: synchronized(this) { firstUs ?: us.also { f -> firstUs = f; learn(cand) } }
+                return ((us - first) / 1000).coerceIn(0, durMs)
+            }
+            var m = mode
+            if (m < 0) {
+                m = frameTimeMode(context).takeIf { it >= 0 } ?: (cand.indices.firstOrNull { cand[it] in 0..durMs } ?: 0)
+                mode = m
+            }
+            return cand[m].coerceIn(0, durMs)
+        }
+
+        private fun learn(cand: LongArray) {
+            cand.indices.firstOrNull { kotlin.math.abs(cand[it]) <= 80 }?.let { setFrameTimeMode(context, it) }
         }
     }
 
@@ -398,6 +433,13 @@ class StudioRenderer(private val context: Context) {
     private companion object {
         const val TAG = "Studio"
         const val MUSIC_LEVEL = 0.7f
+
+        /** How frames are stamped (0 composition, 1 item, 2 clip time), learnt from a made video; -1 = not yet. */
+        fun frameTimeMode(context: Context): Int = context.getSharedPreferences("studio", Context.MODE_PRIVATE).getInt("frame_time_mode", -1)
+
+        fun setFrameTimeMode(context: Context, m: Int) {
+            context.getSharedPreferences("studio", Context.MODE_PRIVATE).edit().putInt("frame_time_mode", m).apply()
+        }
 
         /** 0 → 1 over [ms] at the start and 1 → 0 before [total]. */
         fun fade(t: Long, total: Long, ms: Long = 600): Float =

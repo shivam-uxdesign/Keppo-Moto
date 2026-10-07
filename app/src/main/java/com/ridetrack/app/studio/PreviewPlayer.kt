@@ -65,3 +65,48 @@ class PreviewPlayer(context: Context) {
 
     fun release() = player.release()
 }
+
+/**
+ * Plays the edit exactly as the made video will look and sound (graphics, captions, colour,
+ * camera moves, the mix), with Media3's composition player. Layers show as stills on top. If the
+ * phone can't play it, [onFailed] gets the error and the editor goes back to the simple preview.
+ */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+class ExactPreview(private val context: Context, private val onFailed: (Throwable) -> Unit) {
+    val player = androidx.media3.transformer.CompositionPlayer.Builder(context).build()
+    private var total = 0L
+
+    init {
+        player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                works = false
+                onFailed(error)
+            }
+        })
+    }
+
+    /** Loads [input]'s edit and goes to [atMs]. */
+    fun load(input: RenderInput, atMs: Long) {
+        try {
+            val composition = StudioRenderer(context).previewComposition(input)
+            total = input.plan.totalMs
+            player.setComposition(composition)
+            player.prepare()
+            player.seekTo(atMs.coerceIn(0, total))
+        } catch (e: Exception) {
+            works = false
+            onFailed(e)
+        }
+    }
+
+    fun positionMs(): Long = player.currentPosition.coerceIn(0, total)
+
+    fun seek(ms: Long) = player.seekTo(ms.coerceIn(0, total))
+
+    fun release() = player.release()
+
+    companion object {
+        /** False once it failed on this phone (this session): the simple preview is used. */
+        @Volatile var works = true
+    }
+}
