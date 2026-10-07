@@ -222,3 +222,10 @@ Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds
 4. Remove the built-in library: the song pack, "Add the song pack", MusicLibrary and src/music go (the app doesn't grow).
 5. Keep "Your own song" for WhatsApp or keeping; note that Instagram may mute copyrighted songs added outside it.
 - Later (optional): "Trending now" suggestions: Gemini with Google Search lists three songs trending for moto Reels this week (India) to search in Instagram. Uses Gemini allowance and Search grounding (5,000 free a month, then paid); names can be a bit off.
+
+## 6. Several Reels from one ride ("Reel ideas")
+- A ride's Studio page shows idea cards (cover frame, title, length, clips used): **The story** (1–3, Gemini's stories, one idea each), **Highlights** (best of the ride, 30 s), **The 15-second hook** (best line + a moment either side, built to loop), **Speed run** (fastest stretch: route, top speed, riding shots), **Bloopers** (only if there are any). Tap one to make it; each can still be changed (vibe, length, Edit).
+- Clips may be reused freely across Reels. Within one Reel a clip may appear twice only as a 1–2 s flash-forward teaser at the start, then in full in its place (the planner's "no same seconds twice" rule allows this one case).
+- "Make all" queues them one after another; runs only while charging unless the rider starts it.
+- Gemini: captions read once per ride (~2 requests), one director request returns all the ideas, tips only for Reels actually made: ~3 requests for 5 ideas.
+- Each finished Reel is its own video with Share and Save.
