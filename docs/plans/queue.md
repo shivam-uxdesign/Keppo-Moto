@@ -179,3 +179,25 @@ Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds
   - Clips from other rides: talking lines and riding shots, best first by their saved scores.
   - A shot list for the next ride on Home (from the coach's "film next time" tips); the rider ticks them off (the app can't tell what was filmed). Nothing while riding.
   - Series name on the title ("Evening Ride Diaries · ep 4").
+
+---
+
+# Next batch (planned 7 Oct; build only when the rider says "build")
+
+## 1. Show when Gemini's limit resets (wherever "Gemini is busy" shows)
+- A live countdown worked out from the saved reset time (`GeminiQuota`), not text frozen at the time of the error: "Free again at 5:29 AM · in 3 h 12 min".
+- Per task, since models run out separately: "Captions free again at 5:29 AM; story and tips at 12:30 PM".
+- When the time passes the message disappears and the app retries quietly (no cache clearing).
+- Where: Profile › Moments ("Write down what I say" status line); Studio's "Reading what you said" step and the yellow note under the video; a line under "Make my Reel" before starting ("Captions will be skipped: Gemini is free again at 5:29 AM").
+
+## 2. Profile › Moments redesign: one screen, no long scroll
+- Main page, five rows:
+  1. **Capture moments**: switch + one-line status ("15 s clips · DJI Mic").
+  2. **What to film ›**: "Braking, acceleration, lean, when I speak"; its own page with the switches and thresholds (value chips with small menus, not chip rows).
+  3. **Film when I speak**: switch (used most).
+  4. **Write down what I say ›**: "On · free again at 5:29 AM"; sub-page with Wi-Fi only, status/countdown and the test token.
+  5. **Storage**: "1.2 GB · Manage ›" (Delete all inside).
+- **More settings ›** at the bottom: clip length, photos, video quality, microphone, voice level meter and sensitivity, each one short row.
+- No explanations on the main page: they move to the "How Moments works" sheet, opened from an ⓘ in the title.
+- While riding, one banner ("Settings are locked while riding") instead of a message on every row.
+- Nothing removed; rarely changed settings are one tap deeper.
