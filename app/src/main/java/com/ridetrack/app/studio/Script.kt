@@ -161,9 +161,10 @@ object ScriptWriter {
         appendLine("You are the editor and social media manager for a motorcycle rider who posts motovlogs (often Hinglish).")
         appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
         appendLine(footageText(footage))
-        appendLine("Suggest the pieces of content worth making from THIS ride, as many as the footage really supports (1 to 4).")
+        appendLine("Suggest one piece for every strong moment in THIS ride: a story, a reaction, a funny or useful line, a fast stretch. At least 1, at most 6.")
+        appendLine("List them best first: the first one is made automatically. Each piece must fill at least 80% of its own length with real content.")
         appendLine("Formats allowed: ${formats.joinToString { "${it.name.lowercase()} (${it.hint}, ${it.minSec}–${it.maxSec} s)" }}.")
-        appendLine("Make them different from each other: different hooks, shapes and lengths. Clips may be reused across pieces, but no two pieces open on the same moment.")
+        appendLine("Make them different from each other: different hooks, shapes and lengths; no two pieces open on the same moment or share a shape. Clips may be reused across pieces.")
         appendLine("Suggest a long video only if there's enough talking for 2+ minutes. When the footage is thin, suggest fewer, shorter pieces.")
         appendLine("Pick a vibe for each piece: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm) or vlog (the voice leads).")
         appendLine(CRAFT)
@@ -325,13 +326,15 @@ object ScriptWriter {
 
     // ---- script → video plan, with the guardrails -----------------------------------------------
 
-    /** The plan and what had to be fixed on the way (shown nowhere, logged with errors). */
-    data class Planned(val plan: StudioPlan, val fixes: List<String>)
+    /** The plan, what had to be fixed on the way, and how long the script meant it to be. */
+    data class Planned(val plan: StudioPlan, val fixes: List<String>, val plannedMs: Long = plan.totalMs)
 
     /**
      * Turns [script] into segments the renderer can make, enforcing what Gemini might get wrong:
      * shots inside their clip, no sentence cut in half, no seconds used twice (but a flash hook),
-     * no fast cutting between look-alike silent shots, and the total within the length.
+     * silent shots long enough to read, and the total within the length. Gentle: a shot Gemini
+     * chose is lengthened or merged, never dropped for looking like the one before, and a piece
+     * that comes out under 70% of its length is filled with more of its own clips.
      */
     fun toPlan(script: Script, footage: List<Footage>, bits: List<Bit>, vibe: Vibe, options: StudioOptions): Planned {
         val fixes = ArrayList<String>()
@@ -370,12 +373,12 @@ object ScriptWriter {
                     if (b - a < minSilent) a = (b - minSilent).coerceAtLeast(0)
                     fixes += "lengthened ${f.key}"
                 }
-                // Two silent look-alike shots in a row read as a jump: one longer shot instead.
-                if (prev != null && !talking && !flash && prev.f.look == f.look && prev.f.lines.none { it.endMs > prev.inMs && it.startMs < prev.outMs }) {
-                    if (prev.f.momentId == f.momentId && a - prev.outMs in -500..1_500) {
-                        prev.outMs = maxOf(prev.outMs, b); fixes += "merged ${f.key}"; return@forEachIndexed
-                    }
-                    if (prev.outMs - prev.inMs >= 3_000) { fixes += "dropped look-alike ${f.key}"; return@forEachIndexed }
+                // The same clip continuing right after the shot before: one longer shot, not a jump cut.
+                if (prev != null && !flash && prev.f.momentId == f.momentId && a - prev.outMs in -500..1_500) {
+                    ranges.remove(prev.inMs..prev.outMs)
+                    prev.outMs = maxOf(prev.outMs, b)
+                    ranges += prev.inMs..prev.outMs
+                    fixes += "merged ${f.key}"; return@forEachIndexed
                 }
                 ranges += a..b
                 placed += Placed(si, sec.kind, sec.form, f, a, b, sec.text.takeIf { k == 0 })
@@ -398,6 +401,25 @@ object ScriptWriter {
                 ?: placed.takeIf { it.size > 1 }?.last()
                 ?: break
             placed.remove(drop); fixes += "dropped ${drop.f.key} for length"
+        }
+        // Too short for what it was meant to be (e.g. 11 s of a 30 s piece): more of the same clips,
+        // the shots with the most room first, never cutting into a sentence or reused seconds.
+        val floor = (script.lengthSec * 1000L * 7 / 10).coerceAtMost(budget)
+        var guard = 0
+        while (total() < floor && guard++ < 40) {
+            val need = floor - total()
+            val grow = placed.mapNotNull { p ->
+                val others = used[p.f.momentId].orEmpty().filter { it != p.inMs..p.outMs }
+                val limit = (others.filter { it.first >= p.outMs }.minOfOrNull { it.first } ?: p.f.durationMs).coerceAtMost(p.f.durationMs)
+                (limit - p.outMs).takeIf { it >= 500 }?.let { p to it }
+            }.maxByOrNull { it.second } ?: break
+            val (p, room) = grow
+            var out = p.outMs + minOf(need, room, 6_000)
+            // Don't stop in the middle of a sentence: take it to its end (within the room there is).
+            p.f.lines.firstOrNull { out in (it.startMs + 1) until it.endMs }?.let { l -> out = minOf(l.endMs + 250, p.outMs + room) }
+            used[p.f.momentId]?.let { r -> r.removeAll { it.first == p.inMs && it.last == p.outMs }; r += p.inMs..out }
+            p.outMs = out
+            fixes += "filled ${p.f.key}"
         }
         val segs = ArrayList<Segment>()
         placed.forEachIndexed { i, p ->
@@ -425,7 +447,7 @@ object ScriptWriter {
             val first = segs.filterIsInstance<ClipSegment>().first()
             segs += ClipSegment(first.bit, first.inMs, StudioPlanner.TAIL_MS.coerceAtMost(first.durMs), emptyList(), hook = false, tail = true)
         }
-        return Planned(StudioPlan(segs, vibe), fixes)
+        return Planned(StudioPlan(segs, vibe), fixes, script.lengthSec * 1000L)
     }
 
     /** Footage keys ("c1"…) in filming order. */

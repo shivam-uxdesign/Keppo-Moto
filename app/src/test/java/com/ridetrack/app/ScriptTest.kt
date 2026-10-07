@@ -130,4 +130,21 @@ class ScriptTest {
         assertTrue(line.contains("Tooooooo"))
         assertTrue(line.contains("Ending (stats)"))
     }
+
+    @Test
+    fun `a piece that comes out too short is filled from its own clips, and look-alike shots are kept`() {
+        // Four selfie clips, each 20 s with one line; the script uses 2-3 s of each: about 11 s for a 30 s piece.
+        val fs = (1..4).map { k ->
+            Footage("c$k", "s$k", 20_000, 1_000_000L + k * 60_000, "selfie", listOf(CaptionLine(1_000, 2_500, "line $k")), 40)
+        }
+        val shots = fs.mapIndexed { i, f -> com.ridetrack.app.studio.Section(if (i == 0) SectionKind.HOOK else SectionKind.PEAK, "line", listOf(com.ridetrack.app.studio.ScriptShot(f.momentId, 800, 3_500))) }
+        val script = com.ridetrack.app.studio.Script(PieceFormat.REEL, "Short one", null, 30, "story", null, null, shots)
+        val planned = ScriptWriter.toPlan(script, fs, emptyList(), Vibe.VLOG, StudioOptions(outro = false, loopEnd = false))
+        // All four shots stay (none dropped for looking alike)...
+        assertEquals(4, planned.plan.clips.size)
+        // ...and the piece reaches at least 70% of its 30 s.
+        assertTrue(planned.plan.totalMs >= 21_000, "total ${planned.plan.totalMs}")
+        assertEquals(30_000, planned.plannedMs)
+        assertTrue(planned.fixes.any { it.startsWith("filled") })
+    }
 }
