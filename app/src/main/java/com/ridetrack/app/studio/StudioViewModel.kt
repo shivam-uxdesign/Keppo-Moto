@@ -113,6 +113,8 @@ data class StudioState(
     val canMake: Boolean = false,
     /** Gallery videos only, no ride. */
     val phoneOnly: Boolean = false,
+    /** Gemini can be used in this build. */
+    val gemini: Boolean = false,
 ) {
     /** The small label on the first clip: the series and episode, or the title. */
     val label: String get() = if (series.isBlank()) title else "$series · ep $episode"
@@ -121,7 +123,7 @@ data class StudioState(
 /** Studio: turns a ride's clips into a Reel (captions, stories and tips by Gemini when it can). */
 @OptIn(UnstableApi::class)
 class StudioViewModel(private val c: AppContainer, val rideId: String, private val openReelId: String? = null) : ViewModel() {
-    private val _state = MutableStateFlow(StudioState())
+    private val _state = MutableStateFlow(StudioState(gemini = c.transcripts.available))
     val state: StateFlow<StudioState> = _state.asStateFlow()
 
     private var clips: List<Moment> = emptyList()
@@ -959,7 +961,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                 missed += batch.size
                 note = when {
                     AppCheckSetup.isRejected(e) -> "Captions: Firebase didn't accept this phone (App Check). Add the debug token from Profile › Moments in Firebase."
-                    e is FirebaseTranscriber.Busy -> "Captions: ${FirebaseTranscriber.busyMessage(e)} Remix later to try again."
+                    e is FirebaseTranscriber.Busy -> "Captions were skipped: Gemini's free limit is used up. Remix once it's free again."
                     else -> "Captions: couldn't read $missed clip${if (missed > 1) "s" else ""} (${e.message?.take(80)})."
                 }
                 // Out of allowance or refused: more requests won't help now.

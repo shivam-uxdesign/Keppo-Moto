@@ -440,14 +440,17 @@ private fun TranscribeSettings(m: MomentSettings, onChange: (MomentSettings) -> 
     if (!m.transcribe) return
     Column(Modifier.fillMaxWidth().padding(bottom = RtDimens.xs), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         ToggleRow("Only on Wi-Fi", "Uses no mobile data.", m.transcribeWifiOnly, { onChange(m.copy(transcribeWifiOnly = it)) })
+        val wait = com.ridetrack.app.transcribe.rememberGeminiWait()
+        val waitLine = wait.line.takeIf { wait.captionsBlocked }
         Text(
             when {
+                waitLine != null -> waitLine + if (status.waiting > 0) " · ${status.waiting} clips waiting" else ""
                 status.lastError != null -> status.lastError!!
                 status.waiting > 0 -> "${status.waiting} clips waiting to be written out."
                 else -> "Talking clips are written out after each ride (clips from before this was turned on are skipped)."
             },
             style = RtType.caption,
-            color = if (status.lastError != null) RtColors.Warning else RtColors.TextTertiary,
+            color = if (status.lastError != null || waitLine != null) RtColors.Warning else RtColors.TextTertiary,
         )
         // Test builds only: the App Check debug token, added once in the Firebase console.
         com.ridetrack.app.transcribe.AppCheckSetup.debugToken(context)?.let { token ->

@@ -42,6 +42,37 @@ object GeminiQuota {
         return ms.toLong().takeIf { it > 0 }
     }
 
+    /** Models captions (and background transcripts) can use; story and tips use the full ones. */
+    val CAPTIONS: List<String> get() = FirebaseTranscriber.LITE + FirebaseTranscriber.MODELS
+    val STORY: List<String> get() = FirebaseTranscriber.MODELS
+
+    /** "5:29 AM" in the phone's time zone. Pure. */
+    fun clock(at: Long, zone: ZoneId = ZoneId.systemDefault()): String =
+        java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.US).format(java.time.Instant.ofEpochMilli(at).atZone(zone))
+
+    /** "3 h 12 min", "12 min", "1 min". Pure. */
+    fun left(at: Long, now: Long): String {
+        val min = ((at - now + 59_999) / 60_000).coerceAtLeast(1)
+        return if (min >= 60) "${min / 60} h ${min % 60} min" else "$min min"
+    }
+
+    /**
+     * The live line for "Gemini is busy": when captions and the story/tips are free again, null
+     * when both are free now. Models run out separately, so they can differ. Pure.
+     */
+    fun waitLine(captionsAt: Long?, storyAt: Long?, now: Long, zone: ZoneId = ZoneId.systemDefault()): String? {
+        val c = captionsAt?.takeIf { it > now }
+        val s = storyAt?.takeIf { it > now }
+        fun at(t: Long) = "${clock(t, zone)} · in ${left(t, now)}"
+        return when {
+            c == null && s == null -> null
+            c != null && s != null && kotlin.math.abs(c - s) < 5 * 60_000 -> "Gemini is free again at ${at(maxOf(c, s))}"
+            c != null && s != null -> "Captions free again at ${at(c)}; story and tips at ${clock(s, zone)}"
+            c != null -> "Captions free again at ${at(c)}"
+            else -> "Story and tips free again at ${at(s!!)}"
+        }
+    }
+
     /** "about 19 h", "about 40 min" — how long until [at]. */
     fun waitText(at: Long, now: Long = System.currentTimeMillis()): String {
         val min = ((at - now) / 60_000).coerceAtLeast(1)

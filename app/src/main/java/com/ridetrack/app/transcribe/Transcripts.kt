@@ -124,7 +124,8 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             throw e
         } catch (e: FirebaseTranscriber.Busy) {
             c.errors.record("Transcripts", FirebaseTranscriber.busyMessage(e), e)
-            t.setError(FirebaseTranscriber.busyMessage(e))
+            // Profile shows a live countdown from the saved reset time instead of a frozen message.
+            t.setError(null)
             Result.retry()
         } catch (e: Exception) {
             c.errors.record("Transcripts", "Couldn't transcribe", e)

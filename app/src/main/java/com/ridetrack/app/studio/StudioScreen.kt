@@ -203,6 +203,10 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             s.error?.let { ErrorBox(it) }
         }
         Spacer(Modifier.height(12.dp))
+        val wait = com.ridetrack.app.transcribe.rememberGeminiWait()
+        if (s.gemini && o.captions && wait.captionsBlocked) {
+            Text("Captions will be skipped: ${wait.line}", style = RtType.caption, color = RtColors.Warning, modifier = Modifier.padding(bottom = 8.dp))
+        }
         if (s.canMake) Button("Make my Reel", primary = true) { vm.makePlain() }
         else Text("Studio needs at least 2 clips. Add videos from your phone above.", style = RtType.caption, color = RtColors.TextSecondary)
         Spacer(Modifier.height(12.dp))
@@ -406,6 +410,11 @@ private fun Working(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 Text("$p%", style = RtType.caption, color = RtColors.TextSecondary)
             }
         }
+        val wait = com.ridetrack.app.transcribe.rememberGeminiWait()
+        if (s.gemini) wait.line?.let {
+            Spacer(Modifier.height(12.dp))
+            Text(it, style = RtType.caption, color = RtColors.Warning, modifier = Modifier.padding(horizontal = 8.dp))
+        }
         Spacer(Modifier.height(28.dp))
         if (s.canSkipCaptions) {
             Button("Skip captions", primary = false) { vm.skipCaptions() }
@@ -447,6 +456,7 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             if (!s.phoneOnly) JournalCard(vm, s)
             s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextPrimary) }
             s.notes.forEach { Text(it, style = RtType.caption, color = RtColors.Warning) }
+            if (s.notes.isNotEmpty() && s.gemini) com.ridetrack.app.transcribe.rememberGeminiWait().line?.let { Text(it, style = RtType.caption, color = RtColors.Warning) }
             if (s.notes.isNotEmpty()) ErrorActions()
             if (s.musicUri == null) MusicGuide()
             Coach(s.tips) { vm.act(it) }
