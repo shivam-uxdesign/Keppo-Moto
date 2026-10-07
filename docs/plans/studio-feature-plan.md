@@ -368,9 +368,14 @@ Each build ends with one APK to test on the phone before the next starts.
    - Built: the coach's "film next time" shots show on the pop-up for the ride's first 30 s, one every 6 s.
    - Also (rider's request): Profile › Error log entries can be ticked and sent or copied on their own, one or several.
    - Engine moments from the engine mic; shot list on the HUD pop-up.
-8. **Search and learning** (C6, G1, G2, G3). Medium.
+8. **Search and learning** (C6, G1, G2, G3). Medium. **Built 7 Oct.**
    - Search what you said and what Gemini saw.
    - Views and likes entered by hand, feeding suggestions; post text per platform; the optional hook check.
+   - Built: Studio › Search (magnifier in the Studio tab, and in the editor's + Clip) finds words you said and things Gemini saw (rain, dogs, flyovers) across every ride. Gemini looks at clips a few at a time while the free limit lasts; after a ride it looks at the newest 24. A found sentence can be kept in Saved clips.
+   - Built: "How did it do?" on the finished video: type the views and likes from Instagram. Your Reels shows the views; Studio's suggestions lean towards the Reels that did best.
+   - Built: "Write for YouTube" (title and description, plus an Instagram caption if there isn't one), each with Copy.
+   - Built: subtitles in English or Hindi: Gemini translates the captions and the video is made again.
+   - Built: "Check the hook": three frames of the first 3 seconds and the hook line go to Gemini, which says whether it would stop the scroll and what to change.
 
 ### Risks to know
 - **Stabilise (D3):** Android has no built-in stabiliser. It needs a large library (OpenCV, +20 MB or more) or a simple version of our own. It may need to drop or come later.

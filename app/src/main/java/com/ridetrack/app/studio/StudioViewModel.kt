@@ -109,6 +109,16 @@ data class StudioState(
     val canMake: Boolean = false,
     /** Gallery videos only, no ride. */
     val phoneOnly: Boolean = false,
+    /** How the posted Reel did, as the rider typed it in; null until they do. */
+    val views: Int? = null,
+    val likes: Int? = null,
+    /** YouTube title and description written by Gemini; empty until asked. */
+    val youtubeTitle: String = "",
+    val youtubeDescription: String = "",
+    /** Gemini's read of the first 3 seconds; null until checked. */
+    val hook: HookCheck? = null,
+    /** Gemini is writing post text, translating or checking the hook ("Writing for YouTube…"); null when not. */
+    val posting: String? = null,
     /** Gemini can be used in this build. */
     val gemini: Boolean = false,
     /** The script the Reel was made from. */
@@ -518,6 +528,11 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                 musicName = p.musicName,
                 takes = c.reels.takes(p),
                 tips = p.tips,
+                views = p.views,
+                likes = p.likes,
+                youtubeTitle = p.youtubeTitle.orEmpty(),
+                youtubeDescription = p.youtubeDescription.orEmpty(),
+                hook = null,
                 video = c.reels.video(p.id),
                 thumbs = it.thumbs + borrowed.values.associate { m -> m.id to m.thumb },
             )
@@ -561,6 +576,10 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             idea = old?.idea ?: s.piece?.script?.title,
             script = s.script,
             note = note,
+            views = old?.views,
+            likes = old?.likes,
+            youtubeTitle = s.youtubeTitle.ifBlank { null },
+            youtubeDescription = s.youtubeDescription.ifBlank { null },
         )
         val saved = c.reels.save(project, video, s.takes)
         _state.update { it.copy(reelId = saved.id, video = c.reels.video(saved.id), takes = c.reels.takes(saved), coverFrames = emptyList(), versions = c.reels.versions(saved.id)) }
@@ -837,6 +856,77 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         if (s.series.isNotBlank()) c.studio.episodeUsed(s.episode)
         // No longer a draft.
         s.reelId?.let { id -> viewModelScope.launch { c.reels.update(id) { it.copy(posted = true) } } }
+    }
+
+    // ---- posting ---------------------------------------------------------------------------
+
+    /** How the posted Reel did; Studio's next suggestions lean towards what did well. */
+    fun setStats(views: Int?, likes: Int?) {
+        _state.update { it.copy(views = views, likes = likes) }
+        _state.value.reelId?.let { id -> viewModelScope.launch { c.reels.update(id) { it.copy(views = views, likes = likes, posted = true) } } }
+    }
+
+    /** Gemini writes the YouTube title and description (and a fresh Instagram caption if there's none). */
+    fun writeYouTube() {
+        val s = _state.value
+        if (s.posting != null || !s.gemini) return
+        _state.update { it.copy(posting = "Writing for YouTube…") }
+        viewModelScope.launch {
+            val about = listOfNotNull(s.script?.let { "${it.format.label}: ${it.title}" }, s.story, s.hookLine.takeIf { it.isNotBlank() }).joinToString(". ")
+            val t = runCatching { gemini().postTexts(s.title, about, s.postCaption) }
+                .onFailure { c.errors.record("Studio post text", "Gemini couldn't write the post text", it) }.getOrNull()
+            if (t == null) {
+                _state.update { it.copy(posting = null, toast = "Gemini couldn't write it now. Try again in a bit.") }
+                return@launch
+            }
+            _state.update {
+                it.copy(posting = null, youtubeTitle = t.youtubeTitle, youtubeDescription = t.youtubeDescription, postCaption = it.postCaption.ifBlank { t.instagram })
+            }
+            val now = _state.value
+            now.reelId?.let { id -> c.reels.update(id) { p -> p.copy(youtubeTitle = now.youtubeTitle.ifBlank { null }, youtubeDescription = now.youtubeDescription.ifBlank { null }, postCaption = now.postCaption) } }
+        }
+    }
+
+    /** Subtitles in [lang] (English or Hindi): Gemini translates every caption line, then the video is made again. */
+    fun translateCaptions(lang: String) {
+        val s = _state.value
+        val plan = s.plan ?: return
+        if (s.posting != null || !s.gemini) return
+        val lines = Posting.captionTexts(plan)
+        if (lines.isEmpty()) { _state.update { it.copy(toast = "There are no captions to translate") }; return }
+        _state.update { it.copy(posting = "Translating to $lang…") }
+        viewModelScope.launch {
+            val out = runCatching { gemini().translate(lines, lang) }
+                .onFailure { c.errors.record("Studio subtitles", "Gemini couldn't translate the captions", it) }.getOrNull()
+            if (out == null) {
+                _state.update { it.copy(posting = null, toast = "Couldn't translate now. Try again in a bit.") }
+                return@launch
+            }
+            _state.update { it.copy(posting = null, plan = Posting.withCaptions(plan, out)) }
+            remake()
+        }
+    }
+
+    /** Three frames of the first 3 seconds and the hook line go to Gemini: would it stop the scroll? */
+    fun checkHook() {
+        val s = _state.value
+        val video = s.video ?: return
+        if (s.posting != null || !s.gemini) return
+        _state.update { it.copy(posting = "Watching the first 3 seconds…", hook = null) }
+        viewModelScope.launch {
+            val frames = withContext(Dispatchers.IO) {
+                listOf(200L, 1_500L, 2_800L).mapNotNull { at ->
+                    ReelStore.frame(video, at)?.let { b ->
+                        val small = android.graphics.Bitmap.createScaledBitmap(b, 360, (360f * b.height / b.width).toInt().coerceAtLeast(1), true)
+                        java.io.ByteArrayOutputStream().also { small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, it) }.toByteArray()
+                    }
+                }
+            }
+            if (frames.isEmpty()) { _state.update { it.copy(posting = null, toast = "Couldn't read the video's first seconds") }; return@launch }
+            val h = runCatching { gemini().hookCheck(frames, s.hookLine.ifBlank { s.title }) }
+                .onFailure { c.errors.record("Studio hook check", "Gemini couldn't check the hook", it) }.getOrNull()
+            _state.update { it.copy(posting = null, hook = h, toast = if (h == null) "Gemini couldn't check it now. Try again in a bit." else it.toast) }
+        }
     }
 
     // ---- making ----------------------------------------------------------------------------

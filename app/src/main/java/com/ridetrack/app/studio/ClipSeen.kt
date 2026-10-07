@@ -29,7 +29,7 @@ object ClipSeen {
         return try {
             r.setDataSource(clip.path)
             listOf(durMs / 3, durMs * 2 / 3).mapNotNull { t ->
-                r.getScaledFrameAtTime(t * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 320, 568)?.let { b ->
+                r.frameFit(t * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 320, 568)?.let { b ->
                     ByteArrayOutputStream().use { o -> b.compress(Bitmap.CompressFormat.JPEG, 70, o); b.recycle(); o.toByteArray() }
                 }
             }

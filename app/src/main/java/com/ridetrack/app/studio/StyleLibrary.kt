@@ -148,7 +148,7 @@ class StyleLibrary(private val context: Context) {
             val dur = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: return@withContext emptyList()
             (0 until n).mapNotNull { i ->
                 val t = dur * (2 * i + 1) / (2 * n)
-                r.getScaledFrameAtTime(t * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 360, 640)?.let { b ->
+                r.frameFit(t * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 360, 640)?.let { b ->
                     ByteArrayOutputStream().use { o -> b.compress(Bitmap.CompressFormat.JPEG, 75, o); b.recycle(); o.toByteArray() }
                 }
             }

@@ -286,7 +286,7 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         if (!c.transcripts.available) return Suggested.Scripts(localPieces(fs, "Made by the app (Gemini isn't in this build)", title), "Gemini isn't in this build")
         var answer: String? = null
         return try {
-            val scripts = gemini().scripts(ScriptWriter.planPrompt(cd.title, cd.subtitle, fs, style(), PieceFormat.entries, c.styles.forSuggestions()), fs, onAnswer = { answer = it }) { raw ->
+            val scripts = gemini().scripts(ScriptWriter.planPrompt(cd.title, cd.subtitle, fs, style(), PieceFormat.entries, c.styles.forSuggestions(), Posting.performance(c.reels.reels.value)), fs, onAnswer = { answer = it }) { raw ->
                 c.errors.record("Studio content plan", "Gemini's answer couldn't be read", null, raw.take(4_000))
             }
             if (scripts.isEmpty()) {

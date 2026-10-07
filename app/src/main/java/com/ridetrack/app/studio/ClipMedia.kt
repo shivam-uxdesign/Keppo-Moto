@@ -24,6 +24,18 @@ import java.io.File
 import java.util.UUID
 import kotlin.coroutines.resume
 
+/**
+ * A frame scaled to fit [w]×[h]. Android 8.0 (API 26) has no scaled grab, so there the full frame
+ * is taken and shrunk.
+ */
+fun MediaMetadataRetriever.frameFit(timeUs: Long, option: Int, w: Int, h: Int): Bitmap? {
+    if (android.os.Build.VERSION.SDK_INT >= 27) return getScaledFrameAtTime(timeUs, option, w, h)
+    val f = getFrameAtTime(timeUs, option) ?: return null
+    val k = minOf(w.toFloat() / f.width, h.toFloat() / f.height)
+    if (k >= 1f) return f
+    return Bitmap.createScaledBitmap(f, (f.width * k).toInt().coerceAtLeast(1), (f.height * k).toInt().coerceAtLeast(1), true).also { if (it !== f) f.recycle() }
+}
+
 /** Pictures and copies made from clips: freeze frames, reversed parts, and what a clip is (size, frame rate). */
 @OptIn(UnstableApi::class)
 object ClipMedia {
@@ -64,7 +76,7 @@ object ClipMedia {
                     var t = len
                     var n = 0
                     while (t >= 0) {
-                        val f = r.getScaledFrameAtTime((fromMs + t) * 1000, MediaMetadataRetriever.OPTION_CLOSEST, 1080, 1920)
+                        val f = r.frameFit((fromMs + t) * 1000, MediaMetadataRetriever.OPTION_CLOSEST, 1080, 1920)
                         if (f != null) {
                             val up = upright(r, f)
                             val out = File(work, "f${n++}.jpg")

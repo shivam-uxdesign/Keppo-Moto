@@ -80,7 +80,8 @@ internal suspend fun bestFrame(c: AppContainer): Bitmap? = withContext(Dispatche
 @Composable
 internal fun StylePreview(style: StudioStyle, frame: Bitmap?, modifier: Modifier) {
     val c = appContainer()
-    val bmp by produceState<Bitmap?>(null, style, frame) { value = c.styles.preview(style, frame) }
+    var bmp by remember(style, frame) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(style, frame) { bmp = c.styles.preview(style, frame) }
     Box(modifier.clip(RoundedCornerShape(12.dp)).background(RtColors.Surface), contentAlignment = Alignment.Center) {
         val b = bmp
         if (b != null) Image(b.asImageBitmap(), contentDescription = "${style.name} preview", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -387,8 +388,9 @@ private fun Steps(label: String, v: Float, onChange: (Float) -> Unit) {
 internal fun StylePicker(vm: StudioViewModel, s: StudioState, onAll: () -> Unit, onClose: () -> Unit) {
     val c = appContainer()
     val styles by c.styles.styles.collectAsStateWithLifecycle()
-    val frame by produceState<Bitmap?>(null, s.plan) {
-        value = withContext(Dispatchers.IO) { s.plan?.clips?.firstOrNull()?.bit?.momentId?.let { s.thumbs[it] }?.let { ClipWriter.load(it, 960) } } ?: bestFrame(c)
+    var frame by remember(s.plan) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(s.plan) {
+        frame = withContext(Dispatchers.IO) { s.plan?.clips?.firstOrNull()?.bit?.momentId?.let { s.thumbs[it] }?.let { ClipWriter.load(it, 960) } } ?: bestFrame(c)
     }
     var name by remember { mutableStateOf("") }
     androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {

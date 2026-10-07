@@ -46,6 +46,12 @@ data class ReelProject(
     val note: String? = null,
     /** Shared or saved to the phone at least once; until then it's a draft. */
     val posted: Boolean = false,
+    /** How it did, entered by the rider (from Instagram Insights); null = not entered. */
+    val views: Int? = null,
+    val likes: Int? = null,
+    /** Post text for YouTube (title, description), written on request. */
+    val youtubeTitle: String? = null,
+    val youtubeDescription: String? = null,
 ) {
     val vibe: Vibe get() = options.vibe
 }
@@ -92,6 +98,10 @@ object ReelJson {
         put("script", p.script?.let { ScriptJson.write(it) } ?: JSONObject.NULL)
         put("note", p.note ?: JSONObject.NULL)
         put("posted", p.posted)
+        put("views", p.views ?: JSONObject.NULL)
+        put("likes", p.likes ?: JSONObject.NULL)
+        put("ytTitle", p.youtubeTitle ?: JSONObject.NULL)
+        put("ytDescription", p.youtubeDescription ?: JSONObject.NULL)
     }.toString()
 
     fun read(text: String): ReelProject? = runCatching {
@@ -152,6 +162,10 @@ object ReelJson {
             script = o.optJSONObject("script")?.let { ScriptJson.read(it) },
             note = o.optStringOrNull("note"),
             posted = o.optBoolean("posted"),
+            views = o.optLongOrNull("views")?.toInt(),
+            likes = o.optLongOrNull("likes")?.toInt(),
+            youtubeTitle = o.optStringOrNull("ytTitle"),
+            youtubeDescription = o.optStringOrNull("ytDescription"),
         )
     }.getOrNull()
 

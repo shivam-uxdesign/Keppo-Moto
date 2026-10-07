@@ -207,7 +207,7 @@ internal class LayerDrawer(private val context: Context, private val layers: Lis
         val r = readers.getOrPut(l.id) {
             MediaMetadataRetriever().apply { uriOf(l)?.let { u -> runCatching { setDataSource(context, u) } } }
         }
-        val b = runCatching { r.getScaledFrameAtTime(q * 1000, MediaMetadataRetriever.OPTION_CLOSEST, 720, 1280) }.getOrNull() ?: return cache[l.id]?.second
+        val b = runCatching { r.frameFit(q * 1000, MediaMetadataRetriever.OPTION_CLOSEST, 720, 1280) }.getOrNull() ?: return cache[l.id]?.second
         cache.put(l.id, q to b)?.second?.recycle()
         return b
     }

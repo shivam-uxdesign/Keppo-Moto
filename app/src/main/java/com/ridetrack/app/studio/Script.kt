@@ -164,7 +164,7 @@ object ScriptWriter {
         "The rider's styles (prefer the first ones; pick one per piece by its id when it suits, else just a vibe): " +
             styles.joinToString("; ") { "${it.id} = ${it.describe()}" } + ".\n"
 
-    fun planPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, formats: List<PieceFormat>, styles: List<StudioStyle> = emptyList()): String = buildString {
+    fun planPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, formats: List<PieceFormat>, styles: List<StudioStyle> = emptyList(), performance: String = ""): String = buildString {
         appendLine("You are the editor and social media manager for a motorcycle rider who posts motovlogs (often Hinglish).")
         appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
         appendLine(footageText(footage))
@@ -175,6 +175,7 @@ object ScriptWriter {
         appendLine("Suggest a long video only if there's enough talking for 2+ minutes. When the footage is thin, suggest fewer, shorter pieces.")
         appendLine("Pick a vibe for each piece: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm) or vlog (the voice leads).")
         append(stylesText(styles))
+        append(performance)
         appendLine(CRAFT)
         append(styleText(style))
         append("Reply with JSON only: $SCHEMA")

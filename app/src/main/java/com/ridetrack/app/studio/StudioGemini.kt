@@ -124,6 +124,31 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         return ClipSearch.parseSeen(text, frames.size)
     }
 
+    /** Instagram caption and YouTube title and description for a made video. */
+    suspend fun postTexts(title: String, about: String, caption: String): PostTexts? {
+        val text = call(json = true, temperature = 0.6f) { m -> m.generateContent(Posting.postPrompt(title, about, caption)).text.orEmpty() }
+        return Posting.parsePost(text)
+    }
+
+    /** The edit's caption lines in another language, same count and order; null if it couldn't be read. */
+    suspend fun translate(lines: List<String>, lang: String): List<String>? {
+        val text = call(json = true) { m -> m.generateContent(Posting.translatePrompt(lines, lang)).text.orEmpty() }
+        return Posting.parseTranslation(text, lines.size)
+    }
+
+    /** Whether the first 3 seconds (three frames, JPEG) would stop the scroll. */
+    suspend fun hookCheck(frames: List<ByteArray>, hookLine: String): HookCheck? {
+        val text = call(json = true, timeoutMs = 90_000) { m ->
+            m.generateContent(
+                content {
+                    frames.forEach { inlineData(it, "image/jpeg") }
+                    text(Posting.hookPrompt(hookLine))
+                },
+            ).text.orEmpty()
+        }
+        return Posting.parseHook(text)
+    }
+
     /** Tips for the next Reel, from a plain description of this one (text only). */
     suspend fun coach(summary: String): List<Tip> {
         val text = call(json = true) { m -> m.generateContent(StudioText.coachPrompt(summary)).text.orEmpty() }

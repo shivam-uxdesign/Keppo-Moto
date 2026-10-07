@@ -136,7 +136,8 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
 @Composable
 fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit) {
     val c = com.ridetrack.app.ui.appContainer()
-    val name by produceState("Studio", rideId) { value = c.rides.get(rideId)?.name?.let { "Studio · $it" } ?: "Studio" }
+    var name by remember(rideId) { mutableStateOf("Studio") }
+    LaunchedEffect(rideId) { name = c.rides.get(rideId)?.name?.let { "Studio · $it" } ?: "Studio" }
     Column(
         Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = com.ridetrack.app.ui.theme.RtDimens.screenPadding),
     ) {
@@ -603,26 +604,10 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             if (s.notes.isNotEmpty()) ErrorActions(vm)
             if (s.musicUri == null) MusicGuide()
             Coach(s.tips) { vm.act(it) }
-            if (s.postCaption.isNotBlank()) {
-                Column(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text("CAPTION FOR YOUR POST", style = RtType.label, color = RtColors.TextSecondary)
-                    Text(s.postCaption, style = RtType.body, color = RtColors.TextPrimary)
-                    Row(
-                        Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button) {
-                            val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-                            cm?.setPrimaryClip(android.content.ClipData.newPlainText("Caption", s.postCaption))
-                            toast = "Caption copied"
-                        }.padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Outlined.ContentCopy, contentDescription = null, tint = RtColors.Primary, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Copy caption", style = RtType.button, color = RtColors.Primary)
-                    }
-                }
+            PostingCard(vm, s) { copied ->
+                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText(copied.first, copied.second))
+                toast = "${copied.first} copied"
             }
             toast?.let { Text(it, style = RtType.caption, color = RtColors.TextPrimary, modifier = Modifier.align(Alignment.CenterHorizontally)) }
         }
@@ -642,6 +627,95 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
         }
         Spacer(Modifier.height(12.dp))
     }
+}
+
+/** Post text for Instagram and YouTube, subtitles in another language, the hook check, and how it did. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PostingCard(vm: StudioViewModel, s: StudioState, onCopy: (Pair<String, String>) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (s.postCaption.isNotBlank()) {
+            Text("INSTAGRAM CAPTION", style = RtType.label, color = RtColors.TextSecondary)
+            Text(s.postCaption, style = RtType.body, color = RtColors.TextPrimary)
+            CopyLink("Copy caption") { onCopy("Caption" to s.postCaption) }
+        }
+        if (s.youtubeTitle.isNotBlank()) {
+            Text("YOUTUBE", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 4.dp))
+            Text(s.youtubeTitle, style = RtType.bodyStrong, color = RtColors.TextPrimary)
+            if (s.youtubeDescription.isNotBlank()) Text(s.youtubeDescription, style = RtType.body, color = RtColors.TextSecondary)
+            CopyLink("Copy title and description") { onCopy("YouTube text" to (s.youtubeTitle + "\n\n" + s.youtubeDescription).trim()) }
+        }
+        if (s.gemini) {
+            val busy = s.posting != null
+            s.posting?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                TextLink(if (s.youtubeTitle.isBlank()) "Write for YouTube" else "Write it again", !busy) { vm.writeYouTube() }
+                TextLink("Subtitles in English", !busy) { vm.translateCaptions("English") }
+                TextLink("Subtitles in Hindi", !busy) { vm.translateCaptions("Hindi") }
+                TextLink("Check the hook", !busy) { vm.checkHook() }
+            }
+            s.hook?.let { h ->
+                Text(
+                    (if (h.stops) "✓ Stops the scroll · " else "✗ Might not stop the scroll · ") + h.why,
+                    style = RtType.body,
+                    color = if (h.stops) RtColors.Ok else RtColors.Warning,
+                )
+                h.fix?.let { Text("Try: $it", style = RtType.caption, color = RtColors.TextSecondary) }
+            }
+        }
+        ReelStats(s.views, s.likes, vm::setStats)
+    }
+}
+
+@Composable
+private fun CopyLink(label: String, onClick: () -> Unit) {
+    Row(Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button, onClick = onClick).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Outlined.ContentCopy, contentDescription = null, tint = RtColors.Primary, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = RtType.button, color = RtColors.Primary)
+    }
+}
+
+@Composable
+private fun TextLink(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        style = RtType.button,
+        color = if (enabled) RtColors.Primary else RtColors.TextTertiary,
+        modifier = Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(vertical = 6.dp),
+    )
+}
+
+/** "How did it do?": views and likes from Instagram, so Studio suggests more of what works. */
+@Composable
+internal fun ReelStats(views: Int?, likes: Int?, onSave: (Int?, Int?) -> Unit) {
+    var v by rememberSaveable(views) { mutableStateOf(views?.toString().orEmpty()) }
+    var l by rememberSaveable(likes) { mutableStateOf(likes?.toString().orEmpty()) }
+    Text("HOW DID IT DO?", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 4.dp))
+    Text("Views and likes from Instagram. Studio suggests more of what did well.", style = RtType.caption, color = RtColors.TextTertiary)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        NumberField(v, "Views", Modifier.weight(1f)) { v = it }
+        NumberField(l, "Likes", Modifier.weight(1f)) { l = it }
+        val changed = v != views?.toString().orEmpty() || l != likes?.toString().orEmpty()
+        TextLink("Save", changed) { onSave(v.toIntOrNull(), l.toIntOrNull()) }
+    }
+}
+
+@Composable
+private fun NumberField(value: String, label: String, modifier: Modifier, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { t -> onChange(t.filter(Char::isDigit).take(9)) },
+        label = { Text(label, style = RtType.caption) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+        textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+        modifier = modifier,
+    )
 }
 
 /** The finished Reel (or a clip), playing on a loop; [seek] (ms, a nonce) jumps to a point. */
@@ -838,7 +912,7 @@ internal fun ReelTile(p: ReelProject, modifier: Modifier, onClick: () -> Unit) {
             }
         }
         Text(p.title, style = RtType.caption, color = RtColors.TextPrimary, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
-        Text(p.vibe.label, style = RtType.caption, color = RtColors.TextTertiary, maxLines = 1)
+        Text(listOfNotNull(p.vibe.label, p.views?.let { "%,d views".format(it) }).joinToString(" · "), style = RtType.caption, color = RtColors.TextTertiary, maxLines = 1)
     }
 }
 

@@ -72,6 +72,8 @@ class PreviewPlayer(context: Context) {
  * camera moves, the mix), with Media3's composition player. Layers show as stills on top. If the
  * phone can't play it, [onFailed] gets the error and the editor goes back to the simple preview.
  */
+// CompositionPlayer is marked for Media3's own use in 1.5; it's the only exact preview there is.
+@android.annotation.SuppressLint("RestrictedApi")
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class ExactPreview(private val context: Context, private val onFailed: (Throwable) -> Unit) {
     val player = androidx.media3.transformer.CompositionPlayer.Builder(context).build()

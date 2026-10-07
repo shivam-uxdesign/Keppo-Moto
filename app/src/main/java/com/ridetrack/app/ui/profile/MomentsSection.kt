@@ -497,7 +497,7 @@ private fun TwoMicTest(mic: String?, swapped: Boolean, onSwap: (Boolean) -> Unit
 private fun ChannelBar(role: String, name: String, db: Float?) {
     Column {
         Text("$role · $name", style = RtType.caption, color = RtColors.TextPrimary)
-        BoxWithConstraints(Modifier.fillMaxWidth().height(8.dp).background(RtColors.Outline.copy(alpha = 0.5f), RoundedCornerShape(4.dp))) {
+        Box(Modifier.fillMaxWidth().height(8.dp).background(RtColors.Outline.copy(alpha = 0.5f), RoundedCornerShape(4.dp))) {
             // -60 dBFS (quiet) to 0 (loudest).
             val f = db?.let { ((it + 60f) / 60f).coerceIn(0f, 1f) } ?: 0f
             Box(Modifier.fillMaxWidth(f).fillMaxHeight().background(RtColors.Primary, RoundedCornerShape(4.dp)))
