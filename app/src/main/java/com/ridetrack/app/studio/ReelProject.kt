@@ -72,6 +72,10 @@ object ReelJson {
         put("vibe", p.plan.vibe.name)
         put("segments", JSONArray().apply { p.plan.segments.forEach { put(segment(it)) } })
         put("texts", JSONArray().apply { p.plan.texts.forEach { t -> put(JSONObject().put("id", t.id).put("s", t.startMs).put("e", t.endMs).put("t", t.text).put("y", t.y.toDouble())) } })
+        put("layers", JSONArray().apply { p.plan.layers.forEach { put(layer(it)) } })
+        put("audio", JSONArray().apply { p.plan.audio.forEach { put(audio(it)) } })
+        put("mix", mix(p.plan.mix))
+        put("markers", JSONArray().apply { p.plan.markers.forEach { m -> put(JSONObject().put("id", m.id).put("at", m.atMs).put("label", m.label)) } })
         put("takes", JSONArray().apply { p.takes.forEach { t -> put(JSONObject().put("start", t.startMs).put("dur", t.durMs).put("file", t.file).put("lines", lines(t.lines))) } })
         put("tips", JSONArray().apply { p.tips.forEach { t -> put(JSONObject().put("text", t.text).put("action", t.action?.name ?: JSONObject.NULL).put("nextRide", t.nextRide)) } })
         put("durationMs", p.durationMs)
@@ -111,6 +115,10 @@ object ReelJson {
                 o.optJSONArray("texts")?.let { a ->
                     (0 until a.length()).map { i -> a.getJSONObject(i).let { t -> TextItem(t.getString("id"), t.getLong("s"), t.getLong("e"), t.getString("t"), t.optDouble("y", 0.3).toFloat()) } }
                 }.orEmpty(),
+                layers = o.optJSONArray("layers")?.let { a -> (0 until a.length()).mapNotNull { runCatching { readLayer(a.getJSONObject(it)) }.getOrNull() } }.orEmpty(),
+                audio = o.optJSONArray("audio")?.let { a -> (0 until a.length()).mapNotNull { runCatching { readAudio(a.getJSONObject(it)) }.getOrNull() } }.orEmpty(),
+                mix = o.optJSONObject("mix")?.let { readMix(it) } ?: TrackMix(),
+                markers = o.optJSONArray("markers")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { m -> Marker(m.getString("id"), m.getLong("at"), m.optString("label")) } } }.orEmpty(),
             ),
             takes = o.optJSONArray("takes")?.let { a ->
                 (0 until a.length()).map { i -> a.getJSONObject(i).let { t -> SavedTake(t.getLong("start"), t.getLong("dur"), t.getString("file"), readLines(t.optJSONArray("lines"))) } }
@@ -187,6 +195,41 @@ object ReelJson {
         fromRide = o.optStringOrNull("fromRide"),
         source = o.optStringOrNull("source"),
         camera = o.optStringOrNull("camera"),
+    )
+
+    private fun layer(l: LayerItem) = JSONObject().put("id", l.id).put("bit", bit(l.bit)).put("in", l.inMs).put("start", l.startMs).put("dur", l.durMs)
+        .put("cx", l.cx.toDouble()).put("cy", l.cy.toDouble()).put("w", l.w.toDouble()).put("aspect", l.aspect.toDouble()).put("rotation", l.rotation.toDouble())
+        .put("shape", l.shape.name).put("opacity", l.opacity.toDouble()).put("border", l.border).put("volume", l.volume.toDouble())
+        .put("keys", JSONArray().apply { l.keys.forEach { k -> put(JSONObject().put("at", k.atMs).put("cx", k.cx.toDouble()).put("cy", k.cy.toDouble()).put("w", k.w.toDouble())) } })
+
+    private fun readLayer(o: JSONObject) = LayerItem(
+        id = o.getString("id"), bit = readBit(o.getJSONObject("bit")), inMs = o.getLong("in"), startMs = o.getLong("start"), durMs = o.getLong("dur"),
+        cx = o.optDouble("cx", 0.72).toFloat(), cy = o.optDouble("cy", 0.22).toFloat(), w = o.optDouble("w", 0.42).toFloat(), aspect = o.optDouble("aspect", 0.5625).toFloat(),
+        rotation = o.optDouble("rotation", 0.0).toFloat(), shape = LayerShape.entries.firstOrNull { it.name == o.optString("shape") } ?: LayerShape.ROUNDED,
+        opacity = o.optDouble("opacity", 1.0).toFloat(), border = o.optBoolean("border", true), volume = o.optDouble("volume", 0.0).toFloat(),
+        keys = o.optJSONArray("keys")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { k -> LayerKey(k.getLong("at"), k.getDouble("cx").toFloat(), k.getDouble("cy").toFloat(), k.getDouble("w").toFloat()) } } }.orEmpty(),
+    )
+
+    private fun audio(a: AudioItem) = JSONObject().put("id", a.id).put("kind", a.kind.name).put("bit", bit(a.bit)).put("in", a.inMs).put("start", a.startMs).put("dur", a.durMs)
+        .put("volume", a.volume.toDouble()).put("fadeIn", a.fadeInMs).put("fadeOut", a.fadeOutMs).put("file", a.file ?: JSONObject.NULL)
+        .put("curve", JSONArray().apply { a.curve.forEach { p -> put(JSONObject().put("at", p.atMs).put("l", p.level.toDouble())) } })
+
+    private fun readAudio(o: JSONObject) = AudioItem(
+        id = o.getString("id"), kind = TrackKind.valueOf(o.getString("kind")), bit = readBit(o.getJSONObject("bit")), inMs = o.getLong("in"), startMs = o.getLong("start"), durMs = o.getLong("dur"),
+        volume = o.optDouble("volume", 1.0).toFloat(), fadeInMs = o.optLong("fadeIn"), fadeOutMs = o.optLong("fadeOut"), file = o.optStringOrNull("file"),
+        curve = o.optJSONArray("curve")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { p -> VolumePoint(p.getLong("at"), p.getDouble("l").toFloat()) } } }.orEmpty(),
+    )
+
+    private fun mix(m: TrackMix) = JSONObject()
+        .put("volumes", JSONObject().apply { m.volumes.forEach { (k, v) -> put(k.name, v.toDouble()) } })
+        .put("muted", JSONArray(m.muted.map { it.name })).put("solo", m.solo?.name ?: JSONObject.NULL).put("duck", m.duck).put("clean", m.cleanVoice)
+
+    private fun readMix(o: JSONObject) = TrackMix(
+        volumes = o.optJSONObject("volumes")?.let { v -> TrackKind.entries.filter { v.has(it.name) }.associateWith { v.getDouble(it.name).toFloat() } }.orEmpty(),
+        muted = o.optJSONArray("muted")?.let { a -> (0 until a.length()).mapNotNull { i -> TrackKind.entries.firstOrNull { it.name == a.getString(i) } }.toSet() }.orEmpty(),
+        solo = o.optStringOrNull("solo")?.let { n -> TrackKind.entries.firstOrNull { it.name == n } },
+        duck = o.optBoolean("duck", true),
+        cleanVoice = o.optBoolean("clean", false),
     )
 
     private fun lines(l: List<CaptionLine>) = JSONArray().apply { l.forEach { put(JSONObject().put("s", it.startMs).put("e", it.endMs).put("t", it.text)) } }

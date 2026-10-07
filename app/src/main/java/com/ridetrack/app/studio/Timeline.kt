@@ -174,7 +174,14 @@ object TimelineEdits {
         val texts = plan.texts.mapNotNull { t ->
             if (t.startMs >= total) null else t.copy(endMs = minOf(t.endMs, total))
         }
-        return plan.copy(segments = segs, texts = texts)
+        var out = plan.copy(segments = segs, texts = texts)
+        // The engine sound follows its clips wherever they moved.
+        val engine = plan.audio.filter { it.kind == TrackKind.ENGINE && it.file != null }
+        if (engine.isNotEmpty()) {
+            var n = 0
+            out = TrackEdits.addEngine(out, engine.associate { it.bit.momentId to it.file!! }, { "eng-${n++}" }, engine.first().volume)
+        }
+        return TrackEdits.clamp(out)
     }
 
     /** Where each segment starts, in Reel ms. */
@@ -192,17 +199,24 @@ object TimelineEdits {
 class EditHistory(start: StudioPlan) {
     private val undo = ArrayDeque<StudioPlan>()
     private val redo = ArrayDeque<StudioPlan>()
+    private val undoLabels = ArrayDeque<String>()
+    private val redoLabels = ArrayDeque<String>()
+
+    /** What each undo step did, oldest first. */
+    val steps: List<String> get() = undoLabels.toList()
     var current: StudioPlan = start
         private set
 
     val canUndo: Boolean get() = undo.isNotEmpty()
     val canRedo: Boolean get() = redo.isNotEmpty()
 
-    fun apply(next: StudioPlan) {
+    fun apply(next: StudioPlan, label: String = "Change") {
         if (next == current) return
         undo.addLast(current)
-        if (undo.size > 100) undo.removeFirst()
+        undoLabels.addLast(label)
+        if (undo.size > 100) { undo.removeFirst(); undoLabels.removeFirst() }
         redo.clear()
+        redoLabels.clear()
         current = next
     }
 
@@ -210,14 +224,25 @@ class EditHistory(start: StudioPlan) {
     fun preview(next: StudioPlan) { current = next }
 
     /** The drag ended: one undo step back to [before]. */
-    fun settle(before: StudioPlan) {
+    fun settle(before: StudioPlan, label: String = "Trim") {
         if (before == current) return
         undo.addLast(before)
-        if (undo.size > 100) undo.removeFirst()
+        undoLabels.addLast(label)
+        if (undo.size > 100) { undo.removeFirst(); undoLabels.removeFirst() }
         redo.clear()
+        redoLabels.clear()
     }
 
-    fun undo() { undo.removeLastOrNull()?.let { redo.addLast(current); current = it } }
+    fun undo() {
+        undo.removeLastOrNull()?.let { redo.addLast(current); redoLabels.addLast(undoLabels.removeLastOrNull() ?: "Change"); current = it }
+    }
 
-    fun redo() { redo.removeLastOrNull()?.let { undo.addLast(current); current = it } }
+    fun redo() {
+        redo.removeLastOrNull()?.let { undo.addLast(current); undoLabels.addLast(redoLabels.removeLastOrNull() ?: "Change"); current = it }
+    }
+
+    /** Goes back to just before step [index] of [steps] (undoing it and everything after). */
+    fun undoTo(index: Int) {
+        while (undo.size > index && undo.isNotEmpty()) undo()
+    }
 }

@@ -91,7 +91,99 @@ data class StudioOptions(
 /** Text the rider placed on the timeline: shown from [startMs] to [endMs] (Reel time), [y] = 0 top … 1 bottom. */
 data class TextItem(val id: String, val startMs: Long, val endMs: Long, val text: String, val y: Float = 0.3f)
 
-data class StudioPlan(val segments: List<Segment>, val vibe: Vibe, val texts: List<TextItem> = emptyList()) {
+/** How a layer's corners are cut. */
+enum class LayerShape(val label: String) { RECT("Square"), ROUNDED("Rounded"), CIRCLE("Circle") }
+
+/** Where a layer is at [atMs] (ms from the layer's start): its centre (0..1 of the frame) and width (0..1). */
+data class LayerKey(val atMs: Long, val cx: Float, val cy: Float, val w: Float)
+
+/**
+ * A video over the main clips (picture-in-picture, a split half, a stack): [inMs] into its clip,
+ * shown from [startMs] (Reel time) for [durMs]. Centre [cx], [cy] and width [w] are fractions of
+ * the frame; [aspect] is its width over height. [keys] move or zoom it over time.
+ */
+data class LayerItem(
+    val id: String,
+    val bit: Bit,
+    val inMs: Long,
+    val startMs: Long,
+    val durMs: Long,
+    val cx: Float = 0.72f,
+    val cy: Float = 0.22f,
+    val w: Float = 0.42f,
+    val aspect: Float = 9f / 16f,
+    val rotation: Float = 0f,
+    val shape: LayerShape = LayerShape.ROUNDED,
+    val opacity: Float = 1f,
+    val border: Boolean = true,
+    /** Its own sound, 0 = muted (the default: the main clip's sound plays). */
+    val volume: Float = 0f,
+    val keys: List<LayerKey> = emptyList(),
+) {
+    val endMs: Long get() = startMs + durMs
+}
+
+/** The sound tracks of the edit. */
+enum class TrackKind(val label: String) {
+    CLIPS("Clip sound"), DETACHED("Detached sound"), ENGINE("Engine"), VOICE_OVER("Voice-over"), MUSIC("Music"), LAYERS("Layer sound"),
+}
+
+/** A volume point on a sound: [atMs] from its start, [level] 0..1.5. */
+data class VolumePoint(val atMs: Long, val level: Float)
+
+/**
+ * A sound on its own track: [inMs] into [bit]'s clip (or its engine file), played from [startMs]
+ * (Reel time) for [durMs]. A detached clip sound can run past its cut (J and L cuts).
+ */
+data class AudioItem(
+    val id: String,
+    val kind: TrackKind,
+    val bit: Bit,
+    val inMs: Long,
+    val startMs: Long,
+    val durMs: Long,
+    val volume: Float = 1f,
+    val fadeInMs: Long = 0,
+    val fadeOutMs: Long = 0,
+    /** The engine mic's file for the clip (two-mic recording); null = the clip's own sound. */
+    val file: String? = null,
+    val curve: List<VolumePoint> = emptyList(),
+) {
+    val endMs: Long get() = startMs + durMs
+}
+
+/** The mixer: each track's volume, muted tracks, a soloed one, and the voice clean-up. */
+data class TrackMix(
+    val volumes: Map<TrackKind, Float> = emptyMap(),
+    val muted: Set<TrackKind> = emptySet(),
+    val solo: TrackKind? = null,
+    /** Music and engine dip while you talk. */
+    val duck: Boolean = true,
+    /** Cuts wind rumble and engine drone under your voice. */
+    val cleanVoice: Boolean = false,
+) {
+    fun volume(k: TrackKind): Float = volumes[k] ?: 1f
+
+    /** What the track actually plays at, after mute and solo. */
+    fun gain(k: TrackKind): Float = when {
+        solo != null && solo != k -> 0f
+        k in muted -> 0f
+        else -> volume(k)
+    }
+}
+
+/** A marker the rider dropped while watching, at [atMs] (Reel time). */
+data class Marker(val id: String, val atMs: Long, val label: String = "")
+
+data class StudioPlan(
+    val segments: List<Segment>,
+    val vibe: Vibe,
+    val texts: List<TextItem> = emptyList(),
+    val layers: List<LayerItem> = emptyList(),
+    val audio: List<AudioItem> = emptyList(),
+    val mix: TrackMix = TrackMix(),
+    val markers: List<Marker> = emptyList(),
+) {
     val totalMs: Long = segments.sumOf { it.durMs }
     /** The clips the rider chose (the loop tail and the flash-forward teaser are not among them). */
     val clips: List<ClipSegment> get() = segments.filterIsInstance<ClipSegment>().filter { !it.tail && !it.teaser }
