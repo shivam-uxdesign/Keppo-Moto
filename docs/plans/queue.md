@@ -246,7 +246,7 @@ Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds
 
 ---
 
-# Studio, rethought: script first, change after (planned 7 Oct; discuss only, build when the rider says "build")
+# Studio, rethought: script first, change after: BUILT 7 Oct (bugs a598cbf, script engine b5342b3, Gemini suggestions 42e8907, Script view + style 0a38080, Your Reels page 472dc36)
 
 The rider's notes on the first real Reel (Tuesday Evening Ride, 30 s, Hype; shared as VID-20261007-WA0005): too many cuts, no storyline, feels abrupt; wants to shape the script and have Studio learn how they like stories written; not happy with the outcome, partly because there wasn't much footage.
 
@@ -327,7 +327,7 @@ Hook: "Tooooooo" plus the text "3 hours. No water." (3 s) → Setup: "Arre yaar,
 3. "0 km/h" shown at 2–3 s while moving (a gap in the speed data): hide the badge when there's no speed instead.
 4. Hype transitions show mostly black for a moment (around 5, 11, 19 s) with a yellow slash: looks like a dropout, not an effect.
 
-## Your Reels: its own page (planned 7 Oct)
+## Your Reels: its own page: BUILT 7 Oct (472dc36). The Studio tab doesn't show the latest Reel (only the icon); say if you want a row.
 - **Studio tab:** a "Your Reels" icon at the top right of the header, with a small count badge (e.g. 12). The tab itself is only about making: the "Make a Reel from your videos" card, then the rides list. The Reels grid and Recently deleted move off it.
 - **Your Reels page:**
   - All Reels as covers, 3 per row, newest first; each shows length, vibe, ride name, and "In Journal" where it applies.
@@ -338,3 +338,13 @@ Hook: "Tooooooo" plus the text "3 hours. No water." (3 s) → Setup: "Arre yaar,
   - Recently deleted at the bottom (Restore / Delete, 30 days), as today.
 - **Unchanged:** a ride's own Studio page keeps its "This ride's Reels" strip. Profile › Moments › Storage shows the Reels size, with a link to this page.
 - **Open question:** should the Studio tab also show the latest Reel as a small row, or should Reels live only behind the icon?
+
+## Built with it (7 Oct)
+- Instead of fixed idea cards, Gemini suggests the pieces worth making from each ride, in one request: Reels, YouTube Shorts, Stories and long videos (2–5 min). They differ per ride, with fewer and shorter ones when the footage is thin. Without Gemini, the app suggests a Reel the footage fills well plus a 15 s Short.
+- Make all runs in the background with a progress notification.
+- New Reel vs Make it again are separate buttons.
+- Not done yet:
+  - Long videos are vertical 9:16 like the rest (no 16:9 yet).
+  - Your voice carrying over a road shot (J/L cuts) isn't there yet: each shot plays its own sound.
+  - Suggestions are made when the ride's Studio page opens, not automatically after the ride.
+  - The posting plan is left out (rider's call).

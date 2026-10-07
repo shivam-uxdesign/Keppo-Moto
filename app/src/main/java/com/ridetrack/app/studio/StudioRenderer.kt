@@ -213,7 +213,7 @@ class StudioRenderer(private val context: Context) {
             )
         }
         val clipStart = clip.bit.atMillis - clip.bit.inMs
-        val overlay = SegmentOverlay(art.w, art.h, clock) { c, localMs ->
+        val overlay = SegmentOverlay(overlayBitmap(art.w, art.h), clock) { c, localMs ->
             val f = frameAt(localMs)
             when (seg) {
                 is ClipSegment -> {
@@ -288,8 +288,17 @@ class StudioRenderer(private val context: Context) {
     }
 
     /** A transparent frame-sized bitmap, redrawn for every frame. */
-    private class SegmentOverlay(w: Int, h: Int, private val clock: ItemClock, private val draw: (Canvas, Long) -> Unit) : BitmapOverlay() {
-        private val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    /**
+     * One overlay picture shared by every segment: segments play one after another, so they never
+     * draw at the same time (a 5-minute video has dozens of segments; one 1080×1920 picture each
+     * would run out of memory).
+     */
+    private var shared: Bitmap? = null
+
+    private fun overlayBitmap(w: Int, h: Int): Bitmap =
+        shared?.takeIf { it.width == w && it.height == h && !it.isRecycled } ?: Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { shared = it }
+
+    private class SegmentOverlay(private val bitmap: Bitmap, private val clock: ItemClock, private val draw: (Canvas, Long) -> Unit) : BitmapOverlay() {
         private val canvas = Canvas(bitmap)
 
         override fun getBitmap(presentationTimeUs: Long): Bitmap {
