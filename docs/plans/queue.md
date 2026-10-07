@@ -432,3 +432,4 @@ Today: transitions follow the vibe and only play between script sections; text h
 - Suggestions: 71 clips and 61 s of talking gave only one 11 s Reel (see the "Suggestions quality" fixes discussed: read all clips, gentler checks, at least 3 pieces, show what the checks removed, log Gemini's answer).
 - "Reading what you said" runs again when making a suggestion (clips read state is forgotten between visits; only 32 clips read per pass).
 - Making Reels stops when the rider switches to another app: not really in the background.
+- Microphone: the rider never wants recording from a headset (Bluetooth). Other riders may want a Bluetooth mic, so it has to be a choice, not removed.
