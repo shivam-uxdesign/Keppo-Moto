@@ -363,7 +363,10 @@ Each build ends with one APK to test on the phone before the next starts.
    - Create styles by duplicating, from a Reel, from words, or from a reference Reel.
    - Brand kit upload; styles in the Drive backup; Gemini picks from your styles.
    - Comes after builds 3–5 because a style is made of their parts.
-7. **Recording extras** (F3, F4). Small.
+7. **Recording extras** (F3, F4). Small. **Built 7 Oct.**
+   - Built: with two mics, a rev or exhaust pop on the engine mic (well above the engine's usual level, held a moment, then a 15 s rest) films a moment like hard braking; labelled "Engine"; switch in Moments › What to film.
+   - Built: the coach's "film next time" shots show on the pop-up for the ride's first 30 s, one every 6 s.
+   - Also (rider's request): Profile › Error log entries can be ticked and sent or copied on their own, one or several.
    - Engine moments from the engine mic; shot list on the HUD pop-up.
 8. **Search and learning** (C6, G1, G2, G3). Medium.
    - Search what you said and what Gemini saw.

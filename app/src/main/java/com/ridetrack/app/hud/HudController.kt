@@ -38,6 +38,8 @@ class HudController(
     private val session: RideSessionManager,
     private val settings: SettingsRepository,
     private val moments: MomentsHub,
+    /** The coach's "film next time" shots not ticked off yet, shown at the start of a ride. */
+    private val shots: () -> List<String> = { emptyList() },
 ) {
     private val scope = MainScope()
     private val appVisible = MutableStateFlow(true)
@@ -174,7 +176,13 @@ class HudController(
             moments = moments.state.value,
             // Clip and photo times come from ride frames, so count on the same clock.
             nowMillis = session.frame.value?.timeMillis ?: now,
-        ).copy(
+        ).let { d ->
+            // The first half minute of a ride: the shots to film today, one at a time.
+            val shot = d.elapsedMillis?.takeIf { it in 0 until SHOTS_MILLIS }?.let { e ->
+                shots().takeIf { it.isNotEmpty() }?.let { list -> "Film today: " + list[((e / SHOT_EACH_MILLIS) % list.size).toInt()] }
+            }
+            d.copy(savedNote = d.savedNote ?: shot)
+        }.copy(
             voiceOn = voice.value.first && session.active.value?.moments != null,
             micLevelDb = moments.micLevel.value,
             voiceMarginDb = voice.value.second.marginDb,
@@ -199,5 +207,8 @@ class HudController(
     companion object {
         private const val TAG = "HudController"
         private const val SAVED_NOTE_MILLIS = 2_500L
+        /** The shot list shows for the ride's first 30 s, each shot for 6 s. */
+        private const val SHOTS_MILLIS = 30_000L
+        private const val SHOT_EACH_MILLIS = 6_000L
     }
 }

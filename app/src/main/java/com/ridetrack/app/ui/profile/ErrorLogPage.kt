@@ -6,6 +6,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,6 +43,8 @@ fun ErrorLogPage() {
     val log = appContainer().errors
     val entries by log.entries.collectAsStateWithLifecycle()
     var copied by remember { mutableStateOf(false) }
+    // Entries ticked to send on their own (by time; times are unique enough for a session).
+    var picked by remember { mutableStateOf(setOf<Long>()) }
     // Opening the log counts as seeing what's new.
     androidx.compose.runtime.LaunchedEffect(Unit) { log.markSeen() }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -55,13 +58,30 @@ fun ErrorLogPage() {
             RtCard { Text("No errors recorded.", style = RtType.body, color = RtColors.TextSecondary) }
             return@Column
         }
+        val chosen = entries.filter { it.timeMillis in picked }
+        Text(
+            if (chosen.isEmpty()) "Tick entries to send only those, or send them all." else "${chosen.size} ticked",
+            style = RtType.caption,
+            color = RtColors.TextSecondary,
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PrimaryButton("Share all", { log.share() }, Modifier.weight(1f), icon = Icons.Outlined.IosShare)
-            SecondaryButton(if (copied) "Copied" else "Copy all", { copied = log.copy() }, Modifier.weight(1f), icon = Icons.Outlined.ContentCopy)
+            if (chosen.isEmpty()) {
+                PrimaryButton("Share all", { log.share() }, Modifier.weight(1f), icon = Icons.Outlined.IosShare)
+                SecondaryButton(if (copied) "Copied" else "Copy all", { copied = log.copy() }, Modifier.weight(1f), icon = Icons.Outlined.ContentCopy)
+            } else {
+                PrimaryButton("Share ${chosen.size}", { log.share(chosen) }, Modifier.weight(1f), icon = Icons.Outlined.IosShare)
+                SecondaryButton(if (copied) "Copied" else "Copy ${chosen.size}", { copied = log.copy(chosen) }, Modifier.weight(1f), icon = Icons.Outlined.ContentCopy)
+            }
         }
+        if (chosen.isNotEmpty()) Text("Clear ticks", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { picked = emptySet() }.padding(vertical = 4.dp))
         entries.forEach { e ->
             var open by rememberSaveable(e.timeMillis) { mutableStateOf(false) }
             RtCard(onClick = { open = !open }) {
+                val on = e.timeMillis in picked
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    androidx.compose.material3.Checkbox(checked = on, onCheckedChange = { picked = if (it) picked + e.timeMillis else picked - e.timeMillis })
+                    Text(if (on) "Ticked to send" else "Tick to send", style = RtType.caption, color = RtColors.TextTertiary)
+                }
                 Text(
                     "${ErrorLog.stamp(e.timeMillis)} · ${if (e.warning) "Warning · " else ""}${e.area}",
                     style = RtType.caption,

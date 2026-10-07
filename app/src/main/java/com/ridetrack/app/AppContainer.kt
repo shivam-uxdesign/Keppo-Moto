@@ -137,6 +137,6 @@ class AppContainer(context: Context) {
         }
     }
 
-    val hud = HudController(appContext, session, settings, momentsHub)
+    val hud = HudController(appContext, session, settings, momentsHub) { studio.shots.value.filter { !it.done }.map { it.text } }
     val crashAlerts = CrashAlerts(appContext, settings, session, battery, appScope)
 }
