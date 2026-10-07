@@ -132,6 +132,8 @@ data class StudioState(
     val steps: List<String> = emptyList(),
     /** A clip's settings copied to paste onto others; null when nothing is copied. */
     val copied: TrackEdits.ClipSettings? = null,
+    /** Exporting: progress 0..100; null when not. */
+    val exporting: Int? = null,
     /** Clips that have the engine mic's sound (two-mic recording): moment id → its file. */
     val engineFiles: Map<String, String> = emptyMap(),
     /** Bumped when the timeline changes for good (not mid-drag), so the preview reloads. */
@@ -1132,6 +1134,92 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     /** The exact preview didn't work here: kept as a warning, the simple one is used. */
     fun previewFailed(e: Throwable) {
         c.errors.warn("Studio preview", "The exact preview didn't play on this phone: using the simple preview", e)
+    }
+
+    // ---- clip tools that need the clip's pictures --------------------------------------------
+
+    /** Holds the frame under the playhead for 2 s (a freeze frame, to put text on). */
+    fun freeze() {
+        val plan = _state.value.timeline ?: return
+        val (i, local) = TimelineEdits.at(plan, playheadMs)
+        val seg = plan.segments.getOrNull(i) as? ClipSegment ?: return
+        if (seg.tail) return
+        viewModelScope.launch {
+            val uri = files()[seg.bit.momentId] ?: seg.bit.source?.let(Uri::parse) ?: return@launch say("Couldn't find that clip")
+            val at = seg.inMs + if (seg.still != null) 0 else (local / Speed.outPerSource(seg.speed, seg.ramp)).toLong()
+            val still = seg.still?.let(::File) ?: ClipMedia.still(c.appContext, uri, at) ?: return@launch say("Couldn't read that frame")
+            val ms = playheadMs
+            change("Freeze frame") { ClipTools.freeze(it, ms, still.path) }
+            say("Frozen for 2 s · + Text to write on it")
+        }
+    }
+
+    /** Plays the clip at [i] backwards (made once: it takes a little while), or forwards again. */
+    fun reverse(i: Int) {
+        val seg = _state.value.timeline?.segments?.getOrNull(i) as? ClipSegment ?: return
+        if (seg.reverse != null) { change("Forwards") { ClipTools.reverse(it, i, null) }; return }
+        if (seg.still != null) return
+        if (seg.sourceMs > ClipMedia.MAX_REVERSE_MS) return say("Reverse works on parts up to ${ClipMedia.MAX_REVERSE_MS / 1000} s: trim it first")
+        viewModelScope.launch {
+            val uri = files()[seg.bit.momentId] ?: seg.bit.source?.let(Uri::parse) ?: return@launch say("Couldn't find that clip")
+            say("Reversing…")
+            runCatching { c.reelMaker.keepRunning { ClipMedia.reverse(c.appContext, uri, seg.inMs, seg.sourceMs) } }
+                .onSuccess { f -> change("Reverse") { ClipTools.reverse(it, i, f.path) }; say("Reversed · plays backwards in the saved video") }
+                .onFailure { e -> c.errors.record("Studio reverse", "Couldn't reverse the clip", e); say("Couldn't reverse it") }
+        }
+    }
+
+    fun replace(i: Int, b: Bit) = change("Replace clip") { ClipTools.replace(it, i, b) }
+
+    // ---- export -------------------------------------------------------------------------------
+
+    /** Whether 4K and 60 fps make sense for this Reel's clips. */
+    suspend fun exportChoices(): Pair<Boolean, Boolean> {
+        val plan = _state.value.plan ?: return false to false
+        val f = files()
+        val uris = plan.clips.mapNotNull { f[it.bit.momentId] ?: it.bit.source?.let(Uri::parse) }.distinct()
+        return withContext(Dispatchers.IO) { Exports.choices(uris.mapNotNull { ClipMedia.info(c.appContext, it) }) }
+    }
+
+    /**
+     * Writes the Reel for [preset] with [spec] (in the background: leaving the app doesn't stop
+     * it) and saves it to Movies/Keppo Moto; a Story is cut into its parts.
+     */
+    fun export(preset: ExportPreset, spec: OutputSpec) {
+        val s = _state.value
+        val plan = s.plan ?: return
+        val cd = card ?: return
+        val title = s.title
+        _state.update { it.copy(exporting = 0) }
+        c.appScope.launch {
+            try {
+                val saved = c.reelMaker.keepRunning {
+                    val voice = s.takes.takeIf { it.isNotEmpty() }?.let { takes ->
+                        withContext(Dispatchers.IO) { VoiceRecorder.mix(takes, plan.totalMs, File(c.appContext.cacheDir, "studio-export-voice.wav")) }
+                    }
+                    val dir = File(c.appContext.cacheDir, "studio-exports").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
+                    val out = File(dir, "keppo-${preset.name.lowercase()}-${System.currentTimeMillis()}.mp4")
+                    val input = renderInput(plan, s, cd, voice).copy(output = spec)
+                    val done = StudioRenderer(c.appContext).render(input, out) { p -> _state.update { it.copy(exporting = p) } }.getOrThrow()
+                    if (done.failures.isNotEmpty()) c.errors.warn("Studio export", "Export needed a fallback: ${done.note ?: "a simpler method"}")
+                    val files = preset.splitSec?.let { sec ->
+                        Exports.parts(plan.totalMs, sec * 1000L).takeIf { it.size > 1 }?.mapIndexed { k, r ->
+                            File(dir, "${out.nameWithoutExtension}-part${k + 1}.mp4").also { ClipMedia.cut(c.appContext, done.file, r.first, r.last, it) }
+                        }
+                    } ?: listOf(done.file)
+                    files.mapIndexed { k, f -> ShareImages.saveVideo(c.appContext, f, "Keppo ${preset.label} $title" + if (files.size > 1) " part ${k + 1}" else "") }.count { it }
+                }
+                posted()
+                say(if (saved > 1) "$saved parts saved to Movies/Keppo Moto" else if (saved == 1) "Saved to Movies/Keppo Moto" else "Couldn't save to the gallery")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                c.errors.record("Studio export", "Couldn't export for ${preset.label}", e)
+                say("Couldn't export (${e.message?.take(60)})")
+            } finally {
+                _state.update { it.copy(exporting = null) }
+            }
+        }
     }
 
     /** Everything that can go over the edit as a layer: saved clips, this ride's parts (used ones too), other rides'. */

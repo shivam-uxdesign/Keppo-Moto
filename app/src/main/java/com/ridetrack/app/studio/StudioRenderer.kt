@@ -60,6 +60,8 @@ data class RenderInput(
     /** The voice-over as one track as long as the Reel; its captions and where it talks, in Reel ms. */
     val voice: File? = null,
     val voiceLines: List<CaptionLine> = emptyList(),
+    /** Size, frame rate and bitrate to write; null = the Reel as usual (1080p, 30 fps). */
+    val output: OutputSpec? = null,
 )
 
 /**
@@ -136,6 +138,16 @@ class StudioRenderer(private val context: Context) {
                 val transformer = Transformer.Builder(context)
                     .setVideoMimeType(MimeTypes.VIDEO_H264)
                     .setAudioMimeType(MimeTypes.AUDIO_AAC)
+                    .apply {
+                        input.output?.let { o ->
+                            setEncoderFactory(
+                                androidx.media3.transformer.DefaultEncoderFactory.Builder(context)
+                                    .setRequestedVideoEncoderSettings(androidx.media3.transformer.VideoEncoderSettings.Builder().setBitrate(o.bitrate).build())
+                                    .setEnableFallback(true)
+                                    .build(),
+                            )
+                        }
+                    }
                     .apply { if (a.inAppMuxer) setMuxerFactory(InAppMuxer.Factory.Builder().build()) }
                     .addListener(object : Transformer.Listener {
                         override fun onCompleted(composition: Composition, exportResult: ExportResult) {
@@ -197,6 +209,7 @@ class StudioRenderer(private val context: Context) {
         sequences += EditedMediaItemSequence(items)
         fun build(): Composition = Composition.Builder(sequences)
             .apply { if (a.layers == LayerMode.COMPOSITE) setVideoCompositorSettings(LayerCompositor(stacked, art.w, art.h)) }
+            .apply { input.output?.let { o -> setEffects(Effects(emptyList(), outputEffects(o))) } }
             .apply { if (a.sound) experimentalSetForceAudioTrack(true) }
             .build()
         if (!a.sound || !a.extraTracks) return build()
@@ -234,6 +247,12 @@ class StudioRenderer(private val context: Context) {
         }
         return build()
     }
+
+    /** The export's own size and frame rate on the finished picture. */
+    private fun outputEffects(o: OutputSpec): List<Effect> = listOfNotNull(
+        if (o.width != 1080 || o.height != 1920) Presentation.createForWidthAndHeight(o.width, o.height, Presentation.LAYOUT_SCALE_TO_FIT) else null,
+        if (o.fps <= 30) androidx.media3.effect.FrameDropEffect.createDefaultFrameDropEffect(o.fps.toFloat()) else null,
+    )
 
     private fun uriOf(input: RenderInput, b: Bit): Uri? = input.files[b.momentId] ?: b.source?.let(Uri::parse)
 

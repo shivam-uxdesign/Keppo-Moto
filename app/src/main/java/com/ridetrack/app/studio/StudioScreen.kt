@@ -564,6 +564,8 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     LaunchedEffect(toast) { if (toast != null) { delay(2_200); toast = null } }
     val video = s.video ?: return
     var seek by remember { mutableStateOf<Pair<Long, Long>?>(null) }
+    var exportOpen by remember { mutableStateOf(false) }
+    if (exportOpen) ExportSheet(vm, s) { exportOpen = false }
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Player(android.net.Uri.fromFile(video), Modifier.align(Alignment.CenterHorizontally), seek = seek)
@@ -580,6 +582,13 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 Action("Voice-over", Icons.Outlined.Mic, Modifier.weight(1f)) { vm.voice() }
                 Action("Cover", Icons.Outlined.Image, Modifier.weight(1f)) { vm.cover() }
             }
+            // Export for a place: Instagram, YouTube, a Story in parts, WhatsApp.
+            Text(
+                s.exporting?.let { "Exporting · $it%" } ?: "Export for Instagram, YouTube, a Story or WhatsApp ›",
+                style = RtType.button,
+                color = if (s.exporting != null) RtColors.TextSecondary else RtColors.Primary,
+                modifier = Modifier.clickable(enabled = s.exporting == null, role = Role.Button) { exportOpen = true }.padding(vertical = 4.dp),
+            )
             UsedStrip(s) { seek = it to System.nanoTime() }
             ReelMenu(onDuplicate = vm::duplicate, onDelete = vm::delete, onChange = vm::back)
             if (!s.phoneOnly) JournalCard(vm, s)
@@ -1083,6 +1092,62 @@ private fun ErrorBox(vm: StudioViewModel, message: String) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(message, style = RtType.caption, color = RtColors.Error)
         ErrorActions(vm)
+    }
+}
+
+/** Where the video is going: presets, quality and frame rate, and about how big it'll be. */
+@Composable
+private fun ExportSheet(vm: StudioViewModel, s: StudioState, onClose: () -> Unit) {
+    var preset by remember { mutableStateOf(ExportPreset.INSTAGRAM) }
+    var k4 by remember { mutableStateOf(false) }
+    var fps60 by remember { mutableStateOf(false) }
+    val choices by produceState(false to false) { value = vm.exportChoices() }
+    val total = s.plan?.totalMs ?: 0
+    val spec = preset.spec.let { base ->
+        var o = base
+        if (k4 && choices.first) o = o.copy(width = 2160, height = 3840, bitrate = base.bitrate * 3)
+        if (fps60 && choices.second) o = o.copy(fps = 60, bitrate = (o.bitrate * 1.5).toInt())
+        o
+    }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.SurfaceRaised).padding(16.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Export", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+            ExportPreset.entries.forEach { p ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (p == preset) RtColors.Primary.copy(alpha = 0.15f) else Color.Transparent)
+                        .clickable(role = Role.RadioButton) { preset = p }.padding(10.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(p.label, style = RtType.body, color = RtColors.TextPrimary)
+                        Text(p.blurb + if (p.splitSec != null && total > p.splitSec * 1000L) " · ${Exports.parts(total, p.splitSec * 1000L).size} parts" else "", style = RtType.caption, color = RtColors.TextSecondary)
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Choice("1080p", !k4) { k4 = false }
+                Choice("4K", k4 && choices.first) { if (choices.first) k4 = true }
+                Spacer(Modifier.width(8.dp))
+                Choice("30 fps", !fps60) { fps60 = false }
+                Choice("60 fps", fps60 && choices.second) { if (choices.second) fps60 = true }
+            }
+            if (!choices.first || !choices.second) {
+                Text(
+                    listOfNotNull("4K needs every clip filmed in 4K".takeIf { !choices.first }, "60 fps needs every clip filmed at 60".takeIf { !choices.second }).joinToString(" · "),
+                    style = RtType.caption,
+                    color = RtColors.TextTertiary,
+                )
+            }
+            Text("${spec.label} · ${Exports.sizeLabel(Exports.sizeBytes(spec, total))} · saved to Movies/Keppo Moto", style = RtType.caption, color = RtColors.TextSecondary)
+            Row {
+                Text("Cancel", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button, onClick = onClose).padding(8.dp))
+                Spacer(Modifier.weight(1f))
+                Text("Export", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.export(preset, spec); onClose() }.padding(8.dp))
+            }
+            Text("It keeps going if you leave the app.", style = RtType.caption, color = RtColors.TextTertiary)
+        }
     }
 }
 

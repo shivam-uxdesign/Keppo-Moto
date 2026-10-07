@@ -148,7 +148,7 @@ class SavedClipStore(private val context: Context) {
 
                         override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
                             out.delete()
-                            if (cont.isActive) cont.cancel(exportException)
+                            if (cont.isActive) cont.resumeWith(Result.failure(exportException))
                         }
                     })
                     .build()

@@ -338,7 +338,11 @@ Each build ends with one APK to test on the phone before the next starts.
    - The edit becomes multi-track: video layers (free size, side by side, 3-stack) and audio tracks (voice, engine, voice-over, music) with volume curves, auto-duck and detached sound.
    - Pinch zoom, snapping, no gaps, multi-select, copy and paste settings, markers, autosave.
    - A preview that plays the real composition (Media3's composition player), with small preview copies of clips.
-4. **Clip tools, transitions, export** (D3, D4, D10). Large.
+4. **Clip tools, transitions, export** (D3, D4, D10). Large. **Built 7 Oct.**
+   - Built: in the editor, a clip's tools in groups. Edit: split, move, duplicate, replace (same length), use another part (slip), sound, detach, copy and paste settings, save, delete. Speed: 0.25× to 4×, ramps (slow in the middle, fast then slow, slow then fast), reverse (made once, up to 10 s). Look: colour (exposure, contrast, saturation, warmth), the style's look on or off, rotate, mirror. Frame: crop in and out, zoom and pan moves, punch in on words. Freeze holds the frame under the playhead for 2 s.
+   - Built: a transition on every cut: Style, Cut, Fade, Flash, Zoom punch, Whip, Glitch, or any style's own (Slash, Shutter, Sun, Card); short, normal or long; "Use on all cuts".
+   - Built: Export: Instagram Reel, YouTube Short, Story (cut into 60 s parts), WhatsApp (720p, small); 4K and 60 fps when every clip allows; a size estimate; runs in the background and saves to Movies/Keppo Moto.
+   - Not covered: stabilise (dropped). The simple preview plays speed changes at normal speed; the exact preview and the saved video play them right.
    - Speed and ramps, freeze frame, reverse, reframe with keyframes, colour, crop and rotate, reuse another part.
    - Transitions per cut; export quality, fps and presets per platform.
 5. **Text, captions and stickers** (D6, D7). Medium.
