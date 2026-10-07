@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.CircularProgressIndicator
@@ -64,7 +65,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -73,7 +73,6 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -92,7 +91,6 @@ import com.ridetrack.app.ui.theme.RtType
 import com.ridetrack.app.ui.theme.rememberHaptics
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.io.File
 import java.util.Locale
 
 internal val VibeFonts = mapOf(
@@ -144,39 +142,102 @@ fun PhoneStudioScreen(reelId: String?, onBack: () -> Unit) {
 
 // ---- 1. Setup ---------------------------------------------------------------------------------
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
-    val o = s.options
-    val pickSong = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.setMusic(uri) }
+    var settings by remember { mutableStateOf(false) }
+    val c = com.ridetrack.app.ui.appContainer()
+    val all by c.reels.reels.collectAsStateWithLifecycle()
+    val maker by c.reelMaker.state.collectAsStateWithLifecycle()
+    val made = all.filter { it.deletedAt == null && (it.rideId == vm.rideId || (s.phoneOnly && it.rideId == null)) }.mapNotNull { it.idea }.toSet()
+    val toMake = s.pieces.count { it.script.title !in made }
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.weight(1f))
+                Row(
+                    Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button) { settings = true }.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Outlined.Settings, contentDescription = null, tint = RtColors.TextSecondary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Studio settings", style = RtType.button, color = RtColors.TextSecondary)
+                }
+            }
             ClipStrip(vm, s)
             if (!s.phoneOnly) RideReels(vm.rideId, onSendAll = vm::sendAllToJournal) { vm.openSaved(it) } else PhoneReels { vm.openSaved(it) }
-            Suggestions(vm, s)
-            Section("Or make your own · vibe") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Vibe.entries.chunked(2).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            row.forEach { v -> VibeCard(v, o.vibe == v, s.posters.getOrNull(v.ordinal % s.posters.size.coerceAtLeast(1)), Modifier.weight(1f)) { vm.setOptions { it.copy(vibe = v) } } }
-                        }
-                    }
-                }
+            Suggestions(vm, s, made)
+            AskFor(vm, s)
+            s.error?.let { ErrorBox(it) }
+        }
+        Spacer(Modifier.height(12.dp))
+        when {
+            maker.current != null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Making \u201c${maker.current}\u201d · ${maker.progress ?: 0}%" + if (maker.queued > 0) " · ${maker.queued} more" else "",
+                    style = RtType.caption,
+                    color = RtColors.TextPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                Text("Stop", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { vm.cancelMakeAll() }.padding(8.dp))
             }
-            Section("Length") {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    s.lengths.forEach { n -> Choice("$n s", o.lengthSec == n) { vm.setOptions { it.copy(lengthSec = n) } } }
-                }
-                if (s.lengths.size < StudioPlanner.LENGTHS.size) Text("Longer Reels need more clips.", style = RtType.caption, color = RtColors.TextTertiary)
-            }
+            toMake > 1 -> Button("Make all $toMake · in the background", primary = true) { vm.makeAll() }
+            !s.canMake -> Text("Studio needs at least 2 clips. Add videos from your phone above.", style = RtType.caption, color = RtColors.TextSecondary)
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+    if (settings) StudioSettings(vm, s) { settings = false }
+}
+
+/** Ask for a piece in your words; Gemini writes it and Studio makes it. */
+@Composable
+private fun AskFor(vm: StudioViewModel, s: StudioState) {
+    if (!s.gemini || !s.canMake) return
+    var text by remember { mutableStateOf("") }
+    Section("Ask for something") {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            placeholder = { Text("e.g. a 15 s funny one about the water, or slow cinematic of the flyover", style = RtType.body, color = RtColors.TextTertiary) },
+            textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+        )
+        if (text.isNotBlank() && s.planning == null) {
+            Text("Make it", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.ask(text); text = "" }.padding(vertical = 6.dp))
+        }
+    }
+}
+
+/**
+ * Studio settings, the same for every ride: music, series, what's on the video, Gallery.
+ * Vibe and length aren't here: Gemini picks them per piece (change them after, in Script or Edit).
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun StudioSettings(vm: StudioViewModel, s: StudioState, onClose: () -> Unit) {
+    val o = s.options
+    val pickSong = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.setMusic(uri) }
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onClose,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = RtColors.SurfaceRaised,
+    ) {
+        Column(
+            Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("Studio settings", style = RtType.headline, color = RtColors.TextPrimary)
+            Text("The same for every ride. Gemini picks each piece's vibe and length; change them after making it.", style = RtType.caption, color = RtColors.TextSecondary)
             Section("Music") {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Choice("Add in Instagram", s.musicUri == null) { vm.setMusic(null) }
                     Choice(s.musicName?.let { "♪ $it" } ?: "Your own song", s.musicUri != null) { pickSong.launch(arrayOf("audio/*")) }
                 }
                 Text(
                     if (s.musicUri != null) "The song dips while you talk. Instagram may mute songs added outside it; best for WhatsApp or keeping."
-                    else "Your voice and the ride's sound, cut for ~${o.vibe.bpm} BPM songs. Add a trending song in Instagram: its library is licensed and always current.",
+                    else "Your voice and the ride's sound. Add a trending song in Instagram: its library is licensed and always current.",
                     style = RtType.caption,
                     color = RtColors.TextTertiary,
                 )
@@ -184,38 +245,23 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             Section("Series") {
                 Field(s.series, "Optional, e.g. Evening Ride Diaries") { vm.setSeries(it) }
                 Text(
-                    if (s.series.isBlank()) "A running name helps followers know what's next. The ride's title shows instead." else "Shows as “${s.label}” on the first clip.",
+                    if (s.series.isBlank()) "A running name helps followers know what's next." else "Shows as \u201c${s.label}\u201d on the first clip.",
                     style = RtType.caption,
                     color = RtColors.TextTertiary,
                 )
             }
             Section("On the video") {
-                Toggle("Route opening", "A 2 s route sketch before the first clip. Off: opens on your best moment (better for reach)", o.intro) { v -> vm.setOptions { it.copy(intro = v) } }
-                Toggle("Stats at the end", "Distance, top speed, time, moments, for a second and a half", o.outro) { v -> vm.setOptions { it.copy(outro = v) } }
-                Toggle("Loop the ending", "Ends on the opening shot, so the Reel plays on without a jump", o.loopEnd) { v -> vm.setOptions { it.copy(loopEnd = v) } }
-                Toggle("Map", "The route behind the stats (and in the route opening). Off: no map at all", o.map) { v -> vm.setOptions { it.copy(map = v) } }
                 Toggle("Captions", "What you said, word by word (Gemini reads the clips' sound)", o.captions) { v -> vm.setOptions { it.copy(captions = v) } }
+                Toggle("Stats at the end", "When the script ends on them: distance, top speed, time", o.outro) { v -> vm.setOptions { it.copy(outro = v) } }
+                Toggle("Loop the ending", "Ends on the opening shot, so it plays on without a jump", o.loopEnd) { v -> vm.setOptions { it.copy(loopEnd = v) } }
+                Toggle("Route opening", "A 2 s route sketch before the first clip (off is better for reach)", o.intro) { v -> vm.setOptions { it.copy(intro = v) } }
+                Toggle("Map", "The route behind the stats. Off: no map at all", o.map) { v -> vm.setOptions { it.copy(map = v) } }
                 Toggle("Keppo Moto mark", "Small, on the stats", o.watermark) { v -> vm.setOptions { it.copy(watermark = v) } }
                 val prefs = com.ridetrack.app.ui.appContainer().studio
                 var gallery by remember { mutableStateOf(prefs.alsoSaveToGallery) }
-                Toggle("Also save to Gallery", "Every Reel is kept in Studio; this also puts new ones in Movies/Keppo Moto", gallery) { v -> prefs.alsoSaveToGallery = v; gallery = v }
+                Toggle("Also save to Gallery", "Every piece is kept in Your Reels; this also puts new ones in Movies/Keppo Moto", gallery) { v -> prefs.alsoSaveToGallery = v; gallery = v }
             }
-            s.error?.let { ErrorBox(it) }
         }
-        Spacer(Modifier.height(12.dp))
-        val wait = com.ridetrack.app.transcribe.rememberGeminiWait()
-        if (s.gemini && o.captions && wait.captionsBlocked) {
-            Text("Captions will be skipped: ${wait.line}", style = RtType.caption, color = RtColors.Warning, modifier = Modifier.padding(bottom = 8.dp))
-        }
-        if (s.canMake && s.reelId != null) {
-            // Back from a Reel: change that one, or start another and keep it.
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button("New Reel", primary = false, modifier = Modifier.weight(1f)) { vm.makeNew() }
-                Button("Make it again", primary = true, modifier = Modifier.weight(1f)) { vm.makeAgain() }
-            }
-        } else if (s.canMake) Button("Make my Reel", primary = true) { vm.makeNew() }
-        else Text("Studio needs at least 2 clips. Add videos from your phone above.", style = RtType.caption, color = RtColors.TextSecondary)
-        Spacer(Modifier.height(12.dp))
     }
 }
 
@@ -324,107 +370,74 @@ private fun PhoneReels(onOpen: (String) -> Unit) {
 }
 
 /**
- * What Gemini suggests making from this ride: Reels, Shorts, Stories, long videos, each with its
- * length and why. Tap one to make it; Make all makes the rest in the background.
+ * What Gemini suggests making from this ride: big cards (format, title, vibe, length, why).
+ * Tap one to make it. While Gemini reads, placeholders; when it can't help, why, and what to do.
  */
 @Composable
-private fun Suggestions(vm: StudioViewModel, s: StudioState) {
-    val c = com.ridetrack.app.ui.appContainer()
-    val all by c.reels.reels.collectAsStateWithLifecycle()
-    val maker by c.reelMaker.state.collectAsStateWithLifecycle()
-    val made = all.filter { it.deletedAt == null && (it.rideId == vm.rideId || (s.phoneOnly && it.rideId == null)) }.mapNotNull { it.idea }.toSet()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun Suggestions(vm: StudioViewModel, s: StudioState, made: Set<String>) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("SUGGESTED FOR THIS RIDE", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
-            if (s.planning == null && s.pieces.isNotEmpty()) {
-                Text("Suggest again", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.suggest() }.padding(vertical = 4.dp))
+            if (s.planning == null && s.pieces.isNotEmpty() && s.gemini) {
+                Text("Suggest again", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.retryGemini() }.padding(vertical = 4.dp))
             }
         }
         s.content?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
-        when {
-            s.planning != null -> Row(verticalAlignment = Alignment.CenterVertically) {
+        s.geminiIssue?.let { issue ->
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Warning.copy(alpha = 0.12f)).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(issue, style = RtType.body, color = RtColors.TextPrimary)
+                com.ridetrack.app.transcribe.rememberGeminiWait().line?.let { Text(it, style = RtType.caption, color = RtColors.Warning) }
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Text("Try again", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.retryGemini() }.padding(vertical = 6.dp))
+                    if (s.canMake) Text("Make them without Gemini", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.suggestWithoutGemini() }.padding(vertical = 6.dp))
+                }
+            }
+        }
+        if (s.planning != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(listOfNotNull(s.planning, s.work.firstOrNull()?.detail).joinToString(" · "), style = RtType.caption, color = RtColors.TextPrimary)
             }
-            s.pieces.isEmpty() -> Text(
+            if (s.pieces.isEmpty()) repeat(2) {
+                Box(Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(16.dp)).background(RtColors.Surface))
+            }
+        } else if (s.pieces.isEmpty() && s.geminiIssue == null) {
+            Text(
                 if (s.canMake) "Suggest what to make" else "Add clips to get suggestions",
                 style = RtType.button,
                 color = if (s.canMake) RtColors.Primary else RtColors.TextTertiary,
-                modifier = Modifier.clickable(enabled = s.canMake, role = Role.Button) { vm.suggest() }.padding(vertical = 6.dp),
+                modifier = Modifier.clickable(enabled = s.canMake, role = Role.Button) { vm.retryGemini() }.padding(vertical = 6.dp),
             )
-            else -> Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                s.pieces.forEach { pc ->
-                    val sc = pc.script
-                    Column(
-                        Modifier.width(150.dp).clip(RoundedCornerShape(14.dp)).background(RtColors.Surface)
-                            .clickable(role = Role.Button, onClickLabel = "Make this") { vm.makePiece(pc.key) },
-                    ) {
-                        Box(Modifier.fillMaxWidth().aspectRatio(4f / 5f).background(RtColors.SurfaceRaised)) {
-                            Thumb(pc.opening?.bit?.momentId?.let { s.thumbs[it] }, Modifier.fillMaxSize())
-                            Text(sc.format.label, style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.TopStart).padding(6.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 5.dp))
-                            if (sc.title in made) {
-                                Text("Made", style = RtType.caption, color = RtColors.OnPrimary, modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).clip(RoundedCornerShape(4.dp)).background(RtColors.Primary).padding(horizontal = 5.dp))
-                            }
-                            Text(Format.clock(pc.plan.totalMs), style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 5.dp))
-                        }
-                        Column(Modifier.padding(10.dp)) {
-                            Text(sc.title, style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 2)
-                            sc.why?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary, maxLines = 3) }
-                            Spacer(Modifier.height(4.dp))
-                            Text("${pc.plan.clips.size} shots · ${sc.shape.replace('_', ' ')}", style = RtType.caption, color = RtColors.TextTertiary, maxLines = 1)
-                        }
+        }
+        s.pieces.forEach { pc ->
+            val sc = pc.script
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.Surface)
+                    .clickable(role = Role.Button, onClickLabel = "Make this") { vm.makePiece(pc.key) }
+                    .padding(10.dp),
+            ) {
+                Box(Modifier.width(90.dp).aspectRatio(9f / 16f).clip(RoundedCornerShape(10.dp)).background(RtColors.SurfaceRaised)) {
+                    Thumb(pc.opening?.bit?.momentId?.let { s.thumbs[it] }, Modifier.fillMaxSize())
+                    Text(Format.clock(pc.plan.totalMs), style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 4.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(sc.format.label, style = RtType.caption, color = RtColors.OnPrimary, modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(RtColors.Primary).padding(horizontal = 6.dp))
+                        Text((sc.vibe ?: s.options.vibe).label, style = RtType.caption, color = RtColors.TextSecondary)
+                        if (sc.title in made) Text("· Made", style = RtType.caption, color = RtColors.Primary)
                     }
+                    Text(sc.title, style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 2)
+                    sc.why?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary, maxLines = 4) }
+                    Text("${pc.plan.clips.size} shots · ${sc.shape.replace('_', ' ')}", style = RtType.caption, color = RtColors.TextTertiary)
                 }
             }
         }
-        if (maker.current != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Making \u201c${maker.current}\u201d · ${maker.progress ?: 0}%" + if (maker.queued > 0) " · ${maker.queued} more" else "",
-                    style = RtType.caption,
-                    color = RtColors.TextPrimary,
-                    modifier = Modifier.weight(1f),
-                )
-                Text("Stop", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { vm.cancelMakeAll() }.padding(6.dp))
-            }
-        } else if (s.pieces.size > 1 && s.pieces.any { it.script.title !in made }) {
-            Text(
-                "Make all · in the background",
-                style = RtType.button,
-                color = RtColors.Primary,
-                modifier = Modifier.clickable(role = Role.Button) { vm.makeAll() }.padding(vertical = 4.dp),
-            )
-        }
         s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
-    }
-}
-
-@Composable
-private fun VibeCard(v: Vibe, selected: Boolean, poster: File?, modifier: Modifier, onClick: () -> Unit) {
-    Box(
-        modifier
-            .height(108.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .border(if (selected) 2.dp else 1.dp, if (selected) RtColors.Primary else RtColors.Hairline, RoundedCornerShape(14.dp))
-            .clickable(role = Role.RadioButton, onClick = onClick),
-    ) {
-        Thumb(poster, Modifier.fillMaxSize())
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.15f), Color.Black.copy(alpha = 0.75f)))))
-        Column(Modifier.align(Alignment.BottomStart).padding(10.dp)) {
-            Text(
-                if (v == Vibe.HYPE) v.label.uppercase(Locale.getDefault()) else v.label,
-                fontFamily = VibeFonts[v],
-                fontSize = if (v == Vibe.CHILL) 17.sp else 20.sp,
-                color = Color.White,
-            )
-            Text(v.blurb, style = RtType.caption, color = Color.White.copy(alpha = 0.8f))
-        }
-        if (selected) {
-            Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(22.dp).background(RtColors.Primary, CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Rounded.Check, contentDescription = "Selected", tint = RtColors.OnPrimary, modifier = Modifier.size(14.dp))
-            }
-        }
     }
 }
 
@@ -620,6 +633,11 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
                     sec.text?.let { Text("Text: $it", style = RtType.caption, color = RtColors.TextSecondary) }
                 }
             }
+            Section("Vibe") {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Vibe.entries.forEach { v -> Choice(v.label, (draft.vibe ?: s.options.vibe) == v) { vm.draftVibe(v) } }
+                }
+            }
             Section("Opening") {
                 Field(s.hookLine, "Hook line on the first frame, e.g. 3 hours in. No break?") { vm.setHookLine(it) }
                 Field(s.title, "Title") { vm.setTitle(it) }
@@ -677,7 +695,7 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
 private fun ReelMenu(onDuplicate: () -> Unit, onDelete: () -> Unit, onChange: () -> Unit) {
     var confirm by remember { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text("Change choices", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onChange).padding(vertical = 6.dp))
+        Text("Other suggestions", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onChange).padding(vertical = 6.dp))
         Text("Duplicate", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onDuplicate).padding(vertical = 6.dp))
         Text("Delete", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { confirm = true }.padding(vertical = 6.dp))
     }

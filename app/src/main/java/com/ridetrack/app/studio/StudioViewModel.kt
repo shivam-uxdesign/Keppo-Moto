@@ -145,7 +145,15 @@ data class StudioState(
 /** Studio: turns a ride's clips into a Reel (captions, stories and tips by Gemini when it can). */
 @OptIn(UnstableApi::class)
 class StudioViewModel(private val c: AppContainer, val rideId: String, private val openReelId: String? = null) : ViewModel() {
-    private val _state = MutableStateFlow(StudioState(gemini = c.transcripts.available))
+    private val _state = MutableStateFlow(
+        StudioState(
+            gemini = c.transcripts.available,
+            // Studio settings are the same for every ride.
+            options = c.studio.options,
+            musicUri = c.studio.music?.first?.let(Uri::parse),
+            musicName = c.studio.music?.second,
+        ),
+    )
     val state: StateFlow<StudioState> = _state.asStateFlow()
 
     private var clips: List<Moment> = emptyList()
@@ -475,17 +483,6 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
 
     fun cancelMakeAll() = c.reelMaker.cancelAll()
 
-    /** A new Reel with the choices below (the one on screen stays saved). */
-    fun makeNew() {
-        _state.update { it.copy(piece = null, reelId = null, takes = emptyList(), tips = null, coverFrames = emptyList()) }
-        make()
-    }
-
-    /** The Reel on screen, made again with the choices below. */
-    fun makeAgain() {
-        _state.update { it.copy(piece = null) }
-        make()
-    }
 
     // ---- saved Reels -----------------------------------------------------------------------
 
@@ -811,6 +808,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             val lengths = StudioPlanner.lengthsFor(bits, o.vibe)
             it.copy(options = o.copy(lengthSec = if (o.lengthSec in lengths) o.lengthSec else lengths.last()), lengths = lengths)
         }
+        if (!phoneOnly) c.studio.options = _state.value.options
     }
 
     fun setMusic(uri: Uri?) {
@@ -821,6 +819,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         }
         uri?.let { runCatching { c.appContext.contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
         _state.update { it.copy(musicUri = uri, musicName = name) }
+        c.studio.music = uri?.let { it.toString() to (name ?: "Your song") }
     }
 
     fun setSeries(name: String) {

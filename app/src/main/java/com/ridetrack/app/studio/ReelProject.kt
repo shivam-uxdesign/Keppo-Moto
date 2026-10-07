@@ -127,6 +127,9 @@ object ReelJson {
         )
     }.getOrNull()
 
+    fun writeOptionsJson(o: StudioOptions): String = options(o).toString()
+    fun readOptionsJson(text: String): StudioOptions = readOptions(JSONObject(text))
+
     private fun options(o: StudioOptions) = JSONObject()
         .put("vibe", o.vibe.name).put("lengthSec", o.lengthSec).put("intro", o.intro).put("outro", o.outro).put("loopEnd", o.loopEnd)
         .put("map", o.map).put("captions", o.captions).put("watermark", o.watermark).put("seed", o.seed).put("bpm", o.bpm ?: JSONObject.NULL).put("teaser", o.teaser)

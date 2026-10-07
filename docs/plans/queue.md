@@ -357,3 +357,9 @@ Hook: "Tooooooo" plus the text "3 hours. No water." (3 s) → Setup: "Arre yaar,
 - Next (should have): speed (slow-mo, 2×, ramps); reframe (zoom and pan in a clip); freeze frame with text; voice-over recorded on the timeline; overlays you can turn on and off (speed, lean, map); a transition choice per cut; long-press drag to reorder; a pinch to zoom.
 - Later: J/L cuts; beat markers for an Instagram song; colour per clip; stabilise; templates; stickers.
 - To think about after this build: editing on the iPad (send a Reel project to the iPad: an iOS app, or a web app working on the same project files; how to sync).
+
+## Reel page: suggestions only (BUILT 7 Oct)
+- The Reel page shows only the clips, this ride's Reels, Gemini's suggestions as big cards (format, vibe, title, why, length) and **Ask for something** (describe a piece in your words). The bottom button is **Make all** (in the background).
+- Gemini picks each piece's vibe. Change it afterwards in Script (Vibe), then Make it again.
+- Vibe and length presets are gone. Music, series and the on-video switches moved to ⚙ **Studio settings**, the same for every ride (my choice: your question wasn't answered, so say if you want them per ride).
+- When Gemini can't be reached (no internet, or a blocked address such as Private DNS, an ad-blocker or the Wi-Fi's filter), Studio says so with **Try again** and **Make them without Gemini**, and retries by itself.

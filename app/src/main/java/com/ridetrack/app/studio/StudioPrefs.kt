@@ -28,6 +28,16 @@ class StudioPrefs(context: Context) {
         get() = prefs.getString(SERIES, "").orEmpty()
         set(v) = prefs.edit().putString(SERIES, v.trim()).apply()
 
+    /** The switches in Studio settings (stats, loop, map, captions…), the same for every ride. */
+    var options: StudioOptions
+        get() = prefs.getString(OPTIONS, null)?.let { runCatching { ReelJson.readOptionsJson(it) }.getOrNull() } ?: StudioOptions()
+        set(v) = prefs.edit().putString(OPTIONS, ReelJson.writeOptionsJson(v)).apply()
+
+    /** The rider's own song for every Reel (null = add music in Instagram), and its name. */
+    var music: Pair<String, String>?
+        get() = prefs.getString(MUSIC_URI, null)?.let { it to prefs.getString(MUSIC_NAME, "Your song").orEmpty() }
+        set(v) = prefs.edit().putString(MUSIC_URI, v?.first).putString(MUSIC_NAME, v?.second).apply()
+
     /** Each new Reel also goes to Movies/Keppo Moto. */
     var alsoSaveToGallery: Boolean
         get() = prefs.getBoolean(GALLERY, false)
@@ -79,6 +89,9 @@ class StudioPrefs(context: Context) {
         const val SHOTS = "shots"
         const val MUSIC_GUIDE = "music_guide_seen"
         const val GALLERY = "also_gallery"
+        const val OPTIONS = "options"
+        const val MUSIC_URI = "music_uri"
+        const val MUSIC_NAME = "music_name"
         const val MAX = 4
     }
 }
