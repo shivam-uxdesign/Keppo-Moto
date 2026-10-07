@@ -20,6 +20,7 @@ import com.ridetrack.telemetry.model.TelemetrySample
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -134,6 +135,8 @@ data class StudioState(
     val canRedo: Boolean = false,
     /** Bumped when the timeline changes for good (not mid-drag), so the preview reloads. */
     val timelineVersion: Int = 0,
+    /** Why Gemini can't help right now (no internet, its limit), shown with Try again; null when fine. */
+    val geminiIssue: String? = null,
 ) {
     /** The small label on the first clip: the series and episode, or the title. */
     val label: String get() = if (series.isBlank()) title else "$series · ep $episode"
@@ -212,7 +215,8 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     private fun refreshSources() {
         val day = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
         val list = clips.map { m ->
-            StudioSource(m.id, m.thumb, m.durationMillis ?: 0, likelyTalking(m) || StudioText.load(m.file).orEmpty().isNotEmpty(), if (m.camera == "back") "Road" else null, m.videoStartMillis, Uri.fromFile(m.file))
+            // The voice mark only where words were actually found (not just a clip started by your voice).
+            StudioSource(m.id, m.thumb, m.durationMillis ?: 0, StudioText.load(m.file).orEmpty().isNotEmpty() || !m.transcript.isNullOrBlank(), if (m.camera == "back") "Road" else null, m.videoStartMillis, Uri.fromFile(m.file))
         } + phone.values.map { p ->
             val lines = StudioText.load(PhoneVideos.captionKey(c.appContext, p.id))
             val label = if (!phoneOnly && card != null && (samples.isEmpty() || p.startMillis !in samples.first().timeMillis..samples.last().timeMillis)) {
@@ -287,7 +291,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         val fs = withContext(Dispatchers.Default) { footage() }
         val o = _state.value.options
         val list = scripts.mapIndexedNotNull { i, sc ->
-            val plan = ScriptWriter.toPlan(sc, fs, bits, o.vibe, o).plan
+            val plan = ScriptWriter.toPlan(sc, fs, bits, sc.vibe ?: o.vibe, o).plan
             if (plan.clips.isEmpty()) null else ContentPiece("p$i", sc, plan)
         }
         _state.update { it.copy(pieces = list, content = ScriptWriter.summary(fs).text) }
@@ -299,25 +303,43 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
      */
     fun suggest() {
         if (job?.isActive == true || _state.value.planning != null) return
+        retryJob?.cancel()
         job = viewModelScope.launch {
             try {
                 val gemini = c.transcripts.available
+                unreachable = null
+                _state.update { it.copy(geminiIssue = null) }
                 if (gemini && !captionsDone && _state.value.options.captions) {
                     _state.update { it.copy(planning = "Reading what you said", work = listOf(WorkStep("Reading what you said", 1))) }
                     withContext(Dispatchers.IO) { readCaptions() }
                     bits = withContext(Dispatchers.IO) { buildBits() }
                     refreshSources()
+                    // Couldn't reach Gemini: suggesting would fail the same way. Wait for the internet.
+                    unreachable?.let { e -> waitForGemini(e); return@launch }
                 }
-                _state.update { it.copy(planning = "Gemini is suggesting what to make", work = emptyList()) }
                 val fs = withContext(Dispatchers.Default) { footage() }
                 val cd = card ?: return@launch
-                val scripts = (if (gemini) runCatching {
-                    gemini().scripts(ScriptWriter.planPrompt(cd.title, cd.subtitle, fs, style(), PieceFormat.entries), fs)
-                }.onFailure { c.errors.record("Studio content plan", "Gemini couldn't suggest content", it) }.getOrDefault(emptyList()) else emptyList())
-                    .ifEmpty { localPieces(fs) }
-                withContext(Dispatchers.IO) {
-                    planFile.writeText(org.json.JSONObject().put("pieces", org.json.JSONArray().apply { scripts.forEach { put(ScriptJson.write(it)) } }).toString())
+                val scripts = if (!gemini) localPieces(fs, "Made by the app (Gemini isn't in this build)") else {
+                    _state.update { it.copy(planning = "Gemini is suggesting what to make", work = emptyList()) }
+                    try {
+                        gemini().scripts(ScriptWriter.planPrompt(cd.title, cd.subtitle, fs, style(), PieceFormat.entries), fs) { raw ->
+                            c.errors.record("Studio content plan", "Gemini's answer couldn't be read", null, raw.take(4_000))
+                        }.ifEmpty { localPieces(fs, "Made by the app: Gemini's answer couldn't be read") }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        c.errors.record("Studio content plan", "Gemini couldn't suggest content", e)
+                        when {
+                            com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e) -> { waitForGemini(e); return@launch }
+                            e is FirebaseTranscriber.Busy -> {
+                                _state.update { it.copy(geminiIssue = "Gemini's free limit is used up, so it can't suggest now.") }
+                                return@launch
+                            }
+                            else -> localPieces(fs, "Made by the app: Gemini had a problem (${e.message?.take(60)})")
+                        }
+                    }
                 }
+                savePlan(scripts)
                 showPieces(scripts)
             } catch (e: CancellationException) {
                 throw e
@@ -329,12 +351,92 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         }
     }
 
+    private suspend fun savePlan(scripts: List<Script>) = withContext(Dispatchers.IO) {
+        planFile.writeText(org.json.JSONObject().put("pieces", org.json.JSONArray().apply { scripts.forEach { put(ScriptJson.write(it)) } }).toString())
+    }
+
+    private var retryJob: Job? = null
+    private var retries = 0
+
+    /**
+     * Gemini can't be reached: say why, and try again by itself when the connection comes back
+     * (or in 10 minutes when the phone is online but something blocks Google's server). Three tries.
+     */
+    private fun waitForGemini(e: Throwable) {
+        _state.update { it.copy(geminiIssue = com.ridetrack.app.transcribe.GeminiNet.message(e)) }
+        if (retries >= 3) return
+        retries++
+        val ctx = c.appContext
+        val wasOnline = com.ridetrack.app.transcribe.GeminiNet.online(ctx)
+        retryJob?.cancel()
+        retryJob = viewModelScope.launch {
+            if (wasOnline) delay(10 * 60_000L) else { com.ridetrack.app.transcribe.GeminiNet.awaitOnline(ctx); delay(3_000) }
+            if (_state.value.geminiIssue != null) suggest()
+        }
+    }
+
+    /** Try again now (the rider tapped it). */
+    fun retryGemini() {
+        retries = 0
+        suggest()
+    }
+
+    /** Suggestions the app makes itself, when the rider doesn't want to wait for Gemini. */
+    fun suggestWithoutGemini() {
+        viewModelScope.launch {
+            val fs = withContext(Dispatchers.Default) { footage() }
+            val scripts = localPieces(fs, "Made by the app, without Gemini")
+            savePlan(scripts)
+            showPieces(scripts)
+            _state.update { it.copy(geminiIssue = null) }
+        }
+    }
+
+    /**
+     * The rider asks for a piece in their words ("a 15 s funny one about the water"): Gemini
+     * writes it (one request), it joins the suggestions and is made straight away.
+     */
+    fun ask(text: String) {
+        val t = text.trim()
+        if (t.isEmpty() || job?.isActive == true) return
+        val cd = card ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(planning = "Gemini is writing \u201c${t.take(40)}\u201d", geminiIssue = null) }
+            val fs = withContext(Dispatchers.Default) { footage() }
+            val sc = try {
+                gemini().scripts(ScriptWriter.askPrompt(cd.title, cd.subtitle, fs, style(), t), fs) { raw ->
+                    c.errors.record("Studio ask", "Gemini's answer couldn't be read", null, raw.take(4_000))
+                }.firstOrNull()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                c.errors.record("Studio ask", "Gemini couldn't write what you asked for", e)
+                _state.update {
+                    it.copy(geminiIssue = when {
+                        com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e) -> com.ridetrack.app.transcribe.GeminiNet.message(e)
+                        e is FirebaseTranscriber.Busy -> "Gemini's free limit is used up, so it can't write that now."
+                        else -> "Gemini couldn't write that (${e.message?.take(60)})."
+                    })
+                }
+                null
+            } finally {
+                _state.update { it.copy(planning = null) }
+            }
+            if (sc == null) return@launch
+            c.style.record("(asked for)", sc.describe(fs), t)
+            val scripts = listOf(sc) + _state.value.pieces.map { it.script }
+            savePlan(scripts)
+            showPieces(scripts)
+            _state.value.pieces.firstOrNull()?.let { makePiece(it.key) }
+        }
+    }
+
     /** The app's own suggestions: a Reel as long as the footage fills well, and a 15 s Short. */
-    private fun localPieces(fs: List<Footage>): List<Script> {
+    private fun localPieces(fs: List<Footage>, reason: String): List<Script> {
         val good = ScriptWriter.summary(fs).goodLengthSec
         return listOfNotNull(
-            ScriptWriter.local(fs, PieceFormat.REEL, good, _state.value.title),
-            ScriptWriter.local(fs, PieceFormat.SHORT, 15, _state.value.title)?.takeIf { good > 15 },
+            ScriptWriter.local(fs, PieceFormat.REEL, good, _state.value.title, reason),
+            ScriptWriter.local(fs, PieceFormat.SHORT, 15, _state.value.title, reason)?.takeIf { good > 15 },
         )
     }
 
@@ -343,7 +445,12 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         if (job?.isActive == true) return
         val piece = _state.value.pieces.firstOrNull { it.key == key } ?: return
         pendingScript = piece.script
-        _state.update { it.copy(piece = piece, reelId = null, takes = emptyList(), tips = null, coverFrames = emptyList(), title = card?.title ?: it.title) }
+        _state.update {
+            it.copy(
+                piece = piece, reelId = null, takes = emptyList(), tips = null, coverFrames = emptyList(), title = card?.title ?: it.title,
+                options = it.options.copy(vibe = piece.script.vibe ?: it.options.vibe),
+            )
+        }
         make()
     }
 
@@ -357,10 +464,10 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             val project = ReelProject(
                 id = c.reels.newId(), rideId = rideId.takeIf { !phoneOnly }, createdAt = System.currentTimeMillis(), updatedAt = System.currentTimeMillis(),
                 title = sc.title, series = s.series, episode = s.episode, hookLine = sc.hookLine ?: sc.sections.firstOrNull()?.text.orEmpty(),
-                postCaption = sc.postCaption ?: fallbackCaption(), story = null, options = s.options, musicUri = s.musicUri?.toString(), musicName = s.musicName,
+                postCaption = sc.postCaption ?: fallbackCaption(), story = null, options = s.options.copy(vibe = sc.vibe ?: s.options.vibe), musicUri = s.musicUri?.toString(), musicName = s.musicName,
                 plan = pc.plan, takes = emptyList(), tips = emptyList(), durationMs = pc.plan.totalMs, idea = sc.title, script = sc,
             )
-            MakeJob(project, renderInput(pc.plan, s.copy(title = sc.title, hookLine = project.hookLine), cd, voice = null))
+            MakeJob(project, renderInput(pc.plan, s.copy(title = sc.title, hookLine = project.hookLine, options = project.options), cd, voice = null))
         }
         c.reelMaker.enqueue(jobs)
         say(if (jobs.isEmpty()) "All suggestions are made already" else "Making ${jobs.size} in the background. They'll be in Your Reels.")
@@ -564,6 +671,12 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
 
     fun editDraft(f: (Script) -> Script) = _state.update { s -> s.draft?.let { s.copy(draft = f(it)) } ?: s }
     fun setNote(t: String) = _state.update { it.copy(note = t) }
+    /** Another look for this Reel (the next Make it again uses it). */
+    fun draftVibe(v: Vibe) {
+        editDraft { it.copy(vibe = v) }
+        setOptions { it.copy(vibe = v) }
+    }
+
     fun draftHook(shot: ScriptShot, text: String) = editDraft { ScriptEdits.hook(it, shot, ScriptWriter.isSound(text)) }
 
     /** How long the draft would be, after the app's checks. */
@@ -808,15 +921,22 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         val cd = card
         if (c.transcripts.available && cd != null) {
             val prompt = ScriptWriter.piecePrompt(cd.title, cd.subtitle, fs, style(), PieceFormat.REEL, o.lengthSec, avoid, ScriptWriter.keys(fs))
+            var why = "Made by the app: Gemini's answer couldn't be read"
             runCatching { gemini().scripts(prompt, fs).firstOrNull() }
-                .onFailure { c.errors.record("Studio script", "Gemini couldn't write the script", it) }
+                .onFailure {
+                    c.errors.record("Studio script", "Gemini couldn't write the script", it)
+                    why = if (com.ridetrack.app.transcribe.GeminiNet.isUnreachable(it)) "Made by the app: couldn't reach Gemini (no internet, or blocked)"
+                    else if (it is FirebaseTranscriber.Busy) "Made by the app: Gemini's free limit is used up" else "Made by the app: Gemini had a problem"
+                }
                 .getOrNull()?.let { return it.copy(lengthSec = minOf(it.lengthSec, o.lengthSec)) }
+            return ScriptWriter.local(fs, PieceFormat.REEL, o.lengthSec, _state.value.title, why) ?: error("No usable clips")
         }
         return ScriptWriter.local(fs, PieceFormat.REEL, o.lengthSec, _state.value.title) ?: error("No usable clips")
     }
 
     /** Turns [sc] into the plan (the app's checks fix what Gemini got wrong) and shows it. */
     private suspend fun applyScript(sc: Script) {
+        sc.vibe?.let { v -> _state.update { it.copy(options = it.options.copy(vibe = v)) } }
         val fs = withContext(Dispatchers.Default) { footage() }
         var planned = ScriptWriter.toPlan(sc, fs, bits, _state.value.options.vibe, _state.value.options)
         var used = sc
@@ -1165,6 +1285,9 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
      * Asks Gemini for timed lines for the clips that likely have talking, several clips per request
      * (the free tier allows few requests a day); returns a note if some were missed.
      */
+    /** Set when the last Gemini request couldn't reach the server (no internet, a blocked address). */
+    @Volatile private var unreachable: Throwable? = null
+
     private suspend fun readCaptions(): String? {
         val out = _state.value.excluded
         val moments = clips.filter { it.id !in out && likelyTalking(it) && StudioText.load(it.file) == null }
@@ -1203,13 +1326,15 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             } catch (e: Exception) {
                 c.errors.record("Studio captions", "Couldn't read ${batch.size} clips (${batch.joinToString { it.name }})", e)
                 missed += batch.size
+                if (com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e)) unreachable = e
                 note = when {
                     AppCheckSetup.isRejected(e) -> "Captions: Firebase didn't accept this phone (App Check). Add the debug token from Profile › Moments in Firebase."
                     e is FirebaseTranscriber.Busy -> "Captions were skipped: Gemini's free limit is used up. Remix once it's free again."
+                    com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e) -> "Captions were skipped. " + com.ridetrack.app.transcribe.GeminiNet.message(e)
                     else -> "Captions: couldn't read $missed clip${if (missed > 1) "s" else ""} (${e.message?.take(80)})."
                 }
-                // Out of allowance or refused: more requests won't help now.
-                if (AppCheckSetup.isRejected(e) || e is FirebaseTranscriber.Busy) break
+                // Out of allowance, refused or unreachable: more requests won't help now.
+                if (AppCheckSetup.isRejected(e) || e is FirebaseTranscriber.Busy || com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e)) break
             } finally {
                 audios.forEach { it.second.delete() }
             }

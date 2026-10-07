@@ -131,6 +131,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             c.errors.record("Transcripts", "Couldn't transcribe", e)
             t.setError(
                 if (AppCheckSetup.isRejected(e)) "Firebase didn't accept this phone (App Check). Add the debug token shown below in Firebase › App Check › Manage debug tokens."
+                else if (GeminiNet.isUnreachable(e)) GeminiNet.message(e)
                 else "Couldn't transcribe: ${e.message}",
             )
             t.model = null

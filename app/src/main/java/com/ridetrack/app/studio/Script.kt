@@ -43,6 +43,8 @@ data class Script(
     val hookLine: String?,
     val postCaption: String?,
     val sections: List<Section>,
+    /** The look Gemini chose for it; null = the rider's current one. */
+    val vibe: Vibe? = null,
 ) {
     val totalMs: Long get() = sections.sumOf { s -> s.shots.sumOf { it.durMs } }
 }
@@ -150,7 +152,7 @@ object ScriptWriter {
         }
     }
 
-    private const val SCHEMA = "{\"pieces\":[{\"format\":\"reel|short|story|long\",\"title\":\"max 5 words\",\"why\":\"one line: why this piece works\"," +
+    private const val SCHEMA = "{\"pieces\":[{\"format\":\"reel|short|story|long\",\"vibe\":\"hype|cine|chill|vlog\",\"title\":\"max 5 words\",\"why\":\"one line: why this piece works\"," +
         "\"lengthSec\":30,\"shape\":\"story\",\"hookLine\":\"max 6 words for the first frame or empty\",\"caption\":\"post caption, 1–2 lines + 3–5 hashtags\"," +
         "\"sections\":[{\"kind\":\"hook\",\"form\":\"sound\",\"text\":\"on-screen text or empty\",\"why\":\"short\",\"shots\":[{\"clip\":\"c3\",\"in\":12.4,\"out\":13.2}]}]}]}"
 
@@ -159,10 +161,11 @@ object ScriptWriter {
         appendLine("You are the editor and social media manager for a motorcycle rider who posts motovlogs (often Hinglish).")
         appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
         appendLine(footageText(footage))
-        appendLine("Suggest the pieces of content worth making from THIS ride, as many as the footage really supports (1 to 6).")
+        appendLine("Suggest the pieces of content worth making from THIS ride, as many as the footage really supports (1 to 4).")
         appendLine("Formats allowed: ${formats.joinToString { "${it.name.lowercase()} (${it.hint}, ${it.minSec}–${it.maxSec} s)" }}.")
         appendLine("Make them different from each other: different hooks, shapes and lengths. Clips may be reused across pieces, but no two pieces open on the same moment.")
         appendLine("Suggest a long video only if there's enough talking for 2+ minutes. When the footage is thin, suggest fewer, shorter pieces.")
+        appendLine("Pick a vibe for each piece: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm) or vlog (the voice leads).")
         appendLine(CRAFT)
         append(styleText(style))
         append("Reply with JSON only: $SCHEMA")
@@ -175,6 +178,18 @@ object ScriptWriter {
         appendLine(footageText(footage))
         appendLine("Write ONE ${format.hint}, at most $lengthSec s long.")
         avoid?.let { appendLine("Make it clearly different from this one (another hook, shape or angle): ${ScriptJson.toPromptJson(it, keys)}") }
+        appendLine(CRAFT)
+        append(styleText(style))
+        append("Reply with JSON only (one piece): $SCHEMA")
+    }
+
+    /** Asks for one piece the rider described in their words ("a 15 s funny one about the water"). */
+    fun askPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, ask: String): String = buildString {
+        appendLine("You are the editor of a motorcycle rider's motovlog (often Hinglish).")
+        appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
+        appendLine(footageText(footage))
+        appendLine("The rider asks for: \"${ask.replace("\"", "'")}\". Write ONE piece that does that, from this footage (format, length and vibe as they asked, or what suits it).")
+        appendLine("Vibes: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm), vlog (the voice leads).")
         appendLine(CRAFT)
         append(styleText(style))
         append("Reply with JSON only (one piece): $SCHEMA")
@@ -228,6 +243,7 @@ object ScriptWriter {
                 hookLine = p.optString("hookLine").trim().trim('"').takeIf { it.isNotEmpty() }?.split(Regex("\\s+"))?.take(8)?.joinToString(" "),
                 postCaption = p.optString("caption").trim().takeIf { it.isNotEmpty() },
                 sections = sections,
+                vibe = p.optString("vibe").trim().uppercase().let { v -> Vibe.entries.firstOrNull { it.name == v || (v == "CINEMATIC" && it == Vibe.CINE) } },
             )
         }
     }.getOrDefault(emptyList())
@@ -257,7 +273,7 @@ object ScriptWriter {
      * rider said as the peak, one long road shot, more lines while there's room, a loop. Fewer,
      * longer shots, never a fast montage of look-alike clips.
      */
-    fun local(footage: List<Footage>, format: PieceFormat, lengthSec: Int, title: String): Script? {
+    fun local(footage: List<Footage>, format: PieceFormat, lengthSec: Int, title: String, reason: String = "Made by the app, without Gemini"): Script? {
         if (footage.isEmpty()) return null
         val budget = lengthSec * 1000L
         val pad = 250L
@@ -275,18 +291,36 @@ object ScriptWriter {
             val len = minOf(3_000L, f.durationMs)
             add(Section(SectionKind.HOOK, "picture", listOf(ScriptShot(f.momentId, (f.durationMs - len) / 2, (f.durationMs - len) / 2 + len)), text = title.take(30)))
         }
-        val road = footage.filter { it.lines.isEmpty() || it.look == "road" }.maxByOrNull { it.kmhMax } ?: footage.maxBy { it.durationMs - it.talkingMs }
-        val roadLen = minOf(if (budget >= 25_000) 6_000L else 4_000L, road.durationMs)
-        val roadShot = ScriptShot(road.momentId, (road.durationMs - roadLen) / 2, (road.durationMs - roadLen) / 2 + roadLen)
-        if (budget >= 25_000 && used + roadShot.durMs < budget - 4_000) add(Section(SectionKind.BUILD, "road", listOf(roadShot)))
+        // A riding shot from a part where nothing was said (the road, or riding between lines).
+        fun quiet(f: Footage, len: Long): ScriptShot? {
+            val l = minOf(len, f.durationMs)
+            var a = (f.durationMs - l) / 2
+            if (f.lines.any { it.endMs > a && it.startMs < a + l }) {
+                // Try the stretch after the last word.
+                val after = (f.lines.maxOfOrNull { it.endMs } ?: 0) + 300
+                if (f.durationMs - after >= l) a = after else return null
+            }
+            return ScriptShot(f.momentId, a, a + l)
+        }
+        val roadLen = if (budget >= 25_000) 6_000L else 3_000L
+        val roads = (footage.filter { it.look == "road" } + footage.sortedByDescending { it.kmhMax }).distinct().mapNotNull { quiet(it, roadLen) }
+        val roadShot = roads.firstOrNull() ?: run {
+            val f = footage.maxBy { it.durationMs - it.talkingMs }
+            val l = minOf(roadLen, f.durationMs)
+            ScriptShot(f.momentId, (f.durationMs - l) / 2, (f.durationMs - l) / 2 + l)
+        }
+        if (used + roadShot.durMs < budget - 4_000) add(Section(SectionKind.BUILD, "road", listOf(roadShot)))
         peakU?.let { if (used + it.durMs + 2 * pad <= budget) add(Section(SectionKind.PEAK, "take", listOf(shotOf(it)))) }
         // More of what was said, in filming order, while there's room.
         us.filter { it !== hookU && it !== peakU && !it.sound }.sortedBy { it.f.startMillis + it.startMs }.forEach { u ->
             if (used + u.durMs + 2 * pad <= budget - 1_500) add(Section(SectionKind.PAYOFF, "line", listOf(shotOf(u))))
         }
-        if (sections.size == 1 && used < budget - 4_000) add(Section(SectionKind.BUILD, "road", listOf(roadShot)))
+        // At least three shots: another riding shot from a different clip while there's room.
+        roads.drop(1).filter { r -> sections.none { s -> s.shots.any { it.clip == r.clip } } }.forEach { r ->
+            if (sections.size < 3 && used + r.durMs <= budget - 1_000) add(Section(SectionKind.BUILD, "road", listOf(r)))
+        }
         add(Section(SectionKind.ENDING, "loop", emptyList()))
-        return Script(format, title, "Made by the app (Gemini wasn't available)", lengthSec, "story", null, null, sections)
+        return Script(format, title, reason, lengthSec, "story", null, null, sections)
     }
 
     // ---- script → video plan, with the guardrails -----------------------------------------------
@@ -403,6 +437,7 @@ object ScriptJson {
     fun write(s: Script): JSONObject = JSONObject()
         .put("format", s.format.name).put("title", s.title).put("why", s.why ?: JSONObject.NULL).put("lengthSec", s.lengthSec)
         .put("shape", s.shape).put("hookLine", s.hookLine ?: JSONObject.NULL).put("caption", s.postCaption ?: JSONObject.NULL)
+        .put("vibe", s.vibe?.name ?: JSONObject.NULL)
         .put("sections", JSONArray().apply {
             s.sections.forEach { sec ->
                 put(
@@ -422,6 +457,7 @@ object ScriptJson {
                 shape = o.optString("shape", "story"),
                 hookLine = o.optStringOrNull("hookLine"),
                 postCaption = o.optStringOrNull("caption"),
+                vibe = o.optStringOrNull("vibe")?.let { v -> Vibe.entries.firstOrNull { it.name == v } },
                 sections = o.getJSONArray("sections").let { a ->
                     (0 until a.length()).mapNotNull { i ->
                         val so = a.getJSONObject(i)

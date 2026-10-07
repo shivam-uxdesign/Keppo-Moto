@@ -43,4 +43,15 @@ class TranscriptTest {
         kotlin.test.assertNull(q.waitLine(at, at, at + 1, zone))
         kotlin.test.assertEquals("12 min", q.left(now + 11 * 60_000L + 5_000, now))
     }
+
+    @Test
+    fun `no internet or a blocked address is told apart from Gemini saying no`() {
+        val n = com.ridetrack.app.transcribe.GeminiNet
+        val dns = RuntimeException("Something unexpected happened.", java.net.UnknownHostException("Unable to resolve host \"firebasevertexai.googleapis.com\""))
+        kotlin.test.assertTrue(n.isUnreachable(dns))
+        kotlin.test.assertTrue(n.message(dns).startsWith("Can't reach Gemini"))
+        kotlin.test.assertTrue(n.isUnreachable(com.ridetrack.app.transcribe.GeminiUnreachable(true, null)))
+        kotlin.test.assertTrue(n.message(com.ridetrack.app.transcribe.GeminiUnreachable(true, null)).startsWith("Gemini took too long"))
+        kotlin.test.assertTrue(!n.isUnreachable(RuntimeException("Quota exceeded")))
+    }
 }

@@ -82,9 +82,10 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
     }
 
     /** Scripts for [prompt] (a content plan, one piece, or a rewrite); text only, clips by their keys. */
-    suspend fun scripts(prompt: String, footage: List<Footage>): List<Script> {
-        val text = call(json = true, temperature = 0.7f) { m -> m.generateContent(prompt).text.orEmpty() }
-        return ScriptWriter.parsePieces(text, footage)
+    suspend fun scripts(prompt: String, footage: List<Footage>, onUnreadable: (String) -> Unit = {}): List<Script> {
+        // Several scripts are a long answer: give it two minutes.
+        val text = call(json = true, temperature = 0.7f, timeoutMs = 120_000) { m -> m.generateContent(prompt).text.orEmpty() }
+        return ScriptWriter.parsePieces(text, footage).also { if (it.isEmpty()) onUnreadable(text) }
     }
 
     /** Tips for the next Reel, from a plain description of this one (text only). */
@@ -94,7 +95,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
     }
 
     /** Tries the model that last worked, then the known names, then Remote Config's. */
-    private suspend fun call(json: Boolean, models: List<String> = FirebaseTranscriber.MODELS, temperature: Float = 0.2f, block: suspend (GenerativeModel) -> String): String {
+    private suspend fun call(json: Boolean, models: List<String> = FirebaseTranscriber.MODELS, temperature: Float = 0.2f, timeoutMs: Long = REQUEST_TIMEOUT_MS, block: suspend (GenerativeModel) -> String): String {
         val order = (if (models === FirebaseTranscriber.MODELS) listOfNotNull(preferred()) else emptyList()) + models
         val queue = ArrayDeque(order.distinct())
         val tried = HashSet<String>()
@@ -125,8 +126,8 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
             )
             try {
                 // A hung request would leave Studio waiting forever.
-                val reply = kotlinx.coroutines.withTimeoutOrNull(REQUEST_TIMEOUT_MS) { block(model) }
-                    ?: throw java.io.IOException("Gemini didn't answer within a minute")
+                val reply = kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { block(model) }
+                    ?: throw com.ridetrack.app.transcribe.GeminiUnreachable(timedOut = true, java.io.IOException("Gemini didn't answer within ${timeoutMs / 1000} s"))
                 return reply.also { onWorking(name) }
             } catch (e: QuotaExceededException) {
                 // Each model has its own free allowance: remember this one is spent, try the next.
@@ -135,6 +136,8 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // Not reachable at all (no internet, a blocked address): other models won't help.
+                if (com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e)) throw e as? com.ridetrack.app.transcribe.GeminiUnreachable ?: com.ridetrack.app.transcribe.GeminiUnreachable(false, e)
                 // Rejected pass: get a fresh one and try this model again, once.
                 if (AppCheckSetup.isRejected(e) && !refreshed) {
                     refreshed = true
