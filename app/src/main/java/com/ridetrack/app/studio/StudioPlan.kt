@@ -167,8 +167,62 @@ data class StudioOptions(
     val teaser: Boolean = false,
 )
 
-/** Text the rider placed on the timeline: shown from [startMs] to [endMs] (Reel time), [y] = 0 top … 1 bottom. */
-data class TextItem(val id: String, val startMs: Long, val endMs: Long, val text: String, val y: Float = 0.3f)
+/**
+ * Text the rider placed on the timeline: shown from [startMs] to [endMs] (Reel time), centred at
+ * [x], [y] (0..1 of the frame), [size] times the normal size, turned by [rotation] degrees.
+ */
+data class TextItem(
+    val id: String,
+    val startMs: Long,
+    val endMs: Long,
+    val text: String,
+    val y: Float = 0.3f,
+    val x: Float = 0.5f,
+    val size: Float = 1f,
+    val rotation: Float = 0f,
+    val look: TextLook = TextLook.STYLE,
+    /** Its colour (ARGB); null = the look's own. */
+    val color: Int? = null,
+    val align: TextAlignment = TextAlignment.CENTER,
+    val animIn: TextAnim = TextAnim.FADE,
+    val animOut: TextAnim = TextAnim.FADE,
+)
+
+/** How timeline text looks: the style's own, or plain, outlined, on a box, or handwritten. */
+enum class TextLook(val label: String) { STYLE("Style"), PLAIN("Plain"), OUTLINE("Outline"), BOX("Box"), HAND("Handwritten") }
+
+enum class TextAlignment(val label: String) { LEFT("Left"), CENTER("Centre"), RIGHT("Right") }
+
+/** How text comes in and goes out. */
+enum class TextAnim(val label: String) { FADE("Fade"), POP("Pop"), TYPE("Type on"), SLIDE("Slide"), BOUNCE("Bounce"), NONE("None") }
+
+/** The captions' look for the whole Reel: any style's captions or plain ones, size, height, and the word being said lit up. */
+data class CaptionLook(
+    val kind: CaptionKind = CaptionKind.STYLE,
+    val size: Float = 1f,
+    /** Height of the captions (0 top … 1 bottom); null = the style's own place. */
+    val y: Float? = null,
+    /** Light up the word being said (karaoke); off = the whole line at once (plain captions). */
+    val karaoke: Boolean = true,
+)
+
+enum class CaptionKind(val label: String) { STYLE("Style"), PUNCH("Punch"), SERIF("Serif"), LABEL("Label"), CHAT("Chat"), PLAIN("Plain") }
+
+/** Stickers: live ride numbers, emoji, and callouts. */
+enum class StickerKind(val label: String) { SPEED("Speed"), LEAN("Lean"), EMOJI("Emoji"), ARROW("Arrow"), CIRCLE("Circle") }
+
+/** A sticker on the video from [startMs] to [endMs], centred at [x], [y], [size] times normal, turned [rotation]°; [text] is the emoji. */
+data class StickerItem(
+    val id: String,
+    val kind: StickerKind,
+    val startMs: Long,
+    val endMs: Long,
+    val x: Float = 0.5f,
+    val y: Float = 0.5f,
+    val size: Float = 1f,
+    val rotation: Float = 0f,
+    val text: String = "",
+)
 
 /** How a layer's corners are cut. */
 enum class LayerShape(val label: String) { RECT("Square"), ROUNDED("Rounded"), CIRCLE("Circle") }
@@ -262,6 +316,8 @@ data class StudioPlan(
     val audio: List<AudioItem> = emptyList(),
     val mix: TrackMix = TrackMix(),
     val markers: List<Marker> = emptyList(),
+    val captionLook: CaptionLook = CaptionLook(),
+    val stickers: List<StickerItem> = emptyList(),
 ) {
     val totalMs: Long = segments.sumOf { it.durMs }
     /** The clips the rider chose (the loop tail and the flash-forward teaser are not among them). */

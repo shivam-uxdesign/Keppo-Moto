@@ -267,6 +267,7 @@ object TrackEdits {
         val audio = plan.audio.mapNotNull { a ->
             if (a.startMs >= total - MIN_MS / 2) null else a.copy(durMs = minOf(a.durMs, total - a.startMs))
         }
-        return plan.copy(layers = layers, audio = audio, markers = plan.markers.filter { it.atMs <= total })
+        val stickers = plan.stickers.mapNotNull { s -> if (s.startMs >= total - 250) null else s.copy(endMs = minOf(s.endMs, total)) }
+        return plan.copy(layers = layers, audio = audio, markers = plan.markers.filter { it.atMs <= total }, stickers = stickers)
     }
 }
