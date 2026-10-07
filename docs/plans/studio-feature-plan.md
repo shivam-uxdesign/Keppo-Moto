@@ -304,3 +304,4 @@ Kept on the list, not for the next builds.
   - Keppo records the receiver's two channels as they arrive and checks whether they differ.
   - If they differ: two tracks, voice and engine. If they're the same: one track.
   - A two-mic test in Moments settings shows a level meter per transmitter, so the rider can see which is voice and which is engine and swap them if needed.
+- H1 (iPad): skipped for now. Option 1, the phone serving the editor over Wi-Fi, is the one to think about later.
