@@ -345,3 +345,8 @@ Each build ends with one APK to test on the phone before the next starts.
 - **Reverse (D3):** works, but needs a slow pass over the clip first.
 - **Layers and the matching preview (D1, D9):** these need a newer Media3 (its multi-video compositing and composition player are still marked experimental).
 - **Gemini requests:** "what Gemini saw" search adds requests on top of reading clips, so it is planned last and runs only when the daily allowance has room.
+- D3: **stabilise dropped** (rider, 7 Oct).
+- Layers fallback plan:
+  - Pin the Media3 version, so nothing changes unless we choose to upgrade.
+  - If the composition preview fails on the phone, fall back to today's preview, with layers shown as still frames.
+  - If layered export fails, the existing retry chain applies; the last resort draws the second video's frames into the overlay ourselves (slower, but works on any phone).
