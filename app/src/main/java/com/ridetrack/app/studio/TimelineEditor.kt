@@ -293,6 +293,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     val v = (plan.segments.getOrNull(p.index) as? ClipSegment)?.volume ?: 1f
                     val next = when { v >= 1.5f -> 0f; v == 0f -> 0.5f; v < 1f -> 1f; else -> 1.5f }
                     Choice("Sound ${(v * 100).roundToInt()}%", false) { vm.change { TimelineEdits.volume(it, p.index, next) } }
+                    Choice("Save clip", false) { vm.saveSegment(p.index) }
                     Choice("Delete", false) { vm.change { TimelineEdits.delete(it, p.index) }; vm.pick(null) }
                 }
                 is TimelinePick.Caption -> {

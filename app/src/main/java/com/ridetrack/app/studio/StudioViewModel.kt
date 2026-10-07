@@ -544,6 +544,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             tips = s.tips.orEmpty(),
             durationMs = plan.totalMs,
             inJournal = old?.inJournal ?: false,
+            posted = old?.posted ?: false,
             journalCover = old?.journalCover ?: false,
             coverAtMs = old?.coverAtMs,
             coverText = old?.coverText ?: true,
@@ -826,6 +827,8 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     fun posted() {
         val s = _state.value
         if (s.series.isNotBlank()) c.studio.episodeUsed(s.episode)
+        // No longer a draft.
+        s.reelId?.let { id -> viewModelScope.launch { c.reels.update(id) { it.copy(posted = true) } } }
     }
 
     // ---- making ----------------------------------------------------------------------------
@@ -981,7 +984,8 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     fun edit() {
         val plan = _state.value.plan ?: return
         history = EditHistory(TimelineEdits.liftTexts(plan) { newTextId() })
-        _state.update { it.copy(step = StudioStep.EDIT, pick = null, footage = footage()) }
+        val saved = c.savedClips.clips.value.associate { "saved:${it.id}" to c.savedClips.thumb(it.id).takeIf(File::isFile) }
+        _state.update { it.copy(step = StudioStep.EDIT, pick = null, footage = footage(), thumbs = it.thumbs + saved) }
         publish(reload = true)
         if (_state.value.otherBits.isEmpty()) viewModelScope.launch { loadOtherRides() }
     }
@@ -1023,10 +1027,45 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     fun addCaption(text: String) = change { TimelineEdits.addCaption(it, playheadMs, text) }
     fun insert(b: Bit) = change { TimelineEdits.insert(it, b, playheadMs) }
 
-    /** Parts of this ride (and the other rides Studio read) that aren't in the edit yet. */
+    /** Your saved clips first, then parts of this ride (and the other rides Studio read) that aren't in the edit yet. */
     fun insertable(): List<Bit> {
         val used = _state.value.timeline?.clips?.map { it.bit.momentId }.orEmpty().toSet()
-        return bits.filter { it.momentId !in used } + _state.value.otherBits.filter { it.momentId !in used }
+        val saved = c.savedClips.clips.value.map(c.savedClips::bit)
+        return saved.filter { it.momentId !in used } + bits.filter { it.momentId !in used } + _state.value.otherBits.filter { it.momentId !in used }
+    }
+
+    /**
+     * Keeps [startMs]..[endMs] of a clip in Saved clips (copied, with its words and tags), to
+     * reuse in Reels of other rides.
+     */
+    fun saveClip(momentId: String, startMs: Long, endMs: Long, source: String? = null) {
+        viewModelScope.launch {
+            val f = footage().firstOrNull { it.momentId == momentId }
+            val uri = files()[momentId] ?: source?.let(Uri::parse) ?: return@launch say("Couldn't find that clip")
+            val moment = (clips + borrowed.values).firstOrNull { it.id == momentId }
+            val lines = f?.lines ?: withContext(Dispatchers.IO) { moment?.let { StudioText.load(it.file) } }.orEmpty()
+            say("Saving the clip…")
+            runCatching {
+                c.savedClips.save(
+                    uri, startMs, endMs.coerceAtLeast(startMs + 300), lines,
+                    from = card?.let { "${it.title} · ${it.subtitle.substringBefore(" · ")}" }, rideId = rideId.takeIf { !phoneOnly },
+                    atMillis = f?.startMillis ?: moment?.videoStartMillis ?: System.currentTimeMillis(), camera = moment?.camera, topKmh = f?.kmhMax,
+                )
+            }.onSuccess { say("Saved · Your Reels › Saved clips") }
+                .onFailure { e -> c.errors.record("Studio saved clips", "Couldn't save the clip", e); say("Couldn't save the clip") }
+        }
+    }
+
+    /** Saves the whole clip from the strip. */
+    fun saveSource(id: String) {
+        val src = _state.value.sources.firstOrNull { it.id == id } ?: return
+        saveClip(id, 0, src.durationMs, src.uri.toString())
+    }
+
+    /** Saves exactly the part the edit uses of the clip at [index]. */
+    fun saveSegment(index: Int) {
+        val seg = _state.value.timeline?.segments?.getOrNull(index) as? ClipSegment ?: return
+        saveClip(seg.bit.momentId, seg.inMs, seg.inMs + seg.durMs, seg.bit.source)
     }
 
     /** Leaves the editor without keeping the changes. */

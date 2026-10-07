@@ -100,6 +100,9 @@ class AppContainer(context: Context) {
         ) { reelsChanged(it) }
     }
 
+    /** Parts of clips the rider kept, to reuse in Reels of other rides. */
+    val savedClips = com.ridetrack.app.studio.SavedClipStore(appContext)
+
     /** How the rider wants stories written: their rules and every change they made to a script. */
     val style = com.ridetrack.app.studio.StyleStore(appContext)
 

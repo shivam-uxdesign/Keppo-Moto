@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarOutline
@@ -120,6 +121,23 @@ class MomentViewerViewModel(private val c: AppContainer, rideId: String) : ViewM
 
     fun delete(m: Moment) {
         viewModelScope.launch { c.trash.deleteMoment(m.id) }
+    }
+
+    /** Keeps the clip (its trimmed part, if set) in Studio's Saved clips; [done] gets the message. */
+    fun saveClip(m: Moment, done: (String) -> Unit) {
+        viewModelScope.launch {
+            val ok = runCatching {
+                val ride = c.rides.get(m.rideId)
+                val lines = withContext(Dispatchers.IO) { com.ridetrack.app.studio.StudioText.load(m.file) }.orEmpty()
+                val end = m.trimEndMillis ?: m.durationMillis ?: 0L
+                c.savedClips.save(
+                    android.net.Uri.fromFile(m.file), m.trimStartMillis ?: 0L, end, lines,
+                    from = ride?.let { "${it.name} · ${Format.rideDate(it.startTimeMillis)}" }, rideId = m.rideId, atMillis = m.videoStartMillis,
+                    camera = m.camera, topKmh = m.topSpeedMps?.let { (it * 3.6).roundToInt() },
+                )
+            }.onFailure { c.errors.record("Studio saved clips", "Couldn't save the clip", it) }.isSuccess
+            done(if (ok) "Saved · Studio › Your Reels › Saved clips" else "Couldn't save the clip")
+        }
     }
 }
 
@@ -298,6 +316,7 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                         toast = if (ok) "Saved to your gallery" else "Couldn't save"
                     }
                 }
+                if (current.kind == MomentKind.CLIP) Action(Icons.Outlined.BookmarkAdd, "Keep") { vm.saveClip(current) { toast = it } }
                 Spacer(Modifier.weight(1f))
                 Action(Icons.Outlined.Delete, "Delete") { confirmDelete = current }
             }

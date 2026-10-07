@@ -320,7 +320,12 @@ Each build ends with one APK to test on the phone before the next starts.
    - Read all clips once and remember them; the new rule for how many pieces; gentler checks; show plan vs result.
    - A real background service (keeps going in other apps and after a swipe-away).
    - Auto-read and suggest after each ride, with the battery and Wi-Fi rules; make the top suggestion automatically.
-2. **Studio pages, saved clips, two mics recorded** (C1, C2, C3, C4, C7, F1 recording part, F2). Medium.
+2. **Studio pages, saved clips, two mics recorded** (C1, C2, C3, C4, C7, F1 recording part, F2). Medium. **Built 7 Oct.**
+   - Built: the ride's Studio page (Studio button on the ride, next to Share; Share keeps Story card and 3D video); suggestions first, clips folded; quick prompts and recent asks.
+   - Built: Studio tab "Ready for you" cards and each ride's state (ready, made, not read, waiting for a connection or Gemini).
+   - Built: saved clips (Keep in the clip viewer, Save clip in the strip and the editor), auto-tagged, with tag search and editing in Your Reels › Saved clips, and in the editor's + Clip. Draft mark and "Not posted yet" filter.
+   - Built: two-mic recording from a USB-C receiver (voice in the clip, engine next to it when the two sides differ), the two-mic test with swap, and no Bluetooth headset mic unless allowed.
+   - Not yet: the engine track for long "film now" recordings (event clips only for now).
    - A ride's own Studio page; the Studio tab with "Ready for you" and ride states; quick prompts.
    - Saved clips with auto tags; drafts.
    - Record both DJI channels and keep them, with the two-mic test; headset mic off by default. (So the next ride already captures voice and engine separately.)

@@ -355,10 +355,16 @@ private fun ClipStrip(vm: StudioViewModel, s: StudioState, compact: Boolean) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 s.sources.forEach { src ->
                     val out = src.id in s.excluded
+                    var menu by remember { mutableStateOf(false) }
                     Box(
                         Modifier.size(width = 54.dp, height = 96.dp).clip(RoundedCornerShape(8.dp))
-                            .combinedClickable(onClickLabel = "Watch", onLongClickLabel = if (out) "Put back" else "Leave out", onLongClick = { vm.toggleExclude(src.id) }) { preview = src },
+                            .combinedClickable(onClickLabel = "Watch", onLongClickLabel = "More", onLongClick = { menu = true }) { preview = src },
                     ) {
+                        androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = RtColors.SurfaceRaised) {
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Watch") }, onClick = { menu = false; preview = src })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(if (out) "Put back" else "Leave out") }, onClick = { menu = false; vm.toggleExclude(src.id) })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Save clip") }, onClick = { menu = false; vm.saveSource(src.id) })
+                        }
                         Thumb(src.thumb, Modifier.fillMaxSize())
                         if (out) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.65f)))
                         Text(
@@ -373,7 +379,7 @@ private fun ClipStrip(vm: StudioViewModel, s: StudioState, compact: Boolean) {
                     }
                 }
             }
-            Text("Tap to watch · long-press to leave one out", style = RtType.caption, color = RtColors.TextTertiary)
+            Text("Tap to watch · long-press to leave one out or save it", style = RtType.caption, color = RtColors.TextTertiary)
         }
     }
     preview?.let { src ->
@@ -382,6 +388,7 @@ private fun ClipStrip(vm: StudioViewModel, s: StudioState, compact: Boolean) {
                 Player(src.uri, Modifier, height = 480.dp)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(if (src.id in s.excluded) "Put back" else "Leave out", primary = false, modifier = Modifier.weight(1f)) { vm.toggleExclude(src.id); preview = null }
+                    Button("Save", primary = false, modifier = Modifier.weight(1f)) { vm.saveSource(src.id); preview = null }
                     Button("Close", primary = true, modifier = Modifier.weight(1f)) { preview = null }
                 }
             }
@@ -625,7 +632,7 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
 
 /** The finished Reel (or a clip), playing on a loop; [seek] (ms, a nonce) jumps to a point. */
 @Composable
-private fun Player(uri: android.net.Uri, modifier: Modifier, seek: Pair<Long, Long>? = null, height: androidx.compose.ui.unit.Dp = 440.dp) {
+internal fun Player(uri: android.net.Uri, modifier: Modifier, seek: Pair<Long, Long>? = null, height: androidx.compose.ui.unit.Dp = 440.dp) {
     val context = LocalContext.current
     val player = remember(uri) {
         ExoPlayer.Builder(context).build().apply {
@@ -808,6 +815,9 @@ internal fun ReelTile(p: ReelProject, modifier: Modifier, onClick: () -> Unit) {
             )
             p.script?.format?.takeIf { it != PieceFormat.REEL }?.let { f ->
                 Text(f.label, style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 4.dp))
+            }
+            if (!p.posted) {
+                Text("Draft", style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 4.dp))
             }
             if (p.inJournal) {
                 Text("Journal", style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.TopStart).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 4.dp))
