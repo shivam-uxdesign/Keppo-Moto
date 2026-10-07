@@ -305,3 +305,43 @@ Kept on the list, not for the next builds.
   - If they differ: two tracks, voice and engine. If they're the same: one track.
   - A two-mic test in Moments settings shows a level meter per transmitter, so the rider can see which is voice and which is engine and swap them if needed.
 - H1 (iPad): skipped for now. Option 1, the phone serving the editor over Wi-Fi, is the one to think about later.
+
+---
+
+## Build order (proposed 7 Oct; waiting for the rider's go-ahead)
+Each build ends with one APK to test on the phone before the next starts.
+
+1. **Suggestions you can trust** (A1, A2, A3, A4, B1, B3). Medium-large.
+   - Read all clips once and remember them; the new rule for how many pieces; gentler checks; show plan vs result.
+   - A real background service (keeps going in other apps and after a swipe-away).
+   - Auto-read and suggest after each ride, with the battery and Wi-Fi rules; make the top suggestion automatically.
+2. **Studio pages, saved clips, two mics recorded** (C1, C2, C3, C4, C7, F1 recording part, F2). Medium.
+   - A ride's own Studio page; the Studio tab with "Ready for you" and ride states; quick prompts.
+   - Saved clips with auto tags; drafts.
+   - Record both DJI channels and keep them, with the two-mic test; headset mic off by default. (So the next ride already captures voice and engine separately.)
+3. **Editor foundation: layers and tracks** (D1, D2, D8, D9). Large; the biggest build.
+   - The edit becomes multi-track: video layers (free size, side by side, 3-stack) and audio tracks (voice, engine, voice-over, music) with volume curves, auto-duck and detached sound.
+   - Pinch zoom, snapping, no gaps, multi-select, copy and paste settings, markers, autosave.
+   - A preview that plays the real composition (Media3's composition player), with small preview copies of clips.
+4. **Clip tools, transitions, export** (D3, D4, D10). Large.
+   - Speed and ramps, freeze frame, reverse, reframe with keyframes, colour, crop and rotate, reuse another part.
+   - Transitions per cut; export quality, fps and presets per platform.
+5. **Text, captions and stickers** (D6, D7). Medium.
+   - Text styles and animations; karaoke captions and fixing single words.
+   - Speed and lean stickers; phone emoji.
+6. **Styles** (E1–E7). Large.
+   - The recipe model; the Styles page with live previews on your clips; the detailed style editor.
+   - Create styles by duplicating, from a Reel, from words, or from a reference Reel.
+   - Brand kit upload; styles in the Drive backup; Gemini picks from your styles.
+   - Comes after builds 3–5 because a style is made of their parts.
+7. **Recording extras** (F3, F4). Small.
+   - Engine moments from the engine mic; shot list on the HUD pop-up.
+8. **Search and learning** (C6, G1, G2, G3). Medium.
+   - Search what you said and what Gemini saw.
+   - Views and likes entered by hand, feeding suggestions; post text per platform; the optional hook check.
+
+### Risks to know
+- **Stabilise (D3):** Android has no built-in stabiliser. It needs a large library (OpenCV, +20 MB or more) or a simple version of our own. It may need to drop or come later.
+- **Reverse (D3):** works, but needs a slow pass over the clip first.
+- **Layers and the matching preview (D1, D9):** these need a newer Media3 (its multi-video compositing and composition player are still marked experimental).
+- **Gemini requests:** "what Gemini saw" search adds requests on top of reading clips, so it is planned last and runs only when the daily allowance has room.
