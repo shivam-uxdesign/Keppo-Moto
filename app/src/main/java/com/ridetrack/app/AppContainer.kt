@@ -88,6 +88,9 @@ class AppContainer(context: Context) {
         appScope.launch { journal.onRideSaved(ride) }
     }
 
+    /** Make all: pieces made one after another in the background, with a notification. */
+    val reelMaker = com.ridetrack.app.studio.ReelMaker(appContext, reels, errors) { reelsChanged(it) }
+
     /** Keppo Studio's series name and the shot list for the next ride. */
     val studio = com.ridetrack.app.studio.StudioPrefs(appContext)
 

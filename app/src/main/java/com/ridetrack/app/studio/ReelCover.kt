@@ -10,7 +10,6 @@ import android.graphics.RectF
 import android.media.FaceDetector
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import java.io.File
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -57,11 +56,11 @@ object ReelCover {
 
     private fun spread(start: Long, dur: Long, n: Int) = (1..n).map { start + dur * it / (n + 1) }
 
-    /** The upright frame of [file] (or a phone video [uri]) at [ms], or null. */
-    fun frame(context: Context, file: File?, uri: String?, ms: Long): Bitmap? = runCatching {
+    /** The upright frame of a clip (a moment's file or a gallery video) at [ms], or null. */
+    fun frame(context: Context, uri: Uri, ms: Long): Bitmap? = runCatching {
         val r = MediaMetadataRetriever()
         try {
-            if (file != null) r.setDataSource(file.path) else r.setDataSource(context, Uri.parse(uri ?: return null))
+            if (uri.scheme == "file") r.setDataSource(uri.path) else r.setDataSource(context, uri)
             r.getFrameAtTime(ms * 1000, MediaMetadataRetriever.OPTION_CLOSEST)
         } finally {
             r.release()

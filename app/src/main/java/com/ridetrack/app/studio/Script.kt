@@ -457,3 +457,8 @@ data class StyleContext(val rules: List<String>, val examples: List<StyleExample
 
 /** One change the rider made: the script before and after (as short text), and their note. */
 data class StyleExample(val before: String, val after: String, val note: String?)
+
+/** A piece Gemini suggests for a ride: its script and the plan the app made of it. */
+data class ContentPiece(val key: String, val script: Script, val plan: StudioPlan) {
+    val opening: ClipSegment? get() = plan.clips.firstOrNull()
+}
