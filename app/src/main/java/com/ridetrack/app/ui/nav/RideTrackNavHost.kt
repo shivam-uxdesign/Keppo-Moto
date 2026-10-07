@@ -100,6 +100,8 @@ object Routes {
     const val REELS = "reels"
     /** Studio › Your style. */
     const val STUDIO_STYLE = "studio-style"
+    /** Studio › Styles: every style, the brand kit, the style editor. */
+    const val STYLES = "styles"
     /** Studio with videos from the phone only (no ride). */
     const val STUDIO_PHONE = "studio-phone?reel={reel}"
     fun studioPhone(reelId: String?) = "studio-phone" + (reelId?.let { "?reel=$it" } ?: "")
@@ -202,6 +204,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onOpenRide = { nav.navigate(Routes.reel(it)) },
                         onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
                         onOpenReels = { nav.navigate(Routes.REELS) },
+                        onOpenStyles = { nav.navigate(Routes.STYLES) },
                     )
                 }
                 composable(Routes.RIDES_MAP) {
@@ -317,6 +320,9 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                             onStyle = { nav.navigate(Routes.STUDIO_STYLE) },
                         )
                     }
+                }
+                composable(Routes.STYLES) {
+                    DarkRoute { com.ridetrack.app.studio.StylesScreen(onBack = { nav.popBackStack() }) }
                 }
                 composable(Routes.STUDIO_STYLE) {
                     DarkRoute { com.ridetrack.app.studio.StyleScreen(onBack = { nav.popBackStack() }) }

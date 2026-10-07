@@ -45,6 +45,8 @@ data class Script(
     val sections: List<Section>,
     /** The look Gemini chose for it; null = the rider's current one. */
     val vibe: Vibe? = null,
+    /** One of the rider's styles Gemini chose for it (its id); null = the vibe only. */
+    val style: String? = null,
 ) {
     val totalMs: Long get() = sections.sumOf { s -> s.shots.sumOf { it.durMs } }
 }
@@ -152,12 +154,17 @@ object ScriptWriter {
         }
     }
 
-    private const val SCHEMA = "{\"pieces\":[{\"format\":\"reel|short|story|long\",\"vibe\":\"hype|cine|chill|vlog\",\"title\":\"max 5 words\",\"why\":\"one line: why this piece works\"," +
+    private const val SCHEMA = "{\"pieces\":[{\"format\":\"reel|short|story|long\",\"vibe\":\"hype|cine|chill|vlog\",\"style\":\"a style id from the list, or empty\",\"title\":\"max 5 words\",\"why\":\"one line: why this piece works\"," +
         "\"lengthSec\":30,\"shape\":\"story\",\"hookLine\":\"max 6 words for the first frame or empty\",\"caption\":\"post caption, 1–2 lines + 3–5 hashtags\"," +
         "\"sections\":[{\"kind\":\"hook\",\"form\":\"sound\",\"text\":\"on-screen text or empty\",\"why\":\"short\",\"shots\":[{\"clip\":\"c3\",\"in\":12.4,\"out\":13.2}]}]}]}"
 
     /** Asks for a content plan: the pieces worth making from this ride, each with its script. */
-    fun planPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, formats: List<PieceFormat>): String = buildString {
+    /** The rider's own styles, to choose from per piece (favourites and the most used first). */
+    private fun stylesText(styles: List<StudioStyle>): String = if (styles.isEmpty()) "" else
+        "The rider's styles (prefer the first ones; pick one per piece by its id when it suits, else just a vibe): " +
+            styles.joinToString("; ") { "${it.id} = ${it.describe()}" } + ".\n"
+
+    fun planPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, formats: List<PieceFormat>, styles: List<StudioStyle> = emptyList()): String = buildString {
         appendLine("You are the editor and social media manager for a motorcycle rider who posts motovlogs (often Hinglish).")
         appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
         appendLine(footageText(footage))
@@ -167,6 +174,7 @@ object ScriptWriter {
         appendLine("Make them different from each other: different hooks, shapes and lengths; no two pieces open on the same moment or share a shape. Clips may be reused across pieces.")
         appendLine("Suggest a long video only if there's enough talking for 2+ minutes. When the footage is thin, suggest fewer, shorter pieces.")
         appendLine("Pick a vibe for each piece: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm) or vlog (the voice leads).")
+        append(stylesText(styles))
         appendLine(CRAFT)
         append(styleText(style))
         append("Reply with JSON only: $SCHEMA")
@@ -185,12 +193,13 @@ object ScriptWriter {
     }
 
     /** Asks for one piece the rider described in their words ("a 15 s funny one about the water"). */
-    fun askPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, ask: String): String = buildString {
+    fun askPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, ask: String, styles: List<StudioStyle> = emptyList()): String = buildString {
         appendLine("You are the editor of a motorcycle rider's motovlog (often Hinglish).")
         appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
         appendLine(footageText(footage))
         appendLine("The rider asks for: \"${ask.replace("\"", "'")}\". Write ONE piece that does that, from this footage (format, length and vibe as they asked, or what suits it).")
         appendLine("Vibes: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm), vlog (the voice leads).")
+        append(stylesText(styles))
         appendLine(CRAFT)
         append(styleText(style))
         append("Reply with JSON only (one piece): $SCHEMA")
@@ -245,6 +254,7 @@ object ScriptWriter {
                 postCaption = p.optString("caption").trim().takeIf { it.isNotEmpty() },
                 sections = sections,
                 vibe = p.optString("vibe").trim().uppercase().let { v -> Vibe.entries.firstOrNull { it.name == v || (v == "CINEMATIC" && it == Vibe.CINE) } },
+                style = p.optString("style").trim().takeIf { it.startsWith("st-") || it in setOf("hype", "cine", "chill", "vlog") },
             )
         }
     }.getOrDefault(emptyList())
@@ -460,6 +470,7 @@ object ScriptJson {
         .put("format", s.format.name).put("title", s.title).put("why", s.why ?: JSONObject.NULL).put("lengthSec", s.lengthSec)
         .put("shape", s.shape).put("hookLine", s.hookLine ?: JSONObject.NULL).put("caption", s.postCaption ?: JSONObject.NULL)
         .put("vibe", s.vibe?.name ?: JSONObject.NULL)
+        .put("style", s.style ?: JSONObject.NULL)
         .put("sections", JSONArray().apply {
             s.sections.forEach { sec ->
                 put(
@@ -480,6 +491,7 @@ object ScriptJson {
                 hookLine = o.optStringOrNull("hookLine"),
                 postCaption = o.optStringOrNull("caption"),
                 vibe = o.optStringOrNull("vibe")?.let { v -> Vibe.entries.firstOrNull { it.name == v } },
+                style = o.optStringOrNull("style"),
                 sections = o.getJSONArray("sections").let { a ->
                     (0 until a.length()).mapNotNull { i ->
                         val so = a.getJSONObject(i)

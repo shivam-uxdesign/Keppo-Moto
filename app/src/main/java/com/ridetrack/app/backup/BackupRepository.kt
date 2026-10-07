@@ -100,6 +100,12 @@ class BackupRepository(
 
             // Settings and garage are small: always refresh.
             putText(f.moto, SETTINGS, BackupFormat.settingsJson(settings.exportPrefs()), f.motoFiles[SETTINGS])
+            // Studio's styles and the brand kit (logo, font) are small: always refresh.
+            File(context.filesDir, com.ridetrack.app.studio.StyleLibrary.FILE).takeIf { it.isFile }?.let { putText(f.moto, STYLES, it.readText(), f.motoFiles[STYLES]) }
+            BRAND_FILES.forEach { n ->
+                val file = File(File(context.filesDir, "brand"), n)
+                if (file.isFile) drive.putLarge(f.moto, "brand-$n", file, if (n.endsWith(".png")) "image/png" else "application/octet-stream", f.motoFiles["brand-$n"])
+            }
             val bikes = db.bikeDao().all()
             putText(f.garage, BIKES, BackupFormat.bikesJson(bikes), f.garageFiles[BIKES])
             val garage = manifest.garage.toMutableMap()
@@ -208,6 +214,13 @@ class BackupRepository(
             }
             val manifest = readManifest(f)
             f.motoFiles[SETTINGS]?.let { settings.importPrefs(BackupFormat.parseSettings(drive.downloadText(it))) }
+            // Styles and the brand kit, unless this phone has its own already.
+            val styles = File(context.filesDir, com.ridetrack.app.studio.StyleLibrary.FILE)
+            if (!styles.isFile) f.motoFiles[STYLES]?.let { styles.writeText(drive.downloadText(it)) }
+            BRAND_FILES.forEach { n ->
+                val file = File(File(context.filesDir, "brand").apply { mkdirs() }, n)
+                if (!file.isFile) f.motoFiles["brand-$n"]?.let { download(it, file) }
+            }
 
             f.garageFiles[BIKES]?.let { id ->
                 val have = db.bikeDao().all().map { it.id }.toSet()
@@ -377,6 +390,8 @@ class BackupRepository(
         private const val MANIFEST = "manifest.json"
         private const val SETTINGS = "settings.json"
         private const val BIKES = "bikes.json"
+        private const val STYLES = "studio-styles.json"
+        private val BRAND_FILES = listOf("logo.png", "font.ttf")
         private const val RIDE = "ride.json"
         private const val SAMPLES = "samples.jsonl.gz"
         private const val ROUTE = "route.png"

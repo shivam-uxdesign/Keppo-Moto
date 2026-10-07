@@ -100,6 +100,9 @@ class AppContainer(context: Context) {
         ) { reelsChanged(it) }
     }
 
+    /** Studio's styles (built-in and the rider's), favourites and the brand kit. */
+    val styles = com.ridetrack.app.studio.StyleLibrary(appContext)
+
     /** Parts of clips the rider kept, to reuse in Reels of other rides. */
     val savedClips = com.ridetrack.app.studio.SavedClipStore(appContext)
 

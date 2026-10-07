@@ -62,6 +62,8 @@ data class RenderInput(
     val voiceLines: List<CaptionLine> = emptyList(),
     /** Size, frame rate and bitrate to write; null = the Reel as usual (1080p, 30 fps). */
     val output: OutputSpec? = null,
+    /** The rider's brand kit (used when the options turn it on). */
+    val brand: BrandKit? = null,
     /** Lean (degrees, + right) at a wall time; null where it isn't known. */
     val leanAt: (Long) -> Int? = { null },
 )
@@ -199,7 +201,7 @@ class StudioRenderer(private val context: Context) {
         val segs = plan.segments
         val clips = plan.clips
         require(clips.isNotEmpty()) { "No clips to use" }
-        val art = StudioArt(context)
+        val art = StudioArt(context, brand = input.brand?.takeIf { input.options.brand })
         val mix = plan.mix
         drawer?.release()
         drawer = if (a.layers == LayerMode.DRAWN) LayerDrawer(context, plan.layers) { l -> uriOf(input, l.bit) } else null

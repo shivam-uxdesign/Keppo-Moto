@@ -33,6 +33,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
@@ -565,6 +566,9 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     val video = s.video ?: return
     var seek by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     var exportOpen by remember { mutableStateOf(false) }
+    var styleOpen by remember { mutableStateOf(false) }
+    val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
+    if (styleOpen) StylePicker(vm, s, onAll = { nav(com.ridetrack.app.ui.nav.Routes.STYLES) }) { styleOpen = false }
     if (exportOpen) ExportSheet(vm, s) { exportOpen = false }
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -581,6 +585,7 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 Action("Remix", Icons.Outlined.Refresh, Modifier.weight(1f)) { vm.remix() }
                 Action("Voice-over", Icons.Outlined.Mic, Modifier.weight(1f)) { vm.voice() }
                 Action("Cover", Icons.Outlined.Image, Modifier.weight(1f)) { vm.cover() }
+                Action("Style", Icons.Outlined.Palette, Modifier.weight(1f)) { styleOpen = true }
             }
             // Export for a place: Instagram, YouTube, a Story in parts, WhatsApp.
             Text(

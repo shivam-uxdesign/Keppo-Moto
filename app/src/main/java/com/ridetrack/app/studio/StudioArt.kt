@@ -65,7 +65,7 @@ data class Cam(val k: Float, val x: Float, val y: Float, val deg: Float)
  * two clips; each transition is a camera move plus graphics that cover the cut. Sizes are
  * written for a 540-wide frame and scaled.
  */
-class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
+class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private val brand: BrandKit? = null) {
     private val s = w / 540f
     private val anton = font(context, R.font.anton)
     private val serif = font(context, R.font.instrument_serif_italic)
@@ -75,6 +75,12 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val W = w.toFloat()
     private val H = h.toFloat()
+
+    /** The brand kit's logo and font, when the style uses it. */
+    private val logo: android.graphics.Bitmap? = brand?.logo?.let { runCatching { android.graphics.BitmapFactory.decodeFile(it) }.getOrNull() }
+    private val brandFont: Typeface? = brand?.font?.let { runCatching { Typeface.createFromFile(it) }.getOrNull() }
+    /** Plain text and captions in the brand's font when there is one. */
+    private val plainFace: Typeface get() = brandFont ?: geist
 
     private fun font(c: Context, id: Int) = runCatching { ResourcesCompat.getFont(c, id) }.getOrNull() ?: Typeface.DEFAULT_BOLD
 
@@ -164,7 +170,29 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
         speedBadge(c, f.vibe, kmh, clock)
         opener?.let { opening(c, f.vibe, it, f.localMs / 1000f) }
         if (captions) caption(c, f.vibe, lines, f.localMs / 1000f, look)
+        brandMark(c)
         edge(f)?.let { transition(c, f, it) }
+    }
+
+    /** The rider's handle (and small logo) low on the left, clear of the platforms' buttons. */
+    private fun brandMark(c: Canvas) {
+        val b = brand ?: return
+        val handle = b.handle.trim().takeIf { it.isNotEmpty() }?.let { if (it.startsWith("@")) it else "@$it" }
+        if (handle == null && logo == null) return
+        var x = 34 * s
+        val y = H * 0.875f
+        logo?.let { l ->
+            val hgt = 34 * s
+            val wid = hgt * l.width / l.height.coerceAtLeast(1)
+            c.drawBitmap(l, null, RectF(x, y - hgt / 2, x + wid, y + hgt / 2), Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = 220 })
+            x += wid + 10 * s
+        }
+        handle?.let {
+            text(plainFace, 20 * s, b.color ?: Color.WHITE, Paint.Align.LEFT)
+            p.setShadowLayer(8 * s, 0f, 1 * s, Color.argb(160, 0, 0, 0)); p.alpha = 220
+            c.drawText(it, x, mid(y), p)
+            p.clearShadowLayer()
+        }
     }
 
     /** What the first seconds say: a small title label and a hook line, readable with the sound off. */
@@ -390,7 +418,7 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
     /** Plain captions: white words with a dark edge, two rows at most; the word being said lights up yellow. */
     private fun plainCaption(c: Canvas, lines: List<CaptionLine>, t: Float, karaoke: Boolean, y: Float) {
         val cur = current(lines, t) ?: return
-        text(geist, 46 * s, Color.WHITE, Paint.Align.LEFT)
+        text(plainFace, 46 * s, Color.WHITE, Paint.Align.LEFT)
         val rows = wrap(cur.words, W * 0.82f).takeLast(2)
         val skipped = cur.words.size - rows.sumOf { it.size }
         val lh = 58 * s
@@ -663,7 +691,7 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
         c.scale(k, k, px, py)
         when (t.look) {
             TextLook.STYLE -> { c.translate(px - W / 2, 0f); drawCoverText(c, vibe, shown, cy = py, shade = false) }
-            TextLook.PLAIN -> styledText(c, shown, px, py, t.align, geist, 52 * s, t.color ?: Color.WHITE, shadow = true)
+            TextLook.PLAIN -> styledText(c, shown, px, py, t.align, plainFace, 52 * s, t.color ?: brand?.color ?: Color.WHITE, shadow = true)
             TextLook.OUTLINE -> styledText(c, shown.uppercase(), px, py, t.align, anton, 72 * s, t.color ?: Color.WHITE, outline = true)
             TextLook.HAND -> styledText(c, shown, px, py, t.align, marker, 58 * s, t.color ?: Color.WHITE, shadow = true)
             TextLook.BOX -> {
@@ -950,7 +978,13 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
         val name = if (f.vibe == Vibe.HYPE) card.title.uppercase() else card.title
         text(face, fit(face, name, size * s, W * 0.88f), Color.WHITE, Paint.Align.CENTER); p.alpha = ta
         c.drawText(name, W / 2, H * 0.19f, p)
-        if (watermark) {
+        val l = logo
+        if (l != null) {
+            // The rider's own logo instead of the Keppo mark.
+            val hgt = 90 * s
+            val wid = hgt * l.width / l.height.coerceAtLeast(1)
+            c.drawBitmap(l, null, RectF(W / 2 - wid / 2, H * 0.77f - hgt / 2, W / 2 + wid / 2, H * 0.77f + hgt / 2), Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = (cl((t - 0.8f) / 0.4f) * 255).toInt() })
+        } else if (watermark) {
             text(geistMed, 18 * s, Color.WHITE, Paint.Align.CENTER); p.alpha = (cl((t - 0.8f) / 0.4f) * 180).toInt()
             c.drawText("made with Keppo Moto", W / 2, H * 0.79f, p)
         }

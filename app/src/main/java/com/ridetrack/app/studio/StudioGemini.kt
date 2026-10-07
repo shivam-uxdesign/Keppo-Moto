@@ -89,6 +89,25 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         return ScriptWriter.parsePieces(text, footage).also { if (it.isEmpty()) onUnreadable(text) }
     }
 
+    /** A style from the rider's words ("night ride, neon, punchy, big yellow captions"); null if the answer couldn't be read. */
+    suspend fun styleFromWords(words: String, id: String): StudioStyle? {
+        val text = call(json = true, temperature = 0.6f) { m -> m.generateContent(StyleJson.wordsPrompt(words)).text.orEmpty() }
+        return StyleJson.fromGemini(text, id)
+    }
+
+    /** A style that approximates a reference video's look and pace, from a few of its frames (JPEG). */
+    suspend fun styleFromFrames(frames: List<ByteArray>, id: String): StudioStyle? {
+        val text = call(json = true, temperature = 0.4f, timeoutMs = 120_000) { m ->
+            m.generateContent(
+                content {
+                    frames.forEach { inlineData(it, "image/jpeg") }
+                    text(StyleJson.REFERENCE_PROMPT)
+                },
+            ).text.orEmpty()
+        }
+        return StyleJson.fromGemini(text, id)
+    }
+
     /** Tips for the next Reel, from a plain description of this one (text only). */
     suspend fun coach(summary: String): List<Tip> {
         val text = call(json = true) { m -> m.generateContent(StudioText.coachPrompt(summary)).text.orEmpty() }

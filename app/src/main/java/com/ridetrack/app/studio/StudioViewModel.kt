@@ -380,7 +380,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             _state.update { it.copy(planning = "Gemini is writing \u201c${t.take(40)}\u201d", geminiIssue = null) }
             val fs = withContext(Dispatchers.Default) { footage() }
             val sc = try {
-                gemini().scripts(ScriptWriter.askPrompt(cd.title, cd.subtitle, fs, style(), t), fs) { raw ->
+                gemini().scripts(ScriptWriter.askPrompt(cd.title, cd.subtitle, fs, style(), t, c.styles.forSuggestions()), fs) { raw ->
                     c.errors.record("Studio ask", "Gemini's answer couldn't be read", null, raw.take(4_000))
                 }.firstOrNull()
             } catch (e: CancellationException) {
@@ -1179,6 +1179,27 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     }
 
     fun replace(i: Int, b: Bit) = change("Replace clip") { ClipTools.replace(it, i, b) }
+
+    // ---- styles -------------------------------------------------------------------------------
+
+    /** Makes this Reel again in style [st]: its look, captions, text, transitions, pace, colour and stickers. */
+    fun applyStyle(st: StudioStyle) {
+        val plan = _state.value.plan ?: return
+        var n = 0
+        val styled = Styles.apply(plan, st) { "st${System.currentTimeMillis() % 100_000}-${n++}" }
+        c.styles.used(st.id)
+        _state.update { it.copy(plan = styled, options = Styles.options(it.options, st)) }
+        remake()
+    }
+
+    /** Keeps this Reel's look as a new style (Styles). */
+    fun saveLookAsStyle(name: String) {
+        val s = _state.value
+        val plan = s.plan ?: return
+        val st = Styles.fromReel(plan, s.options, c.styles.newId(), name.trim().ifBlank { "My look" })
+        c.styles.save(st)
+        say("Saved as the style \u201c${st.name}\u201d")
+    }
 
     /** Gemini reads one clip's words again (one request); its captions in the edit are replaced. */
     fun readAgain(momentId: String) {

@@ -266,8 +266,13 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
     fun pieces(scripts: List<Script>, o: StudioOptions = c.studio.options): List<ContentPiece> {
         val fs = footage()
         return scripts.mapIndexedNotNull { i, sc ->
-            val planned = ScriptWriter.toPlan(sc, fs, bits, sc.vibe ?: o.vibe, o)
-            if (planned.plan.clips.isEmpty()) null else ContentPiece("p$i", sc, planned.plan, planned.plannedMs, planned.fixes)
+            val st = sc.style?.let(c.styles::get)
+            val planned = ScriptWriter.toPlan(sc, fs, bits, st?.base ?: sc.vibe ?: o.vibe, o)
+            if (planned.plan.clips.isEmpty()) return@mapIndexedNotNull null
+            // The style Gemini picked from the rider's own: its whole look on the piece.
+            var n = 0
+            val plan = st?.let { Styles.apply(planned.plan, it) { "s${i}-${n++}" } } ?: planned.plan
+            ContentPiece("p$i", sc, plan, planned.plannedMs, planned.fixes)
         }
     }
 
@@ -281,7 +286,7 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         if (!c.transcripts.available) return Suggested.Scripts(localPieces(fs, "Made by the app (Gemini isn't in this build)", title), "Gemini isn't in this build")
         var answer: String? = null
         return try {
-            val scripts = gemini().scripts(ScriptWriter.planPrompt(cd.title, cd.subtitle, fs, style(), PieceFormat.entries), fs, onAnswer = { answer = it }) { raw ->
+            val scripts = gemini().scripts(ScriptWriter.planPrompt(cd.title, cd.subtitle, fs, style(), PieceFormat.entries, c.styles.forSuggestions()), fs, onAnswer = { answer = it }) { raw ->
                 c.errors.record("Studio content plan", "Gemini's answer couldn't be read", null, raw.take(4_000))
             }
             if (scripts.isEmpty()) {
@@ -327,6 +332,7 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
             options = s.options,
             speedAt = { StudioNumbers.speedAt(ride, it) },
             leanAt = { StudioNumbers.leanAt(ride, it) },
+            brand = c.styles.brand.value.takeIf { !it.empty },
             clockAt = { Format.timeOfDay(it).lowercase(Locale.getDefault()) },
             music = s.musicUri,
             opener = StudioArt.Opener(label = if (s.options.intro) s.label.takeIf { s.series.isNotBlank() } else s.label, hookLine = s.hookLine.ifBlank { null }),
@@ -357,10 +363,12 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         val cd = card ?: return null
         val sc = pc.script
         val now = System.currentTimeMillis()
+        val st = sc.style?.let(c.styles::get)?.also { c.styles.used(it.id) }
+        val opts = st?.let { Styles.options(s.options, it) } ?: s.options.copy(vibe = sc.vibe ?: s.options.vibe)
         val project = ReelProject(
             id = c.reels.newId(), rideId = rideId.takeIf { !phoneOnly }, createdAt = now, updatedAt = now,
             title = sc.title, series = s.series, episode = s.episode, hookLine = sc.hookLine ?: sc.sections.firstOrNull()?.text.orEmpty(),
-            postCaption = sc.postCaption ?: fallbackCaption(), story = null, options = s.options.copy(vibe = sc.vibe ?: s.options.vibe),
+            postCaption = sc.postCaption ?: fallbackCaption(), story = null, options = opts,
             musicUri = s.musicUri?.toString(), musicName = s.musicName,
             plan = pc.plan, takes = emptyList(), tips = emptyList(), durationMs = pc.plan.totalMs, idea = sc.title, script = sc,
         )

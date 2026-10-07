@@ -352,7 +352,13 @@ Each build ends with one APK to test on the phone before the next starts.
    - Not yet: Giphy (later, as decided); route, G-force, weather and place stickers.
    - Text styles and animations; karaoke captions and fixing single words.
    - Speed and lean stickers; phone emoji.
-6. **Styles** (E1–E7). Large.
+6. **Styles** (E1–E7). Large. **Built 7 Oct.**
+   - Built: a style is a full recipe: base look, captions (look, size, height, word highlight), text (look, colour, in and out), transitions (which, length, every cut or between sections), pace of riding shots, punch-in on words, colour, overlays (corner speed, speed and lean stickers, map, route opening, stats, Keppo mark, brand kit), sound (dip, voice clean-up).
+   - Built: Styles page (palette icon in the Studio tab header; also "All styles" from a Reel): every style previewed on your own best clip, favourites and how often each was used; the style editor with one part at a time, Reset per part, Shuffle and Share.
+   - Built: new styles by duplicating, "Keep this Reel's look as a style" (Style on a finished Reel), describing it in words (Gemini) or from a video you like (Gemini looks at a few frames); share as a code and add a code from another rider.
+   - Built: brand kit: upload your logo and font, your handle and colour; on pieces whose style has Brand on (handle low left, logo instead of the Keppo mark, your font for plain text and captions).
+   - Built: styles and the brand kit go in the Google Drive backup. Suggestions choose among your styles (favourites and the most used first); a finished Reel can be made again in any style.
+   - Decided for you (open question E2): Styles lives in the Studio tab header, with a Style button on a finished Reel.
    - The recipe model; the Styles page with live previews on your clips; the detailed style editor.
    - Create styles by duplicating, from a Reel, from words, or from a reference Reel.
    - Brand kit upload; styles in the Drive backup; Gemini picks from your styles.
