@@ -393,14 +393,14 @@ Hook: "Tooooooo" plus the text "3 hours. No water." (3 s) → Setup: "Arre yaar,
 - **Kept safe:** the saved part is copied (a few MB each), so it stays when the ride or its moments are deleted. (Rider: OK.)
 - **Drafts too:** Reels made but not posted yet. Studio knows a Reel was posted when Share or Save was used on it. Your Reels gets a "Not posted yet" filter, and those Reels carry a small "Draft" mark.
 
-## Search what you said (proposed)
+## Search what you said (open for discussion)
 - A **search bar** at the top of the Studio tab searches the words in every clip of every ride (transcripts and captions). It's also in the editor's + Clip and in Saved clips.
 - Matching is forgiving of Hinglish spelling ("pani" finds "paani", "bhaai" finds "bhai"): repeated letters and common vowel differences are ignored.
 - Each result shows the line with the match highlighted, the clip's thumbnail, the ride and the time. Tap it to play from that line.
 - Result actions: **Save clip** (just that sentence, with a little room), **Add to Reel** (in the editor, at the playhead), **Open ride**.
 - Clips not read yet don't show up; a line says how many ("12 clips aren't written out yet").
 
-## Editor: transitions, text and stickers (proposed)
+## Editor: transitions, text and stickers (open for discussion)
 Today: transitions follow the vibe and only play between script sections; text has one style and can only move up or down; there are no stickers. The preview doesn't show the real styles.
 - **Transitions per cut:** a small ◇ marker sits on each join on the timeline. Tap it to choose:
   - Cut
@@ -423,3 +423,7 @@ Today: transitions follow the vibe and only play between script sections; text h
   - **Emoji**, plus arrows and circles to point at things.
   - Each sticker can be dragged, pinched and rotated, and has its own time on a stickers track.
 - **The preview shows the real thing:** text, captions and stickers are drawn in the preview exactly as in the saved video. Only colour and camera moves still wait for Save.
+- Open questions:
+  - Which ride stickers matter most?
+  - Phone emoji only, or animated GIF stickers (these need an online service such as Giphy)?
+  - Should a text style you use become your default (Your style)?
