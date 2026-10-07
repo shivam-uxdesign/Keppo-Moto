@@ -350,3 +350,8 @@ Each build ends with one APK to test on the phone before the next starts.
   - Pin the Media3 version, so nothing changes unless we choose to upgrade.
   - If the composition preview fails on the phone, fall back to today's preview, with layers shown as still frames.
   - If layered export fails, the existing retry chain applies; the last resort draws the second video's frames into the overlay ourselves (slower, but works on any phone).
+- **Knowing when something failed or fell back** (proposed with build 1, extending A3):
+  - Fallbacks are logged as "Warning" entries in the error log, not only errors, with what failed, which fallback was used, the phone, the Android version and the app version.
+  - The rider sees it where it happened: a small note on the Reel ("Made with a simpler method on this phone · Details"), and a "Simple preview" label in the editor when the preview fell back.
+  - A count on Profile › Error log when there are new entries ("2 new").
+  - Send to the developer: the existing Send/Copy, plus "Send Studio details" for a Reel (its plan, checks, fallbacks and Gemini's answer).
