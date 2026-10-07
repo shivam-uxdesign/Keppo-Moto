@@ -36,7 +36,9 @@ class FirebaseTranscriber {
 
     companion object {
         /** Newest first; a name Google has retired is skipped (its error says so) and the next tried. */
-        val MODELS = listOf("gemini-3.8-flash", "gemini-3-flash", "gemini-3.8-flash-lite", "gemini-3-flash-lite", "gemini-2.5-flash")
+        // Names as on Google's pricing page (Oct 2026); a name Google drops is skipped, and Remote
+        // Config's `gemini_model` is the last resort.
+        val MODELS = listOf("gemini-3.8-flash", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3.5-flash-lite", "gemini-2.5-flash")
 
         /** The error means this model name can't be used (gone, retired, or closed to new projects). */
         fun isMissingModel(e: Throwable): Boolean {
@@ -63,7 +65,7 @@ class FirebaseTranscriber {
         }
 
         /** Models with a bigger free allowance, tried first for captions (names that don't exist are skipped). */
-        val LITE = listOf("gemini-3.8-flash-lite", "gemini-3-flash-lite")
+        val LITE = listOf("gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
 
         private fun text(e: Throwable) = "${e.message} ${e.cause?.message}"
     }
