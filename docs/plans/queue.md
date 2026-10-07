@@ -435,3 +435,4 @@ Today: transitions follow the vibe and only play between script sections; text h
 - Microphone: the rider never wants recording from a headset (Bluetooth). Other riders may want a Bluetooth mic, so it has to be a choice, not removed.
 - Editor: multiple audio and multiple video layers (picture-in-picture, overlays), with effects and transitions placed on the timeline itself.
 - Recording with two microphones on the next ride: one in the helmet (voice), one for the engine sound. Each should be its own audio track (record both, mix in the editor).
+- Timeline: improve it with all the features a creator needs (a full editor, not the basics). A complete feature list is to be proposed when the rider asks for questions.
