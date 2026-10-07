@@ -12,7 +12,11 @@ import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.audio.SpeedChangingAudioProcessor
 import androidx.media3.effect.BitmapOverlay
+import androidx.media3.effect.Brightness
+import androidx.media3.effect.ScaleAndRotateTransformation
+import androidx.media3.effect.SpeedChangeEffect
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.HslAdjustment
 import androidx.media3.effect.MatrixTransformation
@@ -278,12 +282,27 @@ class StudioRenderer(private val context: Context) {
             is TitleSegment -> firstClip to if (firstClip.inMs >= seg.durMs) firstClip.inMs - seg.durMs else firstClip.inMs
             is StatsSegment -> lastClip to 0L
         }
-        val dur = seg.durMs.coerceAtMost(clip.bit.clipDurationMs - from).coerceAtLeast(500)
+        val cs = (seg as? ClipSegment)?.takeIf { !it.tail }
+        // How much of the clip plays (more than the segment when sped up), and how long it shows.
+        val srcLen = when {
+            cs?.still != null -> 0L
+            cs != null -> cs.sourceMs.coerceAtMost(clip.bit.clipDurationMs - from).coerceAtLeast(300)
+            else -> seg.durMs.coerceAtMost(clip.bit.clipDurationMs - from).coerceAtLeast(500)
+        }
+        val dur = when {
+            cs?.still != null -> cs.durMs
+            cs != null -> Speed.outMs(srcLen, cs.speed, cs.ramp)
+            else -> srcLen
+        }
         val uri = input.files[clip.bit.momentId] ?: clip.bit.source?.let(Uri::parse) ?: error("Clip file missing")
-        val media = MediaItem.Builder()
-            .setUri(uri)
-            .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setStartPositionMs(from).setEndPositionMs(from + dur).build())
-            .build()
+        val media = when {
+            // A freeze frame: the picture held.
+            cs?.still != null -> MediaItem.Builder().setUri(Uri.fromFile(File(cs.still))).setMimeType(MimeTypes.IMAGE_JPEG).setImageDurationMs(dur).build()
+            // Backwards: the reversed copy made when Reverse was tapped.
+            cs?.reverse != null && File(cs.reverse).isFile -> clipped(Uri.fromFile(File(cs.reverse)), 0, srcLen)
+            else -> clipped(uri, from, from + srcLen)
+        }
+        val sped = cs != null && cs.still == null && (cs.speed != 1f || cs.ramp != SpeedRamp.NONE)
 
         val segStart = plan.startOf(i)
         val clock = ItemClock(segStart, from, dur, preview)
@@ -297,8 +316,13 @@ class StudioRenderer(private val context: Context) {
                 localMs = localMs,
                 durMs = dur,
                 // Inside a script section the cut is plain; the vibe's transition plays between sections.
-                hasPrev = i > 0 && boundary(segs[i - 1], seg),
-                hasNext = i < segs.lastIndex && boundary(seg, segs[i + 1]),
+                // A transition the rider chose on a cut always plays (a Cut never does).
+                hasPrev = i > 0 && (cs?.transition?.let { it.kind != TransitionKind.CUT } ?: boundary(segs[i - 1], seg)),
+                hasNext = i < segs.lastIndex && ((segs[i + 1] as? ClipSegment)?.transition?.let { it.kind != TransitionKind.CUT } ?: boundary(seg, segs[i + 1])),
+                inKind = cs?.transition?.kind ?: TransitionKind.STYLE,
+                inMs = cs?.transition?.ms(plan.vibe) ?: plan.vibe.transitionMs,
+                outKind = (segs.getOrNull(i + 1) as? ClipSegment)?.transition?.kind ?: TransitionKind.STYLE,
+                outMs = (segs.getOrNull(i + 1) as? ClipSegment)?.transition?.ms(plan.vibe) ?: plan.vibe.transitionMs,
                 nextLabel = describe(input, segs.getOrNull(if (localMs < dur / 2) i else i + 1)).first,
                 nextTime = describe(input, segs.getOrNull(if (localMs < dur / 2) i else i + 1)).second,
             )
@@ -327,13 +351,22 @@ class StudioRenderer(private val context: Context) {
             drawer?.draw(c, global)
         }
         val video = ArrayList<Effect>()
+        // Speed first, so everything after sees the Reel's own time.
+        if (sped) video += SpeedChangeEffect(RampSpeed(cs!!.speed, cs.ramp, srcLen * 1000))
+        if (cs != null && (cs.rotation != 0 || cs.flip)) {
+            video += ScaleAndRotateTransformation.Builder().setRotationDegrees((360 - cs.rotation).toFloat()).setScale(if (cs.flip) -1f else 1f, 1f).build()
+        }
         video += Presentation.createForWidthAndHeight(art.w, art.h, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP)
         if (seg is ClipSegment) {
-            video += MatrixTransformation { us -> art.cameraMatrix(art.camera(frameAt(clock.localMs(us)))) }
+            video += MatrixTransformation { us ->
+                val local = clock.localMs(us)
+                art.cameraMatrix(reframed(art, art.camera(frameAt(local)), cs, local))
+            }
         } else if (seg is TitleSegment && !o.map) {
             video += MatrixTransformation { us -> Matrix().apply { val k = 1.12f - 0.05f * clock.localMs(us) / dur; setScale(k, k) } }
         }
-        video += grade(plan.vibe)
+        if (cs == null || cs.color.look) video += grade(plan.vibe)
+        if (cs != null && !cs.color.plain) video += colour(cs.color)
         video += OverlayEffect(listOf(overlay))
 
         // Talking clips at full volume, riding noise softer, the title and stats silent; short fades at the
@@ -345,10 +378,55 @@ class StudioRenderer(private val context: Context) {
         val underVoice = GainProcessor.ducking(voiceRanges(input).map { (it.first - segStart)..(it.last - segStart) }, 0.3f)
         val g = plan.mix.gain(TrackKind.CLIPS)
         val audio = GainProcessor { us -> level * g * fade(us / 1000, dur, 60) * underVoice(us) }
-        if (!sound) return EditedMediaItem.Builder(media).setRemoveAudio(true).setEffects(Effects(emptyList(), video)).build()
-        // The voice clean-up on talking clips.
-        val procs = if (plan.mix.cleanVoice && seg is ClipSegment && seg.lines.isNotEmpty()) listOf(HighPassProcessor(), audio) else listOf(audio)
+        // A still or a reversed copy has no sound of its own (silence fills in).
+        val silent = cs?.still != null || (cs?.reverse != null && File(cs.reverse).isFile)
+        if (!sound || silent) {
+            return EditedMediaItem.Builder(media).setRemoveAudio(true).apply { if (cs?.still != null) setFrameRate(30) }.setEffects(Effects(emptyList(), video)).build()
+        }
+        // Sped up or slowed: the sound at the same speed. The voice clean-up on talking clips.
+        val procs = listOfNotNull(
+            if (sped) SpeedChangingAudioProcessor(RampSpeed(cs!!.speed, cs.ramp, srcLen * 1000)) else null,
+            if (plan.mix.cleanVoice && seg is ClipSegment && seg.lines.isNotEmpty()) HighPassProcessor() else null,
+            audio,
+        )
         return EditedMediaItem.Builder(media).setEffects(Effects(procs, video)).build()
+    }
+
+    /** The style's camera with the rider's zoom and pan on top. */
+    private fun reframed(art: StudioArt, cam: Cam, cs: ClipSegment?, localMs: Long): Cam {
+        if (cs == null || cs.frame.isEmpty()) return cam
+        val f = ClipTools.frameAt(cs, localMs)
+        val room = (f.zoom - 1f) / 2f
+        return cam.copy(k = cam.k * f.zoom, x = cam.x - f.x * art.w * room, y = cam.y - f.y * art.h * room)
+    }
+
+    /** A clip's own colour: exposure, contrast, saturation, warmth. */
+    private fun colour(c: ClipColor): List<Effect> = listOfNotNull(
+        if (c.exposure != 0f) Brightness(c.exposure * 0.35f) else null,
+        if (c.contrast != 0f) Contrast(c.contrast * 0.4f) else null,
+        if (c.saturation != 0f) HslAdjustment.Builder().adjustSaturation(c.saturation * 40f).build() else null,
+        if (c.warmth != 0f) RgbAdjustment.Builder().setRedScale(1f + 0.12f * c.warmth).setBlueScale(1f - 0.12f * c.warmth).build() else null,
+    )
+
+    /**
+     * The speed over a clip's part ([lengthUs] long): constant, or in a ramp's steps. Times are
+     * from the first frame or sample it sees.
+     */
+    private class RampSpeed(private val speed: Float, private val ramp: SpeedRamp, private val lengthUs: Long) : androidx.media3.common.audio.SpeedProvider {
+        @Volatile private var base: Long? = null
+
+        private fun origin(timeUs: Long): Long = base ?: synchronized(this) { base ?: timeUs.also { base = it } }
+
+        override fun getSpeed(timeUs: Long): Float {
+            val b = origin(timeUs)
+            val f = ((timeUs - b).toFloat() / lengthUs.coerceAtLeast(1)).coerceIn(0f, 1f)
+            return Speed.at(speed, ramp, f)
+        }
+
+        override fun getNextSpeedChangeTimeUs(timeUs: Long): Long {
+            val b = origin(timeUs)
+            return ramp.steps.dropLast(1).map { b + (it.first * lengthUs).toLong() }.firstOrNull { it > timeUs } ?: androidx.media3.common.C.TIME_UNSET
+        }
     }
 
     /** Where the voice-over talks, in Reel ms. */

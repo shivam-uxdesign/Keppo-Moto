@@ -38,6 +38,7 @@ class PreviewPlayer(context: Context) {
                 is StatsSegment -> last to 0L
             }
             val uri = files[clip.bit.momentId] ?: clip.bit.source?.let(Uri::parse) ?: return@forEach
+            // The simple preview plays every clip at normal speed: as long as the segment.
             val dur = seg.durMs.coerceAtMost(clip.bit.clipDurationMs - from).coerceAtLeast(100)
             items += MediaItem.Builder().setUri(uri)
                 .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setStartPositionMs(from).setEndPositionMs(from + dur).build())

@@ -39,7 +39,22 @@ data class FrameAt(
     /** What the transition graphic says about the clip it lands on ("62 KM/H", "6:21 PM"). */
     val nextLabel: String,
     val nextTime: String,
+    /** The transitions on the cut into this segment and out of it, and how long each takes. */
+    val inKind: TransitionKind = TransitionKind.STYLE,
+    val inMs: Long = vibe.transitionMs,
+    val outKind: TransitionKind = TransitionKind.STYLE,
+    val outMs: Long = vibe.transitionMs,
 )
+
+/** Which style's look a transition uses (its camera move and graphic); null for the plain ones (fade, flash, zoom, whip, glitch, cut). */
+fun lookOf(kind: TransitionKind, vibe: Vibe): Vibe? = when (kind) {
+    TransitionKind.STYLE -> vibe
+    TransitionKind.SLASH -> Vibe.HYPE
+    TransitionKind.SHUTTER -> Vibe.CINE
+    TransitionKind.SUN -> Vibe.CHILL
+    TransitionKind.CARD -> Vibe.VLOG
+    else -> null
+}
 
 /** A camera move on the footage: zoom [k] about the centre, then a shift of [x], [y] px, a tilt of [deg]. */
 data class Cam(val k: Float, val x: Float, val y: Float, val deg: Float)
@@ -67,36 +82,54 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
 
     /** 0..1 across the cut (0.5 = the cut) when this frame is inside a transition, else null. */
     fun edge(f: FrameAt): Float? {
-        val d = f.vibe.transitionMs / 2f
         val t = f.localMs.toFloat()
-        if (f.hasPrev && t < d) return 0.5f + t / (2 * d)
-        if (f.hasNext && t > f.durMs - d) return (t - (f.durMs - d)) / (2 * d)
+        if (f.hasPrev && f.inKind != TransitionKind.CUT) {
+            val d = f.inMs / 2f
+            if (t < d) return 0.5f + t / (2 * d)
+        }
+        if (f.hasNext && f.outKind != TransitionKind.CUT) {
+            val d = f.outMs / 2f
+            if (t > f.durMs - d) return (t - (f.durMs - d)) / (2 * d)
+        }
         return null
     }
 
     /** The camera on a clip: a slow push, a kick on the beat (Hype), and each vibe's move into and out of the cut. */
     fun camera(f: FrameAt): Cam {
-        val d = f.vibe.transitionMs / 2f
         val t = f.localMs.toFloat()
         var k = 1.03f + 0.05f * (t / f.durMs)
         var x = 0f
         var y = 0f
         var r = 0f
-        val qo = if (f.hasNext) cl((t - (f.durMs - d)) / d) else 0f
-        val qi = if (f.hasPrev) 1 - cl(t / d) else 0f
-        when (f.vibe) {
-            Vibe.HYPE -> {
-                val b = (t % f.vibe.beatMs) / f.vibe.beatMs
-                k += 0.035f * max(0f, 1 - b * 5)
-                val o = eIn(qo)
-                val i = 1 - eOut(1 - qi) // remaining punch as it lands
-                k += 0.32f * o + 0.28f * i
-                x += -W * 0.22f * o + W * 0.22f * i
-                r += -2.9f * o + 2.9f * i
+        if (f.vibe == Vibe.HYPE) {
+            val b = (t % f.vibe.beatMs) / f.vibe.beatMs
+            k += 0.035f * max(0f, 1 - b * 5)
+        }
+        val dOut = f.outMs / 2f
+        val dIn = f.inMs / 2f
+        val qo = if (f.hasNext && f.outKind != TransitionKind.CUT) cl((t - (f.durMs - dOut)) / dOut) else 0f
+        val qi = if (f.hasPrev && f.inKind != TransitionKind.CUT) 1 - cl(t / dIn) else 0f
+        // Out of this clip, then into it: each cut's own move.
+        for ((kind, o, i) in listOf(Triple(f.outKind, qo, 0f), Triple(f.inKind, 0f, qi))) {
+            if (o == 0f && i == 0f) continue
+            when (lookOf(kind, f.vibe)) {
+                Vibe.HYPE -> {
+                    val eo = eIn(o)
+                    val ei = 1 - eOut(1 - i) // remaining punch as it lands
+                    k += 0.32f * eo + 0.28f * ei
+                    x += -W * 0.22f * eo + W * 0.22f * ei
+                    r += -2.9f * eo + 2.9f * ei
+                }
+                Vibe.CINE -> k += 0.05f * eIn(o) + 0.07f * eOut(i)
+                Vibe.CHILL -> { k += 0.07f * eInOut(o) + 0.05f * i; y -= H * 0.02f * o; r += 0.86f * o }
+                Vibe.VLOG -> { y -= H * 0.18f * eIn(o); y += H * 0.18f * eIn(i); k += 0.04f * i }
+                null -> when (kind) {
+                    TransitionKind.ZOOM -> k += 0.45f * eIn(o) + 0.45f * eOut(i)
+                    TransitionKind.WHIP -> x += -W * 0.75f * eIn(o) + W * 0.75f * eIn(i)
+                    TransitionKind.GLITCH -> x += W * 0.03f * (if (((t / 40).toInt() and 1) == 0) 1 else -1) * max(o, i)
+                    else -> {}
+                }
             }
-            Vibe.CINE -> k += 0.05f * eIn(qo) + 0.07f * eOut(qi)
-            Vibe.CHILL -> { k += 0.07f * eInOut(qo) + 0.05f * qi; y -= H * 0.02f * qo; r += 0.86f * qo }
-            Vibe.VLOG -> { y -= H * 0.18f * eIn(qo); y += H * 0.18f * eIn(qi); k += 0.04f * qi }
         }
         return Cam(k, x, y, r)
     }
@@ -193,11 +226,59 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
     // ---- transitions -----------------------------------------------------------------------
 
     fun transition(c: Canvas, f: FrameAt, t: Float) {
-        when (f.vibe) {
+        // t ≥ 0.5: landing in this clip (its cut in); below: leaving it (the next cut).
+        val kind = if (t >= 0.5f) f.inKind else f.outKind
+        when (lookOf(kind, f.vibe)) {
             Vibe.HYPE -> slash(c, t)
             Vibe.CINE -> shutter(c, t, f.nextTime)
             Vibe.CHILL -> sun(c, t)
             Vibe.VLOG -> card(c, t, f.nextLabel, f.nextTime)
+            null -> when (kind) {
+                TransitionKind.FADE -> veil(c, t, Color.BLACK)
+                TransitionKind.FLASH -> veil(c, t, Color.WHITE, sharp = true)
+                TransitionKind.WHIP -> streaks(c, t)
+                TransitionKind.GLITCH -> glitch(c, t)
+                else -> {}
+            }
+        }
+    }
+
+    /** Through [color]: full at the cut. [sharp] = a quick flash rather than a fade. */
+    private fun veil(c: Canvas, t: Float, color: Int, sharp: Boolean = false) {
+        val cov = 1 - abs(t - 0.5f) * 2
+        val a = if (sharp) cov.pow(3f) else eInOut(cov)
+        p.reset(); p.color = Color.argb((a * 255).toInt(), Color.red(color), Color.green(color), Color.blue(color))
+        c.drawRect(0f, 0f, W, H, p)
+    }
+
+    /** Motion streaks across the frame as the camera whips. */
+    private fun streaks(c: Canvas, t: Float) {
+        val cov = 1 - abs(t - 0.5f) * 2
+        if (cov <= 0f) return
+        p.reset()
+        val rnd = java.util.Random(7)
+        repeat(18) {
+            val y = rnd.nextFloat() * H
+            val h = (6 + rnd.nextFloat() * 30) * s
+            p.color = Color.argb((cov * (60 + rnd.nextInt(90))).toInt(), 255, 255, 255)
+            c.drawRect(0f, y, W, y + h, p)
+        }
+        p.color = Color.argb((cov * 0.35f * 255).toInt(), 0, 0, 0)
+        c.drawRect(0f, 0f, W, H, p)
+    }
+
+    /** Coloured bands that jump about for a moment across the cut. */
+    private fun glitch(c: Canvas, t: Float) {
+        val cov = 1 - abs(t - 0.5f) * 2
+        if (cov <= 0.15f) return
+        val rnd = java.util.Random((t * 40).toLong())
+        p.reset()
+        repeat(7) {
+            val y = rnd.nextFloat() * H
+            val h = (8 + rnd.nextFloat() * 70) * s
+            val dx = (rnd.nextFloat() - 0.5f) * 80 * s
+            p.color = if (it % 2 == 0) Color.argb((cov * 150).toInt(), 0, 255, 230) else Color.argb((cov * 150).toInt(), 255, 0, 120)
+            c.drawRect(dx, y, W + dx, y + h, p)
         }
     }
 
