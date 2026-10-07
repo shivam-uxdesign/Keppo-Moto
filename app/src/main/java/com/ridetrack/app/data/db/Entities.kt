@@ -138,4 +138,6 @@ data class MomentEntity(
     val topSpeedMps: Double? = null,
     /** What the rider said in the clip (Hinglish in English letters); "" = no clear speech; null = not transcribed. */
     val transcript: String? = null,
+    /** "back" when filmed with the back camera (road view); null = the selfie camera. */
+    val camera: String? = null,
 )

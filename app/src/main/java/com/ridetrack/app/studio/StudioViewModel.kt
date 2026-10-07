@@ -176,6 +176,8 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                     thumbs = clips.associate { m -> m.id to m.thumb },
                 )
             }
+            // Road shots filmed with the back camera tick off the coach's "film the road" shot.
+            if (clips.any { it.camera == "back" }) c.studio.tickRoadShots()
             c.studio.takePending().takeIf { it.isNotEmpty() }?.let { addPhoneVideos(it).join() }
             refreshSources()
             refreshIdeas()
@@ -188,7 +190,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     private fun refreshSources() {
         val day = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
         val list = clips.map { m ->
-            StudioSource(m.id, m.thumb, m.durationMillis ?: 0, likelyTalking(m) || StudioText.load(m.file).orEmpty().isNotEmpty(), null, m.videoStartMillis, Uri.fromFile(m.file))
+            StudioSource(m.id, m.thumb, m.durationMillis ?: 0, likelyTalking(m) || StudioText.load(m.file).orEmpty().isNotEmpty(), if (m.camera == "back") "Road" else null, m.videoStartMillis, Uri.fromFile(m.file))
         } + phone.values.map { p ->
             val lines = StudioText.load(PhoneVideos.captionKey(c.appContext, p.id))
             val label = if (!phoneOnly && card != null && (samples.isEmpty() || p.startMillis !in samples.first().timeMillis..samples.last().timeMillis)) {
@@ -994,7 +996,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             val dur = m.durationMillis ?: 0
             val lines = StudioText.load(m.file).orEmpty()
             val focus = (m.timeMillis - m.videoStartMillis).coerceIn(0, dur)
-            StudioPlanner.bitsOf(m.id, m.videoStartMillis, dur, lines, { t -> speedAt(t).toDouble() }, focus)
+            StudioPlanner.bitsOf(m.id, m.videoStartMillis, dur, lines, { t -> speedAt(t).toDouble() }, focus).map { it.copy(camera = m.camera) }
         } + phone.values.filter { it.id !in out }.flatMap { p ->
             PhoneVideos.bits(p, StudioText.load(PhoneVideos.captionKey(c.appContext, p.id)).orEmpty()) { t -> speedAt(t).toDouble() }
         }

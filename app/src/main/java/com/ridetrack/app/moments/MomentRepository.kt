@@ -40,6 +40,8 @@ data class Moment(
     val topSpeedMps: Double? = null,
     /** What the rider said (Hinglish in English letters); "" = no clear speech; null = not yet. */
     val transcript: String? = null,
+    /** "back" for the back camera (road view); null = the selfie camera. */
+    val camera: String? = null,
 ) {
     /** When the clip's first frame was filmed; estimated for clips saved before this was stored. */
     val videoStartMillis: Long get() = clipStartMillis ?: (timeMillis - 10_000)
@@ -96,6 +98,7 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
             starred = m.starred,
             clipStartMillis = m.clipStartMillis,
             source = m.source.takeIf { it != MomentSource.EVENT }?.name,
+            camera = m.camera,
         ),
     )
 
@@ -155,6 +158,7 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
             trimEndMillis = trimEndMillis,
             topSpeedMps = topSpeedMps,
             transcript = transcript,
+            camera = camera,
         )
     }
 }

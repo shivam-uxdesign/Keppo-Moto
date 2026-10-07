@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Cameraswitch
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
@@ -58,6 +59,7 @@ interface HudControlActions {
     fun pauseVideo()
     fun resumeVideo()
     fun stopVideo()
+    fun flipCamera()
     fun reconnectMic()
 }
 
@@ -147,6 +149,12 @@ private fun VideoButtons(data: HudData, actions: HudControlActions, modifier: Mo
             }
             RoundButton("Stop and save the video", Color(0xE60C0C0E), onClick = { haptics.confirm(); actions.stopVideo() }) {
                 Box(Modifier.size(18.dp).background(RtColors.Error, RoundedCornerShape(4.dp)))
+            }
+            // Your video: the back camera for the road ahead, or filming off the bike.
+            if (video.source == MomentSource.MANUAL && !video.starting) {
+                RoundButton(if (video.back) "Switch to the selfie camera" else "Switch to the back camera", Color(0xE60C0C0E), onClick = { haptics.tick(); actions.flipCamera() }) {
+                    Icon(Icons.Rounded.Cameraswitch, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                }
             }
         }
     }

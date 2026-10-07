@@ -43,7 +43,7 @@ sealed interface MomentRequest {
     data class LiveControl(override val rideId: String, val action: LiveAction) : MomentRequest
 }
 
-enum class LiveAction { PAUSE, RESUME, STOP }
+enum class LiveAction { PAUSE, RESUME, STOP, FLIP }
 
 /** A video being filmed on purpose, as the HUD shows it. */
 data class LiveState(
@@ -55,6 +55,8 @@ data class LiveState(
     val recordedMillis: Long = 0,
     /** When the current stretch began; null while paused or starting. */
     val segmentStartMillis: Long? = null,
+    /** Filming with the back camera (road view). */
+    val back: Boolean = false,
 ) {
     fun elapsedMillis(now: Long): Long = recordedMillis + (segmentStartMillis?.let { now - it } ?: 0L)
 }

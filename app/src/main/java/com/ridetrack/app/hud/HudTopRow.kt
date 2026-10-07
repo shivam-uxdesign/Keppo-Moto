@@ -35,7 +35,7 @@ object HudTopRow {
         val photoTaken = data.photoTakenAtMillis
         val filming = if (data.phoneMic) Tone.PHONE else Tone.REC
         return when {
-            video != null -> Label("cam " + clock(video.elapsedMillis), if (video.paused) Tone.WARNING else filming)
+            video != null -> Label("cam " + clock(video.elapsedMillis) + if (video.back) " · back" else "", if (video.paused) Tone.WARNING else filming)
             clipStart != null -> Label("cam " + clock(now - clipStart), filming)
             photoAt != null && now < photoAt -> Label(((photoAt - now + 999) / 1000).coerceIn(1, 3).toString(), Tone.ACCENT)
             photoTaken != null && now >= photoTaken && now - photoTaken < PHOTO_SHOWN_MILLIS -> Label("photo", Tone.ACCENT)

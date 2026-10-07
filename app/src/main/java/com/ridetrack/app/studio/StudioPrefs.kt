@@ -57,6 +57,9 @@ class StudioPrefs(context: Context) {
 
     fun clear() = save(emptyList())
 
+    /** A back-camera clip was filmed: shots about the road ahead are done. */
+    fun tickRoadShots() = save(_shots.value.map { if (ROAD.containsMatchIn(it.text)) it.copy(done = true) else it })
+
     private fun save(list: List<Shot>) {
         _shots.value = list
         val arr = JSONArray()
@@ -70,6 +73,7 @@ class StudioPrefs(context: Context) {
     }.getOrDefault(emptyList())
 
     private companion object {
+        val ROAD = Regex("road|back camera|ahead|view", RegexOption.IGNORE_CASE)
         const val SERIES = "series"
         const val EPISODE = "episode"
         const val SHOTS = "shots"

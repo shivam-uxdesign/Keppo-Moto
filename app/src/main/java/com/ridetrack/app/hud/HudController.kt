@@ -68,6 +68,7 @@ class HudController(
         override fun pauseVideo() = session.pauseVideo()
         override fun resumeVideo() = session.resumeVideo()
         override fun stopVideo() = session.stopVideo()
+        override fun flipCamera() = session.flipCamera()
         override fun reconnectMic() {
             moments.reconnectMic()
             overlay.closeControls()
@@ -166,7 +167,7 @@ class HudController(
             stoppedForMillis = stoppedSinceMillis?.let { now - it },
             camera = CameraIndicator.from(moments.state.value),
             manuallyPaused = session.manuallyPaused.value,
-            video = moments.live.value?.let { HudVideo(it.source, it.starting, it.paused, it.elapsedMillis(now)) },
+            video = moments.live.value?.let { HudVideo(it.source, it.starting, it.paused, it.elapsedMillis(now), it.back) },
             savedNote = moments.liveSaved.value?.takeIf { now - it.atMillis < SAVED_NOTE_MILLIS }?.let { saved ->
                 (if (saved.source == MomentSource.GPS_LOST) "GPS back · saved · " else "Saved to moments · ") + Format.clock(saved.lengthMillis)
             } ?: note.value?.takeIf { now - it.second < SAVED_NOTE_MILLIS }?.first,

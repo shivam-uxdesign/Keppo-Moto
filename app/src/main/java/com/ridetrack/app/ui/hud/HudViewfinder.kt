@@ -104,7 +104,7 @@ fun ViewfinderCard(data: HudData, video: HudVideo, frame: ImageBitmap?, modifier
             Spacer(Modifier.weight(1f))
             RecDot(edge, blink = !video.paused && !video.starting)
             Spacer(Modifier.width(5.dp))
-            val clock = Format.clock(video.elapsedMillis)
+            val clock = Format.clock(video.elapsedMillis) + if (video.back) " · BACK" else ""
             Text(
                 when {
                     video.starting -> "STARTING"

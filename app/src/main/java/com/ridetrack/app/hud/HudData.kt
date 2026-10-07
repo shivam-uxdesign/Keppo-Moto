@@ -15,7 +15,7 @@ import com.ridetrack.telemetry.model.TelemetryFrame
 enum class HudStatus { RECORDING, STOPPED, PAUSED, GPS_LOST, BREAK }
 
 /** A video being filmed (your record button, or GPS lost), as the pop-up shows it. */
-data class HudVideo(val source: MomentSource, val starting: Boolean, val paused: Boolean, val elapsedMillis: Long)
+data class HudVideo(val source: MomentSource, val starting: Boolean, val paused: Boolean, val elapsedMillis: Long, val back: Boolean = false)
 
 /** The Moments camera, as the rider should see it: quiet while buffering, REC while saving. */
 enum class CameraIndicator {

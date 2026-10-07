@@ -636,6 +636,9 @@ class RideSessionManager(
 
     fun stopVideo() = videoControl(LiveAction.STOP)
 
+    /** Your video: switch between the selfie and the back camera (a new clip starts). */
+    fun flipCamera() = videoControl(LiveAction.FLIP)
+
     private fun videoControl(action: LiveAction) {
         val id = _active.value?.rideId ?: return
         momentsHub.submitLive(MomentRequest.LiveControl(id, action))

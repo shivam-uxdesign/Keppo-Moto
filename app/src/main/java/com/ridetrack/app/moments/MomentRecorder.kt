@@ -136,6 +136,10 @@ class MomentRecorder(
     @Volatile private var liveStarting = false
     private var viewfinderBound = false
     private var usingFront = false
+    /** Your video wants the back camera (road view, or filming off the bike); back to selfie when it stops. */
+    @Volatile private var wantBack = false
+    /** The back camera is the one bound now. */
+    private var boundBack = false
     /** Bumped for every new encoder session, so a start can wait for a fresh stream. */
     @Volatile private var encoderSession = 0
     private val analysisExecutor = Executors.newSingleThreadExecutor()
@@ -260,10 +264,12 @@ class MomentRecorder(
     /** (Re)binds the use cases for the current state. Main thread. */
     private fun bindCamera() {
         val p = provider ?: return
-        val front = p.hasCameraSafe(CameraSelector.DEFAULT_FRONT_CAMERA)
+        val hasBack = p.hasCameraSafe(CameraSelector.DEFAULT_BACK_CAMERA)
+        if (wantBack && !hasBack) wantBack = false
+        val front = p.hasCameraSafe(CameraSelector.DEFAULT_FRONT_CAMERA) && !(wantBack && hasBack)
         val selector = when {
             front -> CameraSelector.DEFAULT_FRONT_CAMERA
-            p.hasCameraSafe(CameraSelector.DEFAULT_BACK_CAMERA) -> CameraSelector.DEFAULT_BACK_CAMERA
+            hasBack -> CameraSelector.DEFAULT_BACK_CAMERA
             else -> {
                 log.error("no camera found")
                 setReason(PauseReason.FAILED, true)
@@ -277,6 +283,7 @@ class MomentRecorder(
             .build()
             .also { imageCapture = it }
         usingFront = front
+        boundBack = !front
         val withViewfinder = withVideo && viewfinderWanted
         val useCases = buildList {
             add(capture)
@@ -590,7 +597,7 @@ class MomentRecorder(
 
     private fun rebindIfNeeded() {
         if (provider == null || PauseReason.FAILED in reasons) return
-        if (videoWanted != videoBound || (videoBound && lowPower != boundLowPower) || (videoBound && viewfinderWanted != viewfinderBound)) bindCamera()
+        if (videoWanted != videoBound || (videoBound && lowPower != boundLowPower) || (videoBound && viewfinderWanted != viewfinderBound) || boundBack != wantBack) bindCamera()
     }
 
     private fun refreshStatus() {
@@ -786,6 +793,7 @@ class MomentRecorder(
                         log.log("video resumed")
                     }
                     LiveAction.STOP -> stopLive("stopped")
+                    LiveAction.FLIP -> flip()
                 }
                 else -> Unit
             }
@@ -817,7 +825,7 @@ class MomentRecorder(
         val session = encoderSession
         // Your video shows the camera on the HUD, which needs the camera re-set up (a new
         // stream, so no lead-in). GPS-lost videos keep the running stream and its lead-in.
-        val restart = manual && !viewfinderBound
+        val restart = manual && (!viewfinderBound || boundBack != wantBack)
         viewfinderWanted = manual
         withContext(Dispatchers.Main) { if (restart) bindCamera() else rebindIfNeeded() }
         val askedAt = System.currentTimeMillis()
@@ -849,6 +857,7 @@ class MomentRecorder(
             log.error("video not started: camera not ready (encoder=${encoderInfo()}, reasons=$reasons)")
             recording?.finish()
             viewfinderWanted = false
+            wantBack = false
             hub.setLive(null)
             withContext(Dispatchers.Main) { rebindIfNeeded() }
             return
@@ -856,21 +865,41 @@ class MomentRecorder(
         live = Live(recording, r)
         // A chain of events counts from the clip's start, look-back included (the HUD's "cam 00:10").
         val countFrom = if (r.source == MomentSource.EVENT) fromMillis else System.currentTimeMillis()
-        hub.setLive(LiveState(r.source, segmentStartMillis = countFrom))
+        hub.setLive(LiveState(r.source, segmentStartMillis = countFrom, back = boundBack))
         log.log("video filming: ${recording.file.name}")
     }
 
-    private suspend fun stopLive(reason: String) {
+    /**
+     * Your video: switches between the selfie and the back camera. The encoder can't change
+     * streams mid-file, so this clip is saved and a new one starts on the other camera at once.
+     */
+    private suspend fun flip() {
+        val l = live ?: return
+        if (l.request.source != MomentSource.MANUAL) return
+        val back = !boundBack
+        log.log("camera flip: to ${if (back) "back" else "front"}")
+        stopLive("camera flipped", rebind = false)
+        wantBack = back
+        startLive(l.request.copy(preRollMillis = 0))
+    }
+
+    /** [rebind] false while flipping: the next clip binds the other camera itself. */
+    private suspend fun stopLive(reason: String, rebind: Boolean = true) {
         val l = live ?: return
         buffer.stopTap()
         live = null
         val length = l.rec.finish()
+        val camera = if (boundBack) "back" else null
         val hadViewfinder = viewfinderWanted
-        viewfinderWanted = false
-        hub.setViewfinder(null)
-        hub.setLive(null)
+        if (rebind) {
+            viewfinderWanted = false
+            // Event and voice clips always use the selfie camera.
+            wantBack = false
+            hub.setViewfinder(null)
+            hub.setLive(null)
+        }
         l.rec.failed?.let { log.error("video write failed", it) }
-        if (hadViewfinder) withContext(Dispatchers.Main) { rebindIfNeeded() }
+        if (rebind && (hadViewfinder || boundBack)) withContext(Dispatchers.Main) { rebindIfNeeded() }
         if (length == null) {
             log.log("video not saved ($reason): no frames")
             return
@@ -899,6 +928,7 @@ class MomentRecorder(
                 starred = false,
                 clipStartMillis = start,
                 source = req.source,
+                camera = camera,
             ),
         )
         log.log("video saved ($reason): ${file.name} ${length / 1000}s ${file.length() / 1024}KB")
