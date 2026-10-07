@@ -84,6 +84,12 @@ data class StudioState(
     val coverBusy: Boolean = false,
     /** A short message after Journal or cover actions. */
     val toast: String? = null,
+    /** Reels this ride could make (stories, highlights, the hook…). */
+    val ideas: List<ReelIdea> = emptyList(),
+    /** The idea being made; null for a plain Reel. */
+    val idea: ReelIdea? = null,
+    /** Ideas still waiting in Make all. */
+    val queued: Int = 0,
 ) {
     /** The small label on the first clip: the series and episode, or the title. */
     val label: String get() = if (series.isBlank()) title else "$series · ep $episode"
@@ -109,6 +115,8 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     private var coachJob: Job? = null
     private val recorder = VoiceRecorder()
     @Volatile private var skipCaptions = false
+    /** Make all: the ideas still to make, in order. */
+    private val queue = ArrayDeque<String>()
 
     init {
         viewModelScope.launch {
@@ -134,8 +142,60 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                     thumbs = clips.associate { m -> m.id to m.thumb },
                 )
             }
+            refreshIdeas()
             openReelId?.let { id -> c.reels.get(id)?.let { open(it) } }
         }
+    }
+
+    // ---- Reel ideas ------------------------------------------------------------------------
+
+    private fun refreshIdeas() {
+        val list = ReelIdeas.ideas(bits, direction, _state.value.options, geminiPending = direction == null && c.transcripts.available)
+        _state.update { it.copy(ideas = list) }
+    }
+
+    /** Makes a new Reel from an idea (the one on screen stays saved). */
+    fun makeIdea(key: String) {
+        if (job?.isActive == true) return
+        val idea = _state.value.ideas.firstOrNull { it.key == key } ?: return
+        idea.story?.let { storyIndex = it }
+        val lengths = StudioPlanner.lengthsFor(bits, idea.options.vibe)
+        _state.update {
+            it.copy(
+                idea = idea, reelId = null, takes = emptyList(), tips = null, coverFrames = emptyList(),
+                options = idea.options.copy(lengthSec = if (idea.options.lengthSec in lengths) idea.options.lengthSec else lengths.last()),
+                lengths = lengths,
+            )
+        }
+        make()
+    }
+
+    /** Makes every idea, one after another. */
+    fun makeAll() {
+        if (job?.isActive == true) return
+        val keys = _state.value.ideas.map { it.key }
+        if (keys.isEmpty()) return
+        queue.clear()
+        queue.addAll(keys.drop(1))
+        _state.update { it.copy(queued = queue.size) }
+        makeIdea(keys.first())
+    }
+
+    /** After a Reel of Make all: the next idea, once its tips are written. */
+    private fun next() {
+        val key = queue.removeFirstOrNull() ?: return
+        _state.update { it.copy(queued = queue.size) }
+        viewModelScope.launch {
+            job?.join()
+            coachJob?.join()
+            makeIdea(key)
+        }
+    }
+
+    /** Plain Reel (no idea): the classic best-of with the current choices. */
+    fun makePlain() {
+        _state.update { it.copy(idea = null) }
+        make()
     }
 
     // ---- saved Reels -----------------------------------------------------------------------
@@ -151,6 +211,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                 reelId = p.id,
                 step = StudioStep.READY,
                 coverFrames = emptyList(),
+                idea = null,
                 options = p.options,
                 plan = p.plan,
                 title = p.title,
@@ -200,6 +261,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             coverText = old?.coverText ?: true,
             coverLine = old?.coverLine,
             coverRoute = old?.coverRoute ?: false,
+            idea = old?.idea ?: s.idea?.title,
         )
         val saved = c.reels.save(project, video, s.takes)
         _state.update { it.copy(reelId = saved.id, video = c.reels.video(saved.id), takes = c.reels.takes(saved), coverFrames = emptyList()) }
@@ -383,10 +445,13 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
 
     // ---- choices ---------------------------------------------------------------------------
 
-    fun setOptions(f: (StudioOptions) -> StudioOptions) = _state.update {
-        val o = f(it.options)
-        val lengths = StudioPlanner.lengthsFor(bits, o.vibe)
-        it.copy(options = o.copy(lengthSec = if (o.lengthSec in lengths) o.lengthSec else lengths.last()), lengths = lengths)
+    fun setOptions(f: (StudioOptions) -> StudioOptions) {
+        _state.update {
+            val o = f(it.options)
+            val lengths = StudioPlanner.lengthsFor(bits, o.vibe)
+            it.copy(options = o.copy(lengthSec = if (o.lengthSec in lengths) o.lengthSec else lengths.last()), lengths = lengths)
+        }
+        if (_state.value.step == StudioStep.SETUP) refreshIdeas()
     }
 
     fun setMusic(uri: Uri?) {
@@ -446,15 +511,25 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                     bits = withContext(Dispatchers.IO) { buildBits() }
                 }
                 step(1, 1)
-                if (gemini && direction == null) direction = runCatching { direct() }.onFailure { c.errors.record("Studio director", "Gemini couldn't pick the story", it) }.getOrNull()
+                if (gemini && direction == null) {
+                    direction = runCatching { direct() }.onFailure { c.errors.record("Studio director", "Gemini couldn't pick the story", it) }.getOrNull()
+                    val was = _state.value.idea
+                    refreshIdeas()
+                    // "The story" waiting on Gemini becomes Gemini's first story.
+                    if (was?.kind == IdeaKind.STORY) _state.update { st -> st.copy(idea = st.ideas.firstOrNull { it.kind == IdeaKind.STORY } ?: was) }
+                }
                 replan()
                 val s = _state.value
                 step(1, 2, listOfNotNull(s.story?.let { "“$it”" }, "${s.plan?.clips?.size} clips · ${Format.clock(s.plan?.totalMs ?: 0)}").joinToString(" · "))
                 render(notes)
+                next()
             } catch (e: CancellationException) {
-                _state.update { it.copy(step = StudioStep.SETUP, canSkipCaptions = false) }
+                queue.clear()
+                _state.update { it.copy(step = StudioStep.SETUP, canSkipCaptions = false, queued = 0) }
                 throw e
             } catch (e: Exception) {
+                queue.clear()
+                _state.update { it.copy(queued = 0) }
                 c.errors.record("Studio", "Couldn't make the video", e, _state.value.plan?.let(::describePlan))
                 _state.update { it.copy(step = StudioStep.SETUP, canSkipCaptions = false, error = "Couldn't make the video (${e.message ?: e.javaClass.simpleName})") }
             }
@@ -465,9 +540,14 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     private fun replan() {
         val d = direction
         val stories = d?.stories.orEmpty()
-        val story = stories.getOrNull(storyIndex)
-        val scored = bits.map { b -> b.copy(punch = if (b.id == d?.hookId && story == null) 10f else d?.punch?.get(b.id) ?: b.punch) }
-        val plan = StudioPlanner.plan(scored, _state.value.options, story?.ids.orEmpty(), d?.endingId)
+        val idea = _state.value.idea
+        val story = if (idea == null || idea.kind == IdeaKind.STORY) stories.getOrNull(storyIndex) else null
+        val o = _state.value.options
+        val plan = if (idea != null && idea.kind != IdeaKind.STORY) {
+            ReelIdeas.planFor(idea.kind, idea.pick, bits, d, o)
+        } else {
+            StudioPlanner.plan(ReelIdeas.scored(bits, d, story != null), o, story?.ids.orEmpty(), d?.endingId)
+        }
         if (plan.clips.isEmpty()) error("No usable clips")
         _state.update {
             it.copy(
@@ -485,7 +565,8 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     fun remix() {
         if (_state.value.plan == null || job?.isActive == true) return
         val n = direction?.stories?.size ?: 0
-        storyIndex = if (n == 0) 0 else (storyIndex + 1) % (n + 1)
+        val idea = _state.value.idea
+        if (idea == null || idea.kind == IdeaKind.STORY) storyIndex = if (n == 0) 0 else (storyIndex + 1) % (n + 1)
         setOptions { it.copy(seed = it.seed + 1) }
         make()
     }
@@ -493,6 +574,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     fun skipCaptions() { skipCaptions = true }
 
     fun cancel() {
+        queue.clear()
         job?.cancel()
         _state.update { it.copy(step = StudioStep.SETUP, renderProgress = null) }
     }

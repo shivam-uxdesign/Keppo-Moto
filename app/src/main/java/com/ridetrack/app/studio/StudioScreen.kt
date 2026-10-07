@@ -140,7 +140,8 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 color = RtColors.TextSecondary,
             )
             RideReels(vm.rideId, onSendAll = vm::sendAllToJournal) { vm.openSaved(it) }
-            Section("Vibe") {
+            if (s.ideas.isNotEmpty()) Ideas(vm, s)
+            Section("Or make your own · vibe") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Vibe.entries.chunked(2).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -178,6 +179,7 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             Section("On the video") {
                 Toggle("Route opening", "A 2 s route sketch before the first clip. Off: opens on your best moment (better for reach)", o.intro) { v -> vm.setOptions { it.copy(intro = v) } }
                 Toggle("Stats at the end", "Distance, top speed, time, moments, for a second and a half", o.outro) { v -> vm.setOptions { it.copy(outro = v) } }
+                Toggle("Flash-forward opening", "A second of a later moment before the hook, to make people stay", o.teaser) { v -> vm.setOptions { it.copy(teaser = v) } }
                 Toggle("Loop the ending", "Ends on the opening shot, so the Reel plays on without a jump", o.loopEnd) { v -> vm.setOptions { it.copy(loopEnd = v) } }
                 Toggle("Map", "The route behind the stats (and in the route opening). Off: no map at all", o.map) { v -> vm.setOptions { it.copy(map = v) } }
                 Toggle("Captions", "What you said, word by word (Gemini reads the clips' sound)", o.captions) { v -> vm.setOptions { it.copy(captions = v) } }
@@ -189,8 +191,45 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             s.error?.let { ErrorBox(it) }
         }
         Spacer(Modifier.height(12.dp))
-        Button("Make my Reel", primary = true) { vm.make() }
+        Button("Make my Reel", primary = true) { vm.makePlain() }
         Spacer(Modifier.height(12.dp))
+    }
+}
+
+/** Reels this ride could make: tap one to make it, or make them all. */
+@Composable
+private fun Ideas(vm: StudioViewModel, s: StudioState) {
+    val all by com.ridetrack.app.ui.appContainer().reels.reels.collectAsStateWithLifecycle()
+    val made = all.filter { it.rideId == vm.rideId && it.deletedAt == null }.mapNotNull { it.idea }.toSet()
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("REEL IDEAS · ${s.ideas.size}", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
+            if (s.ideas.size > 1) {
+                Text("Make all", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.makeAll() }.padding(vertical = 4.dp))
+            }
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            s.ideas.forEach { idea ->
+                Column(
+                    Modifier.width(132.dp).clip(RoundedCornerShape(14.dp)).background(RtColors.Surface)
+                        .clickable(role = Role.Button, onClickLabel = "Make this Reel") { vm.makeIdea(idea.key) },
+                ) {
+                    Box(Modifier.fillMaxWidth().aspectRatio(4f / 5f).background(RtColors.SurfaceRaised)) {
+                        Thumb(idea.opening?.bit?.momentId?.let { s.thumbs[it] }, Modifier.fillMaxSize())
+                        if (idea.title in made) {
+                            Text("Made", style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.TopStart).padding(6.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 4.dp))
+                        }
+                    }
+                    Column(Modifier.padding(10.dp)) {
+                        Text(idea.title, style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 2)
+                        Text(idea.blurb, style = RtType.caption, color = RtColors.TextSecondary, maxLines = 2)
+                        Spacer(Modifier.height(4.dp))
+                        Text("${Format.clock(idea.plan.totalMs)} · ${idea.plan.clips.size} clips · ${idea.options.vibe.label}", style = RtType.caption, color = RtColors.TextTertiary, maxLines = 1)
+                    }
+                }
+            }
+        }
+        Text("Clips can be used in more than one Reel.", style = RtType.caption, color = RtColors.TextTertiary)
     }
 }
 
@@ -228,6 +267,7 @@ private fun VibeCard(v: Vibe, selected: Boolean, poster: File?, modifier: Modifi
 private fun Working(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            s.idea?.let { Text(it.title + if (s.queued > 0) " · ${s.queued} more after this" else "", style = RtType.bodyStrong, color = RtColors.TextPrimary) }
             s.work.forEach { w ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
@@ -272,7 +312,7 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Player(video, Modifier.align(Alignment.CenterHorizontally))
             Text(
-                listOfNotNull(s.story?.let { "“$it”" }, s.options.vibe.label, Format.clock(s.plan?.totalMs ?: 0), "${s.plan?.clips?.size ?: 0} clips", s.musicName?.let { "♪ $it" }).joinToString(" · "),
+                listOfNotNull(s.idea?.takeIf { it.kind != IdeaKind.STORY }?.title, s.story?.let { "“$it”" }, s.options.vibe.label, Format.clock(s.plan?.totalMs ?: 0), "${s.plan?.clips?.size ?: 0} clips", s.musicName?.let { "♪ $it" }).joinToString(" · "),
                 style = RtType.caption,
                 color = RtColors.TextSecondary,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -378,7 +418,7 @@ private fun Edit(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             }
             Section("Clips, in order") {
                 plan.segments.forEachIndexed { i, seg ->
-                    if (seg !is ClipSegment || seg.tail) return@forEachIndexed
+                    if (seg !is ClipSegment || seg.tail || seg.teaser) return@forEachIndexed
                     Column(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),

@@ -260,4 +260,46 @@ class StudioTest {
         val c = com.ridetrack.app.studio.ReelCover.candidates(plan, 2)
         assertEquals(listOf(7_000L, 8_000L), c)
     }
+
+    private fun rideBits(): List<com.ridetrack.app.studio.Bit> {
+        var t = 1_000_000L
+        return (0 until 8).flatMap { k ->
+            val lines = if (k % 2 == 0) listOf(CaptionLine(400, 2_400, if (k == 4) "Arre oops, gir gaya!" else "Line number $k is here")) else emptyList()
+            val kmh = 20.0 + k * 8
+            StudioPlanner.bitsOf("m$k", t, 10_000, lines, { kmh }).also { t += 60_000 }
+        }
+    }
+
+    @Test
+    fun `one ride gives several Reel ideas, clips reused across them`() {
+        val bits = rideBits()
+        val ideas = com.ridetrack.app.studio.ReelIdeas.ideas(bits, null, com.ridetrack.app.studio.StudioOptions())
+        val kinds = ideas.map { it.kind }
+        assertEquals(
+            listOf(com.ridetrack.app.studio.IdeaKind.HIGHLIGHTS, com.ridetrack.app.studio.IdeaKind.HOOK, com.ridetrack.app.studio.IdeaKind.SPEED_RUN, com.ridetrack.app.studio.IdeaKind.BLOOPERS),
+            kinds,
+        )
+        val hook = ideas.first { it.kind == com.ridetrack.app.studio.IdeaKind.HOOK }
+        assertTrue(hook.plan.totalMs <= 15_000)
+        assertTrue(hook.plan.clips.first().bit.talking)
+        val speed = ideas.first { it.kind == com.ridetrack.app.studio.IdeaKind.SPEED_RUN }
+        assertEquals(com.ridetrack.app.studio.Vibe.HYPE, speed.options.vibe)
+        assertEquals("m7", speed.plan.clips.first().bit.momentId)
+        val oops = ideas.first { it.kind == com.ridetrack.app.studio.IdeaKind.BLOOPERS }
+        assertTrue(oops.plan.clips.any { it.bit.momentId == "m4" })
+        // Pending Gemini: a "The story" idea first.
+        assertEquals(com.ridetrack.app.studio.IdeaKind.STORY, com.ridetrack.app.studio.ReelIdeas.ideas(bits, null, com.ridetrack.app.studio.StudioOptions(), geminiPending = true).first().kind)
+    }
+
+    @Test
+    fun `a teaser flashes a later clip first and isn't counted as a clip`() {
+        val plan = StudioPlanner.plan(rideBits(), com.ridetrack.app.studio.StudioOptions(lengthSec = 30, teaser = true))
+        val first = plan.segments.first() as com.ridetrack.app.studio.ClipSegment
+        assertTrue(first.teaser)
+        assertEquals(StudioPlanner.TEASER_MS, first.durMs)
+        assertTrue(plan.clips.none { it.teaser })
+        assertTrue(plan.clips.drop(1).any { it.bit.id == first.bit.id })
+        assertTrue(plan.clips.first().hook)
+        assertTrue(plan.totalMs <= 30_000)
+    }
 }

@@ -38,6 +38,8 @@ data class ReelProject(
     val coverText: Boolean = true,
     val coverLine: String? = null,
     val coverRoute: Boolean = false,
+    /** Which Reel idea it was made from ("Highlights", "The 15-second hook"…); null for a plain one. */
+    val idea: String? = null,
 ) {
     val vibe: Vibe get() = options.vibe
 }
@@ -73,6 +75,7 @@ object ReelJson {
         put("coverText", p.coverText)
         put("coverLine", p.coverLine ?: JSONObject.NULL)
         put("coverRoute", p.coverRoute)
+        put("idea", p.idea ?: JSONObject.NULL)
     }.toString()
 
     fun read(text: String): ReelProject? = runCatching {
@@ -109,12 +112,13 @@ object ReelJson {
             coverText = o.optBoolean("coverText", true),
             coverLine = o.optStringOrNull("coverLine"),
             coverRoute = o.optBoolean("coverRoute"),
+            idea = o.optStringOrNull("idea"),
         )
     }.getOrNull()
 
     private fun options(o: StudioOptions) = JSONObject()
         .put("vibe", o.vibe.name).put("lengthSec", o.lengthSec).put("intro", o.intro).put("outro", o.outro).put("loopEnd", o.loopEnd)
-        .put("map", o.map).put("captions", o.captions).put("watermark", o.watermark).put("seed", o.seed).put("bpm", o.bpm ?: JSONObject.NULL)
+        .put("map", o.map).put("captions", o.captions).put("watermark", o.watermark).put("seed", o.seed).put("bpm", o.bpm ?: JSONObject.NULL).put("teaser", o.teaser)
 
     private fun readOptions(o: JSONObject) = StudioOptions(
         vibe = o.optStringOrNull("vibe")?.let { n -> Vibe.entries.firstOrNull { it.name == n } } ?: Vibe.HYPE,
@@ -127,6 +131,7 @@ object ReelJson {
         watermark = o.optBoolean("watermark", true),
         seed = o.optInt("seed", 1),
         bpm = o.optLongOrNull("bpm")?.toInt(),
+        teaser = o.optBoolean("teaser"),
     )
 
     private fun segment(s: Segment): JSONObject = when (s) {
