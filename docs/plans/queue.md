@@ -229,3 +229,11 @@ Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds
 - "Make all" queues them one after another; runs only while charging unless the rider starts it.
 - Gemini: captions read once per ride (~2 requests), one director request returns all the ideas, tips only for Reels actually made: ~3 requests for 5 ideas.
 - Each finished Reel is its own video with Share and Save.
+
+## 7. Your Reels: every Reel saved, reopen with all edit options
+- Today a finished Reel lives only in the shares cache, which is cleared on the next share: unshared Reels are lost. Fix: every Reel is saved in app storage (files/reels) the moment it's made.
+- Saved with it, the whole project: vibe, length, clips (order, trims), captions, hook line, title, series/episode, voice-over takes, music choice, switches; plus the coach's tips. Reopening restores it exactly.
+- Optional setting "Also save to Gallery" (off by default): each new Reel also goes to Movies/Keppo Moto.
+- Studio tab: "Your Reels" grid at the top (cover frame, length, vibe, ride; newest first), rides list below. Each ride's Studio page also lists its Reels next to the Reel ideas.
+- A Reel opens full screen with Share · Save to Gallery · Copy post caption · Edit (all Studio edit options; "Make it again" updates that Reel) · Duplicate (try another take, keep the original) · Remix · Voice-over · Delete.
+- Storage: ~15–25 MB per 30 s Reel; Profile › Moments › Storage shows "Reels: 180 MB" with a way to clear old ones. Delete goes to Recently deleted (30 days) like rides and moments. Not in the Drive backup for now (large; remakeable from the saved project).
