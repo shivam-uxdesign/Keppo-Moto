@@ -170,12 +170,12 @@ Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds
   - Fonts bundled: Anton, Instrument Serif (OFL), Permanent Marker (Apache 2.0); licences in assets/licenses.
 - **Also in this build:** a fixed App Check debug token for test builds (`APPCHECK_DEBUG_TOKEN` in local.properties, gitignored), so reinstalling doesn't break transcripts; the transcription job is no longer replaced while running, and a cancelled job isn't shown as an error; App Check refusals get a plain message.
 - **Next / not done:** a list of past Studio videos; fit-with-borders for landscape clips; map flights between clips; beat matching; deleting `.lines.json` with its clip.
-- **Planned after the Reels research (6 Oct; not built, waiting for the rider's go-ahead):** audit v2 has the research and sources.
+- **Built 7 Oct (after the Reels research; audit v2 has the research and sources):**
   - Hook first: no 2 s title card before the action. The title becomes a small label on the hook clip, and Gemini writes a short hook line for the first frame (works with sound off). The route-sketch opening becomes an option, off by default.
   - Lengths 15 / 30 / 45 / 60. Stats card 1.5 s. A looping end: the rider's sign-off if there is one, else a cut back to the hook's first frame.
   - One story per Reel: Gemini names the story and picks the clips that tell it; Remix tries another story.
   - The coach: under every finished Reel, 3–5 tips (Gemini, text only: what was said, clips used and skipped, speeds, wind noise, length, how it opens and ends), with a one-tap action where possible (put the title on the hook, make that story, record a voice-over).
   - Voice-over recorded in Studio over any part (the clip's sound dips; captioned like the rest).
   - Clips from other rides: talking lines and riding shots, best first by their saved scores.
-  - A shot list for the next ride on Home (from the coach's "film next time" tips), ticked off when filmed. Nothing while riding.
+  - A shot list for the next ride on Home (from the coach's "film next time" tips); the rider ticks them off (the app can't tell what was filmed). Nothing while riding.
   - Series name on the title ("Evening Ride Diaries · ep 4").

@@ -76,6 +76,9 @@ class AppContainer(context: Context) {
         }
     }
 
+    /** Keppo Studio's series name and the shot list for the next ride. */
+    val studio = com.ridetrack.app.studio.StudioPrefs(appContext)
+
     /** The battery during a ride: time left, and when to charge. */
     val batteryWatch = BatteryWatch(appContext, battery, moments)
 

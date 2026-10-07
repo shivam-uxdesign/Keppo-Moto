@@ -49,6 +49,11 @@ data class RenderInput(
     val music: Uri?,
     /** The song's level while the rider talks (0..1). */
     val duck: Float = 0.25f,
+    /** Title label and hook line on the first clip. */
+    val opener: StudioArt.Opener? = null,
+    /** The voice-over as one track as long as the Reel; its captions and where it talks, in Reel ms. */
+    val voice: File? = null,
+    val voiceLines: List<CaptionLine> = emptyList(),
 )
 
 /**
@@ -104,8 +109,11 @@ class StudioRenderer(private val context: Context) {
         val art = StudioArt(context)
         val items = segs.mapIndexed { i, seg -> item(input, art, i, seg) }
         val sequences = mutableListOf(EditedMediaItemSequence(items))
+        input.voice?.let { wav ->
+            sequences += EditedMediaItemSequence(listOf(EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(wav))).build()))
+        }
         input.music?.let { uri ->
-            val duck = GainProcessor.ducking(plan.talkingRanges(), input.duck)
+            val duck = GainProcessor.ducking(plan.talkingRanges() + voiceRanges(input), input.duck)
             val total = plan.totalMs
             val music = EditedMediaItem.Builder(MediaItem.fromUri(uri))
                 .setRemoveVideo(true)
@@ -138,6 +146,11 @@ class StudioRenderer(private val context: Context) {
             .build()
 
         val clock = ItemClock()
+        val segStart = plan.startOf(i)
+        // Voice-over captions that fall in this segment, timed from its start.
+        val voLines = input.voiceLines.filter { it.endMs > segStart && it.startMs < segStart + dur }.map { it.copy(startMs = it.startMs - segStart, endMs = it.endMs - segStart) }
+        val lines = if (seg is ClipSegment) (seg.lines + voLines).sortedBy { it.startMs } else voLines
+        val opener = input.opener.takeIf { seg is ClipSegment && seg.hook && !seg.tail }
         val frameAt = { localMs: Long ->
             FrameAt(
                 vibe = plan.vibe,
@@ -155,7 +168,9 @@ class StudioRenderer(private val context: Context) {
             when (seg) {
                 is ClipSegment -> {
                     val wall = clipStart + from + localMs
-                    art.drawClip(c, f, seg, input.speedAt(wall), input.clockAt(wall), o.captions)
+                    // Clips from other rides have no samples here: their own speed.
+                    val kmh = input.speedAt(wall).takeIf { it > 0 || seg.bit.fromRide == null } ?: seg.bit.speedKmh.toInt()
+                    art.drawClip(c, f, if (seg.tail) emptyList() else lines, kmh, input.clockAt(wall), o.captions, opener)
                 }
                 is TitleSegment -> art.drawTitle(c, f, input.card, o.map)
                 is StatsSegment -> art.drawStats(c, f, input.card, o.map, o.watermark)
@@ -171,18 +186,23 @@ class StudioRenderer(private val context: Context) {
         video += grade(plan.vibe)
         video += OverlayEffect(listOf(overlay))
 
-        // Talking clips at full volume, riding noise softer, the title and stats silent; short fades at the cuts.
+        // Talking clips at full volume, riding noise softer, the title and stats silent; short fades at the
+        // cuts; the clip dips under the voice-over.
         val level = when (seg) {
             is ClipSegment -> if (seg.lines.isNotEmpty()) 1f else 0.55f
             else -> 0f
         }
-        val audio = GainProcessor { us -> level * fade(us / 1000, dur, 60) }
+        val underVoice = GainProcessor.ducking(voiceRanges(input).map { (it.first - segStart)..(it.last - segStart) }, 0.3f)
+        val audio = GainProcessor { us -> level * fade(us / 1000, dur, 60) * underVoice(us) }
         return EditedMediaItem.Builder(media).setEffects(Effects(listOf(audio), video)).build()
     }
 
+    /** Where the voice-over talks, in Reel ms. */
+    private fun voiceRanges(input: RenderInput): List<LongRange> = input.voiceLines.map { (it.startMs - 150)..(it.endMs + 250) }
+
     /** What a transition says about segment [s]: speed and time for a clip, "That's a wrap" for the stats. */
     private fun describe(input: RenderInput, s: Segment?): Pair<String, String> = when (s) {
-        is ClipSegment -> "${input.speedAt(s.bit.atMillis)} km/h" to input.clockAt(s.bit.atMillis)
+        is ClipSegment -> "${input.speedAt(s.bit.atMillis).takeIf { it > 0 } ?: s.bit.speedKmh.toInt()} km/h" to (s.bit.fromRide ?: input.clockAt(s.bit.atMillis))
         is StatsSegment -> "That's a wrap" to input.card.title
         else -> "" to ""
     }

@@ -63,6 +63,9 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
 
     suspend fun forRide(rideId: String): List<Moment> = dao.forRide(rideId).map { it.toModel() }
 
+    /** Every moment of every ride that isn't deleted. */
+    suspend fun all(): List<Moment> = dao.all().map { it.toModel() }
+
     /** Per ride: how many moments it has and up to [max] pictures for its card (starred first). */
     fun observeCards(max: Int = 2): Flow<Map<String, RideMoments>> = dao.observeAllLive().map { all ->
         all.groupBy { it.rideId }.mapValues { (rideId, ms) ->

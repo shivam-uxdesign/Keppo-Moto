@@ -31,6 +31,8 @@ data class Bit(
     val speedKmh: Double,
     /** How good this bit is, 0–10 (Gemini's pick, or the app's guess). */
     val punch: Float,
+    /** From another ride: its date ("Mon 5 Oct"), shown in Edit; null for this ride. */
+    val fromRide: String? = null,
 ) {
     val talking: Boolean get() = lines.isNotEmpty()
 }
@@ -39,18 +41,24 @@ sealed interface Segment {
     val durMs: Long
 }
 
-/** A clip part on screen from [inMs] (ms into the clip) for [durMs]; [lines] in ms from the segment start. */
-data class ClipSegment(val bit: Bit, val inMs: Long, override val durMs: Long, val lines: List<CaptionLine>, val hook: Boolean) : Segment
+/**
+ * A clip part on screen from [inMs] (ms into the clip) for [durMs]; [lines] in ms from the segment start.
+ * The [tail] is a split second of the hook at the very end, so the Reel loops back into its start.
+ */
+data class ClipSegment(val bit: Bit, val inMs: Long, override val durMs: Long, val lines: List<CaptionLine>, val hook: Boolean, val tail: Boolean = false) : Segment
 
-/** The title over the first clip (or the route); the stats over the last. Both play muted. */
+/** The route-sketch opening (optional); the stats over the last clip. Both play muted. */
 data class TitleSegment(override val durMs: Long) : Segment
 data class StatsSegment(override val durMs: Long) : Segment
 
 data class StudioOptions(
     val vibe: Vibe = Vibe.HYPE,
     val lengthSec: Int = 30,
-    val intro: Boolean = true,
+    /** A 2 s route sketch before the first clip. Off: the Reel opens on its best moment (better for reach). */
+    val intro: Boolean = false,
     val outro: Boolean = true,
+    /** End on a split second of the opening shot, so the Reel loops. */
+    val loopEnd: Boolean = true,
     val map: Boolean = true,
     val captions: Boolean = true,
     val watermark: Boolean = true,
@@ -59,7 +67,8 @@ data class StudioOptions(
 
 data class StudioPlan(val segments: List<Segment>, val vibe: Vibe) {
     val totalMs: Long = segments.sumOf { it.durMs }
-    val clips: List<ClipSegment> get() = segments.filterIsInstance<ClipSegment>()
+    /** The clips the rider chose (the loop tail is not one of them). */
+    val clips: List<ClipSegment> get() = segments.filterIsInstance<ClipSegment>().filter { !it.tail }
 
     fun startOf(i: Int): Long = segments.take(i).sumOf { it.durMs }
 
@@ -79,12 +88,14 @@ data class StudioPlan(val segments: List<Segment>, val vibe: Vibe) {
 /** Picks and orders bits into a Reel. Pure: no Android, so it's unit-tested. */
 object StudioPlanner {
     const val INTRO_MS = 2_000L
-    const val OUTRO_MS = 3_000L
+    const val OUTRO_MS = 1_500L
+    /** The loop tail: the hook's first split second, again. */
+    const val TAIL_MS = 600L
     /** A talking bit is at most this long; longer speech is split into more bits. */
     const val MAX_BIT_MS = 8_000L
     private const val PAD_BEFORE = 300L
     private const val PAD_AFTER = 350L
-    val LENGTHS = listOf(30, 45, 60)
+    val LENGTHS = listOf(15, 30, 45, 60)
 
     /**
      * A clip's bits: its timed lines grouped into sentences of up to [MAX_BIT_MS] (a pause of
@@ -159,11 +170,19 @@ object StudioPlanner {
         return ok.ifEmpty { LENGTHS.take(1) }
     }
 
-    fun plan(bits: List<Bit>, o: StudioOptions): StudioPlan {
+    /**
+     * The Reel: the best bits that fit, the hook first, then the ride in order. With a [story]
+     * (bit ids Gemini grouped as one idea) those bits come first; an [ending] (a sign-off) goes last.
+     */
+    fun plan(bits: List<Bit>, o: StudioOptions, story: List<String> = emptyList(), ending: String? = null): StudioPlan {
         val r = java.util.Random(o.seed.toLong() * 7919 + o.vibe.ordinal)
         val shakes = bits.associate { it.id to r.nextDouble() }
-        var room = o.lengthSec * 1000L - (if (o.intro) INTRO_MS else 0) - (if (o.outro) OUTRO_MS else 0)
-        val ranked = bits.map { it to it.punch + it.speedKmh / 40 + shakes.getValue(it.id) * (if (o.seed > 1) 2.5 else 1.0) }.sortedByDescending { it.second }
+        var room = o.lengthSec * 1000L - (if (o.intro) INTRO_MS else 0) - (if (o.outro) OUTRO_MS else 0) - (if (o.loopEnd) TAIL_MS else 0)
+        val inStory = story.toSet()
+        val ranked = bits.map {
+            it to it.punch + it.speedKmh / 40 + shakes.getValue(it.id) * (if (o.seed > 1 && story.isEmpty()) 2.5 else 1.0) +
+                (if (it.id in inStory) 100 else 0) + (if (it.id == ending) 50 else 0)
+        }.sortedByDescending { it.second }
         data class Pick(val b: Bit, val d: Long)
         val picked = ArrayList<Pick>()
         for ((b, _) in ranked) {
@@ -176,12 +195,18 @@ object StudioPlanner {
             if (room < o.vibe.beatMs * 2) break
         }
         if (picked.isEmpty()) return StudioPlan(emptyList(), o.vibe)
-        val hook = picked.first()
-        val order = if (o.vibe == Vibe.VLOG) picked.sortedBy { it.b.atMillis } else listOf(hook) + picked.drop(1).sortedBy { it.b.atMillis }
+        val end = picked.firstOrNull { it.b.id == ending && picked.size > 1 }
+        val hook = (picked - setOfNotNull(end)).maxBy { it.b.punch + (if (it.b.id in inStory) 0.01f else 0f) }
+        val middle = picked.filter { it !== hook && it !== end }.sortedBy { it.b.atMillis }
+        val order = if (o.vibe == Vibe.VLOG) (picked - setOfNotNull(end)).sortedBy { it.b.atMillis } + listOfNotNull(end) else listOf(hook) + middle + listOfNotNull(end)
         val segs = ArrayList<Segment>()
         if (o.intro) segs += TitleSegment(INTRO_MS)
-        order.forEach { p -> segs += ClipSegment(p.b, p.b.inMs, p.d, p.b.lines, hook = p === hook && o.vibe != Vibe.VLOG) }
+        order.forEach { p -> segs += ClipSegment(p.b, p.b.inMs, p.d, p.b.lines, hook = p === order.first()) }
         if (o.outro) segs += StatsSegment(OUTRO_MS)
+        if (o.loopEnd) {
+            val first = segs.filterIsInstance<ClipSegment>().first()
+            segs += ClipSegment(first.bit, first.inMs, TAIL_MS.coerceAtMost(first.durMs), emptyList(), hook = false, tail = true)
+        }
         return StudioPlan(segs, o.vibe)
     }
 
@@ -189,7 +214,7 @@ object StudioPlanner {
 
     /** Moves a clip's start or end by [deltaMs], keeping its captions where they were said. */
     fun nudge(plan: StudioPlan, index: Int, startDelta: Long, endDelta: Long): StudioPlan {
-        val s = plan.segments.getOrNull(index) as? ClipSegment ?: return plan
+        val s = (plan.segments.getOrNull(index) as? ClipSegment)?.takeIf { !it.tail } ?: return plan
         val newIn = (s.inMs + startDelta).coerceIn(0, s.inMs + s.durMs - 1_000)
         val shift = newIn - s.inMs
         val newDur = (s.durMs - shift + endDelta).coerceIn(1_000, s.bit.clipDurationMs - newIn)
@@ -210,22 +235,48 @@ object StudioPlanner {
     fun move(plan: StudioPlan, index: Int, by: Int): StudioPlan {
         val j = index + by
         val segs = plan.segments.toMutableList()
-        if (segs.getOrNull(index) !is ClipSegment || segs.getOrNull(j) !is ClipSegment) return plan
-        segs[index] = segs[j].also { segs[j] = segs[index] }
-        return plan.copy(segments = segs)
+        val a = segs.getOrNull(index) as? ClipSegment
+        val b = segs.getOrNull(j) as? ClipSegment
+        if (a == null || b == null || a.tail || b.tail) return plan
+        segs[index] = b.copy(hook = a.hook)
+        segs[j] = a.copy(hook = b.hook)
+        return retail(plan.copy(segments = segs))
     }
 
     fun remove(plan: StudioPlan, index: Int): StudioPlan {
-        if (plan.clips.size <= 1 || plan.segments.getOrNull(index) !is ClipSegment) return plan
-        return plan.copy(segments = plan.segments.toMutableList().also { it.removeAt(index) })
+        val s = plan.segments.getOrNull(index) as? ClipSegment
+        if (plan.clips.size <= 1 || s == null || s.tail) return plan
+        val segs = plan.segments.toMutableList().also { it.removeAt(index) }
+        // The next clip opens the Reel if the hook went.
+        if (s.hook) segs.indexOfFirst { it is ClipSegment }.takeIf { it >= 0 }?.let { segs[it] = (segs[it] as ClipSegment).copy(hook = true) }
+        return retail(plan.copy(segments = segs))
     }
 
     /** Swaps a clip for the unused bit filmed nearest to it. */
     fun swap(plan: StudioPlan, index: Int, bits: List<Bit>): StudioPlan {
-        val s = plan.segments.getOrNull(index) as? ClipSegment ?: return plan
+        val s = (plan.segments.getOrNull(index) as? ClipSegment)?.takeIf { !it.tail } ?: return plan
         val used = plan.clips.map { it.bit.id }.toSet()
-        val alt = bits.filter { it.id !in used }.minByOrNull { kotlin.math.abs(it.atMillis - s.bit.atMillis) } ?: return plan
+        val alt = bits.filter { it.id !in used && it.fromRide == null }.minByOrNull { kotlin.math.abs(it.atMillis - s.bit.atMillis) } ?: return plan
         val seg = ClipSegment(alt, alt.inMs, durationOf(alt, plan.vibe, 0.5), alt.lines, s.hook)
-        return plan.copy(segments = plan.segments.toMutableList().also { it[index] = seg })
+        return retail(plan.copy(segments = plan.segments.toMutableList().also { it[index] = seg }))
+    }
+
+    /** Adds a bit (e.g. from another ride) as the last clip, before the stats. */
+    fun add(plan: StudioPlan, bit: Bit): StudioPlan {
+        if (plan.clips.any { it.bit.id == bit.id }) return plan
+        val segs = plan.segments.toMutableList()
+        val at = segs.indexOfLast { it is ClipSegment && !it.tail } + 1
+        segs.add(at, ClipSegment(bit, bit.inMs, durationOf(bit, plan.vibe, 0.5), bit.lines, hook = plan.clips.isEmpty()))
+        return retail(plan.copy(segments = segs))
+    }
+
+    /** Keeps the loop tail showing whatever opens the Reel now. */
+    private fun retail(plan: StudioPlan): StudioPlan {
+        val i = plan.segments.indexOfFirst { it is ClipSegment && it.tail }
+        if (i < 0) return plan
+        val first = plan.clips.firstOrNull() ?: return plan
+        val segs = plan.segments.toMutableList()
+        segs[i] = ClipSegment(first.bit, first.inMs, TAIL_MS.coerceAtMost(first.durMs), emptyList(), hook = false, tail = true)
+        return plan.copy(segments = segs)
     }
 }

@@ -30,6 +30,8 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tune
@@ -114,6 +116,7 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier) {
             StudioStep.WORKING -> Working(vm, s, modifier)
             StudioStep.READY -> Ready(vm, s, modifier)
             StudioStep.EDIT -> Edit(vm, s, modifier)
+            StudioStep.VOICE -> Voice(vm, s, modifier)
         }
     }
 }
@@ -158,10 +161,19 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                     color = RtColors.TextTertiary,
                 )
             }
+            Section("Series") {
+                Field(s.series, "Optional, e.g. Evening Ride Diaries") { vm.setSeries(it) }
+                Text(
+                    if (s.series.isBlank()) "A running name helps followers know what's next. The ride's title shows instead." else "Shows as “${s.label}” on the first clip.",
+                    style = RtType.caption,
+                    color = RtColors.TextTertiary,
+                )
+            }
             Section("On the video") {
-                Toggle("Title at the start", "The ride's name over the route", o.intro) { v -> vm.setOptions { it.copy(intro = v) } }
-                Toggle("Stats at the end", "Distance, top speed, time, moments", o.outro) { v -> vm.setOptions { it.copy(outro = v) } }
-                Toggle("Map", "A route sketch under the title and stats. Off: no map at all", o.map) { v -> vm.setOptions { it.copy(map = v) } }
+                Toggle("Route opening", "A 2 s route sketch before the first clip. Off: opens on your best moment (better for reach)", o.intro) { v -> vm.setOptions { it.copy(intro = v) } }
+                Toggle("Stats at the end", "Distance, top speed, time, moments, for a second and a half", o.outro) { v -> vm.setOptions { it.copy(outro = v) } }
+                Toggle("Loop the ending", "Ends on the opening shot, so the Reel plays on without a jump", o.loopEnd) { v -> vm.setOptions { it.copy(loopEnd = v) } }
+                Toggle("Map", "The route behind the stats (and in the route opening). Off: no map at all", o.map) { v -> vm.setOptions { it.copy(map = v) } }
                 Toggle("Captions", "What you said, word by word (Gemini reads the clips' sound)", o.captions) { v -> vm.setOptions { it.copy(captions = v) } }
                 Toggle("Keppo Moto mark", "Small, on the stats", o.watermark) { v -> vm.setOptions { it.copy(watermark = v) } }
             }
@@ -251,7 +263,7 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Player(video, Modifier.align(Alignment.CenterHorizontally))
             Text(
-                "${s.options.vibe.label} · ${Format.clock(s.plan?.totalMs ?: 0)} · ${s.plan?.clips?.size ?: 0} clips" + (s.musicName?.let { " · ♪ $it" } ?: ""),
+                listOfNotNull(s.story?.let { "“$it”" }, s.options.vibe.label, Format.clock(s.plan?.totalMs ?: 0), "${s.plan?.clips?.size ?: 0} clips", s.musicName?.let { "♪ $it" }).joinToString(" · "),
                 style = RtType.caption,
                 color = RtColors.TextSecondary,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -259,9 +271,11 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Action("Remix", Icons.Outlined.Refresh, Modifier.weight(1f)) { vm.remix() }
                 Action("Edit", Icons.Outlined.Edit, Modifier.weight(1f)) { vm.edit() }
+                Action("Voice-over", Icons.Outlined.Mic, Modifier.weight(1f)) { vm.voice() }
                 Action("Change", Icons.Outlined.Tune, Modifier.weight(1f)) { vm.back() }
             }
             s.notes.forEach { Text(it, style = RtType.caption, color = RtColors.Warning) }
+            Coach(s.tips) { vm.act(it) }
             if (s.postCaption.isNotBlank()) {
                 Column(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(14.dp),
@@ -288,12 +302,13 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button("Share", primary = true, icon = Icons.Outlined.IosShare, modifier = Modifier.weight(1f)) {
+                vm.posted()
                 ShareImages.share(context, ShareImages.uriFor(context, video), "video/mp4")
             }
             Button("Save", primary = false, icon = Icons.Outlined.Download, modifier = Modifier.weight(1f)) {
                 scope.launch {
                     val ok = ShareImages.saveVideo(context, video, "Keppo Reel ${System.currentTimeMillis() / 1000}")
-                    if (ok) haptics.confirm()
+                    if (ok) { haptics.confirm(); vm.posted() }
                     toast = if (ok) "Saved to Movies/Keppo Moto" else "Couldn't save here. Use Share instead."
                 }
             }
@@ -342,12 +357,13 @@ private fun Edit(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     val plan = s.plan ?: return
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Section("Title") {
-                Field(s.title, "The ride's name") { vm.setTitle(it) }
+            Section("Opening") {
+                Field(s.hookLine, "Hook line on the first frame, e.g. 3 hours in. No break?") { vm.setHookLine(it) }
+                Field(s.title, "Title") { vm.setTitle(it) }
             }
             Section("Clips, in order") {
                 plan.segments.forEachIndexed { i, seg ->
-                    if (seg !is ClipSegment) return@forEachIndexed
+                    if (seg !is ClipSegment || seg.tail) return@forEachIndexed
                     Column(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -357,7 +373,7 @@ private fun Edit(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    Format.timeOfDay(seg.bit.atMillis) + " · ${seg.bit.speedKmh.toInt()} km/h" + if (seg.hook) " · opens the Reel" else "",
+                                    (seg.bit.fromRide ?: Format.timeOfDay(seg.bit.atMillis)) + " · ${seg.bit.speedKmh.toInt()} km/h" + if (seg.hook) " · opens the Reel" else "",
                                     style = RtType.body,
                                     color = RtColors.TextPrimary,
                                 )
@@ -378,12 +394,169 @@ private fun Edit(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                     }
                 }
             }
+            Section("Add from another ride") {
+                val used = plan.clips.map { it.bit.id }.toSet()
+                val others = s.otherBits.filter { it.id !in used }
+                if (others.isEmpty()) Text("Your other rides' clips show here once Studio has read them.", style = RtType.caption, color = RtColors.TextTertiary)
+                others.forEach { b ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button) { vm.add(b) }.padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Thumb(s.thumbs[b.momentId], Modifier.size(width = 36.dp, height = 48.dp).clip(RoundedCornerShape(6.dp)))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(b.lines.joinToString(" ") { it.text }.ifBlank { "Riding · ${b.speedKmh.toInt()} km/h" }, style = RtType.body, color = RtColors.TextPrimary, maxLines = 2)
+                            Text("${b.fromRide} · ${String.format(Locale.US, "%.1f s", (b.outMs - b.inMs) / 1000.0)}", style = RtType.caption, color = RtColors.TextSecondary)
+                        }
+                        Text("Add", style = RtType.button, color = RtColors.Primary)
+                    }
+                }
+            }
             s.error?.let { Text(it, style = RtType.caption, color = RtColors.Error) }
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button("Back", primary = false, modifier = Modifier.weight(1f)) { vm.back() }
             Button("Make it again · ${Format.clock(plan.totalMs)}", primary = true, modifier = Modifier.weight(2f)) { vm.remake() }
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+// ---- coach ------------------------------------------------------------------------------------
+
+/** "Make the next one better": a few tips, each with a one-tap fix where there is one. */
+@Composable
+private fun Coach(tips: List<Tip>?, onAct: (TipAction) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("MAKE THE NEXT ONE BETTER", style = RtType.label, color = RtColors.TextSecondary)
+        if (tips == null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Looking at your Reel…", style = RtType.caption, color = RtColors.TextSecondary)
+            }
+            return@Column
+        }
+        tips.forEach { t ->
+            Row {
+                Text("→", style = RtType.body, color = RtColors.Primary)
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(t.text, style = RtType.body, color = RtColors.TextPrimary)
+                    if (t.nextRide) Text("Added to your shot list for the next ride", style = RtType.caption, color = RtColors.TextTertiary)
+                    t.action?.let { a ->
+                        Text(
+                            when (a) {
+                                TipAction.TITLE_ON_HOOK -> "Open on the hook"
+                                TipAction.SHORTER -> "Make a 15 s cut"
+                                TipAction.VOICE_OVER -> "Record a voice-over"
+                                TipAction.OTHER_RIDES -> "Add from another ride"
+                                TipAction.STORY -> "Try another story"
+                            },
+                            style = RtType.button,
+                            color = RtColors.Primary,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button) { onAct(a) }.padding(vertical = 4.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---- 5. Voice-over ----------------------------------------------------------------------------
+
+/** Play the Reel muted, tap to talk over it; each take sits where it was recorded. */
+@Composable
+private fun Voice(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
+    val context = LocalContext.current
+    val video = s.video ?: return
+    var allowed by remember {
+        mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED)
+    }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed = it }
+    val player = remember(video) {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(video)))
+            volume = 0f
+            prepare()
+        }
+    }
+    DisposableEffect(player) { onDispose { player.release() } }
+    var position by remember { mutableStateOf(0L) }
+    LaunchedEffect(player) { while (true) { position = player.currentPosition; delay(100) } }
+    // A take stops when the Reel ends.
+    LaunchedEffect(s.recordingAt, position) {
+        if (s.recordingAt != null && !player.isPlaying && player.playbackState == Player.STATE_ENDED) vm.stopTake()
+    }
+    val total = s.plan?.totalMs ?: 0
+    Column(modifier) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier.align(Alignment.CenterHorizontally).height(380.dp).aspectRatio(9f / 16f).clip(RoundedCornerShape(18.dp)).background(Color.Black),
+            ) {
+                AndroidView(factory = { ctx -> PlayerView(ctx).apply { useController = false } }, update = { it.player = player }, onRelease = { it.player = null }, modifier = Modifier.fillMaxSize())
+                if (s.recordingAt != null) {
+                    Row(
+                        Modifier.align(Alignment.TopCenter).padding(10.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.size(8.dp).background(Color(0xFFFF4D5E), CircleShape))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Recording · ${Format.clock(position - s.recordingAt)}", style = RtType.caption, color = Color.White)
+                    }
+                }
+            }
+            // Where the takes sit in the Reel.
+            Box(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp)).background(RtColors.Surface)) {
+                androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                    if (total > 0) {
+                        s.takes.forEach { t ->
+                            drawRect(Color(0xFFFFD60A), androidx.compose.ui.geometry.Offset(size.width * t.startMs / total, 0f), androidx.compose.ui.geometry.Size(size.width * t.durMs / total, size.height))
+                        }
+                        drawRect(Color.White, androidx.compose.ui.geometry.Offset(size.width * position / total - 1f, 0f), androidx.compose.ui.geometry.Size(2f, size.height))
+                    }
+                }
+            }
+            Text(
+                "Play the Reel and tap the mic where you want to talk; tap again to stop. The Reel is muted while you record, and the clips' sound dips under your voice.",
+                style = RtType.caption,
+                color = RtColors.TextSecondary,
+            )
+            s.takes.forEach { t ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${Format.clock(t.startMs)} – ${Format.clock(t.startMs + t.durMs)}" + (t.lines.joinToString(" ") { it.text }.takeIf { it.isNotBlank() }?.let { " · “$it”" } ?: ""), style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f), maxLines = 2)
+                    Text("Delete", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { vm.deleteTake(t) }.padding(8.dp))
+                }
+            }
+            s.error?.let { Text(it, style = RtType.caption, color = RtColors.Error) }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button("Back", primary = false, modifier = Modifier.weight(1f)) { vm.stopTake(); vm.back() }
+            val rec = s.recordingAt != null
+            Box(
+                Modifier.size(64.dp).clip(CircleShape).background(if (rec) Color(0xFFFF4D5E) else RtColors.Primary).clickable(role = Role.Button, onClickLabel = if (rec) "Stop recording" else "Record") {
+                    when {
+                        !allowed -> ask.launch(android.Manifest.permission.RECORD_AUDIO)
+                        rec -> { vm.stopTake(); player.pause() }
+                        else -> {
+                            if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
+                            vm.startTake(player.currentPosition)
+                            player.play()
+                        }
+                    }
+                },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(if (rec) Icons.Rounded.Stop else Icons.Outlined.Mic, contentDescription = null, tint = if (rec) Color.White else RtColors.OnPrimary, modifier = Modifier.size(28.dp))
+            }
+            Button("Done", primary = s.takes.isNotEmpty(), modifier = Modifier.weight(1f)) { if (s.takes.isNotEmpty()) vm.finishVoice() else vm.back() }
         }
         Spacer(Modifier.height(12.dp))
     }

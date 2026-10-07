@@ -7,7 +7,6 @@ import com.ridetrack.app.studio.StatsSegment
 import com.ridetrack.app.studio.StudioOptions
 import com.ridetrack.app.studio.StudioPlanner
 import com.ridetrack.app.studio.StudioText
-import com.ridetrack.app.studio.TitleSegment
 import com.ridetrack.app.studio.Vibe
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -68,8 +67,13 @@ class StudioTest {
         val bits = clip4() + listOf(hook, overlap) + StudioPlanner.bitsOf("m1", 900_000, 7_920, emptyList(), speed)
         val plan = StudioPlanner.plan(bits, StudioOptions(vibe = Vibe.HYPE, lengthSec = 30))
         assertTrue(plan.totalMs <= 30_000, "${plan.totalMs}")
-        assertTrue(plan.segments.first() is TitleSegment)
-        assertTrue(plan.segments.last() is StatsSegment)
+        // Opens straight on the hook; stats, then a split second of the hook so it loops.
+        assertTrue(plan.segments.first() is ClipSegment)
+        assertTrue(plan.segments[plan.segments.size - 2] is StatsSegment)
+        val tail = plan.segments.last() as ClipSegment
+        assertTrue(tail.tail)
+        assertEquals("m9#0", tail.bit.id)
+        assertEquals(StudioPlanner.TAIL_MS, tail.durMs)
         assertEquals("m9#0", plan.clips.first().bit.id)
         assertTrue(plan.clips.first().hook)
         assertTrue(plan.clips.none { it.bit.id == "m8#2" })
@@ -79,18 +83,73 @@ class StudioTest {
     }
 
     @Test
-    fun `vlog tells it in order with no hook`() {
+    fun `vlog tells it in order`() {
         val hook = Bit("m9#0", "m9", 19_650, 5_800, 7_700, 1_200_000, listOf(CaptionLine(260, 1_700, "Speed sixty, sixty-five hai!")), 61.0, 10f)
         val plan = StudioPlanner.plan(clip4() + hook, StudioOptions(vibe = Vibe.VLOG, lengthSec = 45, intro = false, outro = false))
         val times = plan.clips.map { it.bit.atMillis }
         assertEquals(times.sorted(), times)
-        assertTrue(plan.clips.none { it.hook })
+        assertEquals(listOf(true) + List(plan.clips.size - 1) { false }, plan.clips.map { it.hook })
+    }
+
+    @Test
+    fun `a story's moments come first, and the sign-off closes the Reel`() {
+        val a = Bit("a", "ma", 20_000, 0, 3_000, 1_000_000, listOf(CaptionLine(300, 2_500, "Yo brother, take a break")), 40.0, 4f)
+        val b = Bit("b", "mb", 20_000, 0, 3_000, 1_100_000, listOf(CaptionLine(300, 2_500, "sorry, cut!")), 40.0, 5f)
+        val loud = Bit("x", "mx", 20_000, 0, 3_000, 1_050_000, listOf(CaptionLine(300, 2_500, "Speed sixty-five!")), 70.0, 9f)
+        val bye = Bit("z", "mz", 20_000, 0, 3_000, 1_300_000, listOf(CaptionLine(300, 2_000, "Aaj ka top: 68!")), 40.0, 3f)
+        val plan = StudioPlanner.plan(listOf(a, b, loud, bye), StudioOptions(vibe = Vibe.HYPE, lengthSec = 15, outro = false, loopEnd = false), story = listOf("a", "b"), ending = "z")
+        val ids = plan.clips.map { it.bit.id }
+        assertTrue("a" in ids && "b" in ids, "$ids")
+        assertEquals("z", ids.last())
+    }
+
+    @Test
+    fun `a clip from another ride goes in before the stats, and removing the hook moves the loop tail`() {
+        val plan = StudioPlanner.plan(clip4(), StudioOptions(vibe = Vibe.HYPE, lengthSec = 30))
+        val other = Bit("o#0", "o", 9_000, 0, 3_000, 5, listOf(CaptionLine(300, 2_400, "Chain ko lube chahiye")), 30.0, 5f, fromRide = "Mon 5 Oct")
+        val added = StudioPlanner.add(plan, other)
+        val i = added.segments.indexOfFirst { it is ClipSegment && it.bit.id == "o#0" }
+        assertTrue(added.segments[i + 1] is StatsSegment)
+        val hookAt = added.segments.indexOfFirst { it is ClipSegment && it.hook }
+        val removed = StudioPlanner.remove(added, hookAt)
+        val first = removed.clips.first()
+        assertTrue(first.hook)
+        assertEquals(first.bit.id, (removed.segments.last() as ClipSegment).bit.id)
+    }
+
+    @Test
+    fun `the coach's own tips flag a slow opening and save filming tips for the next ride`() {
+        val plan = StudioPlanner.plan(clip4(), StudioOptions(vibe = Vibe.HYPE, lengthSec = 30, intro = true))
+        val tips = com.ridetrack.app.studio.StudioCoach.localTips(plan, StudioOptions(intro = true), clip4(), null, voiceOver = false)
+        assertEquals(com.ridetrack.app.studio.TipAction.TITLE_ON_HOOK, tips.first().action)
+        assertTrue(tips.any { it.nextRide })
+        assertTrue(tips.size <= 4)
+        val summary = com.ridetrack.app.studio.StudioCoach.summary(plan, StudioOptions(intro = true), clip4(), null, null, false, false)
+        assertTrue("Yo brother" in summary)
+        assertTrue("route-and-title card" in summary)
+    }
+
+    @Test
+    fun `Gemini's stories, hook line, ending and tips are read safely`() {
+        val d = StudioText.parseDirection(
+            "{\"hook\":\"a\",\"hookLine\":\"3 hours in. No break?\",\"ending\":\"z\",\"stories\":[{\"name\":\"the hydration debate\",\"ids\":[\"a\",\"b\",\"nope\"]},{\"name\":\"one\",\"ids\":[\"a\"]}]}",
+            setOf("a", "b", "z"),
+        )
+        assertNotNull(d)
+        assertEquals("3 hours in. No break?", d.hookLine)
+        assertEquals("z", d.endingId)
+        assertEquals(listOf(com.ridetrack.app.studio.Story("the hydration debate", listOf("a", "b"))), d.stories)
+        val tips = StudioText.parseTips("{\"tips\":[{\"text\":\"Open on the line\",\"action\":\"title_on_hook\"},{\"text\":\"Film the road\",\"action\":\"none\",\"nextRide\":true},{\"text\":\"\"}]}")
+        assertEquals(2, tips.size)
+        assertEquals(com.ridetrack.app.studio.TipAction.TITLE_ON_HOOK, tips[0].action)
+        assertTrue(tips[1].nextRide)
+        assertEquals(emptyList(), StudioText.parseTips("not json"))
     }
 
     @Test
     fun `only lengths the clips can fill are offered`() {
-        assertEquals(listOf(30), StudioPlanner.lengthsFor(clip4(), Vibe.HYPE))
-        assertEquals(listOf(30, 45, 60), StudioPlanner.lengthsFor(List(20) { i -> clip4()[0].copy(id = "b$i") }, Vibe.HYPE))
+        assertEquals(listOf(15), StudioPlanner.lengthsFor(clip4(), Vibe.HYPE))
+        assertEquals(listOf(15, 30, 45, 60), StudioPlanner.lengthsFor(List(20) { i -> clip4()[0].copy(id = "b$i") }, Vibe.HYPE))
     }
 
     @Test

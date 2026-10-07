@@ -35,7 +35,7 @@ import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.roundToInt
 
-enum class StudioStep { SETUP, WORKING, READY, EDIT }
+enum class StudioStep { SETUP, WORKING, READY, EDIT, VOICE }
 
 /** One step of making the video, as the rider sees it. */
 data class WorkStep(val label: String, val state: Int /* 0 waiting, 1 running, 2 done, 3 skipped */, val detail: String? = null)
@@ -58,27 +58,47 @@ data class StudioState(
     val canSkipCaptions: Boolean = false,
     val plan: StudioPlan? = null,
     val title: String = "",
+    val series: String = "",
+    val episode: Int = 1,
+    val hookLine: String = "",
+    val story: String? = null,
     val postCaption: String = "",
     val video: File? = null,
     val notes: List<String> = emptyList(),
     val error: String? = null,
     /** Thumbnails by moment id, for Edit. */
     val thumbs: Map<String, File?> = emptyMap(),
-)
+    /** The coach's tips for this video; null while they're being written. */
+    val tips: List<Tip>? = null,
+    val takes: List<VoiceTake> = emptyList(),
+    /** ms into the Reel where the take being recorded started; null when not recording. */
+    val recordingAt: Long? = null,
+    /** Good parts of other rides, for Edit › Add from another ride. */
+    val otherBits: List<Bit> = emptyList(),
+) {
+    /** The small label on the first clip: the series and episode, or the title. */
+    val label: String get() = if (series.isBlank()) title else "$series · ep $episode"
+}
 
-/** Studio: turns a ride's clips into a Reel (captions and picks by Gemini when it can). */
+/** Studio: turns a ride's clips into a Reel (captions, stories and tips by Gemini when it can). */
 @OptIn(UnstableApi::class)
 class StudioViewModel(private val c: AppContainer, private val rideId: String) : ViewModel() {
     private val _state = MutableStateFlow(StudioState())
     val state: StateFlow<StudioState> = _state.asStateFlow()
 
     private var clips: List<Moment> = emptyList()
+    /** Clips from other rides the rider added (their files are needed to render). */
+    private val borrowed = HashMap<String, Moment>()
     private var samples: List<TelemetrySample> = emptyList()
     private var card: RideCard? = null
     private var bits: List<Bit> = emptyList()
     private var captionsDone = false
     private var direction: Direction? = null
+    /** Which of Gemini's stories this take tells; past the last = a best-of. */
+    private var storyIndex = 0
     private var job: Job? = null
+    private var coachJob: Job? = null
+    private val recorder = VoiceRecorder()
     @Volatile private var skipCaptions = false
 
     init {
@@ -99,6 +119,8 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
                     talkingCount = talking,
                     posters = clips.sortedByDescending { m -> m.starred }.mapNotNull { m -> m.thumb?.takeIf(File::isFile) }.take(4),
                     title = ride.name,
+                    series = c.studio.series,
+                    episode = c.studio.nextEpisode,
                     lengths = StudioPlanner.lengthsFor(bits, it.options.vibe),
                     thumbs = clips.associate { m -> m.id to m.thumb },
                 )
@@ -124,11 +146,24 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
         _state.update { it.copy(musicUri = uri, musicName = name) }
     }
 
-    fun back() = _state.update { it.copy(step = if (it.step == StudioStep.EDIT) StudioStep.READY else StudioStep.SETUP, error = null) }
+    fun setSeries(name: String) {
+        c.studio.series = name
+        _state.update { it.copy(series = name) }
+    }
+
+    fun back() = _state.update {
+        it.copy(step = if (it.step == StudioStep.EDIT || it.step == StudioStep.VOICE) StudioStep.READY else StudioStep.SETUP, error = null)
+    }
+
+    /** Shared or saved: the next Reel of the series is the next episode. */
+    fun posted() {
+        val s = _state.value
+        if (s.series.isNotBlank()) c.studio.episodeUsed(s.episode)
+    }
 
     // ---- making ----------------------------------------------------------------------------
 
-    /** Captions (Gemini) → picks (Gemini director) → plan → video. */
+    /** Captions (Gemini) → stories and picks (Gemini director) → plan → video → tips. */
     fun make() {
         if (job?.isActive == true) return
         val o = _state.value.options
@@ -137,10 +172,10 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
         skipCaptions = false
         _state.update {
             it.copy(
-                step = StudioStep.WORKING, error = null, video = null, renderProgress = null, notes = emptyList(),
+                step = StudioStep.WORKING, error = null, video = null, renderProgress = null, notes = emptyList(), tips = null,
                 work = listOfNotNull(
                     WorkStep("Reading what you said", if (needCaptions) 0 else 3, if (!o.captions) "Captions are off" else if (!gemini) "Not available in this build" else if (captionsDone) "Done earlier" else null),
-                    WorkStep("Picking your best moments", 0),
+                    WorkStep("Finding the story", 0),
                     WorkStep("Making the video", 0),
                 ),
             )
@@ -159,13 +194,9 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
                 }
                 step(1, 1)
                 if (gemini && direction == null) direction = runCatching { direct() }.getOrNull()
-                val d = direction
-                val scored = bits.map { b -> b.copy(punch = if (b.id == d?.hookId) 10f else d?.punch?.get(b.id) ?: b.punch) }
-                val plan = StudioPlanner.plan(scored, _state.value.options)
-                if (plan.clips.isEmpty()) error("No usable clips")
-                val title = d?.title ?: _state.value.title
-                _state.update { it.copy(plan = plan, title = title, postCaption = d?.postCaption ?: fallbackCaption(), lengths = StudioPlanner.lengthsFor(bits, it.options.vibe)) }
-                step(1, 2, "${plan.clips.size} clips · ${Format.clock(plan.totalMs)}")
+                replan()
+                val s = _state.value
+                step(1, 2, listOfNotNull(s.story?.let { "“$it”" }, "${s.plan?.clips?.size} clips · ${Format.clock(s.plan?.totalMs ?: 0)}").joinToString(" · "))
                 render(notes)
             } catch (e: CancellationException) {
                 _state.update { it.copy(step = StudioStep.SETUP, canSkipCaptions = false) }
@@ -176,10 +207,31 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
         }
     }
 
-    /** A new take from the same moments (no Gemini calls). */
+    /** Plans from the bits, Gemini's scores and the current story. */
+    private fun replan() {
+        val d = direction
+        val stories = d?.stories.orEmpty()
+        val story = stories.getOrNull(storyIndex)
+        val scored = bits.map { b -> b.copy(punch = if (b.id == d?.hookId && story == null) 10f else d?.punch?.get(b.id) ?: b.punch) }
+        val plan = StudioPlanner.plan(scored, _state.value.options, story?.ids.orEmpty(), d?.endingId)
+        if (plan.clips.isEmpty()) error("No usable clips")
+        _state.update {
+            it.copy(
+                plan = plan,
+                story = story?.name,
+                title = if (it.title == card?.title) d?.title ?: it.title else it.title,
+                hookLine = d?.hookLine ?: it.hookLine,
+                postCaption = d?.postCaption ?: fallbackCaption(),
+                lengths = StudioPlanner.lengthsFor(bits, it.options.vibe),
+            )
+        }
+    }
+
+    /** Another take from the same ride: the next story Gemini found, then best-ofs (no new Gemini calls). */
     fun remix() {
-        val s = _state.value
-        if (s.plan == null || job?.isActive == true) return
+        if (_state.value.plan == null || job?.isActive == true) return
+        val n = direction?.stories?.size ?: 0
+        storyIndex = if (n == 0) 0 else (storyIndex + 1) % (n + 1)
         setOptions { it.copy(seed = it.seed + 1) }
         make()
     }
@@ -191,34 +243,140 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
         _state.update { it.copy(step = StudioStep.SETUP, renderProgress = null) }
     }
 
+    /** One tap on a coach tip. */
+    fun act(a: TipAction) {
+        when (a) {
+            TipAction.TITLE_ON_HOOK -> { setOptions { it.copy(intro = false) }; make() }
+            TipAction.SHORTER -> {
+                if (direction?.stories?.isNotEmpty() == true && storyIndex >= direction!!.stories.size) storyIndex = 0
+                setOptions { it.copy(lengthSec = 15) }
+                make()
+            }
+            TipAction.STORY -> remix()
+            TipAction.VOICE_OVER -> voice()
+            TipAction.OTHER_RIDES -> edit()
+        }
+    }
+
     // ---- edit ------------------------------------------------------------------------------
 
-    fun edit() = _state.update { it.copy(step = StudioStep.EDIT) }
+    fun edit() {
+        _state.update { it.copy(step = StudioStep.EDIT) }
+        if (_state.value.otherBits.isEmpty()) viewModelScope.launch { loadOtherRides() }
+    }
     fun setTitle(t: String) = _state.update { it.copy(title = t) }
+    fun setHookLine(t: String) = _state.update { it.copy(hookLine = t) }
     fun nudge(i: Int, start: Long, end: Long) = editPlan { StudioPlanner.nudge(it, i, start, end) }
     fun setText(i: Int, text: String) = editPlan { StudioPlanner.setText(it, i, text) }
     fun move(i: Int, by: Int) = editPlan { StudioPlanner.move(it, i, by) }
     fun remove(i: Int) = editPlan { StudioPlanner.remove(it, i) }
     fun swap(i: Int) = editPlan { StudioPlanner.swap(it, i, bits) }
+    fun add(b: Bit) = editPlan { StudioPlanner.add(it, b) }
     private fun editPlan(f: (StudioPlan) -> StudioPlan) = _state.update { s -> s.plan?.let { s.copy(plan = f(it)) } ?: s }
 
-    /** Done editing: make the video again from the edited plan. */
+    /** Done editing (or recording): make the video again from the edited plan. */
     fun remake() {
         if (job?.isActive == true) return
+        val from = _state.value.step
         _state.update {
-            it.copy(step = StudioStep.WORKING, video = null, error = null, work = listOf(WorkStep("Your changes", 2), WorkStep("Making the video", 0)))
+            it.copy(step = StudioStep.WORKING, video = null, error = null, tips = null, work = listOf(WorkStep("Your changes", 2), WorkStep("Making the video", 0)))
         }
         job = viewModelScope.launch {
             try {
                 render(ArrayList())
             } catch (e: CancellationException) {
-                _state.update { it.copy(step = StudioStep.EDIT) }
+                _state.update { it.copy(step = from) }
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(step = StudioStep.EDIT, error = "Couldn't make the video (${e.message ?: e.javaClass.simpleName})") }
+                _state.update { it.copy(step = from, error = "Couldn't make the video (${e.message ?: e.javaClass.simpleName})") }
             }
         }
     }
+
+    /** The best talking parts of other rides (by their saved captions), then a few riding shots. */
+    private suspend fun loadOtherRides() {
+        val list = withContext(Dispatchers.IO) {
+            val others = c.moments.all().filter { it.rideId != rideId && it.kind == MomentKind.CLIP && it.file.isFile && (it.durationMillis ?: 0) >= 1_500 }
+            val day = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
+            val talking = ArrayList<Pair<Bit, Moment>>()
+            val riding = ArrayList<Pair<Bit, Moment>>()
+            others.sortedByDescending { it.timeMillis }.forEach { m ->
+                val lines = StudioText.load(m.file)
+                val kmh = (m.speedMps ?: 0.0) * 3.6
+                val label = day.format(Instant.ofEpochMilli(m.timeMillis).atZone(ZoneId.systemDefault()))
+                val dur = m.durationMillis ?: 0
+                val bs = StudioPlanner.bitsOf(m.id, m.videoStartMillis, dur, lines.orEmpty(), { kmh }, (m.timeMillis - m.videoStartMillis).coerceIn(0, dur))
+                    .map { it.copy(fromRide = label) }
+                bs.forEach { b -> if (b.talking) talking += b to m else if (riding.size < 6 && kmh > 20) riding += b to m }
+            }
+            (talking.sortedByDescending { it.first.punch }.take(14) + riding)
+        }
+        list.forEach { (b, m) -> borrowed[b.momentId] = m }
+        _state.update { it.copy(otherBits = list.map { it.first }, thumbs = it.thumbs + list.associate { (b, m) -> b.momentId to m.thumb }) }
+    }
+
+    // ---- voice-over ------------------------------------------------------------------------
+
+    fun voice() = _state.update { it.copy(step = StudioStep.VOICE) }
+
+    /** Starts recording a take at [atMs] into the Reel (the screen plays the Reel muted meanwhile). */
+    fun startTake(atMs: Long) {
+        if (_state.value.recordingAt != null) return
+        val dir = File(c.appContext.filesDir, "studio").apply { mkdirs() }
+        val file = File(dir, "voice-$rideId-${System.currentTimeMillis()}.pcm")
+        _state.update { it.copy(recordingAt = atMs) }
+        viewModelScope.launch {
+            val ms = runCatching { recorder.record(file) }.getOrElse { e ->
+                _state.update { it.copy(recordingAt = null, error = "Couldn't record (${e.message})") }
+                return@launch
+            }
+            val total = _state.value.plan?.totalMs ?: 0
+            val take = VoiceTake(atMs, ms.coerceAtMost((total - atMs).coerceAtLeast(0)), file)
+            _state.update { it.copy(recordingAt = null, takes = it.takes + take) }
+        }
+    }
+
+    fun stopTake() = recorder.stop()
+
+    fun deleteTake(t: VoiceTake) {
+        t.file.delete()
+        _state.update { it.copy(takes = it.takes - t) }
+    }
+
+    /** Captions for takes that don't have them yet (Gemini), then the video again. */
+    fun finishVoice() {
+        if (job?.isActive == true) return
+        _state.update {
+            it.copy(step = StudioStep.WORKING, video = null, error = null, tips = null, work = listOf(WorkStep("Reading your voice-over", 0), WorkStep("Making the video", 0)))
+        }
+        job = viewModelScope.launch {
+            try {
+                step(0, 1)
+                if (c.transcripts.available && _state.value.options.captions) {
+                    val g = gemini()
+                    val updated = _state.value.takes.map { t ->
+                        if (t.lines.isNotEmpty() || t.durMs < 500) return@map t
+                        val wav = File(c.appContext.cacheDir, "take.wav")
+                        try {
+                            t.copy(lines = runCatching { withContext(Dispatchers.IO) { g.captions(VoiceRecorder.takeWav(t, wav), "audio/wav") } }.getOrDefault(emptyList()))
+                        } finally {
+                            wav.delete()
+                        }
+                    }
+                    _state.update { it.copy(takes = updated) }
+                }
+                step(0, 2)
+                render(ArrayList())
+            } catch (e: CancellationException) {
+                _state.update { it.copy(step = StudioStep.VOICE) }
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(step = StudioStep.VOICE, error = "Couldn't make the video (${e.message ?: e.javaClass.simpleName})") }
+            }
+        }
+    }
+
+    // ---- rendering ---------------------------------------------------------------------------
 
     private suspend fun render(notes: List<String>) {
         val s = _state.value
@@ -226,20 +384,46 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
         val idx = s.work.lastIndex
         step(idx, 1)
         val baseCard = card ?: return
+        val voice = s.takes.takeIf { it.isNotEmpty() }?.let { takes ->
+            withContext(Dispatchers.IO) { VoiceRecorder.mix(takes, plan.totalMs, File(c.appContext.cacheDir, "studio-voice.wav")) }
+        }
         val input = RenderInput(
             plan = plan,
-            files = clips.associate { it.id to it.file },
+            files = (clips + borrowed.values).associate { it.id to it.file },
             card = baseCard.copy(title = s.title.ifBlank { baseCard.title }),
             options = s.options,
             speedAt = ::speedAt,
             clockAt = { Format.timeOfDay(it).lowercase(Locale.getDefault()) },
             music = s.musicUri,
+            opener = StudioArt.Opener(label = if (s.options.intro) s.label.takeIf { s.series.isNotBlank() } else s.label, hookLine = s.hookLine.ifBlank { null }),
+            voice = voice,
+            voiceLines = s.takes.flatMap { t -> t.lines.map { it.copy(startMs = it.startMs + t.startMs, endMs = it.endMs + t.startMs) } },
         )
         val out = File(ShareImages.sharesDir(c.appContext), "keppo-reel-${System.currentTimeMillis()}.mp4")
         val result = StudioRenderer(c.appContext).render(input, out) { p -> _state.update { it.copy(renderProgress = p) } }
         val file = result.getOrThrow()
         step(idx, 2)
         _state.update { it.copy(step = StudioStep.READY, video = file, renderProgress = null, notes = notes) }
+        coach()
+    }
+
+    /** Tips for this video: Gemini's when it can, the app's own otherwise. "Film next time" ones go on Home. */
+    private fun coach() {
+        coachJob?.cancel()
+        coachJob = viewModelScope.launch {
+            val s = _state.value
+            val plan = s.plan ?: return@launch
+            val d = direction
+            val story = d?.stories?.getOrNull(storyIndex)
+            val voiceOver = s.takes.isNotEmpty()
+            val tips = (if (c.transcripts.available) {
+                runCatching { gemini().coach(StudioCoach.summary(plan, s.options, bits, d, story, voiceOver, s.musicUri != null)) }.getOrDefault(emptyList())
+            } else {
+                emptyList()
+            }).ifEmpty { StudioCoach.localTips(plan, s.options, bits, d, voiceOver) }
+            c.studio.setShots(tips.filter { it.nextRide }.map { it.text })
+            _state.update { it.copy(tips = tips) }
+        }
     }
 
     private fun step(i: Int, state: Int, detail: String? = null) = _state.update { s ->
@@ -276,7 +460,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
                 note = when {
                     AppCheckSetup.isRejected(e) -> "Captions: Firebase didn't accept this phone (App Check). Add the debug token from Profile › Moments in Firebase."
                     e is FirebaseTranscriber.Busy -> "Captions: Gemini is busy right now, so some clips have no captions. Remix later to try again."
-                    else -> "Captions: couldn't read ${missed} clip${if (missed > 1) "s" else ""} (${e.message?.take(80)})."
+                    else -> "Captions: couldn't read $missed clip${if (missed > 1) "s" else ""} (${e.message?.take(80)})."
                 }
                 if (AppCheckSetup.isRejected(e)) break
             } finally {
@@ -356,6 +540,8 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
 
     override fun onCleared() {
         job?.cancel()
+        coachJob?.cancel()
+        recorder.stop()
     }
 
     private companion object {

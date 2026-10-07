@@ -113,15 +113,69 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
 
     // ---- a clip's overlay ---------------------------------------------------------------------
 
-    fun drawClip(c: Canvas, f: FrameAt, seg: ClipSegment, kmh: Int, clock: String, captions: Boolean) {
+    /**
+     * A clip's graphics. [lines] are the captions in ms from the segment start (the clip's words and
+     * any voice-over); [opener] shows on the Reel's first clip: the title label and the hook line.
+     */
+    fun drawClip(c: Canvas, f: FrameAt, lines: List<CaptionLine>, kmh: Int, clock: String, captions: Boolean, opener: Opener? = null) {
         vignette(c)
         if (f.vibe == Vibe.CINE) {
             p.reset(); p.color = Color.BLACK
             c.drawRect(0f, 0f, W, H * 0.09f, p); c.drawRect(0f, H * 0.91f, W, H, p)
         }
         speedBadge(c, f.vibe, kmh, clock)
-        if (captions) caption(c, f.vibe, seg.lines, f.localMs / 1000f)
+        opener?.let { opening(c, f.vibe, it, f.localMs / 1000f) }
+        if (captions) caption(c, f.vibe, lines, f.localMs / 1000f)
         edge(f)?.let { transition(c, f, it) }
+    }
+
+    /** What the first seconds say: a small title label and a hook line, readable with the sound off. */
+    data class Opener(val label: String?, val hookLine: String?)
+
+    /** The opening text: in over a quarter second, held, out by 2.8 s (before most first lines finish). */
+    private fun opening(c: Canvas, vibe: Vibe, o: Opener, t: Float) {
+        val a = cl(t / 0.25f) * cl((2.8f - t) / 0.35f)
+        if (a <= 0f) return
+        val rise = (1 - eOut(cl(t / 0.3f))) * 18 * s
+        o.label?.takeIf { it.isNotBlank() }?.let { label ->
+            text(geistMed, 15 * s, Color.WHITE, Paint.Align.CENTER, 0.25f)
+            p.setShadowLayer(8 * s, 0f, 0f, Color.argb(160, 0, 0, 0)); p.alpha = (a * 230).toInt()
+            c.drawText(label.uppercase(), W / 2, H * (if (vibe == Vibe.CINE) 0.13f else 0.165f) + rise, p)
+            p.clearShadowLayer()
+        }
+        val line = o.hookLine?.takeIf { it.isNotBlank() } ?: return
+        val y = H * (if (vibe == Vibe.CINE) 0.2f else 0.225f) + rise
+        when (vibe) {
+            Vibe.HYPE -> {
+                val txt = line.uppercase()
+                text(anton, fit(anton, txt, 58 * s, W * 0.86f), Color.WHITE, Paint.Align.CENTER)
+                p.alpha = (a * 255).toInt(); p.color = INK; p.alpha = (a * 255).toInt(); c.drawText(txt, W / 2 + 4 * s, mid(y + 5 * s), p)
+                p.color = Color.WHITE; p.alpha = (a * 255).toInt(); c.drawText(txt, W / 2, mid(y), p)
+            }
+            Vibe.CINE -> {
+                text(serif, fit(serif, line, 50 * s, W * 0.84f), CREAM_TEXT, Paint.Align.CENTER)
+                p.setShadowLayer(16 * s, 0f, 0f, Color.argb(150, 0, 0, 0)); p.alpha = (a * 255).toInt()
+                c.drawText(line, W / 2, mid(y), p); p.clearShadowLayer()
+            }
+            Vibe.CHILL -> {
+                val size = fit(marker, line, 40 * s, W * 0.78f)
+                text(marker, size, INK, Paint.Align.CENTER)
+                val bw = p.measureText(line) + 48 * s
+                val bh = 78 * s
+                c.save(); c.translate(W / 2, y); c.rotate(-2.3f)
+                p.color = CREAM; p.alpha = (a * 255).toInt(); c.drawRoundRect(RectF(-bw / 2, -bh / 2, bw / 2, bh / 2), 10 * s, 10 * s, p)
+                text(marker, size, INK, Paint.Align.CENTER); p.alpha = (a * 255).toInt(); c.drawText(line, 0f, mid(0f), p)
+                c.restore()
+            }
+            Vibe.VLOG -> {
+                val size = fit(geist, line, 36 * s, W * 0.76f)
+                text(geist, size, INK, Paint.Align.CENTER)
+                val bw = p.measureText(line) + 52 * s
+                val bh = 76 * s
+                p.color = Color.WHITE; p.alpha = (a * 245).toInt(); c.drawRoundRect(RectF(W / 2 - bw / 2, y - bh / 2, W / 2 + bw / 2, y + bh / 2), 38 * s, 38 * s, p)
+                text(geist, size, INK, Paint.Align.CENTER); p.alpha = (a * 255).toInt(); c.drawText(line, W / 2, mid(y), p)
+            }
+        }
     }
 
     private fun vignette(c: Canvas) {

@@ -91,6 +91,7 @@ fun HomeScreen(
 ) {
     val vm = appViewModel { HomeViewModel(it) }
     val s by vm.state.collectAsStateWithLifecycle()
+    val container = com.ridetrack.app.ui.appContainer()
     val context = LocalContext.current
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         vm.refreshEnvironment()
@@ -208,6 +209,10 @@ fun HomeScreen(
                     modifier = Modifier.riseIn(0),
                 )
                 Spacer(Modifier.height(10.dp))
+                if (container.studio.shots.collectAsStateWithLifecycle().value.isNotEmpty()) {
+                    com.ridetrack.app.studio.ShotListCard(container.studio, Modifier.riseIn(0))
+                    Spacer(Modifier.height(10.dp))
+                }
             }
             GarageStack(
                 bikes = s.bikes,
