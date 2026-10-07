@@ -95,6 +95,8 @@ object Routes {
     fun reel(id: String) = "share/$id?mode=reel"
     /** A saved Reel, opened in Studio. */
     fun savedReel(rideId: String, reelId: String) = "share/$rideId?mode=reel&reel=$reelId"
+    /** Studio › Your Reels. */
+    const val REELS = "reels"
     /** Studio › Your style. */
     const val STUDIO_STYLE = "studio-style"
     /** Studio with videos from the phone only (no ride). */
@@ -195,8 +197,8 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                 composable(Routes.STUDIO) {
                     com.ridetrack.app.studio.StudioHomeScreen(
                         onOpenRide = { nav.navigate(Routes.reel(it)) },
-                        onOpenReel = { ride, reel -> nav.navigate(Routes.savedReel(ride, reel)) },
                         onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
+                        onOpenReels = { nav.navigate(Routes.REELS) },
                     )
                 }
                 composable(Routes.RIDES_MAP) {
@@ -299,6 +301,16 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                             rideId = entry.arguments?.getString("rideId").orEmpty(),
                             momentId = entry.arguments?.getString("momentId").orEmpty(),
                             onBack = { nav.popBackStack() },
+                        )
+                    }
+                }
+                composable(Routes.REELS) {
+                    DarkRoute {
+                        com.ridetrack.app.studio.ReelsScreen(
+                            onBack = { nav.popBackStack() },
+                            onOpenReel = { ride, reel -> nav.navigate(Routes.savedReel(ride, reel)) },
+                            onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
+                            onStyle = { nav.navigate(Routes.STUDIO_STYLE) },
                         )
                     }
                 }

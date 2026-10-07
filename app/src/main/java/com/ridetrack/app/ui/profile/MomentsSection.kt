@@ -173,7 +173,9 @@ internal fun MomentsSection(
             LaunchedEffect(Unit) { reels = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { store.bytes() } }
             InfoRow("Moments", formatBytes(s.momentsBytes))
             InfoRow("Reels", formatBytes(reels))
-            Text("Kept on this phone; nothing is deleted automatically. Reels are managed on the Studio tab.", style = RtType.caption, color = RtColors.TextTertiary)
+            Text("Kept on this phone; nothing is deleted automatically.", style = RtType.caption, color = RtColors.TextTertiary)
+            val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
+            TextButton(onClick = { nav(com.ridetrack.app.ui.nav.Routes.REELS) }) { Text("Manage Reels", color = RtColors.Primary) }
             if ((s.momentsBytes ?: 0) > 0) {
                 TextButton(onClick = { confirmDelete = true }, enabled = editable) { Text("Delete all moments", color = RtColors.Error) }
             }

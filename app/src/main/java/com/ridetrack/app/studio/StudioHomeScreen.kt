@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -105,22 +106,37 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
     }
 }
 
-/** The Studio tab: your Reels, then the rides to make one from, then Recently deleted. */
+/** The Studio tab: for making. Your Reels are behind the icon at the top right. */
 @Composable
-fun StudioHomeScreen(onOpenRide: (String) -> Unit, onOpenReel: (rideId: String, reelId: String) -> Unit, onOpenPhone: (reelId: String?) -> Unit) {
+fun StudioHomeScreen(onOpenRide: (String) -> Unit, onOpenPhone: (reelId: String?) -> Unit, onOpenReels: () -> Unit) {
     val vm = appViewModel { StudioHomeViewModel(it) }
     val rides by vm.rides.collectAsStateWithLifecycle()
     val store = com.ridetrack.app.ui.appContainer().reels
     val reels by store.reels.collectAsStateWithLifecycle()
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val live = reels.filter { it.deletedAt == null }
+    val made = reels.count { it.deletedAt == null }
     val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia(20)) { uris ->
         if (uris.isNotEmpty()) vm.picked(uris, onOpenRide) { onOpenPhone(null) }
     }
-    val deleted = reels.filter { it.deletedAt != null }
-    var showDeleted by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        ScreenHeader("Studio", Modifier.padding(horizontal = RtDimens.screenPadding), subtitle = "Your Reels, and the rides to make one from.")
+        ScreenHeader(
+            "Studio",
+            Modifier.padding(horizontal = RtDimens.screenPadding),
+            subtitle = "Pick a ride, or your own videos.",
+            actions = {
+                // Your Reels, with how many there are.
+                Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClickLabel = "Your Reels", onClick = onOpenReels).padding(8.dp)) {
+                    androidx.compose.material3.Icon(Icons.Outlined.VideoLibrary, contentDescription = "Your Reels", tint = RtColors.TextPrimary, modifier = Modifier.size(26.dp))
+                    if (made > 0) {
+                        Text(
+                            if (made > 99) "99+" else "$made",
+                            style = RtType.caption,
+                            color = RtColors.OnPrimary,
+                            modifier = Modifier.align(Alignment.TopEnd).offsetBadge().clip(RoundedCornerShape(50)).background(RtColors.Primary).padding(horizontal = 5.dp),
+                        )
+                    }
+                }
+            },
+        )
         val list = rides
         if (list == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp) }
@@ -145,17 +161,7 @@ fun StudioHomeScreen(onOpenRide: (String) -> Unit, onOpenReel: (rideId: String, 
                     }
                 }
             }
-            if (live.isNotEmpty()) {
-                item { Label("Your Reels · ${live.size}") }
-                // Three covers a row, newest first.
-                items(live.chunked(3), key = { row -> "r-" + row.first().id }) { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        row.forEach { p -> ReelTile(p, Modifier.weight(1f)) { p.rideId?.let { onOpenReel(it, p.id) } ?: onOpenPhone(p.id) } }
-                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-                    }
-                }
-            }
-            item { Label(if (live.isEmpty()) "Make a Reel from a ride" else "Make another from a ride") }
+            item { Label("Make from a ride") }
             if (list.isEmpty()) {
                 item {
                     EmptyState(
@@ -166,34 +172,11 @@ fun StudioHomeScreen(onOpenRide: (String) -> Unit, onOpenReel: (rideId: String, 
                 }
             }
             items(list, key = { it.id }) { r -> RideRow(r) { onOpenRide(r.id) } }
-            if (deleted.isNotEmpty()) {
-                item {
-                    Text(
-                        if (showDeleted) "Hide Recently deleted" else "Recently deleted · ${deleted.size}",
-                        style = RtType.button,
-                        color = RtColors.TextSecondary,
-                        modifier = Modifier.clickable(role = Role.Button) { showDeleted = !showDeleted }.padding(vertical = 8.dp),
-                    )
-                }
-                if (showDeleted) {
-                    items(deleted, key = { "d-" + it.id }) { p ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            ReelTile(p, Modifier.width(56.dp)) {}
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(p.title, style = RtType.body, color = RtColors.TextPrimary, maxLines = 1)
-                                val days = (30 - (System.currentTimeMillis() - (p.deletedAt ?: 0)) / 86_400_000L).coerceAtLeast(0)
-                                Text("Deleted for good in $days days", style = RtType.caption, color = RtColors.TextTertiary)
-                            }
-                            Text("Restore", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { scope.launch { store.restore(p.id) } }.padding(8.dp))
-                            Text("Delete", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { scope.launch { store.purge(p.id) } }.padding(8.dp))
-                        }
-                    }
-                }
-            }
         }
     }
 }
+
+private fun Modifier.offsetBadge() = this.offset(x = 6.dp, y = (-4).dp)
 
 @Composable
 private fun Label(text: String) {
