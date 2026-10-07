@@ -255,3 +255,42 @@ Kept on the list, not for the next builds.
 ### H4 Horizontal long videos (Open)
 - Long videos (2–5 min) are vertical today. A 16:9 version for YouTube needs horizontal footage or a blurred-sides layout.
 - **Question:** Would you film horizontally for long YouTube videos?
+
+---
+
+## Rider's review (7 Oct)
+
+**Yes (35):**
+- **Fixes:** A1 (read all clips; the request cost is acceptable), A2 (needs more thinking on the minimum number of pieces), A3, A4 (keep making even when swiped away).
+- **After the ride:** B1. B3: make the top suggestion automatically; the rider will keep saying what "top" means to them.
+- **Studio pages:** C1, C2, C3, C4.
+- **Search:** C6, including search of what Gemini sees in the video.
+- **Saved clips:** C7, with saved clips auto-tagged from their transcripts.
+- **Editor:**
+  - D1: the second video can be resized freely; presets for side by side and 3-stack (1 on top, 2 below).
+  - D2, D3 (all clip tools, reverse too), D4, D6, D8, D9, D10.
+  - D7: speed and lean stickers; phone emoji now, Giphy later.
+- **Styles:**
+  - E1, E3, E7.
+  - E2: no default style per format.
+  - E4: yes to the reference-Reel idea.
+  - E5: the rider makes their own brand assets; needs an upload option.
+  - E6: styles also saved in the Google Drive backup.
+- **Recording:** F1 (DJI Mic Mini, 2 transmitters + 1 receiver), F2, F3, F4.
+- **Learning:**
+  - G1: views and likes entered by hand.
+  - G2.
+  - G3: optional, not automatic.
+- **Later:**
+  - H1: iPad, to discuss.
+  - H4: long videos max 3–5 min.
+
+**Not now (5):**
+- B2: richer ready notification.
+- D5: effects track (parked).
+- H2: Story card and 3D video in Studio.
+- H3: posting plan.
+
+**No (2):**
+- C5: first-time introduction ("don't need training for now").
+- D11: beats and sound effects.
