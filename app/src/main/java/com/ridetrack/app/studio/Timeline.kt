@@ -7,6 +7,11 @@ sealed interface TimelinePick {
     data class Clip(val index: Int) : TimelinePick
     data class Caption(val index: Int, val line: Int) : TimelinePick
     data class Text(val id: String) : TimelinePick
+    data class Layer(val id: String) : TimelinePick
+    data class Audio(val id: String) : TimelinePick
+    /** Several clips selected together (to move, delete or paste settings). */
+    data class Clips(val indices: Set<Int>) : TimelinePick
+    data class Marker(val id: String) : TimelinePick
 }
 
 /**

@@ -128,6 +128,12 @@ data class StudioState(
     val pick: TimelinePick? = null,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
+    /** What each undo step did, oldest first (the History list). */
+    val steps: List<String> = emptyList(),
+    /** A clip's settings copied to paste onto others; null when nothing is copied. */
+    val copied: TrackEdits.ClipSettings? = null,
+    /** Clips that have the engine mic's sound (two-mic recording): moment id → its file. */
+    val engineFiles: Map<String, String> = emptyMap(),
     /** Bumped when the timeline changes for good (not mid-drag), so the preview reloads. */
     val timelineVersion: Int = 0,
     /** Why Gemini can't help right now (no internet, its limit), shown with Try again; null when fine. */
@@ -983,9 +989,13 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     /** Opens the timeline editor on this Reel. */
     fun edit() {
         val plan = _state.value.plan ?: return
-        history = EditHistory(TimelineEdits.liftTexts(plan) { newTextId() })
+        // An edit left unsaved (the app closed) carries on where it was.
+        val draft = readDraft()
+        history = EditHistory(draft ?: TimelineEdits.liftTexts(plan) { newTextId() })
         val saved = c.savedClips.clips.value.associate { "saved:${it.id}" to c.savedClips.thumb(it.id).takeIf(File::isFile) }
-        _state.update { it.copy(step = StudioStep.EDIT, pick = null, footage = footage(), thumbs = it.thumbs + saved) }
+        val engine = (clips + borrowed.values).filter { it.engineFile.isFile }.associate { it.id to Uri.fromFile(it.engineFile).toString() }
+        _state.update { it.copy(step = StudioStep.EDIT, pick = null, footage = footage(), thumbs = it.thumbs + saved, engineFiles = engine) }
+        if (draft != null) say("Carried on from your unsaved edit")
         publish(reload = true)
         if (_state.value.otherBits.isEmpty()) viewModelScope.launch { loadOtherRides() }
     }
@@ -994,15 +1004,90 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
 
     private fun publish(reload: Boolean) {
         val h = history ?: return
-        _state.update { it.copy(timeline = h.current, canUndo = h.canUndo, canRedo = h.canRedo, timelineVersion = it.timelineVersion + if (reload) 1 else 0) }
+        _state.update { it.copy(timeline = h.current, canUndo = h.canUndo, canRedo = h.canRedo, steps = h.steps, timelineVersion = it.timelineVersion + if (reload) 1 else 0) }
+        if (reload) writeDraft(h.current)
     }
 
-    /** One change on the timeline (one undo step). */
-    fun change(f: (StudioPlan) -> StudioPlan) {
+    /** One change on the timeline (one undo step, named [label] in History). */
+    fun change(label: String = "Change", f: (StudioPlan) -> StudioPlan) {
         val h = history ?: return
-        h.apply(f(h.current))
+        h.apply(f(h.current), label)
         publish(reload = true)
     }
+
+    /** Back to just before History step [index]. */
+    fun undoTo(index: Int) {
+        history?.undoTo(index)
+        _state.update { it.copy(pick = null) }
+        publish(reload = true)
+    }
+
+    // ---- autosave: the edit is kept as it changes, so nothing is lost if the app closes ----
+
+    private val draftFile: File
+        get() = File(File(c.appContext.filesDir, "studio-drafts").apply { mkdirs() }, (_state.value.reelId ?: "ride-$rideId") + ".json")
+
+    private fun writeDraft(plan: StudioPlan) {
+        val s = _state.value
+        val p = ReelProject(
+            id = s.reelId ?: "draft", rideId = rideId.takeIf { !phoneOnly }, createdAt = 0, updatedAt = System.currentTimeMillis(), title = s.title, series = s.series,
+            episode = s.episode, hookLine = s.hookLine, postCaption = s.postCaption, story = null, options = s.options, musicUri = null, musicName = null,
+            plan = plan, takes = emptyList(), tips = emptyList(), durationMs = plan.totalMs,
+        )
+        val f = draftFile
+        viewModelScope.launch(Dispatchers.IO) { runCatching { f.writeText(ReelJson.write(p)) } }
+    }
+
+    /** The unsaved edit of this Reel, when it's newer than the Reel itself. */
+    private fun readDraft(): StudioPlan? = runCatching {
+        val f = draftFile
+        if (!f.isFile) return null
+        val d = ReelJson.read(f.readText()) ?: return null
+        val saved = _state.value.reelId?.let { c.reels.get(it)?.updatedAt } ?: 0L
+        d.plan.takeIf { d.updatedAt > saved && d.plan != _state.value.plan }
+    }.getOrNull()
+
+    private fun dropDraft() {
+        val f = draftFile
+        viewModelScope.launch(Dispatchers.IO) { f.delete() }
+    }
+
+    // ---- layers and sound ----------------------------------------------------------------
+
+    private fun newId(prefix: String) = prefix + java.util.UUID.randomUUID().toString().take(8)
+
+    /** Puts [b] over the edit at the playhead, in the [preset] place. */
+    fun addLayer(b: Bit, preset: LayerPreset) {
+        val id = newId("l")
+        change("Add layer") { TrackEdits.addLayer(it, b, playheadMs, id, preset) }
+        _state.update { it.copy(pick = TimelinePick.Layer(id)) }
+    }
+
+    /** The engine mic's sound under every clip that has it. */
+    fun addEngine() {
+        val engine = _state.value.engineFiles
+        if (engine.isEmpty()) return say("No engine sound in these clips (record with two mics)")
+        change("Engine sound") { TrackEdits.addEngine(it, engine, { newId("e") }) }
+    }
+
+    fun detach(i: Int) {
+        val id = newId("d")
+        change("Detach sound") { TrackEdits.detach(it, i, id) }
+        _state.update { it.copy(pick = TimelinePick.Audio(id)) }
+    }
+
+    fun copySettings(i: Int) {
+        val s = _state.value.timeline?.let { TrackEdits.copySettings(it, i) } ?: return
+        _state.update { it.copy(copied = s) }
+        say("Copied · select clips and Paste")
+    }
+
+    fun pasteSettings(indices: Set<Int>) {
+        val s = _state.value.copied ?: return
+        change("Paste settings") { TrackEdits.pasteSettings(it, indices, s) }
+    }
+
+    fun addMarker() = change("Marker") { TrackEdits.addMarker(it, playheadMs, newId("m")) }
 
     /** A trim being dragged: [f] gets the plan from before the drag. */
     fun drag(f: (StudioPlan) -> StudioPlan) {
@@ -1023,9 +1108,9 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     fun undo() { history?.undo(); _state.update { it.copy(pick = null) }; publish(reload = true) }
     fun redo() { history?.redo(); _state.update { it.copy(pick = null) }; publish(reload = true) }
 
-    fun addText(text: String) = change { TimelineEdits.addText(it, playheadMs, text, newTextId()) }
-    fun addCaption(text: String) = change { TimelineEdits.addCaption(it, playheadMs, text) }
-    fun insert(b: Bit) = change { TimelineEdits.insert(it, b, playheadMs) }
+    fun addText(text: String) = change("Add text") { TimelineEdits.addText(it, playheadMs, text, newTextId()) }
+    fun addCaption(text: String) = change("Add caption") { TimelineEdits.addCaption(it, playheadMs, text) }
+    fun insert(b: Bit) = change("Add clip") { TimelineEdits.insert(it, b, playheadMs) }
 
     /** Your saved clips first, then parts of this ride (and the other rides Studio read) that aren't in the edit yet. */
     fun insertable(): List<Bit> {
@@ -1033,6 +1118,9 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         val saved = c.savedClips.clips.value.map(c.savedClips::bit)
         return saved.filter { it.momentId !in used } + bits.filter { it.momentId !in used } + _state.value.otherBits.filter { it.momentId !in used }
     }
+
+    /** Everything that can go over the edit as a layer: saved clips, this ride's parts (used ones too), other rides'. */
+    fun layerable(): List<Bit> = c.savedClips.clips.value.map(c.savedClips::bit) + bits + _state.value.otherBits
 
     /**
      * Keeps [startMs]..[endMs] of a clip in Saved clips (copied, with its words and tags), to
@@ -1070,6 +1158,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
 
     /** Leaves the editor without keeping the changes. */
     fun closeEdit() {
+        dropDraft()
         history = null
         dragFrom = null
         _state.update { it.copy(step = StudioStep.READY, timeline = null, pick = null) }
@@ -1084,6 +1173,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         val before = s.script ?: s.plan?.let { ScriptEdits.fromPlan(it, s.title) }
         val after = before?.let { ScriptEdits.sync(it, edited) }
         if (before != null && after != null) c.style.record(before.describe(fs), after.describe(fs) + if (edited.texts.isNotEmpty()) " + text: " + edited.texts.joinToString { it.text } else "", "(edited on the timeline)")
+        dropDraft()
         history = null
         _state.update { it.copy(plan = edited, script = after ?: it.script, timeline = null, pick = null, step = StudioStep.READY) }
         remake()
