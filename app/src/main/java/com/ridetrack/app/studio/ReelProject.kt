@@ -40,6 +40,8 @@ data class ReelProject(
     val coverRoute: Boolean = false,
     /** Which Reel idea it was made from ("Highlights", "The 15-second hook"…); null for a plain one. */
     val idea: String? = null,
+    /** The script it was made from (sections and shots); null for Reels made before scripts. */
+    val script: Script? = null,
 ) {
     val vibe: Vibe get() = options.vibe
 }
@@ -76,6 +78,7 @@ object ReelJson {
         put("coverLine", p.coverLine ?: JSONObject.NULL)
         put("coverRoute", p.coverRoute)
         put("idea", p.idea ?: JSONObject.NULL)
+        put("script", p.script?.let { ScriptJson.write(it) } ?: JSONObject.NULL)
     }.toString()
 
     fun read(text: String): ReelProject? = runCatching {
@@ -113,6 +116,7 @@ object ReelJson {
             coverLine = o.optStringOrNull("coverLine"),
             coverRoute = o.optBoolean("coverRoute"),
             idea = o.optStringOrNull("idea"),
+            script = o.optJSONObject("script")?.let { ScriptJson.read(it) },
         )
     }.getOrNull()
 
@@ -136,13 +140,13 @@ object ReelJson {
 
     private fun segment(s: Segment): JSONObject = when (s) {
         is ClipSegment -> JSONObject().put("type", "clip").put("bit", bit(s.bit)).put("in", s.inMs).put("dur", s.durMs).put("lines", lines(s.lines))
-            .put("hook", s.hook).put("tail", s.tail).put("teaser", s.teaser)
+            .put("hook", s.hook).put("tail", s.tail).put("teaser", s.teaser).put("section", s.section).put("text", s.text ?: JSONObject.NULL)
         is TitleSegment -> JSONObject().put("type", "title").put("dur", s.durMs)
         is StatsSegment -> JSONObject().put("type", "stats").put("dur", s.durMs)
     }
 
     private fun readSegment(o: JSONObject): Segment? = when (o.optString("type")) {
-        "clip" -> ClipSegment(readBit(o.getJSONObject("bit")), o.getLong("in"), o.getLong("dur"), readLines(o.optJSONArray("lines")), o.optBoolean("hook"), o.optBoolean("tail"), o.optBoolean("teaser"))
+        "clip" -> ClipSegment(readBit(o.getJSONObject("bit")), o.getLong("in"), o.getLong("dur"), readLines(o.optJSONArray("lines")), o.optBoolean("hook"), o.optBoolean("tail"), o.optBoolean("teaser"), o.optInt("section", -1), o.optStringOrNull("text"))
         "title" -> TitleSegment(o.getLong("dur"))
         "stats" -> StatsSegment(o.getLong("dur"))
         else -> null

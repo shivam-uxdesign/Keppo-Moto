@@ -205,8 +205,9 @@ class StudioRenderer(private val context: Context) {
                 vibe = plan.vibe,
                 localMs = localMs,
                 durMs = dur,
-                hasPrev = i > 0,
-                hasNext = i < segs.lastIndex,
+                // Inside a script section the cut is plain; the vibe's transition plays between sections.
+                hasPrev = i > 0 && boundary(segs[i - 1], seg),
+                hasNext = i < segs.lastIndex && boundary(seg, segs[i + 1]),
                 nextLabel = describe(input, segs.getOrNull(if (localMs < dur / 2) i else i + 1)).first,
                 nextTime = describe(input, segs.getOrNull(if (localMs < dur / 2) i else i + 1)).second,
             )
@@ -223,6 +224,7 @@ class StudioRenderer(private val context: Context) {
                     val kmh = input.speedAt(wall).takeIf { it >= 0 && seg.bit.fromRide == null }
                         ?: seg.bit.speedKmh.toInt().takeIf { it > 0 } ?: -1
                     art.drawClip(c, f, if (seg.tail) emptyList() else lines, kmh, input.clockAt(wall), o.captions, opener)
+                    seg.text?.let { t -> art.drawSectionText(c, plan.vibe, t, localMs) }
                 }
                 is TitleSegment -> art.drawTitle(c, f, input.card, o.map)
                 is StatsSegment -> art.drawStats(c, f, input.card, o.map, o.watermark)
@@ -254,6 +256,10 @@ class StudioRenderer(private val context: Context) {
     private fun voiceRanges(input: RenderInput): List<LongRange> = input.voiceLines.map { (it.startMs - 150)..(it.endMs + 250) }
 
     /** What a transition says about segment [s]: speed and time for a clip, "That's a wrap" for the stats. */
+    /** A transition between [a] and [b]: always, unless both are clips of the same script section. */
+    private fun boundary(a: Segment, b: Segment): Boolean =
+        !(a is ClipSegment && b is ClipSegment && a.section >= 0 && a.section == b.section && !b.tail)
+
     private fun describe(input: RenderInput, s: Segment?): Pair<String, String> = when (s) {
         is ClipSegment -> {
             val kmh = input.speedAt(s.bit.atMillis).takeIf { it >= 0 && s.bit.fromRide == null } ?: s.bit.speedKmh.toInt().takeIf { it > 0 } ?: -1

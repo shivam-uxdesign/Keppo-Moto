@@ -446,14 +446,15 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
      * A Reel cover's text, still, in the vibe's caption style. Kept inside the middle 3:4 so
      * Instagram's profile grid doesn't crop it.
      */
-    fun drawCoverText(c: Canvas, vibe: Vibe, line: String) {
+    fun drawCoverText(c: Canvas, vibe: Vibe, line: String, cy: Float = H * 0.64f, shade: Boolean = true) {
         val words = line.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (words.isEmpty()) return
         // A soft shade under the text so it reads on any frame.
-        p.reset(); p.shader = LinearGradient(0f, H * 0.42f, 0f, H * 0.82f, Color.TRANSPARENT, Color.argb(150, 0, 0, 0), Shader.TileMode.CLAMP)
-        c.drawRect(0f, H * 0.42f, W, H * 0.82f, p)
-        p.shader = null
-        val cy = H * 0.64f
+        if (shade) {
+            p.reset(); p.shader = LinearGradient(0f, cy - H * 0.22f, 0f, cy + H * 0.18f, Color.TRANSPARENT, Color.argb(150, 0, 0, 0), Shader.TileMode.CLAMP)
+            c.drawRect(0f, cy - H * 0.22f, W, cy + H * 0.18f, p)
+            p.shader = null
+        }
         when (vibe) {
             Vibe.HYPE -> {
                 text(anton, 96 * s, Color.WHITE, Paint.Align.CENTER)
@@ -514,6 +515,17 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
                 rows.forEachIndexed { i, row -> c.drawText(row.joinToString(" "), x + 26 * s, by + 18 * s + lh / 2 + i * lh + mid(2 * s), p) }
             }
         }
+    }
+
+    /** A section's on-screen text, in the top third (clear of captions), for its first 2.6 s. */
+    fun drawSectionText(c: Canvas, vibe: Vibe, text: String, localMs: Long) {
+        val t = localMs / 1000f
+        if (t > 2.6f) return
+        val a = (cl(t / 0.25f) * cl((2.6f - t) / 0.3f) * 255).toInt()
+        if (a <= 0) return
+        c.saveLayerAlpha(0f, 0f, W, H, a)
+        drawCoverText(c, vibe, text, cy = H * 0.3f, shade = false)
+        c.restore()
     }
 
     // ---- speed badge -------------------------------------------------------------------------

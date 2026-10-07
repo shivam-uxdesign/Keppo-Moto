@@ -81,6 +81,12 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         return StudioText.parseBatch(text, audios.size)
     }
 
+    /** Scripts for [prompt] (a content plan, one piece, or a rewrite); text only, clips by their keys. */
+    suspend fun scripts(prompt: String, footage: List<Footage>): List<Script> {
+        val text = call(json = true, temperature = 0.7f) { m -> m.generateContent(prompt).text.orEmpty() }
+        return ScriptWriter.parsePieces(text, footage)
+    }
+
     /** Tips for the next Reel, from a plain description of this one (text only). */
     suspend fun coach(summary: String): List<Tip> {
         val text = call(json = true) { m -> m.generateContent(StudioText.coachPrompt(summary)).text.orEmpty() }
@@ -88,7 +94,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
     }
 
     /** Tries the model that last worked, then the known names, then Remote Config's. */
-    private suspend fun call(json: Boolean, models: List<String> = FirebaseTranscriber.MODELS, block: suspend (GenerativeModel) -> String): String {
+    private suspend fun call(json: Boolean, models: List<String> = FirebaseTranscriber.MODELS, temperature: Float = 0.2f, block: suspend (GenerativeModel) -> String): String {
         val order = (if (models === FirebaseTranscriber.MODELS) listOfNotNull(preferred()) else emptyList()) + models
         val queue = ArrayDeque(order.distinct())
         val tried = HashSet<String>()
@@ -113,7 +119,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
             val model = Firebase.ai(backend = GenerativeBackend.googleAI()).generativeModel(
                 modelName = name,
                 generationConfig = generationConfig {
-                    temperature = 0.2f
+                    this.temperature = temperature
                     if (json) responseMimeType = "application/json"
                 },
             )
@@ -152,6 +158,7 @@ object StudioText {
         The rider speaks English and Hinglish (Hindi mixed with English). Write everything in English letters (Latin script),
         Hindi words the way people text them (for example "bhai ye road mast hai"). Do not translate, never use Devanagari.
         Ignore wind, engine, horn and traffic noise. Split speech into short lines of at most 8 words, at natural pauses.
+        Also write the rider's reactions and drawn-out sounds as they sound ("Tooooo", "Aaaahh", "Fhit!", "Nooo"), each as its own line.
         Reply with JSON only: {"lines":[{"start":1.2,"end":3.4,"text":"..."}]} with start and end in seconds from the
         beginning of the recording. If there is no clear speech, reply {"lines":[]}.
     """.trimIndent()
@@ -162,6 +169,7 @@ object StudioText {
         The rider speaks English and Hinglish (Hindi mixed with English). Write everything in English letters (Latin script),
         Hindi words the way people text them (for example "bhai ye road mast hai"). Do not translate, never use Devanagari.
         Ignore wind, engine, horn and traffic noise. Split speech into short lines of at most 8 words, at natural pauses.
+        Also write the rider's reactions and drawn-out sounds as they sound ("Tooooo", "Aaaahh", "Fhit!", "Nooo"), each as its own line.
         Reply with JSON only: {"clips":[{"clip":1,"lines":[{"start":1.2,"end":3.4,"text":"..."}]}]} with one entry per clip;
         a clip with no clear speech has "lines":[].
     """.trimIndent()

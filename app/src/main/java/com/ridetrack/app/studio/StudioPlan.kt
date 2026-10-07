@@ -58,6 +58,10 @@ data class ClipSegment(
     val tail: Boolean = false,
     /** A 1–2 s flash-forward of a later moment at the very start (the one case a clip shows twice). */
     val teaser: Boolean = false,
+    /** The script section it belongs to: cuts inside a section are plain, the vibe's transition plays between sections. -1 = its own. */
+    val section: Int = -1,
+    /** On-screen text for the start of its section (from the script); null = none. */
+    val text: String? = null,
 ) : Segment
 
 /** The route-sketch opening (optional); the stats over the last clip. Both play muted. */

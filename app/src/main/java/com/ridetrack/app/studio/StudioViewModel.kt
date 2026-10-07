@@ -115,6 +115,10 @@ data class StudioState(
     val phoneOnly: Boolean = false,
     /** Gemini can be used in this build. */
     val gemini: Boolean = false,
+    /** The script the Reel was made from. */
+    val script: Script? = null,
+    /** What the ride has to work with, in words ("40 s of you talking…"). */
+    val content: String? = null,
 ) {
     /** The small label on the first clip: the series and episode, or the title. */
     val label: String get() = if (series.isBlank()) title else "$series · ep $episode"
@@ -143,6 +147,9 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     private var coachJob: Job? = null
     private val recorder = VoiceRecorder()
     @Volatile private var skipCaptions = false
+    /** The script being made; Remix asks for one different from it. */
+    private var remixFrom: Script? = null
+
     /** Make all: the ideas still to make, in order. */
     private val queue = ArrayDeque<String>()
 
@@ -322,6 +329,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                 step = StudioStep.READY,
                 coverFrames = emptyList(),
                 idea = null,
+                script = p.script,
                 options = p.options,
                 plan = p.plan,
                 title = p.title,
@@ -372,6 +380,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             coverLine = old?.coverLine,
             coverRoute = old?.coverRoute ?: false,
             idea = old?.idea ?: s.idea?.title,
+            script = s.script,
         )
         val saved = c.reels.save(project, video, s.takes)
         _state.update { it.copy(reelId = saved.id, video = c.reels.video(saved.id), takes = c.reels.takes(saved), coverFrames = emptyList()) }
@@ -603,7 +612,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                 step = StudioStep.WORKING, error = null, video = null, renderProgress = null, notes = emptyList(), tips = null,
                 work = listOfNotNull(
                     WorkStep("Reading what you said", if (needCaptions) 0 else 3, if (!o.captions) "Captions are off" else if (!gemini) "Not available in this build" else if (captionsDone) "Done earlier" else null),
-                    WorkStep("Finding the story", 0),
+                    WorkStep("Writing the script", 0),
                     WorkStep("Making the video", 0),
                 ),
             )
@@ -621,16 +630,21 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                     bits = withContext(Dispatchers.IO) { buildBits() }
                 }
                 step(1, 1)
-                if (gemini && direction == null) {
+                if (_state.value.idea == null) {
+                    // Script first: Gemini writes the sections (or the app's calm fallback), then the app checks it.
+                    val sc = writeScript(avoid = remixFrom)
+                    remixFrom = null
+                    applyScript(sc)
+                } else if (gemini && direction == null) {
                     direction = runCatching { direct() }.onFailure { c.errors.record("Studio director", "Gemini couldn't pick the story", it) }.getOrNull()
                     val was = _state.value.idea
                     refreshIdeas()
                     // "The story" waiting on Gemini becomes Gemini's first story.
                     if (was?.kind == IdeaKind.STORY) _state.update { st -> st.copy(idea = st.ideas.firstOrNull { it.kind == IdeaKind.STORY } ?: was) }
                 }
-                replan()
+                if (_state.value.idea != null) replan()
                 val s = _state.value
-                step(1, 2, listOfNotNull(s.story?.let { "“$it”" }, "${s.plan?.clips?.size} clips · ${Format.clock(s.plan?.totalMs ?: 0)}").joinToString(" · "))
+                step(1, 2, listOfNotNull(s.script?.title?.let { "“$it”" } ?: s.story?.let { "“$it”" }, "${s.plan?.clips?.size} clips · ${Format.clock(s.plan?.totalMs ?: 0)}").joinToString(" · "))
                 render(notes)
                 next()
             } catch (e: CancellationException) {
@@ -645,6 +659,75 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             }
         }
     }
+
+    // ---- scripts ---------------------------------------------------------------------------
+
+    /** The clips as the script writer sees them: short keys in filming order, how each looks, what was said. */
+    private fun footage(): List<Footage> {
+        val out = _state.value.excluded
+        val list = clips.filter { it.id !in out }.map { m ->
+            val dur = m.durationMillis ?: 0
+            Footage(
+                key = "", momentId = m.id, durationMs = dur, startMillis = m.videoStartMillis,
+                look = if (m.camera == "back") "road" else "selfie",
+                lines = StudioText.load(m.file).orEmpty(),
+                kmhMax = (0..(dur / 1000).toInt()).maxOfOrNull { s -> speedAt(m.videoStartMillis + s * 1000L) }?.coerceAtLeast(0) ?: 0,
+                events = m.types.filter { it != RideEventType.VOICE }.joinToString { it.name.lowercase().replace('_', ' ') },
+                label = Format.timeOfDay(m.videoStartMillis),
+            )
+        } + phone.values.filter { it.id !in out }.map { p ->
+            Footage(
+                key = "", momentId = p.id, durationMs = p.durationMs, startMillis = p.startMillis, look = "phone",
+                lines = StudioText.load(PhoneVideos.captionKey(c.appContext, p.id)).orEmpty(),
+                kmhMax = (0..(p.durationMs / 1000).toInt()).maxOfOrNull { s -> speedAt(p.startMillis + s * 1000L) }?.coerceAtLeast(0) ?: 0,
+                label = "phone video",
+            )
+        }
+        return list.sortedBy { it.startMillis }.mapIndexed { i, f -> f.copy(key = "c${i + 1}") }
+    }
+
+    /** Gemini's script for the chosen length (one request), or the app's own when Gemini can't. */
+    private suspend fun writeScript(avoid: Script?): Script {
+        val fs = withContext(Dispatchers.Default) { footage() }
+        val o = _state.value.options
+        val cd = card
+        if (c.transcripts.available && cd != null) {
+            val prompt = ScriptWriter.piecePrompt(cd.title, cd.subtitle, fs, style(), PieceFormat.REEL, o.lengthSec, avoid, ScriptWriter.keys(fs))
+            runCatching { gemini().scripts(prompt, fs).firstOrNull() }
+                .onFailure { c.errors.record("Studio script", "Gemini couldn't write the script", it) }
+                .getOrNull()?.let { return it.copy(lengthSec = minOf(it.lengthSec, o.lengthSec)) }
+        }
+        return ScriptWriter.local(fs, PieceFormat.REEL, o.lengthSec, _state.value.title) ?: error("No usable clips")
+    }
+
+    /** Turns [sc] into the plan (the app's checks fix what Gemini got wrong) and shows it. */
+    private suspend fun applyScript(sc: Script) {
+        val fs = withContext(Dispatchers.Default) { footage() }
+        var planned = ScriptWriter.toPlan(sc, fs, bits, _state.value.options.vibe, _state.value.options)
+        var used = sc
+        if (planned.plan.clips.isEmpty()) {
+            // Nothing usable in Gemini's script: the app's own.
+            used = ScriptWriter.local(fs, sc.format, sc.lengthSec, _state.value.title) ?: error("No usable clips")
+            planned = ScriptWriter.toPlan(used, fs, bits, _state.value.options.vibe, _state.value.options)
+        }
+        if (planned.plan.clips.isEmpty()) error("No usable clips")
+        if (planned.fixes.isNotEmpty()) c.errors.record("Studio script", "Fixed ${planned.fixes.size} things in the script", null, planned.fixes.joinToString("\n"))
+        val hook = used.sections.firstOrNull { it.kind == SectionKind.HOOK }
+        _state.update {
+            it.copy(
+                plan = planned.plan,
+                script = used,
+                story = null,
+                title = if (it.title == card?.title && used.title.isNotBlank() && used.why?.startsWith("Made by the app") != true) used.title else it.title,
+                hookLine = used.hookLine ?: hook?.text ?: it.hookLine,
+                postCaption = used.postCaption ?: fallbackCaption(),
+                content = ScriptWriter.summary(fs).text,
+            )
+        }
+    }
+
+    /** What Studio has learnt about the rider's style (see Your style). */
+    private fun style(): StyleContext? = null
 
     /** Plans from the bits, Gemini's scores and the current story. */
     private fun replan() {
@@ -676,6 +759,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         if (_state.value.plan == null || job?.isActive == true) return
         val n = direction?.stories?.size ?: 0
         val idea = _state.value.idea
+        if (idea == null) remixFrom = _state.value.script
         if (idea == null || idea.kind == IdeaKind.STORY) storyIndex = if (n == 0) 0 else (storyIndex + 1) % (n + 1)
         setOptions { it.copy(seed = it.seed + 1) }
         make()
@@ -880,7 +964,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         coachJob = viewModelScope.launch {
             val s = _state.value
             val plan = s.plan ?: return@launch
-            val d = direction
+            val d = direction ?: s.script?.let { sc -> Direction(sc.title, sc.postCaption, null, emptyMap(), sc.hookLine) }
             val story = d?.stories?.getOrNull(storyIndex)
             val voiceOver = s.takes.isNotEmpty()
             val tips = (if (c.transcripts.available) {
@@ -1054,7 +1138,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     }
 
     private companion object {
-        const val MAX_CAPTION_CLIPS = 16
+        const val MAX_CAPTION_CLIPS = 32
         /** Clips read per Gemini request. */
         const val BATCH = 8
         const val MAX_AUDIO_BYTES = 14L * 1024 * 1024
