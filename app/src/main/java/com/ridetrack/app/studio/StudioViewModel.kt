@@ -138,12 +138,27 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
         val o = f(it.options)
         val lengths = StudioPlanner.lengthsFor(bits, o.vibe)
         // A suggested song follows the vibe until the rider picks one themselves.
-        val track = if (it.track != null && !it.trackPicked && it.track.vibe != o.vibe) MusicLibrary.forVibe(o.vibe).firstOrNull() else it.track
+        val track = if (!it.trackPicked && (it.track == null || it.track.vibe != o.vibe)) MusicLibrary.forVibe(o.vibe).firstOrNull() else it.track
         it.copy(
             options = o.copy(lengthSec = if (o.lengthSec in lengths) o.lengthSec else lengths.last(), bpm = track?.bpm),
             lengths = lengths,
             track = track,
         )
+    }
+
+    /** Imports Studio's song pack (a zip of the songs) on builds that don't carry them. */
+    fun importSongs(zip: Uri) {
+        viewModelScope.launch {
+            val n = withContext(Dispatchers.IO) { runCatching { MusicLibrary.importPack(c.appContext, zip) } }
+            n.onFailure { e ->
+                c.errors.record("Studio music", "Couldn't import the song pack", e)
+                _state.update { it.copy(error = "Couldn't read the song pack (${e.message})") }
+            }
+            n.onSuccess { count ->
+                if (count == 0) _state.update { it.copy(error = "That zip has none of Studio's songs. Pick keppo-studio-songs.zip.") }
+                setOptions { it }
+            }
+        }
     }
 
     /** A library song (cuts follow its tempo); null with [setMusic] null = no music. */

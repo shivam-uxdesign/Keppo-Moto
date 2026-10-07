@@ -152,7 +152,7 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 if (s.lengths.size < StudioPlanner.LENGTHS.size) Text("Longer Reels need more clips.", style = RtType.caption, color = RtColors.TextTertiary)
             }
             Section("Music") {
-                MusicPicker(s, onTrack = vm::setTrack)
+                MusicPicker(s, onTrack = vm::setTrack, onImport = vm::importSongs)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Choice(s.musicName?.let { "♪ $it" } ?: "Your own song", s.musicUri != null) { pickSong.launch(arrayOf("audio/*")) }
                     Choice("No music", s.musicUri == null && s.track == null) { vm.setMusic(null) }
@@ -435,7 +435,7 @@ private fun Edit(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
 
 /** Songs suggested for the vibe, the rest under "More songs"; tap ▶ to hear 15 s, tap the name to use it. */
 @Composable
-private fun MusicPicker(s: StudioState, onTrack: (Track) -> Unit) {
+private fun MusicPicker(s: StudioState, onTrack: (Track) -> Unit, onImport: (android.net.Uri) -> Unit) {
     val context = LocalContext.current
     val player = remember { ExoPlayer.Builder(context).build() }
     DisposableEffect(player) { onDispose { player.release() } }
@@ -447,6 +447,19 @@ private fun MusicPicker(s: StudioState, onTrack: (Track) -> Unit) {
         delay(15_000)
         player.pause()
         playing = null
+    }
+    val importPack = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) onImport(uri) }
+    MusicLibrary.version.collectAsStateWithLifecycle().value
+    if (MusicLibrary.TRACKS.isEmpty()) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                "Studio's free songs come as a pack on test builds. Download keppo-studio-songs.zip from the chat, then add it here once.",
+                style = RtType.caption,
+                color = RtColors.TextSecondary,
+            )
+            Button("Add the song pack", primary = false) { importPack.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }
+        }
+        return
     }
     val vibe = s.options.vibe
     val suggested = MusicLibrary.forVibe(vibe)
