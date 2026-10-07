@@ -384,3 +384,11 @@ Hook: "Tooooooo" plus the text "3 hours. No water." (3 s) → Setup: "Arre yaar,
 - **Duplicate** (clip toolbar): copies the selected clip right after itself, the same seconds. Good for an instant replay or a punch-in (later with slow-mo or zoom). Trim or move the copy as usual.
 - **+ Clip shows every clip**, with the used ones marked "In this Reel" (×2 when used twice). Picking one opens a small clip trimmer: the whole clip with in/out handles and a preview, to choose which part (e.g. a different moment of a long clip).
 - Gemini's first draft still avoids repeating the same seconds (except a flash hook); in the editor the rider can reuse anything.
+
+## Saved clips: keep a moment to use in any Reel, from any ride (proposed; the rider's actual ask)
+- **Save a clip** from: the editor (selected clip → Save, the exact part), a ride's clip viewer, and the Studio clip strip (long-press opens a small menu: Watch · Leave out · Save).
+- **Saved** page: in Your Reels, tabs "Reels | Saved clips". Thumbnails, length, the words said, which ride, with filters (talking, reactions, road). Remove from there.
+- **Use it anywhere:** the editor's + Clip gets tabs "This ride | Saved | Other rides | Phone". It's added at the playhead and can be trimmed like any clip.
+- **Gemini can use them too (optional):** suggestions may pull in a saved clip ("your saved 'Tooooo' opens this one").
+- **Kept safe:** the saved part is copied (a few MB each), so it stays when the ride or its moments are deleted.
+- **Open:** whether "drafts" means this, or Reels started but not finished or posted (see questions).
