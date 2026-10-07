@@ -300,3 +300,7 @@ Kept on the list, not for the next builds.
 - H4 decided: vertical only, long videos max 3–5 min.
 - F1: the DJI Mic Mini has mono and stereo settings; the rider will send a screenshot.
 - H1 (iPad): options discussed without publishing the app (see the chat). The rider is to choose.
+- F1 update: on the rider's DJI Mic Mini, the **mono** setting gives two different audio streams (one per transmitter). Plan:
+  - Keppo records the receiver's two channels as they arrive and checks whether they differ.
+  - If they differ: two tracks, voice and engine. If they're the same: one track.
+  - A two-mic test in Moments settings shows a level meter per transmitter, so the rider can see which is voice and which is engine and swap them if needed.
