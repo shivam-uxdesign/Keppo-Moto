@@ -44,7 +44,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -162,11 +167,23 @@ fun ProfilePageScreen(page: ProfilePage, onBack: () -> Unit) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = RtDimens.screenPadding),
     ) {
-        ScreenHeader(page.title, onBack = onBack)
+        // Moments has its own sub-pages and a "How Moments works" sheet (ⓘ).
+        var momentsSub by rememberSaveable { mutableStateOf<MomentsSub?>(null) }
+        var how by remember { mutableStateOf(false) }
+        androidx.activity.compose.BackHandler(enabled = momentsSub != null) { momentsSub = null }
+        ScreenHeader(
+            momentsSub?.title ?: page.title,
+            onBack = { if (momentsSub != null) momentsSub = null else onBack() },
+            actions = {
+                if (page == ProfilePage.MOMENTS && momentsSub == null) {
+                    IconButton(onClick = { how = true }) { Icon(Icons.Outlined.Info, contentDescription = "How Moments works", tint = RtColors.TextSecondary) }
+                }
+            },
+        )
         when (page) {
             ProfilePage.STATISTICS -> StatisticsPage(s)
             ProfilePage.RIDING -> RidingPage(s, vm)
-            ProfilePage.MOMENTS -> MomentsSection(s, vm, showHeader = false)
+            ProfilePage.MOMENTS -> MomentsSection(s, vm, showHeader = false, sub = momentsSub, onSub = { momentsSub = it }, showHow = how, onHowDismiss = { how = false })
             ProfilePage.SAFETY -> SafetySection(s, vm, showHeader = false)
             ProfilePage.SYNC -> {
                 JournalSection(s, vm)

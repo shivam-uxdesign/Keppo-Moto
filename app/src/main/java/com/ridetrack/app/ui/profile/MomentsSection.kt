@@ -1,6 +1,8 @@
 package com.ridetrack.app.ui.profile
 
 import android.os.Build
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import com.ridetrack.app.moments.MicChoice
 import com.ridetrack.app.moments.MicType
 import com.ridetrack.app.moments.Microphones
@@ -10,6 +12,7 @@ import com.ridetrack.telemetry.moments.RollingBuffer
 import com.ridetrack.app.moments.AudioEncoder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Box
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -68,10 +71,29 @@ import com.ridetrack.app.ui.theme.RtDimens
 import com.ridetrack.app.ui.theme.RtType
 import java.util.Locale
 
-/** Opt-in background capture of clips and photos. */
+/** Moments' sub-pages: rarely changed settings, one tap deeper. */
+enum class MomentsSub(val title: String) {
+    WHAT("What to film"),
+    TRANSCRIBE("Write down what I say"),
+    STORAGE("Storage"),
+    MORE("More settings"),
+}
+
+/**
+ * Opt-in background capture of clips and photos. One short screen of five rows; the rest is on
+ * [MomentsSub] pages, and the explanations are in the "How Moments works" sheet ([showHow]).
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel, showHeader: Boolean = true) {
+internal fun MomentsSection(
+    s: ProfileUiState,
+    vm: ProfileViewModel,
+    showHeader: Boolean = true,
+    sub: MomentsSub? = null,
+    onSub: (MomentsSub?) -> Unit = {},
+    showHow: Boolean = false,
+    onHowDismiss: () -> Unit = {},
+) {
     val context = LocalContext.current
     val m = s.settings.moments
     var explain by remember { mutableStateOf(false) }
@@ -79,6 +101,7 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel, showHeader:
     var confirmDelete by remember { mutableStateOf(false) }
     var testQueued by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.refreshMomentsStorage() }
+    val editable = !s.rideActive
 
     val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         val camera = result[Manifest.permission.CAMERA] == true ||
@@ -87,95 +110,95 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel, showHeader:
     }
 
     if (showHeader) SectionHeader("Moments")
-    RtCard {
-        ToggleRow(
-            "Capture moments",
-            when {
-                s.rideActive -> "Can't be changed during a ride."
-                m.enabled -> "Saves ${m.clipSeconds} s before and after the events you pick below, from the selfie camera with sound."
-                else -> "Automatically film the best bits of your ride and take a photo now and then. Off by default."
-            },
-            m.enabled,
-            onChange = { on ->
-                if (!on) vm.setMoments(m.copy(enabled = false)) else explain = true
-            },
-            enabled = !s.rideActive,
+    // While riding, one banner instead of a note on every row.
+    if (s.rideActive) {
+        Text(
+            "Settings are locked while riding. The voice sensitivity can still be tuned (More settings).",
+            style = RtType.caption,
+            color = RtColors.Warning,
+            modifier = Modifier.fillMaxWidth().background(RtColors.Warning.copy(alpha = 0.12f), RoundedCornerShape(10.dp)).padding(10.dp),
         )
-        if (m.enabled) {
-            HorizontalDivider(color = RtColors.Outline.copy(alpha = 0.6f))
-            val editable = !s.rideActive
-            ToggleRow("Hard braking", "Braking at ${gText(m.brakeG)} or more.", m.braking, { vm.setMoments(m.copy(braking = it)) }, enabled = editable)
-            if (m.braking) {
-                ChoiceRow(MomentSettings.BRAKE_CHOICES, m.brakeG, ::gText, editable) { vm.setMoments(m.copy(brakeG = it)) }
-            }
-            ToggleRow("Strong acceleration", "Accelerating at ${gText(m.accelG)} or more.", m.acceleration, { vm.setMoments(m.copy(acceleration = it)) }, enabled = editable)
-            if (m.acceleration) {
-                ChoiceRow(MomentSettings.ACCEL_CHOICES, m.accelG, ::gText, editable) { vm.setMoments(m.copy(accelG = it)) }
-            }
-            ToggleRow("Deep lean", "Leaning past ${m.leanDeg}°. Needs a calibrated mount.", m.lean, { vm.setMoments(m.copy(lean = it)) }, enabled = editable)
-            if (m.lean) {
-                ChoiceRow(MomentSettings.LEAN_CHOICES, m.leanDeg, { "$it°" }, editable) { vm.setMoments(m.copy(leanDeg = it)) }
-            }
-            Spacer(Modifier.height(RtDimens.sm))
-            Label("Clip length")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
-                MomentSettings.CLIP_CHOICES.forEach { sec ->
-                    Pick("$sec s before & after", m.clipSeconds == sec, editable) { vm.setMoments(m.copy(clipSeconds = sec)) }
-                }
-            }
-            Spacer(Modifier.height(RtDimens.sm))
-            Label("Photos")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
-                PhotoInterval.entries.forEach { p ->
-                    Pick(if (p == PhotoInterval.OFF) p.label else "Every ${p.label}", m.photos == p, editable) { vm.setMoments(m.copy(photos = p)) }
-                }
-            }
-            Text(
-                "Plus one photo at each stop longer than a minute.",
-                style = RtType.caption,
-                color = RtColors.TextSecondary,
+        Spacer(Modifier.height(RtDimens.sm))
+    }
+    when (sub) {
+        null -> RtCard {
+            val mic = MicChoice.decode(m.mic)
+            ToggleRow(
+                "Capture moments",
+                if (m.enabled) "${m.clipSeconds} s clips · ${if (mic.type == MicType.AUTO) "best mic connected" else mic.label}" else "Off",
+                m.enabled,
+                onChange = { on -> if (!on) vm.setMoments(m.copy(enabled = false)) else explain = true },
+                enabled = editable,
             )
+            if (m.enabled) {
+                Divider()
+                SubRow("What to film", whatSummary(m)) { onSub(MomentsSub.WHAT) }
+                Divider()
+                ToggleRow("Film when I speak", if (m.voice) "On · ${m.voiceSensitivity.label}" else "Off", m.voice, { vm.setMoments(m.copy(voice = it)) })
+                Divider()
+                SubRow("Write down what I say", transcribeSummary(m)) { onSub(MomentsSub.TRANSCRIBE) }
+            }
+            Divider()
+            SubRow("Storage", "${formatBytes(s.momentsBytes)} · Manage") { onSub(MomentsSub.STORAGE) }
+            if (m.enabled) {
+                Divider()
+                SubRow("More settings", "Clip length, photos, video quality, microphone, voice level") { onSub(MomentsSub.MORE) }
+            }
+            if (BuildConfig.DEBUG && s.rideActive && vm.canTestClip) {
+                // Beta: checks the whole clip path in ~15 s (camera → buffer → MP4 → ride page).
+                TextButton(onClick = {
+                    vm.testClip()
+                    testQueued = true
+                }, enabled = !testQueued) {
+                    Text(if (testQueued) "Test clip queued: check the ride page after it ends" else "Save a test clip now (beta)", color = RtColors.Primary)
+                }
+            }
+        }
+        MomentsSub.WHAT -> RtCard {
+            ToggleRow("Hard braking", "At ${gText(m.brakeG)} or more", m.braking, { vm.setMoments(m.copy(braking = it)) }, enabled = editable)
+            if (m.braking) ValueMenu("Strength", MomentSettings.BRAKE_CHOICES, m.brakeG, ::gText, editable) { vm.setMoments(m.copy(brakeG = it)) }
+            Divider()
+            ToggleRow("Strong acceleration", "At ${gText(m.accelG)} or more", m.acceleration, { vm.setMoments(m.copy(acceleration = it)) }, enabled = editable)
+            if (m.acceleration) ValueMenu("Strength", MomentSettings.ACCEL_CHOICES, m.accelG, ::gText, editable) { vm.setMoments(m.copy(accelG = it)) }
+            Divider()
+            ToggleRow("Deep lean", "Past ${m.leanDeg}° · needs a calibrated mount", m.lean, { vm.setMoments(m.copy(lean = it)) }, enabled = editable)
+            if (m.lean) ValueMenu("Angle", MomentSettings.LEAN_CHOICES, m.leanDeg, { "$it°" }, editable) { vm.setMoments(m.copy(leanDeg = it)) }
+            Divider()
+            ToggleRow("When I speak", "From 10 s before you talk until 5 s after", m.voice, { vm.setMoments(m.copy(voice = it)) })
+        }
+        MomentsSub.TRANSCRIBE -> RtCard { TranscribeSettings(m) { vm.setMoments(it) } }
+        MomentsSub.STORAGE -> RtCard {
+            var reels by remember { mutableStateOf<Long?>(null) }
+            val store = com.ridetrack.app.ui.appContainer().reels
+            LaunchedEffect(Unit) { reels = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { store.bytes() } }
+            InfoRow("Moments", formatBytes(s.momentsBytes))
+            InfoRow("Reels", formatBytes(reels))
+            Text("Kept on this phone; nothing is deleted automatically. Reels are managed on the Studio tab.", style = RtType.caption, color = RtColors.TextTertiary)
+            if ((s.momentsBytes ?: 0) > 0) {
+                TextButton(onClick = { confirmDelete = true }, enabled = editable) { Text("Delete all moments", color = RtColors.Error) }
+            }
+        }
+        MomentsSub.MORE -> RtCard {
+            ValueMenu("Clip length", MomentSettings.CLIP_CHOICES, m.clipSeconds, { "$it s before & after" }, editable) { vm.setMoments(m.copy(clipSeconds = it)) }
+            Divider()
+            ValueMenu("Photos", PhotoInterval.entries, m.photos, { if (it == PhotoInterval.OFF) it.label else "Every ${it.label}" }, editable) { vm.setMoments(m.copy(photos = it)) }
+            Text("Plus one photo at each stop longer than a minute.", style = RtType.caption, color = RtColors.TextTertiary)
+            Divider()
+            ValueMenu("Video quality", VideoQuality.entries, m.quality, { it.label }, editable) { vm.setMoments(m.copy(quality = it)) }
+            Divider()
             Spacer(Modifier.height(RtDimens.sm))
             MicPicker(m.mic, editable) { vm.setMoments(m.copy(mic = it)) }
-            // Tunable during a ride: watch the pop-up's meter and adjust.
-            ToggleRow(
-                "Start filming when I speak",
-                "Films from 10 s before you start talking until 5 s after you stop. Starts after about 1.5 s of talking, and only for a voice: horns, engines and breathing don't set it off. Works stopped or paused too.",
-                m.voice,
-                { vm.setMoments(m.copy(voice = it)) },
-            )
-            if (m.voice) VoiceLevel(m.voiceSensitivity, m.mic, s.rideActive) { vm.setMoments(m.copy(voiceSensitivity = it)) }
-            if (m.voice) TranscribeSettings(m) { vm.setMoments(it) }
-            Spacer(Modifier.height(RtDimens.sm))
-            Label("Video quality")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
-                VideoQuality.entries.forEach { q -> Pick(q.label, m.quality == q, !s.rideActive) { vm.setMoments(m.copy(quality = q)) } }
-            }
-            Spacer(Modifier.height(RtDimens.sm))
-        }
-        if (BuildConfig.DEBUG && s.rideActive && vm.canTestClip) {
-            // Beta: checks the whole clip path in ~15 s (camera → buffer → MP4 → ride page).
-            TextButton(onClick = {
-                vm.testClip()
-                testQueued = true
-            }, enabled = !testQueued) {
-                Text(if (testQueued) "Test clip queued: check the ride page after it ends" else "Save a test clip now (beta)", color = RtColors.Primary)
-            }
-        }
-        HorizontalDivider(color = RtColors.Outline.copy(alpha = 0.6f))
-        Text(
-            "Stored on this phone: ${formatBytes(s.momentsBytes)}. Nothing is deleted automatically.",
-            style = RtType.caption,
-            color = RtColors.TextSecondary,
-            modifier = Modifier.padding(top = RtDimens.sm),
-        )
-        if ((s.momentsBytes ?: 0) > 0) {
-            TextButton(onClick = { confirmDelete = true }, enabled = !s.rideActive) {
-                Text("Delete all moments", color = RtColors.Error)
+            if (m.voice) {
+                Divider()
+                Spacer(Modifier.height(RtDimens.sm))
+                Label("Voice level")
+                // Tunable during a ride: watch the pop-up's meter and adjust.
+                VoiceLevel(m.voiceSensitivity, m.mic, s.rideActive) { vm.setMoments(m.copy(voiceSensitivity = it)) }
             }
         }
     }
 
+    if (showHow) MomentsExplainer(onContinue = null, onDismiss = onHowDismiss)
     if (explain) {
         MomentsExplainer(
             onContinue = {
@@ -219,7 +242,7 @@ internal fun MomentsSection(s: ProfileUiState, vm: ProfileViewModel, showHeader:
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MomentsExplainer(onContinue: () -> Unit, onDismiss: () -> Unit) {
+private fun MomentsExplainer(onContinue: (() -> Unit)?, onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -236,9 +259,11 @@ private fun MomentsExplainer(onContinue: () -> Unit, onDismiss: () -> Unit) {
             Bullet("On hard braking, strong acceleration or a deep lean, the seconds before and after are saved as a clip. You choose how strong each one must be, and how often a photo is taken.")
             Bullet("No camera screen opens. The ride screen and pop-up show a small CAM dot, and REC while a moment is saved. Android also shows its green camera dot.")
             Bullet("Clips stay on this phone (about 12 MB each at 720p) until you delete them. It uses more battery, and the phone may get warm on the mount; Moments pauses itself if it gets hot.")
-            PrimaryButton("Continue", onContinue, large = true)
+            Bullet("Film when I speak starts a clip when you talk (a voice, not horns or engines). Write down what I say turns your words into text with Gemini after the ride.")
+            Bullet("While filming your own video from the pop-up, the flip button switches to the back camera for the road ahead.")
+            if (onContinue != null) PrimaryButton("Continue", onContinue, large = true)
             TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(bottom = RtDimens.md)) {
-                Text("Not now", style = RtType.button, color = RtColors.TextSecondary)
+                Text(if (onContinue != null) "Not now" else "Close", style = RtType.button, color = RtColors.TextSecondary)
             }
         }
     }
@@ -269,6 +294,66 @@ internal fun formatBytes(b: Long?): String = when {
     b < 1_000_000 -> "none"
     b < 1_000_000_000 -> "${b / 1_000_000} MB"
     else -> String.format(Locale.US, "%.1f GB", b / 1e9)
+}
+
+private fun whatSummary(m: MomentSettings): String =
+    listOfNotNull("Braking".takeIf { m.braking }, "acceleration".takeIf { m.acceleration }, "lean".takeIf { m.lean }, "when I speak".takeIf { m.voice })
+        .joinToString(", ").replaceFirstChar { it.uppercase() }.ifEmpty { "Nothing yet" }
+
+@Composable
+private fun transcribeSummary(m: MomentSettings): String {
+    if (!m.transcribe) return "Off"
+    val wait = com.ridetrack.app.transcribe.rememberGeminiWait()
+    return if (wait.captionsBlocked) "On · free again at ${com.ridetrack.app.transcribe.GeminiQuota.clock(wait.captionsAt!!)}" else "On" + if (m.transcribeWifiOnly) " · Wi-Fi only" else ""
+}
+
+@Composable
+private fun Divider() = HorizontalDivider(color = RtColors.Outline.copy(alpha = 0.6f))
+
+/** A row that opens a sub-page. */
+@Composable
+private fun SubRow(title: String, summary: String, onClick: () -> Unit) {
+    androidx.compose.foundation.layout.Row(
+        Modifier.fillMaxWidth().clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick).padding(vertical = 12.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = RtType.bodyStrong, color = RtColors.TextPrimary)
+            Text(summary, style = RtType.caption, color = RtColors.TextSecondary)
+        }
+        androidx.compose.material3.Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = RtColors.TextTertiary)
+    }
+}
+
+@Composable
+private fun InfoRow(title: String, value: String) {
+    androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+        Text(title, style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
+        Text(value, style = RtType.body, color = RtColors.TextSecondary)
+    }
+}
+
+/** A setting with one value shown as a chip; tapping it opens a small menu of the choices. */
+@Composable
+private fun <T> ValueMenu(title: String, choices: List<T>, selected: T, label: (T) -> String, enabled: Boolean, onPick: (T) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    androidx.compose.foundation.layout.Row(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Text(title, style = RtType.body, color = if (enabled) RtColors.TextPrimary else RtColors.TextTertiary, modifier = Modifier.weight(1f))
+        Box {
+            Pick(label(selected) + "  ▾", true, enabled) { open = true }
+            androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = RtColors.SurfaceRaised) {
+                choices.forEach { c ->
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(label(c), color = if (c == selected) RtColors.Primary else RtColors.TextPrimary) },
+                        onClick = { open = false; onPick(c) },
+                    )
+                }
+            }
+        }
+    }
 }
 
 private fun gText(g: Double): String = String.format(java.util.Locale.US, "%.1f G", g)

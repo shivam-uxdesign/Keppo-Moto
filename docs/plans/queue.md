@@ -182,7 +182,7 @@ Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds
 
 ---
 
-# Next batch (planned 7 Oct; build only when the rider says "build")
+# Next batch (planned 7 Oct): all 8 BUILT 7 Oct (music 273398b, Your Reels f4e8ff6, covers + Journal d8599ca, Reel ideas 2318b9a, phone videos 7447502, camera flip 699e0b8, Gemini countdown a9bc1dc, Moments page next commit)
 
 ## 1. Show when Gemini's limit resets (wherever "Gemini is busy" shows)
 - A live countdown worked out from the saved reset time (`GeminiQuota`), not text frozen at the time of the error: "Free again at 5:29 AM · in 3 h 12 min".
