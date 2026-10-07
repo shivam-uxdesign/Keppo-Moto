@@ -11,12 +11,9 @@ import com.ridetrack.app.moments.Moment
 import com.ridetrack.app.moments.MomentKind
 import com.ridetrack.app.moments.MomentSource
 import com.ridetrack.app.share.ShareImages
-import com.ridetrack.app.transcribe.AppCheckSetup
-import com.ridetrack.app.transcribe.ClipAudio
 import com.ridetrack.app.transcribe.FirebaseTranscriber
 import com.ridetrack.app.ui.format.Format
 import com.ridetrack.telemetry.model.RideEventType
-import com.ridetrack.telemetry.model.TelemetrySample
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,8 +29,6 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlin.math.cos
-import kotlin.math.roundToInt
 
 /** Studio for gallery videos only, with no ride (the rider id Studio is opened with). */
 const val PHONE_STUDIO = "phone"
@@ -156,16 +151,15 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     )
     val state: StateFlow<StudioState> = _state.asStateFlow()
 
-    private var clips: List<Moment> = emptyList()
-    /** Videos from the phone's gallery, by id. */
-    private val phone = LinkedHashMap<String, PhoneClip>()
-    private val phoneOnly = rideId == PHONE_STUDIO
-    /** Clips from other rides the rider added (their files are needed to render). */
-    private val borrowed = HashMap<String, Moment>()
-    private var samples: List<TelemetrySample> = emptyList()
-    private var card: RideCard? = null
-    private var bits: List<Bit> = emptyList()
-    private var captionsDone = false
+    /** The ride's clips, captions and suggestions (shared with the work that runs after a ride). */
+    private val engine = StudioEngine(c, rideId)
+    private val clips get() = engine.clips
+    private val phone get() = engine.phone
+    private val phoneOnly = engine.phoneOnly
+    private val borrowed get() = engine.borrowed
+    private val samples get() = engine.samples
+    private val card get() = engine.card
+    private val bits get() = engine.bits
     private var job: Job? = null
     private var coachJob: Job? = null
     private val recorder = VoiceRecorder()
@@ -178,8 +172,8 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
 
     init {
         viewModelScope.launch {
+            engine.load()?.let { why -> _state.update { it.copy(loading = false, blocked = why) }; return@launch }
             if (phoneOnly) {
-                card = RideCard(title = "My videos", subtitle = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()).format(java.time.LocalDate.now()), route = emptyList(), stats = emptyList())
                 _state.update {
                     it.copy(loading = false, phoneOnly = true, title = "My videos", series = c.studio.series, episode = c.studio.nextEpisode, options = it.options.copy(outro = false, map = false))
                 }
@@ -188,21 +182,14 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                 openReelId?.let { id -> c.reels.get(id)?.let { open(it) } }
                 return@launch
             }
-            val ride = c.rides.get(rideId)
-            if (ride == null) { _state.update { it.copy(loading = false, blocked = "Ride not found") }; return@launch }
-            samples = withContext(Dispatchers.IO) { c.rides.track(rideId).samples }
-            val moments = c.moments.forRide(rideId)
-            clips = moments.filter { it.kind == MomentKind.CLIP && it.file.isFile && (it.durationMillis ?: 0) >= 1_500 }.sortedBy { it.videoStartMillis }
             val talking = clips.count { likelyTalking(it) }
-            card = rideCard(ride.name, ride.startTimeMillis, ride.stats.distanceM, ride.durationMillis ?: 0, ride.stats.maxSpeedMps, moments.size)
-            bits = withContext(Dispatchers.IO) { buildBits() }
             _state.update {
                 it.copy(
                     loading = false,
                     clipCount = clips.size,
                     talkingCount = talking,
                     posters = clips.sortedByDescending { m -> m.starred }.mapNotNull { m -> m.thumb?.takeIf(File::isFile) }.take(4),
-                    title = ride.name,
+                    title = card?.title.orEmpty(),
                     series = c.studio.series,
                     episode = c.studio.nextEpisode,
                     lengths = StudioPlanner.lengthsFor(bits, it.options.vibe),
@@ -262,8 +249,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         }
         val missed = uris.size - added.size
         added.forEach { phone[it.id] = it }
-        if (added.isNotEmpty()) captionsDone = false
-        bits = withContext(Dispatchers.IO) { buildBits() }
+        engine.refreshBits()
         refreshSources()
         if (_state.value.step == StudioStep.EDIT) {
             added.forEach { p -> bits.filter { it.momentId == p.id }.maxByOrNull { it.punch }?.let { b -> insert(b) } }
@@ -275,34 +261,25 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     /** Leaves a clip out of what Studio picks from (or puts it back). */
     fun toggleExclude(id: String) {
         _state.update { it.copy(excluded = if (id in it.excluded) it.excluded - id else it.excluded + id) }
+        engine.excluded = _state.value.excluded
         viewModelScope.launch {
-            bits = withContext(Dispatchers.IO) { buildBits() }
+            engine.refreshBits()
             refreshSources()
-            }
+        }
     }
 
     // ---- suggested content ---------------------------------------------------------------------
 
-    private val planFile get() = File(File(c.appContext.filesDir, "studio-plans").apply { mkdirs() }, "$rideId.json")
-
     /** Loads the saved suggestions, or asks for them the first time the ride's Studio opens. */
     private suspend fun loadPlan() {
-        val saved = withContext(Dispatchers.IO) {
-            runCatching { org.json.JSONObject(planFile.readText()).getJSONArray("pieces") }.getOrNull()?.let { a ->
-                (0 until a.length()).mapNotNull { ScriptJson.read(a.optJSONObject(it)) }
-            }
-        }
+        val saved = engine.loadPlan()
         if (saved != null) showPieces(saved) else if (_state.value.canMake) suggest()
     }
 
     private suspend fun showPieces(scripts: List<Script>) {
-        val fs = withContext(Dispatchers.Default) { footage() }
         val o = _state.value.options
-        val list = scripts.mapIndexedNotNull { i, sc ->
-            val plan = ScriptWriter.toPlan(sc, fs, bits, sc.vibe ?: o.vibe, o).plan
-            if (plan.clips.isEmpty()) null else ContentPiece("p$i", sc, plan)
-        }
-        _state.update { it.copy(pieces = list, content = ScriptWriter.summary(fs).text) }
+        val (list, text) = withContext(Dispatchers.Default) { engine.pieces(scripts, o) to ScriptWriter.summary(footage()).text }
+        _state.update { it.copy(pieces = list, content = text) }
     }
 
     /**
@@ -315,39 +292,23 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         job = viewModelScope.launch {
             try {
                 val gemini = c.transcripts.available
-                unreachable = null
                 _state.update { it.copy(geminiIssue = null) }
-                if (gemini && !captionsDone && _state.value.options.captions) {
+                if (gemini && _state.value.options.captions && withContext(Dispatchers.IO) { engine.unreadCount() } > 0) {
                     _state.update { it.copy(planning = "Reading what you said", work = listOf(WorkStep("Reading what you said", 1))) }
-                    withContext(Dispatchers.IO) { readCaptions() }
-                    bits = withContext(Dispatchers.IO) { buildBits() }
+                    val read = engine.readCaptions(onProgress = { d -> _state.update { it.copy(planning = "Reading what you said · $d") } })
                     refreshSources()
                     // Couldn't reach Gemini: suggesting would fail the same way. Wait for the internet.
-                    unreachable?.let { e -> waitForGemini(e); return@launch }
+                    read.unreachable?.let { e -> waitForGemini(e); return@launch }
                 }
-                val fs = withContext(Dispatchers.Default) { footage() }
-                val cd = card ?: return@launch
-                val scripts = if (!gemini) localPieces(fs, "Made by the app (Gemini isn't in this build)") else {
-                    _state.update { it.copy(planning = "Gemini is suggesting what to make", work = emptyList()) }
-                    try {
-                        gemini().scripts(ScriptWriter.planPrompt(cd.title, cd.subtitle, fs, style(), PieceFormat.entries), fs) { raw ->
-                            c.errors.record("Studio content plan", "Gemini's answer couldn't be read", null, raw.take(4_000))
-                        }.ifEmpty { localPieces(fs, "Made by the app: Gemini's answer couldn't be read") }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        c.errors.record("Studio content plan", "Gemini couldn't suggest content", e)
-                        when {
-                            com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e) -> { waitForGemini(e); return@launch }
-                            e is FirebaseTranscriber.Busy -> {
-                                _state.update { it.copy(geminiIssue = "Gemini's free limit is used up, so it can't suggest now.") }
-                                return@launch
-                            }
-                            else -> localPieces(fs, "Made by the app: Gemini had a problem (${e.message?.take(60)})")
-                        }
+                if (gemini) _state.update { it.copy(planning = "Gemini is suggesting what to make", work = emptyList()) }
+                val scripts = when (val r = engine.suggest(_state.value.title)) {
+                    is Suggested.Scripts -> r.scripts
+                    is Suggested.Unreachable -> { waitForGemini(r.error); return@launch }
+                    Suggested.Busy -> {
+                        _state.update { it.copy(geminiIssue = "Gemini's free limit is used up, so it can't suggest now.") }
+                        return@launch
                     }
                 }
-                savePlan(scripts)
                 showPieces(scripts)
             } catch (e: CancellationException) {
                 throw e
@@ -359,9 +320,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         }
     }
 
-    private suspend fun savePlan(scripts: List<Script>) = withContext(Dispatchers.IO) {
-        planFile.writeText(org.json.JSONObject().put("pieces", org.json.JSONArray().apply { scripts.forEach { put(ScriptJson.write(it)) } }).toString())
-    }
+    private suspend fun savePlan(scripts: List<Script>, why: String? = null) = engine.savePlan(scripts, why = why)
 
     private var retryJob: Job? = null
     private var retries = 0
@@ -394,7 +353,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         viewModelScope.launch {
             val fs = withContext(Dispatchers.Default) { footage() }
             val scripts = localPieces(fs, "Made by the app, without Gemini")
-            savePlan(scripts)
+            savePlan(scripts, "Asked for without Gemini")
             showPieces(scripts)
             _state.update { it.copy(geminiIssue = null) }
         }
@@ -440,13 +399,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     }
 
     /** The app's own suggestions: a Reel as long as the footage fills well, and a 15 s Short. */
-    private fun localPieces(fs: List<Footage>, reason: String): List<Script> {
-        val good = ScriptWriter.summary(fs).goodLengthSec
-        return listOfNotNull(
-            ScriptWriter.local(fs, PieceFormat.REEL, good, _state.value.title, reason),
-            ScriptWriter.local(fs, PieceFormat.SHORT, 15, _state.value.title, reason)?.takeIf { good > 15 },
-        )
-    }
+    private fun localPieces(fs: List<Footage>, reason: String): List<Script> = engine.localPieces(fs, reason, _state.value.title)
 
     /** Makes a suggestion as a new Reel (whatever is on screen stays saved). */
     fun makePiece(key: String) {
@@ -464,19 +417,9 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
 
     /** Makes every suggestion not made yet, in the background (a notification shows progress). */
     fun makeAll() {
-        val made = c.reels.reels.value.filter { it.rideId == rideId.takeIf { !phoneOnly } && it.deletedAt == null }.mapNotNull { it.idea }.toSet()
+        val made = engine.madeIdeas()
         val s = _state.value
-        val cd = card ?: return
-        val jobs = s.pieces.filter { it.script.title !in made }.map { pc ->
-            val sc = pc.script
-            val project = ReelProject(
-                id = c.reels.newId(), rideId = rideId.takeIf { !phoneOnly }, createdAt = System.currentTimeMillis(), updatedAt = System.currentTimeMillis(),
-                title = sc.title, series = s.series, episode = s.episode, hookLine = sc.hookLine ?: sc.sections.firstOrNull()?.text.orEmpty(),
-                postCaption = sc.postCaption ?: fallbackCaption(), story = null, options = s.options.copy(vibe = sc.vibe ?: s.options.vibe), musicUri = s.musicUri?.toString(), musicName = s.musicName,
-                plan = pc.plan, takes = emptyList(), tips = emptyList(), durationMs = pc.plan.totalMs, idea = sc.title, script = sc,
-            )
-            MakeJob(project, renderInput(pc.plan, s.copy(title = sc.title, hookLine = project.hookLine, options = project.options), cd, voice = null))
-        }
+        val jobs = s.pieces.filter { it.script.title !in made }.mapNotNull { engine.job(it, s) }
         c.reelMaker.enqueue(jobs)
         say(if (jobs.isEmpty()) "All suggestions are made already" else "Making ${jobs.size} in the background. They'll be in Your Reels.")
     }
@@ -494,10 +437,9 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         val gallery = p.plan.clips.mapNotNull { it.bit.source }.distinct().filter { u -> phone.values.none { it.uri.toString() == u } }
         if (gallery.isNotEmpty()) {
             withContext(Dispatchers.IO) { gallery.mapNotNull { PhoneVideos.read(c.appContext, Uri.parse(it)) } }.forEach { phone[it.id] = it }
-            bits = withContext(Dispatchers.IO) { buildBits() }
+            engine.refreshBits()
             refreshSources()
         }
-        captionsDone = true
         _state.update {
             it.copy(
                 reelId = p.id,
@@ -589,9 +531,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     /** The clips' videos, for the editor's live preview. */
     fun previewFiles(): Map<String, Uri> = files()
 
-    /** Every clip's video by moment id: moments' files and gallery videos. */
-    private fun files(): Map<String, Uri> =
-        (clips + borrowed.values).associate { it.id to Uri.fromFile(it.file) } + phone.values.associate { it.id to it.uri }
+    private fun files(): Map<String, Uri> = engine.files()
 
     /** The source frame (not the finished Reel, so no captions) at [atMs] into the Reel. */
     private fun sourceFrame(plan: StudioPlan, atMs: Long): android.graphics.Bitmap? {
@@ -844,14 +784,16 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         if (job?.isActive == true) return
         val o = _state.value.options
         val gemini = c.transcripts.available
-        val needCaptions = o.captions && gemini && !captionsDone
+        // A suggestion's script is written already: nothing to read. Otherwise only clips not read yet.
+        val unread = if (pendingScript == null && o.captions && gemini && !engine.captionsTried) engine.unreadCount() else 0
+        val needCaptions = unread > 0
         skipCaptions = false
         _state.update {
             it.copy(
                 step = StudioStep.WORKING, error = null, video = null, renderProgress = null, notes = emptyList(), tips = null,
                 work = listOfNotNull(
-                    WorkStep("Reading what you said", if (needCaptions) 0 else 3, if (!o.captions) "Captions are off" else if (!gemini) "Not available in this build" else if (captionsDone) "Done earlier" else null),
-                    WorkStep("Writing the script", 0),
+                    WorkStep("Reading what you said", 0).takeIf { needCaptions },
+                    WorkStep(if (pendingScript != null) "Fitting the script to your clips" else "Writing the script", 0),
                     WorkStep("Making the video", 0),
                 ),
             )
@@ -859,23 +801,24 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         job = viewModelScope.launch {
             val notes = ArrayList<String>()
             try {
+                val w = if (needCaptions) 1 else 0
                 if (needCaptions) {
                     step(0, 1)
                     _state.update { it.copy(canSkipCaptions = true) }
-                    val note = withContext(Dispatchers.IO) { readCaptions() }
+                    val read = engine.readCaptions(onProgress = { d -> step(0, 1, d) }, skip = { skipCaptions })
                     _state.update { it.copy(canSkipCaptions = false) }
-                    note?.let { notes += it }
+                    read.note?.let { notes += it }
                     step(0, if (skipCaptions) 3 else 2, if (skipCaptions) "Skipped" else null)
-                    bits = withContext(Dispatchers.IO) { buildBits() }
+                    refreshSources()
                 }
-                step(1, 1)
+                step(w, 1)
                 // Script first: a suggestion's script, or Gemini writes one (or the app's calm fallback); then the app checks it.
                 val sc = pendingScript ?: writeScript(avoid = remixFrom)
                 pendingScript = null
                 remixFrom = null
                 applyScript(sc)
                 val s = _state.value
-                step(1, 2, listOfNotNull(s.script?.title?.let { "“$it”" } ?: s.story?.let { "“$it”" }, "${s.plan?.clips?.size} clips · ${Format.clock(s.plan?.totalMs ?: 0)}").joinToString(" · "))
+                step(w, 2, listOfNotNull(s.script?.title?.let { "“$it”" } ?: s.story?.let { "“$it”" }, "${s.plan?.clips?.size} clips · ${Format.clock(s.plan?.totalMs ?: 0)}").joinToString(" · "))
                 render(notes)
             } catch (e: CancellationException) {
                 _state.update { it.copy(step = StudioStep.SETUP, canSkipCaptions = false) }
@@ -889,29 +832,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
 
     // ---- scripts ---------------------------------------------------------------------------
 
-    /** The clips as the script writer sees them: short keys in filming order, how each looks, what was said. */
-    private fun footage(): List<Footage> {
-        val out = _state.value.excluded
-        val list = clips.filter { it.id !in out }.map { m ->
-            val dur = m.durationMillis ?: 0
-            Footage(
-                key = "", momentId = m.id, durationMs = dur, startMillis = m.videoStartMillis,
-                look = if (m.camera == "back") "road" else "selfie",
-                lines = StudioText.load(m.file).orEmpty(),
-                kmhMax = (0..(dur / 1000).toInt()).maxOfOrNull { s -> speedAt(m.videoStartMillis + s * 1000L) }?.coerceAtLeast(0) ?: 0,
-                events = m.types.filter { it != RideEventType.VOICE }.joinToString { it.name.lowercase().replace('_', ' ') },
-                label = Format.timeOfDay(m.videoStartMillis),
-            )
-        } + phone.values.filter { it.id !in out }.map { p ->
-            Footage(
-                key = "", momentId = p.id, durationMs = p.durationMs, startMillis = p.startMillis, look = "phone",
-                lines = StudioText.load(PhoneVideos.captionKey(c.appContext, p.id)).orEmpty(),
-                kmhMax = (0..(p.durationMs / 1000).toInt()).maxOfOrNull { s -> speedAt(p.startMillis + s * 1000L) }?.coerceAtLeast(0) ?: 0,
-                label = "phone video",
-            )
-        }
-        return list.sortedBy { it.startMillis }.mapIndexed { i, f -> f.copy(key = "c${i + 1}") }
-    }
+    private fun footage(): List<Footage> = engine.footage()
 
     /** Gemini's script for the chosen length (one request), or the app's own when Gemini can't. */
     private suspend fun writeScript(avoid: Script?): Script {
@@ -960,8 +881,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         }
     }
 
-    /** What Studio has learnt about the rider's style (see Your style). */
-    private fun style(): StyleContext? = c.style.context()
+    private fun style(): StyleContext? = engine.style()
 
     /** Another take: Gemini writes a script clearly different from this one (one request). */
     fun remix() {
@@ -1220,22 +1140,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         coach()
     }
 
-    /** What the renderer needs for [plan] with the choices in [s]. */
-    private fun renderInput(plan: StudioPlan, s: StudioState, baseCard: RideCard, voice: File?): RenderInput {
-        val ride = samples.toList()
-        return RenderInput(
-            plan = plan,
-            files = files(),
-            card = baseCard.copy(title = s.title.ifBlank { baseCard.title }),
-            options = s.options,
-            speedAt = { StudioNumbers.speedAt(ride, it) },
-            clockAt = { Format.timeOfDay(it).lowercase(Locale.getDefault()) },
-            music = s.musicUri,
-            opener = StudioArt.Opener(label = if (s.options.intro) s.label.takeIf { s.series.isNotBlank() } else s.label, hookLine = s.hookLine.ifBlank { null }),
-            voice = voice,
-            voiceLines = s.takes.flatMap { t -> t.lines.map { it.copy(startMs = it.startMs + t.startMs, endMs = it.endMs + t.startMs) } },
-        )
-    }
+    private fun renderInput(plan: StudioPlan, s: StudioState, baseCard: RideCard, voice: File?) = engine.renderInput(plan, s, baseCard, voice)
 
     /** Tips for this video: Gemini's when it can, the app's own otherwise. "Film next time" ones go on Home. */
     private fun coach() {
@@ -1278,134 +1183,13 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         s.copy(work = s.work.mapIndexed { k, w -> if (k == i) w.copy(state = state, detail = detail ?: w.detail) else w })
     }
 
-    // ---- captions and the director ---------------------------------------------------------
-
-    /**
-     * Asks Gemini for timed lines for the clips that likely have talking, several clips per request
-     * (the free tier allows few requests a day); returns a note if some were missed.
-     */
-    /** Set when the last Gemini request couldn't reach the server (no internet, a blocked address). */
-    @Volatile private var unreachable: Throwable? = null
-
-    private suspend fun readCaptions(): String? {
-        val out = _state.value.excluded
-        val moments = clips.filter { it.id !in out && likelyTalking(it) && StudioText.load(it.file) == null }
-            .sortedByDescending { (if (RideEventType.VOICE in it.types) 2 else 0) + (it.transcript?.length ?: 0).coerceAtMost(200) / 100 }
-            .map { m ->
-                CaptionJob(m.file.name, m.file, { f -> ClipAudio.extract(m.file, f) }) { lines ->
-                    // The words also become the clip's transcript (shown in the ride and the clip viewer).
-                    if (m.transcript == null) c.moments.setTranscript(m.id, lines.joinToString(" ") { it.text })
-                }
-            }
-        // Phone videos are filmed on purpose: always worth reading.
-        val gallery = phone.values.filter { it.id !in out && StudioText.load(PhoneVideos.captionKey(c.appContext, it.id)) == null }
-            .map { p -> CaptionJob("phone ${p.id}", PhoneVideos.captionKey(c.appContext, p.id), { f -> ClipAudio.extract(c.appContext, p.uri, f) }) {} }
-        val todo = (gallery + moments).take(MAX_CAPTION_CLIPS)
-        if (todo.isEmpty()) return null
-        val g = gemini()
-        var missed = 0
-        var note: String? = null
-        var done = 0
-        for (batch in todo.chunked(BATCH)) {
-            if (skipCaptions) break
-            step(0, 1, "${done + 1}–${done + batch.size} of ${todo.size} clips")
-            val audios = batch.mapIndexed { k, j -> j to File(c.appContext.cacheDir, "studio-cap-$done-$k.m4a") }
-            try {
-                val usable = audios.filter { (j, f) -> j.extract(f) && f.length() <= MAX_AUDIO_BYTES / 2 }
-                audios.filter { it !in usable }.forEach { (j, _) -> StudioText.save(j.key, emptyList()) }
-                val results = if (usable.isEmpty()) emptyList() else g.captionsBatch(usable.map { it.second })
-                usable.forEachIndexed { i, (j, _) ->
-                    val lines = results.getOrNull(i)
-                    if (lines == null) { missed++; return@forEachIndexed }
-                    StudioText.save(j.key, lines)
-                    j.saved(lines)
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                c.errors.record("Studio captions", "Couldn't read ${batch.size} clips (${batch.joinToString { it.name }})", e)
-                missed += batch.size
-                if (com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e)) unreachable = e
-                note = when {
-                    AppCheckSetup.isRejected(e) -> "Captions: Firebase didn't accept this phone (App Check). Add the debug token from Profile › Moments in Firebase."
-                    e is FirebaseTranscriber.Busy -> "Captions were skipped: Gemini's free limit is used up. Remix once it's free again."
-                    com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e) -> "Captions were skipped. " + com.ridetrack.app.transcribe.GeminiNet.message(e)
-                    else -> "Captions: couldn't read $missed clip${if (missed > 1) "s" else ""} (${e.message?.take(80)})."
-                }
-                // Out of allowance, refused or unreachable: more requests won't help now.
-                if (AppCheckSetup.isRejected(e) || e is FirebaseTranscriber.Busy || com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e)) break
-            } finally {
-                audios.forEach { it.second.delete() }
-            }
-            done += batch.size
-        }
-        captionsDone = !skipCaptions && missed == 0
-        return note
-    }
-
-    /** One clip whose words Gemini reads: [key] is where its captions are kept. */
-    private class CaptionJob(val name: String, val key: File, val extract: (File) -> Boolean, val saved: suspend (List<CaptionLine>) -> Unit)
-
-    private fun gemini() = StudioGemini(preferred = { c.transcripts.model }, onWorking = { c.transcripts.model = it })
+    private fun gemini() = engine.gemini()
 
     /** Voice-triggered, filmed on purpose, or already known to have words. */
     private fun likelyTalking(m: Moment) =
         RideEventType.VOICE in m.types || m.source == MomentSource.MANUAL || !m.transcript.isNullOrBlank()
 
-    private fun buildBits(): List<Bit> {
-        val out = _state.value.excluded
-        return clips.filter { it.id !in out }.flatMap { m ->
-            val dur = m.durationMillis ?: 0
-            val lines = StudioText.load(m.file).orEmpty()
-            val focus = (m.timeMillis - m.videoStartMillis).coerceIn(0, dur)
-            StudioPlanner.bitsOf(m.id, m.videoStartMillis, dur, lines, { t -> speedAt(t).coerceAtLeast(0).toDouble() }, focus).map { it.copy(camera = m.camera) }
-        } + phone.values.filter { it.id !in out }.flatMap { p ->
-            PhoneVideos.bits(p, StudioText.load(PhoneVideos.captionKey(c.appContext, p.id)).orEmpty()) { t -> speedAt(t).coerceAtLeast(0).toDouble() }
-        }
-    }
-
-    // ---- ride numbers ----------------------------------------------------------------------
-
-    /** km/h at [wall]; -1 when there's no speed for that moment (a gap in GPS): no badge then. */
-    private fun speedAt(wall: Long): Int = StudioNumbers.speedAt(samples, wall)
-
-    private fun rideCard(name: String, start: Long, distanceM: Double, durMs: Long, topMps: Double?, moments: Int): RideCard {
-        val zone = ZoneId.systemDefault()
-        val day = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()).format(Instant.ofEpochMilli(start).atZone(zone))
-        // The ride's saved stats can cover only part of it (a ride that survived the app dying):
-        // take whichever is bigger, the stats or what the samples show, so the card agrees with the badges.
-        val fromSamples = StudioNumbers.summary(samples)
-        val km = String.format(Locale.US, "%.1f", maxOf(distanceM, fromSamples.distanceM) / 1000)
-        val min = (maxOf(durMs, fromSamples.movingMs) / 60_000).coerceAtLeast(1)
-        val topKmh = maxOf((topMps ?: 0.0) * 3.6, fromSamples.topKmh)
-        val pts = samples.filter { it.latitude != null && it.longitude != null }
-        val step = (pts.size / 400 + 1).coerceAtLeast(1)
-        val route = pts.filterIndexed { i, _ -> i % step == 0 || i == pts.lastIndex }
-        val top = (topMps ?: route.maxOfOrNull { it.speedMps ?: 0.0 } ?: 1.0).coerceAtLeast(1.0)
-        val norm = if (route.size >= 2) {
-            val lat0 = route.map { it.latitude!! }.average()
-            val k = cos(Math.toRadians(lat0))
-            val xs = route.map { it.longitude!! * k }
-            val ys = route.map { -it.latitude!! }
-            val span = maxOf(xs.max() - xs.min(), ys.max() - ys.min()).coerceAtLeast(1e-9) / 2
-            val cx = (xs.max() + xs.min()) / 2
-            val cy = (ys.max() + ys.min()) / 2
-            route.indices.map { i -> Triple(((xs[i] - cx) / span).toFloat(), ((ys[i] - cy) / span).toFloat(), ((route[i].speedMps ?: 0.0) / top).toFloat()) }
-        } else {
-            emptyList()
-        }
-        return RideCard(
-            title = name,
-            subtitle = "$day · $km km · $min min",
-            route = norm,
-            stats = listOf(km to "km", "${topKmh.roundToInt()}" to "top km/h", "$min" to "minutes", "$moments" to "moments"),
-        )
-    }
-
-    private fun fallbackCaption(): String {
-        val cd = card ?: return ""
-        return "${cd.title} 🏍️\n${cd.subtitle}\n\n#motovlog #bikelife #ridersofindia #keppomoto"
-    }
+    private fun fallbackCaption(): String = engine.fallbackCaption()
 
     override fun onCleared() {
         job?.cancel()
@@ -1413,10 +1197,4 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         recorder.stop()
     }
 
-    private companion object {
-        const val MAX_CAPTION_CLIPS = 32
-        /** Clips read per Gemini request. */
-        const val BATCH = 8
-        const val MAX_AUDIO_BYTES = 14L * 1024 * 1024
-    }
 }

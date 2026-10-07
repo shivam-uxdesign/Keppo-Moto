@@ -517,8 +517,18 @@ data class StyleContext(val rules: List<String>, val examples: List<StyleExample
 data class StyleExample(val before: String, val after: String, val note: String?)
 
 /** A piece Gemini suggests for a ride: its script and the plan the app made of it. */
-data class ContentPiece(val key: String, val script: Script, val plan: StudioPlan) {
+data class ContentPiece(
+    val key: String,
+    val script: Script,
+    val plan: StudioPlan,
+    /** How long the script asked for, and what the app's checks changed in it. */
+    val plannedMs: Long = plan.totalMs,
+    val fixes: List<String> = emptyList(),
+) {
     val opening: ClipSegment? get() = plan.clips.firstOrNull()
+
+    /** The checks changed the length by more than 15%: worth showing "planned vs. made". */
+    val lengthChanged: Boolean get() = plannedMs > 0 && kotlin.math.abs(plan.totalMs - plannedMs) * 100 > plannedMs * 15
 }
 
 /** The rider's direct changes to a script, in the Script view. Pure, unit-tested. */

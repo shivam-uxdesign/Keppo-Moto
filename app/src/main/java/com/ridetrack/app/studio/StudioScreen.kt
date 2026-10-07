@@ -434,6 +434,8 @@ private fun Suggestions(vm: StudioViewModel, s: StudioState, made: Set<String>) 
                     Text(sc.title, style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 2)
                     sc.why?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary, maxLines = 4) }
                     Text("${pc.plan.clips.size} shots · ${sc.shape.replace('_', ' ')}", style = RtType.caption, color = RtColors.TextTertiary)
+                    // The app's checks changed it noticeably: say so, so the length isn't a surprise.
+                    if (pc.lengthChanged) Text("Planned ${Format.clock(pc.plannedMs)} · ${Format.clock(pc.plan.totalMs)} after checks", style = RtType.caption, color = RtColors.Warning)
                 }
             }
         }
