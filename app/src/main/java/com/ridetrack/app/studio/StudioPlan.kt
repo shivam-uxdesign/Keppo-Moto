@@ -59,6 +59,8 @@ data class StudioOptions(
     val outro: Boolean = true,
     /** End on a split second of the opening shot, so the Reel loops. */
     val loopEnd: Boolean = true,
+    /** The song's tempo, so cuts land on its beats; null = the vibe's own pace. */
+    val bpm: Int? = null,
     val map: Boolean = true,
     val captions: Boolean = true,
     val watermark: Boolean = true,
@@ -152,8 +154,8 @@ object StudioPlanner {
     }
 
     /** How long a bit plays: speech to the end of its sentence on the beat; riding for a few beats. */
-    fun durationOf(b: Bit, vibe: Vibe, shake: Double): Long {
-        val beat = vibe.beatMs
+    fun durationOf(b: Bit, vibe: Vibe, shake: Double, beatMs: Long = vibe.beatMs): Long {
+        val beat = beatMs
         if (b.talking) {
             val need = b.lines.last().endMs + PAD_AFTER
             val d = ceil(need.toDouble() / beat).toLong() * beat
@@ -176,6 +178,7 @@ object StudioPlanner {
      */
     fun plan(bits: List<Bit>, o: StudioOptions, story: List<String> = emptyList(), ending: String? = null): StudioPlan {
         val r = java.util.Random(o.seed.toLong() * 7919 + o.vibe.ordinal)
+        val beat = o.bpm?.takeIf { it in 50..200 }?.let { 60_000L / it } ?: o.vibe.beatMs
         val shakes = bits.associate { it.id to r.nextDouble() }
         var room = o.lengthSec * 1000L - (if (o.intro) INTRO_MS else 0) - (if (o.outro) OUTRO_MS else 0) - (if (o.loopEnd) TAIL_MS else 0)
         val inStory = story.toSet()
@@ -186,13 +189,13 @@ object StudioPlanner {
         data class Pick(val b: Bit, val d: Long)
         val picked = ArrayList<Pick>()
         for ((b, _) in ranked) {
-            val d = durationOf(b, o.vibe, shakes.getValue(b.id))
+            val d = durationOf(b, o.vibe, shakes.getValue(b.id), beat)
             if (d <= 0 || d > room) continue
             // Never the same seconds twice (clips filmed back to back overlap).
             if (picked.any { p -> b.atMillis < p.b.atMillis + p.d && b.atMillis + d > p.b.atMillis }) continue
             picked += Pick(b, d)
             room -= d
-            if (room < o.vibe.beatMs * 2) break
+            if (room < beat * 2) break
         }
         if (picked.isEmpty()) return StudioPlan(emptyList(), o.vibe)
         val end = picked.firstOrNull { it.b.id == ending && picked.size > 1 }

@@ -36,7 +36,7 @@ class FirebaseTranscriber {
 
     companion object {
         /** Newest first; a name Google has retired is skipped (its error says so) and the next tried. */
-        val MODELS = listOf("gemini-3.8-flash", "gemini-3-flash", "gemini-2.5-flash")
+        val MODELS = listOf("gemini-3.8-flash", "gemini-3-flash", "gemini-3.8-flash-lite", "gemini-3-flash-lite", "gemini-2.5-flash")
 
         /** The error means this model name can't be used (gone, retired, or closed to new projects). */
         fun isMissingModel(e: Throwable): Boolean {
@@ -48,6 +48,14 @@ class FirebaseTranscriber {
         /** The model Google's error says to use instead ("… use models/gemini-3.8-flash …"), if any. */
         fun suggestedModel(e: Throwable, current: String): String? =
             Regex("models/(gemini-[a-z0-9.\\-]+)").findAll(text(e)).map { it.groupValues[1].trimEnd('.', '-') }.firstOrNull { it != current }
+
+        /** The free tier's daily allowance is used up (it resets at midnight Pacific, about 12:30 PM in India). */
+        fun isDailyLimit(e: Throwable): Boolean = Regex("per ?day|PerDay|daily", RegexOption.IGNORE_CASE).containsMatchIn(text(e))
+
+        /** What to tell the rider when every model is busy. */
+        fun busyMessage(e: Throwable): String =
+            if (isDailyLimit(e)) "Gemini's free daily limit is used up. It resets around 12:30 PM (India time); clips wait until then."
+            else "Gemini is busy (free-tier limit per minute). Trying again in a few minutes."
 
         private fun text(e: Throwable) = "${e.message} ${e.cause?.message}"
     }

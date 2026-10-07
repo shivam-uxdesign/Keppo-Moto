@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tune
@@ -151,12 +152,17 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 if (s.lengths.size < StudioPlanner.LENGTHS.size) Text("Longer Reels need more clips.", style = RtType.caption, color = RtColors.TextTertiary)
             }
             Section("Music") {
+                MusicPicker(s, onTrack = vm::setTrack)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Choice(s.musicName?.let { "♪ $it" } ?: "Your song", s.musicUri != null) { pickSong.launch(arrayOf("audio/*")) }
-                    Choice("No music", s.musicUri == null) { vm.setMusic(null) }
+                    Choice(s.musicName?.let { "♪ $it" } ?: "Your own song", s.musicUri != null) { pickSong.launch(arrayOf("audio/*")) }
+                    Choice("No music", s.musicUri == null && s.track == null) { vm.setMusic(null) }
                 }
                 Text(
-                    if (s.musicUri != null) "The song dips while you talk." else "Your voice and the ride's sound only. You can add a trending song in Instagram.",
+                    when {
+                        s.track != null -> "Cuts land on the song's beat (${s.track.bpm} BPM), and it dips while you talk. Free to post (public domain)."
+                        s.musicUri != null -> "The song dips while you talk. Instagram may mute songs you don't have the rights to."
+                        else -> "Your voice and the ride's sound only. You can add a trending song in Instagram."
+                    },
                     style = RtType.caption,
                     color = RtColors.TextTertiary,
                 )
@@ -263,7 +269,7 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Player(video, Modifier.align(Alignment.CenterHorizontally))
             Text(
-                listOfNotNull(s.story?.let { "“$it”" }, s.options.vibe.label, Format.clock(s.plan?.totalMs ?: 0), "${s.plan?.clips?.size ?: 0} clips", s.musicName?.let { "♪ $it" }).joinToString(" · "),
+                listOfNotNull(s.story?.let { "“$it”" }, s.options.vibe.label, Format.clock(s.plan?.totalMs ?: 0), "${s.plan?.clips?.size ?: 0} clips", (s.track?.title ?: s.musicName)?.let { "♪ $it" }).joinToString(" · "),
                 style = RtType.caption,
                 color = RtColors.TextSecondary,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -421,6 +427,79 @@ private fun Edit(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             Button("Make it again · ${Format.clock(plan.totalMs)}", primary = true, modifier = Modifier.weight(2f)) { vm.remake() }
         }
         Spacer(Modifier.height(12.dp))
+    }
+}
+
+// ---- music ------------------------------------------------------------------------------------
+
+/** Songs suggested for the vibe, the rest under "More songs"; tap ▶ to hear 15 s, tap the name to use it. */
+@Composable
+private fun MusicPicker(s: StudioState, onTrack: (Track) -> Unit) {
+    val context = LocalContext.current
+    val player = remember { ExoPlayer.Builder(context).build() }
+    DisposableEffect(player) { onDispose { player.release() } }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { player.pause() }
+    var playing by remember { mutableStateOf<String?>(null) }
+    var more by remember { mutableStateOf(false) }
+    LaunchedEffect(playing) {
+        if (playing == null) { player.pause(); return@LaunchedEffect }
+        delay(15_000)
+        player.pause()
+        playing = null
+    }
+    val vibe = s.options.vibe
+    val suggested = MusicLibrary.forVibe(vibe)
+    val others = MusicLibrary.TRACKS.filter { it.vibe != vibe }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text("Suggested for ${vibe.label}", style = RtType.caption, color = RtColors.TextSecondary)
+        suggested.forEach { t -> TrackRow(t, s.track?.id == t.id, playing == t.id, { onTrack(t) }) { playing = preview(player, t, playing) } }
+        Text(
+            if (more) "Fewer songs" else "More songs · ${others.size}",
+            style = RtType.button,
+            color = RtColors.Primary,
+            modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button) { more = !more }.padding(vertical = 8.dp),
+        )
+        if (more) {
+            others.groupBy { it.vibe }.forEach { (v, list) ->
+                Text(v.label, style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
+                list.forEach { t -> TrackRow(t, s.track?.id == t.id, playing == t.id, { onTrack(t) }) { playing = preview(player, t, playing) } }
+            }
+        }
+    }
+}
+
+/** Starts (or stops) the 15 s preview of [t]; returns what's playing now. */
+private fun preview(player: ExoPlayer, t: Track, playing: String?): String? {
+    if (playing == t.id) { player.pause(); return null }
+    player.setMediaItem(MediaItem.fromUri(t.uri))
+    player.prepare()
+    player.play()
+    return t.id
+}
+
+@Composable
+private fun TrackRow(t: Track, selected: Boolean, playing: Boolean, onSelect: () -> Unit, onPreview: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) RtColors.Primary.copy(alpha = 0.12f) else Color.Transparent)
+            .clickable(role = Role.RadioButton, onClick = onSelect)
+            .padding(horizontal = 6.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(36.dp).clip(CircleShape).background(RtColors.Surface).clickable(role = Role.Button, onClickLabel = if (playing) "Stop preview" else "Play preview", onClick = onPreview),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(if (playing) Icons.Rounded.Stop else Icons.Rounded.PlayArrow, contentDescription = null, tint = RtColors.TextPrimary, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(t.title, style = RtType.body, color = if (selected) RtColors.Primary else RtColors.TextPrimary)
+            Text("${t.mood} · ${t.bpm} BPM", style = RtType.caption, color = RtColors.TextTertiary)
+        }
+        if (selected) Icon(Icons.Rounded.Check, contentDescription = "Selected", tint = RtColors.Primary, modifier = Modifier.size(18.dp))
     }
 }
 

@@ -47,10 +47,14 @@ data class StudioState(
     val clipCount: Int = 0,
     val talkingCount: Int = 0,
     val posters: List<File> = emptyList(),
-    val options: StudioOptions = StudioOptions(),
+    val options: StudioOptions = StudioOptions(bpm = MusicLibrary.forVibe(Vibe.HYPE).firstOrNull()?.bpm),
     val lengths: List<Int> = StudioPlanner.LENGTHS,
+    /** The rider's own song (from the phone); null = none or a library track. */
     val musicUri: Uri? = null,
     val musicName: String? = null,
+    /** A song from the built-in library; it follows the vibe until the rider picks one. */
+    val track: Track? = MusicLibrary.forVibe(Vibe.HYPE).firstOrNull(),
+    val trackPicked: Boolean = false,
     val step: StudioStep = StudioStep.SETUP,
     val work: List<WorkStep> = emptyList(),
     val renderProgress: Int? = null,
@@ -133,7 +137,18 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
     fun setOptions(f: (StudioOptions) -> StudioOptions) = _state.update {
         val o = f(it.options)
         val lengths = StudioPlanner.lengthsFor(bits, o.vibe)
-        it.copy(options = o.copy(lengthSec = if (o.lengthSec in lengths) o.lengthSec else lengths.last()), lengths = lengths)
+        // A suggested song follows the vibe until the rider picks one themselves.
+        val track = if (it.track != null && !it.trackPicked && it.track.vibe != o.vibe) MusicLibrary.forVibe(o.vibe).firstOrNull() else it.track
+        it.copy(
+            options = o.copy(lengthSec = if (o.lengthSec in lengths) o.lengthSec else lengths.last(), bpm = track?.bpm),
+            lengths = lengths,
+            track = track,
+        )
+    }
+
+    /** A library song (cuts follow its tempo); null with [setMusic] null = no music. */
+    fun setTrack(t: Track) = _state.update {
+        it.copy(track = t, trackPicked = true, musicUri = null, musicName = null, options = it.options.copy(bpm = t.bpm))
     }
 
     fun setMusic(uri: Uri?) {
@@ -143,7 +158,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
             }.getOrNull()?.substringBeforeLast('.') ?: "Your song"
         }
         uri?.let { runCatching { c.appContext.contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
-        _state.update { it.copy(musicUri = uri, musicName = name) }
+        _state.update { it.copy(musicUri = uri, musicName = name, track = null, trackPicked = true, options = it.options.copy(bpm = null)) }
     }
 
     fun setSeries(name: String) {
@@ -394,16 +409,16 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
             options = s.options,
             speedAt = ::speedAt,
             clockAt = { Format.timeOfDay(it).lowercase(Locale.getDefault()) },
-            music = s.musicUri,
+            music = s.track?.uri ?: s.musicUri,
             opener = StudioArt.Opener(label = if (s.options.intro) s.label.takeIf { s.series.isNotBlank() } else s.label, hookLine = s.hookLine.ifBlank { null }),
             voice = voice,
             voiceLines = s.takes.flatMap { t -> t.lines.map { it.copy(startMs = it.startMs + t.startMs, endMs = it.endMs + t.startMs) } },
         )
         val out = File(ShareImages.sharesDir(c.appContext), "keppo-reel-${System.currentTimeMillis()}.mp4")
         val result = StudioRenderer(c.appContext).render(input, out) { p -> _state.update { it.copy(renderProgress = p) } }
-        val file = result.getOrThrow()
+        val done = result.getOrThrow()
         step(idx, 2)
-        _state.update { it.copy(step = StudioStep.READY, video = file, renderProgress = null, notes = notes) }
+        _state.update { it.copy(step = StudioStep.READY, video = done.file, renderProgress = null, notes = notes + listOfNotNull(done.note)) }
         coach()
     }
 
@@ -417,7 +432,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
             val story = d?.stories?.getOrNull(storyIndex)
             val voiceOver = s.takes.isNotEmpty()
             val tips = (if (c.transcripts.available) {
-                runCatching { gemini().coach(StudioCoach.summary(plan, s.options, bits, d, story, voiceOver, s.musicUri != null)) }.getOrDefault(emptyList())
+                runCatching { gemini().coach(StudioCoach.summary(plan, s.options, bits, d, story, voiceOver, s.musicUri != null || s.track != null)) }.getOrDefault(emptyList())
             } else {
                 emptyList()
             }).ifEmpty { StudioCoach.localTips(plan, s.options, bits, d, voiceOver) }
@@ -461,7 +476,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
                 missed++
                 note = when {
                     AppCheckSetup.isRejected(e) -> "Captions: Firebase didn't accept this phone (App Check). Add the debug token from Profile › Moments in Firebase."
-                    e is FirebaseTranscriber.Busy -> "Captions: Gemini is busy right now, so some clips have no captions. Remix later to try again."
+                    e is FirebaseTranscriber.Busy -> "Captions: ${FirebaseTranscriber.busyMessage(e)} Some clips have no captions; Remix later to try again."
                     else -> "Captions: couldn't read $missed clip${if (missed > 1) "s" else ""} (${e.message?.take(80)})."
                 }
                 if (AppCheckSetup.isRejected(e)) break

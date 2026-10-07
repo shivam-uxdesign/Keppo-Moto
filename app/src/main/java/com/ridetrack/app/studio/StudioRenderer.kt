@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.PorterDuff
 import android.net.Uri
+import android.util.Log
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -24,6 +25,7 @@ import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.InAppMuxer
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import kotlinx.coroutines.CoroutineScope
@@ -65,14 +67,53 @@ data class RenderInput(
 @UnstableApi
 class StudioRenderer(private val context: Context) {
 
-    suspend fun render(input: RenderInput, output: File, onProgress: (Int) -> Unit): Result<File> {
+    /** The finished file, and a note when it had to leave something out to work on this phone. */
+    data class Rendered(val file: File, val note: String?)
+
+    /** One way of exporting; later ones leave things out, in case a phone's encoder or muxer chokes. */
+    private data class Attempt(val inAppMuxer: Boolean, val extraTracks: Boolean, val sound: Boolean, val note: String?)
+
+    /**
+     * Tries Media3's own muxer first (it copes with odd timestamps), then the phone's, then
+     * without the song and voice-over tracks, then without sound. Fails with every error's reason.
+     */
+    suspend fun render(input: RenderInput, output: File, onProgress: (Int) -> Unit): Result<Rendered> {
+        val extras = input.music != null || input.voice != null
+        val attempts = listOfNotNull(
+            Attempt(inAppMuxer = true, extraTracks = true, sound = true, note = null),
+            Attempt(inAppMuxer = false, extraTracks = true, sound = true, note = null),
+            if (extras) Attempt(inAppMuxer = true, extraTracks = false, sound = true, note = "Made without the song and voice-over: this phone couldn't mix them in.") else null,
+            Attempt(inAppMuxer = true, extraTracks = false, sound = false, note = "Made without sound: this phone couldn't write the sound track. Send me the error below."),
+        )
+        val reasons = ArrayList<String>()
+        for (a in attempts) {
+            val r = export(input, a, output, onProgress)
+            r.onSuccess { return Result.success(Rendered(it, a.note?.let { n -> if (a.sound) n else "$n (${reasons.joinToString(" / ")})" })) }
+            val e = r.exceptionOrNull()!!
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            reasons += describe(e)
+            Log.w(TAG, "Export attempt $a failed", e)
+            onProgress(0)
+        }
+        return Result.failure(IllegalStateException(reasons.distinct().joinToString(" / ")))
+    }
+
+    /** "Muxer error (ERROR_CODE_MUXING_FAILED: Failed to write sample …)" — enough to find the cause. */
+    private fun describe(e: Throwable): String {
+        val code = (e as? ExportException)?.errorCodeName
+        val causes = generateSequence(e.cause) { it.cause }.take(3).mapNotNull { it.message?.take(120) }.toList()
+        return listOfNotNull(e.message, code, causes.joinToString(": ").ifBlank { null }).joinToString(" · ")
+    }
+
+    private suspend fun export(input: RenderInput, a: Attempt, output: File, onProgress: (Int) -> Unit): Result<File> {
         output.delete()
-        val composition = runCatching { composition(input) }.getOrElse { return Result.failure(it) }
+        val composition = runCatching { composition(input, a) }.getOrElse { return Result.failure(it) }
         return withContext(Dispatchers.Main) {
             suspendCancellableCoroutine { cont ->
                 val transformer = Transformer.Builder(context)
                     .setVideoMimeType(MimeTypes.VIDEO_H264)
                     .setAudioMimeType(MimeTypes.AUDIO_AAC)
+                    .apply { if (a.inAppMuxer) setMuxerFactory(InAppMuxer.Factory.Builder().build()) }
                     .addListener(object : Transformer.Listener {
                         override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                             if (cont.isActive) cont.resume(Result.success(output))
@@ -101,18 +142,19 @@ class StudioRenderer(private val context: Context) {
         }
     }
 
-    private fun composition(input: RenderInput): Composition {
+    private fun composition(input: RenderInput, a: Attempt): Composition {
         val plan = input.plan
         val segs = plan.segments
         val clips = plan.clips
         require(clips.isNotEmpty()) { "No clips to use" }
         val art = StudioArt(context)
-        val items = segs.mapIndexed { i, seg -> item(input, art, i, seg) }
+        val items = segs.mapIndexed { i, seg -> item(input, art, i, seg, a.sound) }
         val sequences = mutableListOf(EditedMediaItemSequence(items))
-        input.voice?.let { wav ->
+        if (!a.sound) return Composition.Builder(sequences).build()
+        if (a.extraTracks) input.voice?.let { wav ->
             sequences += EditedMediaItemSequence(listOf(EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(wav))).build()))
         }
-        input.music?.let { uri ->
+        if (a.extraTracks) input.music?.let { uri ->
             val duck = GainProcessor.ducking(plan.talkingRanges() + voiceRanges(input), input.duck)
             val total = plan.totalMs
             val music = EditedMediaItem.Builder(MediaItem.fromUri(uri))
@@ -126,7 +168,7 @@ class StudioRenderer(private val context: Context) {
     }
 
     /** One segment: which clip and part of it, how it's moved and graded, and what's drawn on it. */
-    private fun item(input: RenderInput, art: StudioArt, i: Int, seg: Segment): EditedMediaItem {
+    private fun item(input: RenderInput, art: StudioArt, i: Int, seg: Segment, sound: Boolean): EditedMediaItem {
         val plan = input.plan
         val o = input.options
         val segs = plan.segments
@@ -194,6 +236,7 @@ class StudioRenderer(private val context: Context) {
         }
         val underVoice = GainProcessor.ducking(voiceRanges(input).map { (it.first - segStart)..(it.last - segStart) }, 0.3f)
         val audio = GainProcessor { us -> level * fade(us / 1000, dur, 60) * underVoice(us) }
+        if (!sound) return EditedMediaItem.Builder(media).setRemoveAudio(true).setEffects(Effects(emptyList(), video)).build()
         return EditedMediaItem.Builder(media).setEffects(Effects(listOf(audio), video)).build()
     }
 
@@ -237,6 +280,7 @@ class StudioRenderer(private val context: Context) {
     }
 
     private companion object {
+        const val TAG = "Studio"
         const val MUSIC_LEVEL = 0.7f
 
         /** 0 → 1 over [ms] at the start and 1 → 0 before [total]. */

@@ -117,7 +117,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             // Stopped by the system (or a newer job): not an error, the clips wait for the next run.
             throw e
         } catch (e: FirebaseTranscriber.Busy) {
-            t.setError("Gemini is busy (free-tier limit); trying again later")
+            t.setError(FirebaseTranscriber.busyMessage(e))
             Result.retry()
         } catch (e: Exception) {
             t.setError(
@@ -144,6 +144,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val tried = HashSet<String>()
         var remoteTried = false
         var last: Exception? = null
+        var busy: FirebaseTranscriber.Busy? = null
         while (true) {
             val name = queue.removeFirstOrNull() ?: if (!remoteTried) {
                 remoteTried = true
@@ -158,14 +159,15 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                     ?: throw java.io.IOException("Gemini didn't answer within a minute")
                 return text.also { onWorking(name) }
             } catch (e: FirebaseTranscriber.Busy) {
-                throw e
+                // Each model has its own free allowance: try the next one.
+                busy = e
             } catch (e: Exception) {
                 if (!FirebaseTranscriber.isMissingModel(e)) throw e
                 last = e
                 FirebaseTranscriber.suggestedModel(e, name)?.takeIf { it !in tried }?.let { queue.addFirst(it) }
             }
         }
-        throw last ?: IllegalStateException("no Gemini model")
+        throw busy ?: last ?: IllegalStateException("no Gemini model")
     }
 
     private companion object {

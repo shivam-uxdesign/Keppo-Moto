@@ -149,6 +149,8 @@ dependencies {
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    // Media3's own MP4 muxer: Studio tries it first (some phones' MediaMuxer rejects mixed clips).
+    implementation(libs.androidx.media3.muxer)
 
     // Google Drive backup: Drive access through Play services; uploads run as WorkManager jobs.
     implementation(libs.play.services.auth)

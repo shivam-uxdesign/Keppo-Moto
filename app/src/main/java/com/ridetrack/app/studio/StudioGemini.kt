@@ -70,6 +70,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         val tried = HashSet<String>()
         var remoteTried = false
         var last: Exception? = null
+        var busy: FirebaseTranscriber.Busy? = null
         while (true) {
             val name = queue.removeFirstOrNull() ?: if (!remoteTried) {
                 remoteTried = true
@@ -91,7 +92,8 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
                     ?: throw java.io.IOException("Gemini didn't answer within a minute")
                 return reply.also { onWorking(name) }
             } catch (e: QuotaExceededException) {
-                throw FirebaseTranscriber.Busy(e.message)
+                // Each model has its own free allowance: try the next one.
+                busy = FirebaseTranscriber.Busy(e.message)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -100,7 +102,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
                 FirebaseTranscriber.suggestedModel(e, name)?.takeIf { it !in tried }?.let { queue.addFirst(it) }
             }
         }
-        throw last ?: IllegalStateException("no Gemini model")
+        throw busy ?: last ?: IllegalStateException("no Gemini model")
     }
 }
 
