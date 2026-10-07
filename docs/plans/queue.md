@@ -201,3 +201,9 @@ Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds
 - No explanations on the main page: they move to the "How Moments works" sheet, opened from an ⓘ in the title.
 - While riding, one banner ("Settings are locked while riding") instead of a message on every row.
 - Nothing removed; rarely changed settings are one tap deeper.
+
+## 3. Studio: your own videos, and seeing every clip
+- **Start from phone videos:** a "Make a Reel from your videos" card at the top of the Studio tab opens Android's photo picker (videos and photos, multi-select, no permission). A video filmed during a recorded ride (by its time) is linked to that ride and gets real speed, route and stats; otherwise it's a plain clip (captions and music, no speed badge). Long videos: Studio uses the best parts, as with ride clips.
+- **Add more while making a Reel:** an "Add videos" button by the clip strip in setup, and "Add from your phone" in Edit next to "Add from another ride". Added videos get captions, the story picker and beat cuts like the rest.
+- **See every clip:** before making, a thumbnail strip "Studio picks from these 12 clips" (length, 🗣 if you talk; tap to preview, long-press to leave out). After making, the strip shows the clips used, in Reel order, the opening one marked; tap to jump there in the video. Clips from the phone or other rides are labelled ("Phone", "Mon 5 Oct").
+- Picked videos aren't copied: Studio keeps access to them in the gallery and skips (and says so) any that were deleted. Landscape videos are cropped to 9:16; "fit with borders" stays on the later list.
