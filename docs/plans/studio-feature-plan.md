@@ -260,7 +260,7 @@ Kept on the list, not for the next builds.
 
 ## Rider's review (7 Oct)
 
-**Yes (35):**
+**Yes (37):**
 - **Fixes:** A1 (read all clips; the request cost is acceptable), A2 (needs more thinking on the minimum number of pieces), A3, A4 (keep making even when swiped away).
 - **After the ride:** B1. B3: make the top suggestion automatically; the rider will keep saying what "top" means to them.
 - **Studio pages:** C1, C2, C3, C4.
@@ -285,7 +285,7 @@ Kept on the list, not for the next builds.
   - H1: iPad, to discuss.
   - H4: long videos max 3–5 min.
 
-**Not now (5):**
+**Not now (4):**
 - B2: richer ready notification.
 - D5: effects track (parked).
 - H2: Story card and 3D video in Studio.
