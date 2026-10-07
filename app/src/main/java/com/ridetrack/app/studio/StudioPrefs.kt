@@ -21,6 +21,11 @@ class StudioPrefs(context: Context) {
         get() = prefs.getString(SERIES, "").orEmpty()
         set(v) = prefs.edit().putString(SERIES, v.trim()).apply()
 
+    /** The "add a trending song in Instagram" guide was dismissed. */
+    var musicGuideSeen: Boolean
+        get() = prefs.getBoolean(MUSIC_GUIDE, false)
+        set(v) = prefs.edit().putBoolean(MUSIC_GUIDE, v).apply()
+
     /** The episode the next shared Reel of the series gets. */
     val nextEpisode: Int get() = prefs.getInt(EPISODE, 1)
 
@@ -56,6 +61,7 @@ class StudioPrefs(context: Context) {
         const val SERIES = "series"
         const val EPISODE = "episode"
         const val SHOTS = "shots"
+        const val MUSIC_GUIDE = "music_guide_seen"
         const val MAX = 4
     }
 }

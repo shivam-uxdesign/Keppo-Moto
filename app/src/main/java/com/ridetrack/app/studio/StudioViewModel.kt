@@ -46,14 +46,11 @@ data class StudioState(
     val clipCount: Int = 0,
     val talkingCount: Int = 0,
     val posters: List<File> = emptyList(),
-    val options: StudioOptions = StudioOptions(bpm = MusicLibrary.forVibe(Vibe.HYPE).firstOrNull()?.bpm),
+    val options: StudioOptions = StudioOptions(),
     val lengths: List<Int> = StudioPlanner.LENGTHS,
-    /** The rider's own song (from the phone); null = none or a library track. */
+    /** The rider's own song (from the phone); null = no music (the default: songs are added in Instagram). */
     val musicUri: Uri? = null,
     val musicName: String? = null,
-    /** A song from the built-in library; it follows the vibe until the rider picks one. */
-    val track: Track? = MusicLibrary.forVibe(Vibe.HYPE).firstOrNull(),
-    val trackPicked: Boolean = false,
     val step: StudioStep = StudioStep.SETUP,
     val work: List<WorkStep> = emptyList(),
     val renderProgress: Int? = null,
@@ -136,33 +133,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
     fun setOptions(f: (StudioOptions) -> StudioOptions) = _state.update {
         val o = f(it.options)
         val lengths = StudioPlanner.lengthsFor(bits, o.vibe)
-        // A suggested song follows the vibe until the rider picks one themselves.
-        val track = if (!it.trackPicked && (it.track == null || it.track.vibe != o.vibe)) MusicLibrary.forVibe(o.vibe).firstOrNull() else it.track
-        it.copy(
-            options = o.copy(lengthSec = if (o.lengthSec in lengths) o.lengthSec else lengths.last(), bpm = track?.bpm),
-            lengths = lengths,
-            track = track,
-        )
-    }
-
-    /** Imports Studio's song pack (a zip of the songs) on builds that don't carry them. */
-    fun importSongs(zip: Uri) {
-        viewModelScope.launch {
-            val n = withContext(Dispatchers.IO) { runCatching { MusicLibrary.importPack(c.appContext, zip) } }
-            n.onFailure { e ->
-                c.errors.record("Studio music", "Couldn't import the song pack", e)
-                _state.update { it.copy(error = "Couldn't read the song pack (${e.message})") }
-            }
-            n.onSuccess { count ->
-                if (count == 0) _state.update { it.copy(error = "That zip has none of Studio's songs. Pick keppo-studio-songs.zip.") }
-                setOptions { it }
-            }
-        }
-    }
-
-    /** A library song (cuts follow its tempo); null with [setMusic] null = no music. */
-    fun setTrack(t: Track) = _state.update {
-        it.copy(track = t, trackPicked = true, musicUri = null, musicName = null, options = it.options.copy(bpm = t.bpm))
+        it.copy(options = o.copy(lengthSec = if (o.lengthSec in lengths) o.lengthSec else lengths.last()), lengths = lengths)
     }
 
     fun setMusic(uri: Uri?) {
@@ -172,7 +143,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
             }.getOrNull()?.substringBeforeLast('.') ?: "Your song"
         }
         uri?.let { runCatching { c.appContext.contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
-        _state.update { it.copy(musicUri = uri, musicName = name, track = null, trackPicked = true, options = it.options.copy(bpm = null)) }
+        _state.update { it.copy(musicUri = uri, musicName = name) }
     }
 
     fun setSeries(name: String) {
@@ -427,7 +398,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
             options = s.options,
             speedAt = ::speedAt,
             clockAt = { Format.timeOfDay(it).lowercase(Locale.getDefault()) },
-            music = s.track?.uri ?: s.musicUri,
+            music = s.musicUri,
             opener = StudioArt.Opener(label = if (s.options.intro) s.label.takeIf { s.series.isNotBlank() } else s.label, hookLine = s.hookLine.ifBlank { null }),
             voice = voice,
             voiceLines = s.takes.flatMap { t -> t.lines.map { it.copy(startMs = it.startMs + t.startMs, endMs = it.endMs + t.startMs) } },
@@ -455,7 +426,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
             val story = d?.stories?.getOrNull(storyIndex)
             val voiceOver = s.takes.isNotEmpty()
             val tips = (if (c.transcripts.available) {
-                runCatching { gemini().coach(StudioCoach.summary(plan, s.options, bits, d, story, voiceOver, s.musicUri != null || s.track != null)) }
+                runCatching { gemini().coach(StudioCoach.summary(plan, s.options, bits, d, story, voiceOver, s.musicUri != null)) }
                     .onFailure { c.errors.record("Studio coach", "Gemini couldn't write tips", it) }.getOrDefault(emptyList())
             } else {
                 emptyList()
@@ -468,7 +439,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
     /** The plan in a few lines, so an error report shows what was being made. */
     private fun describePlan(p: StudioPlan): String = buildString {
         val s = _state.value
-        appendLine("Plan: ${p.vibe} · ${p.totalMs} ms · ${p.segments.size} segments · length ${s.options.lengthSec}s · music ${s.track?.id ?: s.musicUri?.let { "own" } ?: "none"} · voice takes ${s.takes.size}")
+        appendLine("Plan: ${p.vibe} · ${p.totalMs} ms · ${p.segments.size} segments · length ${s.options.lengthSec}s · music ${s.musicUri?.let { "own" } ?: "none"} · voice takes ${s.takes.size}")
         p.segments.forEachIndexed { i, seg ->
             appendLine(
                 "  $i " + when (seg) {

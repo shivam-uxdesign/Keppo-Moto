@@ -20,7 +20,6 @@ class RideTrackApp : Application() {
         super.onCreate()
         keepCrashTrace()
         AppCheckSetup.install(this)
-        com.ridetrack.app.studio.MusicLibrary.init(this)
         com.ridetrack.app.transcribe.GeminiQuota.init(this)
         container = AppContainer(this)
         // A crash is written to the error log (with its stack trace) before the app closes.

@@ -150,9 +150,6 @@ class StudioTest {
     fun `with a song, talking clips end on the song's beat`() {
         val plan = StudioPlanner.plan(clip4(), StudioOptions(vibe = Vibe.HYPE, lengthSec = 15, outro = false, loopEnd = false, bpm = 100))
         plan.clips.forEach { assertEquals(0, it.durMs % 600, "${it.durMs}") }
-        val all = com.ridetrack.app.studio.MusicLibrary.ALL
-        assertTrue(all.size >= 16)
-        Vibe.entries.forEach { v -> assertTrue(all.count { it.vibe == v } >= 3, "$v") }
     }
 
     @Test

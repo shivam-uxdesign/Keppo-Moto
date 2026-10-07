@@ -38,11 +38,6 @@ android {
         jniLibs.useLegacyPackaging = true
     }
     namespace = "com.ridetrack.app"
-    // Studio's songs (15 MB) go inside the app only with `-PbundleMusic=true` (Play builds);
-    // test builds stay small enough to send, and the songs come as a pack the app imports.
-    if (providers.gradleProperty("bundleMusic").orNull == "true") {
-        sourceSets.getByName("main").assets.srcDir("src/music/assets")
-    }
     compileSdk = 35
 
     defaultConfig {
