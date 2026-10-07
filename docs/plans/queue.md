@@ -363,3 +363,18 @@ Hook: "Tooooooo" plus the text "3 hours. No water." (3 s) → Setup: "Arre yaar,
 - Gemini picks each piece's vibe. Change it afterwards in Script (Vibe), then Make it again.
 - Vibe and length presets are gone. Music, series and the on-video switches moved to ⚙ **Studio settings**, the same for every ride (my choice: your question wasn't answered, so say if you want them per ride).
 - When Gemini can't be reached (no internet, or a blocked address such as Private DNS, an ad-blocker or the Wi-Fi's filter), Studio says so with **Try again** and **Make them without Gemini**, and retries by itself.
+
+---
+
+# Studio page improvements (planning 7 Oct; discuss only, build when the rider says "build")
+
+## Rider's decisions so far
+- **Studio lives in both places:** the Studio tab, and inside each ride (a ride's own Studio page).
+- **Suggestions are ready automatically after a ride:** Studio reads the clips and asks Gemini in the background, so they're waiting when the rider opens Studio.
+- **Story card and 3D video stay separate** (under Share) for now.
+- More ideas, UX changes and workflows from the rider to follow.
+
+## Open questions on "ready after the ride"
+- When to run: as soon as the ride is saved, only on Wi-Fi, only while charging, or a mix?
+- Tell the rider when it's ready? (a quiet notification "3 suggestions ready for Tuesday Evening Ride")
+- Gemini's daily limit: if it's used up, wait for the reset and run then.
