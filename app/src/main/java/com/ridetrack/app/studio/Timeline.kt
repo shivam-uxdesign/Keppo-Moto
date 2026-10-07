@@ -39,8 +39,12 @@ object TimelineEdits {
     /** Moves a clip's start by [deltaMs] (positive = later), keeping its words where they were said. */
     fun trimStart(plan: StudioPlan, i: Int, deltaMs: Long): StudioPlan {
         val s = clip(plan, i) ?: return plan
-        val newIn = (s.inMs + deltaMs).coerceIn(0, s.inMs + s.durMs - MIN_MS)
-        val shift = newIn - s.inMs
+        // A freeze frame only gets shorter or longer.
+        if (s.still != null) return normalize(with(plan, i, s.copy(durMs = (s.durMs - deltaMs).coerceIn(MIN_MS, 10_000))))
+        // Sped up or slowed down: the edge moves in the Reel's time, the clip moves in its own.
+        val f = Speed.outPerSource(s.speed, s.ramp)
+        val newIn = (s.inMs + (deltaMs / f).toLong()).coerceIn(0, s.inMs + s.sourceMs - (MIN_MS / f).toLong())
+        val shift = ((newIn - s.inMs) * f).toLong()
         val dur = s.durMs - shift
         val lines = s.lines.map { it.copy(startMs = it.startMs - shift, endMs = it.endMs - shift) }.filter { it.endMs > 0 && it.startMs < dur }
         return normalize(with(plan, i, s.copy(inMs = newIn, durMs = dur, lines = lines)))
@@ -49,7 +53,8 @@ object TimelineEdits {
     /** Moves a clip's end by [deltaMs] (positive = longer), never past the end of the clip. */
     fun trimEnd(plan: StudioPlan, i: Int, deltaMs: Long): StudioPlan {
         val s = clip(plan, i) ?: return plan
-        val dur = (s.durMs + deltaMs).coerceIn(MIN_MS, s.bit.clipDurationMs - s.inMs)
+        val max = if (s.still != null) 10_000 else ((s.bit.clipDurationMs - s.inMs) * Speed.outPerSource(s.speed, s.ramp)).toLong()
+        val dur = (s.durMs + deltaMs).coerceIn(MIN_MS, max.coerceAtLeast(MIN_MS))
         return normalize(with(plan, i, s.copy(durMs = dur, lines = s.lines.filter { it.startMs < dur })))
     }
 
@@ -59,8 +64,10 @@ object TimelineEdits {
         val s = clip(plan, i) ?: return plan
         if (local < MIN_MS || local > s.durMs - MIN_MS) return plan
         val a = s.copy(durMs = local, lines = s.lines.filter { it.startMs < local }.map { it.copy(endMs = minOf(it.endMs, local)) })
+        val srcLocal = if (s.still != null) 0L else (local / Speed.outPerSource(s.speed, s.ramp)).toLong()
         val b = s.copy(
-            inMs = s.inMs + local, durMs = s.durMs - local, hook = false, text = null,
+            inMs = s.inMs + srcLocal, durMs = s.durMs - local, hook = false, text = null, transition = Transition(TransitionKind.CUT),
+            frame = s.frame.filter { it.atMs >= local }.map { it.copy(atMs = it.atMs - local) },
             lines = s.lines.filter { it.endMs > local }.map { it.copy(startMs = (it.startMs - local).coerceAtLeast(0), endMs = it.endMs - local) },
         )
         return normalize(plan.copy(segments = plan.segments.toMutableList().also { it[i] = a; it.add(i + 1, b) }))

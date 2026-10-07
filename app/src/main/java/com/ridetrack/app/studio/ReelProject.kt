@@ -167,12 +167,31 @@ object ReelJson {
     private fun segment(s: Segment): JSONObject = when (s) {
         is ClipSegment -> JSONObject().put("type", "clip").put("bit", bit(s.bit)).put("in", s.inMs).put("dur", s.durMs).put("lines", lines(s.lines))
             .put("hook", s.hook).put("tail", s.tail).put("teaser", s.teaser).put("section", s.section).put("text", s.text ?: JSONObject.NULL).put("volume", s.volume.toDouble())
+            .put("speed", s.speed.toDouble()).put("ramp", s.ramp.name).put("reverse", s.reverse ?: JSONObject.NULL).put("still", s.still ?: JSONObject.NULL)
+            .put("rotation", s.rotation).put("flip", s.flip)
+            .put("frame", JSONArray().apply { s.frame.forEach { k -> put(JSONObject().put("at", k.atMs).put("z", k.zoom.toDouble()).put("x", k.x.toDouble()).put("y", k.y.toDouble())) } })
+            .put("color", JSONObject().put("exp", s.color.exposure.toDouble()).put("con", s.color.contrast.toDouble()).put("sat", s.color.saturation.toDouble()).put("warm", s.color.warmth.toDouble()).put("look", s.color.look))
+            .put("transition", s.transition?.let { JSONObject().put("kind", it.kind.name).put("length", it.length.name) } ?: JSONObject.NULL)
         is TitleSegment -> JSONObject().put("type", "title").put("dur", s.durMs)
         is StatsSegment -> JSONObject().put("type", "stats").put("dur", s.durMs)
     }
 
     private fun readSegment(o: JSONObject): Segment? = when (o.optString("type")) {
-        "clip" -> ClipSegment(readBit(o.getJSONObject("bit")), o.getLong("in"), o.getLong("dur"), readLines(o.optJSONArray("lines")), o.optBoolean("hook"), o.optBoolean("tail"), o.optBoolean("teaser"), o.optInt("section", -1), o.optStringOrNull("text"), o.optDouble("volume", 1.0).toFloat())
+        "clip" -> ClipSegment(
+            readBit(o.getJSONObject("bit")), o.getLong("in"), o.getLong("dur"), readLines(o.optJSONArray("lines")), o.optBoolean("hook"), o.optBoolean("tail"), o.optBoolean("teaser"),
+            o.optInt("section", -1), o.optStringOrNull("text"), o.optDouble("volume", 1.0).toFloat(),
+            speed = o.optDouble("speed", 1.0).toFloat(),
+            ramp = SpeedRamp.entries.firstOrNull { it.name == o.optString("ramp") } ?: SpeedRamp.NONE,
+            reverse = o.optStringOrNull("reverse"),
+            still = o.optStringOrNull("still"),
+            rotation = o.optInt("rotation", 0),
+            flip = o.optBoolean("flip"),
+            frame = o.optJSONArray("frame")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { k -> FrameKey(k.getLong("at"), k.getDouble("z").toFloat(), k.getDouble("x").toFloat(), k.getDouble("y").toFloat()) } } }.orEmpty(),
+            color = o.optJSONObject("color")?.let { c -> ClipColor(c.optDouble("exp", 0.0).toFloat(), c.optDouble("con", 0.0).toFloat(), c.optDouble("sat", 0.0).toFloat(), c.optDouble("warm", 0.0).toFloat(), c.optBoolean("look", true)) } ?: ClipColor(),
+            transition = o.optJSONObject("transition")?.let { t ->
+                Transition(TransitionKind.entries.firstOrNull { it.name == t.optString("kind") } ?: TransitionKind.STYLE, TransitionLength.entries.firstOrNull { it.name == t.optString("length") } ?: TransitionLength.NORMAL)
+            },
+        )
         "title" -> TitleSegment(o.getLong("dur"))
         "stats" -> StatsSegment(o.getLong("dur"))
         else -> null

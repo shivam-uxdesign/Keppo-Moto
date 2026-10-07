@@ -64,7 +64,86 @@ data class ClipSegment(
     val text: String? = null,
     /** The clip's own sound: 1 = as recorded, 0 = muted, up to 1.5 = louder. */
     val volume: Float = 1f,
-) : Segment
+    /** Playback speed (0.25–4) and how it changes across the clip. */
+    val speed: Float = 1f,
+    val ramp: SpeedRamp = SpeedRamp.NONE,
+    /** The part played backwards: a file made once when Reverse was tapped; null = forwards. */
+    val reverse: String? = null,
+    /** A freeze frame: this picture held for [durMs]; null = the moving clip. */
+    val still: String? = null,
+    /** Turned (0, 90, 180, 270) and mirrored. */
+    val rotation: Int = 0,
+    val flip: Boolean = false,
+    /** Zoom and pan inside the clip over time (a crop, or a move); empty = the style's camera only. */
+    val frame: List<FrameKey> = emptyList(),
+    val color: ClipColor = ClipColor(),
+    /** The transition into this clip; null = the style's own. */
+    val transition: Transition? = null,
+) : Segment {
+    /** How much of the clip this plays, in its own ms (more than [durMs] when sped up). */
+    val sourceMs: Long get() = if (still != null) 0 else Speed.sourceMs(durMs, speed, ramp)
+}
+
+/** How the speed changes across a clip: (end as a fraction of the clip's part, speed multiplier) steps. */
+enum class SpeedRamp(val label: String, val steps: List<Pair<Float, Float>>) {
+    NONE("Even", listOf(1f to 1f)),
+    MIDDLE("Slow in the middle", listOf(0.3f to 1.6f, 0.7f to 0.4f, 1f to 1.6f)),
+    EASE_OUT("Fast, then slow", listOf(0.5f to 2f, 1f to 0.5f)),
+    SPEED_UP("Slow, then fast", listOf(0.5f to 0.5f, 1f to 2f)),
+}
+
+/** Speed maths: output length from the clip's part and back. Pure. */
+object Speed {
+    val CHOICES = listOf(0.25f, 0.5f, 0.75f, 1f, 1.5f, 2f, 3f, 4f)
+
+    /** Output ms per ms of the clip. */
+    fun outPerSource(speed: Float, ramp: SpeedRamp): Double {
+        var prev = 0f
+        var sum = 0.0
+        ramp.steps.forEach { (end, mult) ->
+            sum += (end - prev) / (speed * mult).toDouble()
+            prev = end
+        }
+        return sum
+    }
+
+    fun sourceMs(outMs: Long, speed: Float, ramp: SpeedRamp): Long =
+        if (speed == 1f && ramp == SpeedRamp.NONE) outMs else (outMs / outPerSource(speed, ramp)).toLong()
+
+    fun outMs(sourceMs: Long, speed: Float, ramp: SpeedRamp): Long =
+        if (speed == 1f && ramp == SpeedRamp.NONE) sourceMs else (sourceMs * outPerSource(speed, ramp)).toLong()
+
+    /** The speed at [fraction] (0..1) through the clip's part. */
+    fun at(speed: Float, ramp: SpeedRamp, fraction: Float): Float =
+        speed * (ramp.steps.firstOrNull { fraction < it.first }?.second ?: ramp.steps.last().second)
+}
+
+/** Zoom ([zoom] ≥ 1) and pan ([x], [y] in -1..1 of the room the zoom gives) at [atMs] into the segment. */
+data class FrameKey(val atMs: Long, val zoom: Float = 1f, val x: Float = 0f, val y: Float = 0f)
+
+/** A clip's colour: each -1..1 around 0 (as filmed); [look] keeps the style's own grade on top. */
+data class ClipColor(
+    val exposure: Float = 0f,
+    val contrast: Float = 0f,
+    val saturation: Float = 0f,
+    val warmth: Float = 0f,
+    val look: Boolean = true,
+) {
+    val plain: Boolean get() = exposure == 0f && contrast == 0f && saturation == 0f && warmth == 0f
+}
+
+/** The transitions that can go on a cut. */
+enum class TransitionKind(val label: String) {
+    STYLE("Style"), CUT("Cut"), FADE("Fade"), FLASH("Flash"), ZOOM("Zoom punch"), WHIP("Whip"), GLITCH("Glitch"),
+    SLASH("Slash"), SHUTTER("Shutter"), SUN("Sun"), CARD("Card"),
+}
+
+enum class TransitionLength(val label: String, val factor: Float) { SHORT("Short", 0.5f), NORMAL("Normal", 1f), LONG("Long", 1.6f) }
+
+data class Transition(val kind: TransitionKind = TransitionKind.STYLE, val length: TransitionLength = TransitionLength.NORMAL) {
+    /** How long it takes across the cut with [vibe]'s timing. */
+    fun ms(vibe: Vibe): Long = (vibe.transitionMs * length.factor).toLong()
+}
 
 /** The route-sketch opening (optional); the stats over the last clip. Both play muted. */
 data class TitleSegment(override val durMs: Long) : Segment

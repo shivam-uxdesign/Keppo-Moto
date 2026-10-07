@@ -234,14 +234,22 @@ object TrackEdits {
         return TimelineEdits.normalize(plan.copy(segments = segs)) to moved
     }
 
-    /** A clip's settings to paste onto others (its sound level for now). */
-    data class ClipSettings(val volume: Float)
+    /** A clip's settings to paste onto others: sound level, speed, turn, mirror and colour. */
+    data class ClipSettings(val volume: Float, val speed: Float = 1f, val ramp: SpeedRamp = SpeedRamp.NONE, val rotation: Int = 0, val flip: Boolean = false, val color: ClipColor = ClipColor())
 
-    fun copySettings(plan: StudioPlan, i: Int): ClipSettings? = clip(plan, i)?.let { ClipSettings(it.volume) }
+    fun copySettings(plan: StudioPlan, i: Int): ClipSettings? = clip(plan, i)?.let { ClipSettings(it.volume, it.speed, it.ramp, it.rotation, it.flip, it.color) }
 
-    fun pasteSettings(plan: StudioPlan, indices: Set<Int>, s: ClipSettings): StudioPlan = plan.copy(
-        segments = plan.segments.mapIndexed { k, seg -> if (k in indices && seg is ClipSegment && !seg.tail) seg.copy(volume = s.volume) else seg },
-    )
+    fun pasteSettings(plan: StudioPlan, indices: Set<Int>, s: ClipSettings): StudioPlan {
+        var p = plan.copy(
+            segments = plan.segments.mapIndexed { k, seg -> if (k in indices && seg is ClipSegment && !seg.tail) seg.copy(volume = s.volume, rotation = s.rotation, flip = s.flip, color = s.color) else seg },
+        )
+        // Speed changes their length, so it goes through the speed tool.
+        indices.sorted().forEach { k ->
+            val seg = clip(p, k) ?: return@forEach
+            if (seg.still == null && (seg.speed != s.speed || seg.ramp != s.ramp)) p = ClipTools.ramp(ClipTools.speed(p, k, s.speed), k, s.ramp)
+        }
+        return p
+    }
 
     // ---- markers -----------------------------------------------------------------------------
 
