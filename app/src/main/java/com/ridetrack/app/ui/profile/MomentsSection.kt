@@ -165,6 +165,10 @@ internal fun MomentsSection(
             if (m.lean) ValueMenu("Angle", MomentSettings.LEAN_CHOICES, m.leanDeg, { "$it°" }, editable) { vm.setMoments(m.copy(leanDeg = it)) }
             Divider()
             ToggleRow("When I speak", "From 10 s before you talk until 5 s after", m.voice, { vm.setMoments(m.copy(voice = it)) })
+            if (m.twoMics) {
+                Divider()
+                ToggleRow("Revs and exhaust pops", "From the engine mic (two mics). Studio can open a piece on one.", m.engineMoments, { vm.setMoments(m.copy(engineMoments = it)) }, enabled = editable)
+            }
         }
         MomentsSub.TRANSCRIBE -> RtCard { TranscribeSettings(m) { vm.setMoments(it) } }
         MomentsSub.STORAGE -> RtCard {

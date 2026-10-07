@@ -195,6 +195,15 @@ class MomentsHub {
     val micLevel: StateFlow<Float?> = _micLevel.asStateFlow()
     private val background = BackgroundLevel()
     private val levels = ArrayList<VoiceChunk>()
+    private val engine = ArrayList<Triple<Long, Float, Long>>()
+
+    /** The engine mic's level (two-mic recording): (time, dBFS, chunk ms), for revs and exhaust pops. */
+    fun reportEngine(timeMillis: Long, levelDb: Float, chunkMillis: Long) = synchronized(engine) {
+        engine += Triple(timeMillis, levelDb, chunkMillis)
+        if (engine.size > MAX_LEVELS * 2) engine.subList(0, engine.size - MAX_LEVELS * 2).clear()
+    }
+
+    fun drainEngine(): List<Triple<Long, Float, Long>> = synchronized(engine) { engine.toList().also { engine.clear() } }
 
     /** From the audio thread: one chunk's level. The session drains them for speech detection. */
     fun reportLevel(timeMillis: Long, levelDb: Float, chunkMillis: Long, voice: Float) {

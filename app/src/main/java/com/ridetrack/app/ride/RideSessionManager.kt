@@ -132,6 +132,10 @@ class RideSessionManager(
     private val voiceSettings = settings.settings.map { it.moments.voice to it.moments.voiceSensitivity }
         .stateIn(scope, SharingStarted.Eagerly, false to VoiceSensitivity.STRICT)
 
+    /** Revs and exhaust pops on the engine mic film moments (two-mic recording). */
+    private val engineMoments = settings.settings.map { it.moments.engineMoments }
+        .stateIn(scope, SharingStarted.Eagerly, true)
+
     private val recordingDispatcher = Dispatchers.Default.limitedParallelism(1)
     private val lifecycleMutex = Mutex()
     private var recordingJob: Job? = null
@@ -348,8 +352,14 @@ class RideSessionManager(
     private fun captureMoments(rec: Recorder, frame: TelemetryFrame) {
         val planner = rec.planner
         val chain = rec.chain
+        // Revs and exhaust pops on the engine mic count like the bike's own events.
+        val engine = momentsHub.drainEngine()
+        val revs = if (engineMoments.value && planner != null) engine.mapNotNull { (t, db, ms) ->
+            rec.engineRevs.onLevel(t, db, ms)?.let { e -> e.copy(latitude = frame.latitude, longitude = frame.longitude, speedMps = frame.speedMps) to t }
+        } else emptyList()
+        revs.forEach { (e, _) -> momentsHub.log("engine rev: +${e.value?.roundToInt()} dB over the engine's usual level") }
         planner?.let { p ->
-            rec.pipeline.takeMomentEvents().forEach { (event, at) ->
+            (rec.pipeline.takeMomentEvents() + revs).forEach { (event, at) ->
                 if (chain.filming) {
                     // Another event while the chain is filming: keep going 10 s past it.
                     chain.extend(event.timeMillis + CHAIN_AFTER_MILLIS)
@@ -741,6 +751,7 @@ class RideSessionManager(
         var chainHasVoice = false
         /** "Start filming when I speak". */
         val speech = SpeechGate()
+        val engineRevs = com.ridetrack.telemetry.moments.EngineRevs()
         var lastSpeechHandled = Long.MIN_VALUE
         var lastMicLog = 0L
         var chainHasGps = false

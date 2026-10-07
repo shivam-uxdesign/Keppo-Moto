@@ -51,6 +51,7 @@ fun momentTitle(m: Moment): String {
             RideEventType.STRONG_ACCELERATION -> "Acceleration"
             RideEventType.SIGNIFICANT_LEAN -> "Lean"
             RideEventType.VOICE -> "Talking"
+            RideEventType.ENGINE_REV -> "Engine"
             else -> it.name.lowercase().replace('_', ' ')
         }
     }

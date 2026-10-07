@@ -21,6 +21,8 @@ enum class RideEventType {
     MANUAL_RESUME,
     /** Moments only: the rider was speaking (a moment's type, not a ride event). */
     VOICE,
+    /** Moments only: a rev or exhaust pop on the engine mic (two-mic recording). */
+    ENGINE_REV,
 }
 
 /**

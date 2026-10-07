@@ -94,6 +94,8 @@ data class MomentSettings(
     val swapMics: Boolean = false,
     /** Automatic may pick a Bluetooth headset's mic; off = never, unless chosen by name. */
     val headsetMic: Boolean = false,
+    /** With two mics: a rev or exhaust pop on the engine mic films a moment. */
+    val engineMoments: Boolean = true,
 ) {
     val anyTrigger: Boolean get() = braking || acceleration || lean
 
@@ -245,6 +247,7 @@ class SettingsRepository(private val context: Context) {
         val momentsTwoMics = booleanPreferencesKey("moments_two_mics")
         val momentsSwapMics = booleanPreferencesKey("moments_swap_mics")
         val momentsHeadsetMic = booleanPreferencesKey("moments_headset_mic")
+        val momentsEngine = booleanPreferencesKey("moments_engine")
         val momentShareFields = stringSetPreferencesKey("moment_share_fields")
         val momentShareLayout = stringPreferencesKey("moment_share_layout")
         val safetyCrash = booleanPreferencesKey("safety_crash")
@@ -319,6 +322,7 @@ class SettingsRepository(private val context: Context) {
                 twoMics = p[Keys.momentsTwoMics] ?: true,
                 swapMics = p[Keys.momentsSwapMics] ?: false,
                 headsetMic = p[Keys.momentsHeadsetMic] ?: false,
+                engineMoments = p[Keys.momentsEngine] ?: true,
             ),
             momentShareFields = p[Keys.momentShareFields]
                 ?.mapNotNull { n -> MomentField.entries.firstOrNull { it.name == n } }
@@ -477,5 +481,6 @@ class SettingsRepository(private val context: Context) {
         it[Keys.momentsTwoMics] = m.twoMics
         it[Keys.momentsSwapMics] = m.swapMics
         it[Keys.momentsHeadsetMic] = m.headsetMic
+        it[Keys.momentsEngine] = m.engineMoments
     }
 }

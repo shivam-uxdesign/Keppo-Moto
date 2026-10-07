@@ -483,7 +483,10 @@ class MomentRecorder(
         }
         audio = try {
             // Both channels of a USB-C receiver: its second transmitter can be the engine mic.
-            AudioEncoder(context, buffer, device, onLevel = hub::reportLevel, vad = vad, twoMics = settings.twoMics && mic.type == MicType.USB, swap = settings.swapMics, onHeadsetLost = {
+            AudioEncoder(context, buffer, device, onLevel = hub::reportLevel, vad = vad, twoMics = settings.twoMics && mic.type == MicType.USB, swap = settings.swapMics,
+                // The engine mic's level, for revs and exhaust pops (only when the two mics really differ).
+                onChannels = { l, r -> if (audio?.twoDifferent == true) hub.reportEngine(System.currentTimeMillis(), if (settings.swapMics) l else r, ENGINE_CHUNK_MS) },
+                onHeadsetLost = {
                 scope.launch(Dispatchers.Main) {
                     log.log("headset left call mode: released it (its music can play again); switching mic")
                     headsetSkipped = true
@@ -960,6 +963,8 @@ class MomentRecorder(
 
     companion object {
         private const val ENCODER_LATENCY_MILLIS = 800L
+        /** One stereo chunk: 2048 frames at 44.1 kHz. */
+        private const val ENGINE_CHUNK_MS = 46L
         private const val MIN_FREE_BYTES = 1_000_000_000L
         private const val STALL_MILLIS = 10_000L
         private const val LOW_POWER_BITRATE = 1_500_000
