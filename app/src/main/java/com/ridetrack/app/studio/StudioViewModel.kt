@@ -998,28 +998,26 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             val dur = m.durationMillis ?: 0
             val lines = StudioText.load(m.file).orEmpty()
             val focus = (m.timeMillis - m.videoStartMillis).coerceIn(0, dur)
-            StudioPlanner.bitsOf(m.id, m.videoStartMillis, dur, lines, { t -> speedAt(t).toDouble() }, focus).map { it.copy(camera = m.camera) }
+            StudioPlanner.bitsOf(m.id, m.videoStartMillis, dur, lines, { t -> speedAt(t).coerceAtLeast(0).toDouble() }, focus).map { it.copy(camera = m.camera) }
         } + phone.values.filter { it.id !in out }.flatMap { p ->
-            PhoneVideos.bits(p, StudioText.load(PhoneVideos.captionKey(c.appContext, p.id)).orEmpty()) { t -> speedAt(t).toDouble() }
+            PhoneVideos.bits(p, StudioText.load(PhoneVideos.captionKey(c.appContext, p.id)).orEmpty()) { t -> speedAt(t).coerceAtLeast(0).toDouble() }
         }
     }
 
     // ---- ride numbers ----------------------------------------------------------------------
 
-    private fun speedAt(wall: Long): Int {
-        if (samples.isEmpty()) return 0
-        var lo = 0
-        var hi = samples.lastIndex
-        while (lo < hi) { val mid = (lo + hi) / 2; if (samples[mid].timeMillis < wall) lo = mid + 1 else hi = mid }
-        val s = samples[lo].takeIf { kotlin.math.abs(it.timeMillis - wall) < 3_000 } ?: return 0
-        return ((s.speedMps ?: 0.0) * 3.6).roundToInt()
-    }
+    /** km/h at [wall]; -1 when there's no speed for that moment (a gap in GPS): no badge then. */
+    private fun speedAt(wall: Long): Int = StudioNumbers.speedAt(samples, wall)
 
     private fun rideCard(name: String, start: Long, distanceM: Double, durMs: Long, topMps: Double?, moments: Int): RideCard {
         val zone = ZoneId.systemDefault()
         val day = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()).format(Instant.ofEpochMilli(start).atZone(zone))
-        val km = String.format(Locale.US, "%.1f", distanceM / 1000)
-        val min = (durMs / 60_000).coerceAtLeast(1)
+        // The ride's saved stats can cover only part of it (a ride that survived the app dying):
+        // take whichever is bigger, the stats or what the samples show, so the card agrees with the badges.
+        val fromSamples = StudioNumbers.summary(samples)
+        val km = String.format(Locale.US, "%.1f", maxOf(distanceM, fromSamples.distanceM) / 1000)
+        val min = (maxOf(durMs, fromSamples.movingMs) / 60_000).coerceAtLeast(1)
+        val topKmh = maxOf((topMps ?: 0.0) * 3.6, fromSamples.topKmh)
         val pts = samples.filter { it.latitude != null && it.longitude != null }
         val step = (pts.size / 400 + 1).coerceAtLeast(1)
         val route = pts.filterIndexed { i, _ -> i % step == 0 || i == pts.lastIndex }
@@ -1040,7 +1038,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             title = name,
             subtitle = "$day · $km km · $min min",
             route = norm,
-            stats = listOf(km to "km", "${((topMps ?: 0.0) * 3.6).roundToInt()}" to "top km/h", "$min" to "minutes", "$moments" to "moments"),
+            stats = listOf(km to "km", "${topKmh.roundToInt()}" to "top km/h", "$min" to "minutes", "$moments" to "moments"),
         )
     }
 

@@ -310,4 +310,24 @@ class StudioTest {
         assertEquals(0, com.ridetrack.app.studio.PhoneVideos.parseDate(null))
         assertEquals(0, com.ridetrack.app.studio.PhoneVideos.parseDate("garbage"))
     }
+
+    private fun sample(t: Long, mps: Double?, lat: Double = 28.6, lon: Double = 77.2) =
+        com.ridetrack.telemetry.model.TelemetrySample(t, lat, lon, mps, null, null, null, null, null, null)
+
+    @Test
+    fun `speed is unknown in a GPS gap, never a wrong zero`() {
+        val s = listOf(sample(0, 10.0), sample(1_000, 15.0), sample(20_000, 12.0))
+        assertEquals(54, com.ridetrack.app.studio.StudioNumbers.speedAt(s, 1_200))
+        assertEquals(-1, com.ridetrack.app.studio.StudioNumbers.speedAt(s, 10_000))
+        assertEquals(-1, com.ridetrack.app.studio.StudioNumbers.speedAt(emptyList(), 0))
+    }
+
+    @Test
+    fun `ride numbers from samples ignore a single spike and long gaps`() {
+        val s = (0 until 60).map { i -> sample(i * 1_000L, if (i == 30) 60.0 else 15.0, lat = 28.6 + i * 0.0001) }
+        val sum = com.ridetrack.app.studio.StudioNumbers.summary(s)
+        assertEquals(54.0, sum.topKmh, 0.01)
+        assertEquals(59_000, sum.movingMs)
+        assertTrue(sum.distanceM in 640.0..670.0)
+    }
 }

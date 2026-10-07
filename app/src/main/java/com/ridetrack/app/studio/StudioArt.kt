@@ -103,11 +103,16 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
 
     /** The camera as Media3 wants it: a matrix in normalised device coordinates (-1..1, y up). */
     fun cameraMatrix(c: Cam): Matrix = Matrix().apply {
+        // Never zoom less than it takes to keep the frame filled after the shift and tilt
+        // (black edges showed during Hype's punch).
+        val r = Math.toRadians(abs(c.deg).toDouble())
+        val fill = (kotlin.math.cos(r) + (H / W) * kotlin.math.sin(r)).toFloat() + 2 * abs(c.x) / W + 2 * abs(c.y) / H
+        val k = max(c.k, fill)
         // Rotate in pixel space so a tilt doesn't shear the 9:16 frame.
         setScale(W / 2, H / 2)
         postRotate(-c.deg)
         postScale(2 / W, 2 / H)
-        postScale(c.k, c.k)
+        postScale(k, k)
         postTranslate(2 * c.x / W, -2 * c.y / H)
     }
 
@@ -202,10 +207,11 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
         val e = eInOut(t)
         val cov = 1 - abs(t - 0.5f) * 2
         val cx = (e - 0.5f) * 2.2f * d
-        val bw = d * 1.1f * eOut(cov) + 30 * s
+        // A narrow band sweeping across, not a full black wipe (that read as the video dropping out).
+        val bw = d * 0.16f * eOut(cov) + 18 * s
         c.save(); c.translate(W / 2, H / 2); c.rotate(-21.8f)
-        p.reset(); p.color = YELLOW; c.drawRect(cx + bw / 2 - 4 * s, -d, cx + bw / 2 + 32 * s, d, p)
-        p.color = INK; c.drawRect(cx - bw / 2, -d, cx + bw / 2, d, p)
+        p.reset(); p.color = YELLOW; c.drawRect(cx + bw / 2 - 4 * s, -d, cx + bw / 2 + 26 * s, d, p)
+        p.color = Color.argb(215, Color.red(INK), Color.green(INK), Color.blue(INK)); c.drawRect(cx - bw / 2, -d, cx + bw / 2, d, p)
         c.restore()
         val fl = cl(1 - abs(t - 0.55f) / 0.04f)
         if (fl > 0) { p.reset(); p.color = Color.argb((0.5f * fl * 255).toInt(), 255, 255, 255); c.drawRect(0f, 0f, W, H, p) }
