@@ -294,3 +294,9 @@ Kept on the list, not for the next builds.
 **No (2):**
 - C5: first-time introduction ("don't need training for now").
 - D11: beats and sound effects.
+
+**Follow-ups (7 Oct):**
+- A2 decided: the number of pieces follows the ride's strong moments (a story, a reaction, a funny or useful line, a fast stretch). At least 1, at most 6. No two pieces open on the same moment or share a shape.
+- H4 decided: vertical only, long videos max 3–5 min.
+- F1: the DJI Mic Mini has mono and stereo settings; the rider will send a screenshot.
+- H1 (iPad): options discussed without publishing the app (see the chat). The rider is to choose.
