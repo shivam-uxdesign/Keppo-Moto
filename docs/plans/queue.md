@@ -326,3 +326,15 @@ Hook: "Tooooooo" plus the text "3 hours. No water." (3 s) → Setup: "Arre yaar,
 2. "6.6 km · 6 minutes" means ~66 km/h average, which doesn't fit a top of 22: the card's numbers disagree.
 3. "0 km/h" shown at 2–3 s while moving (a gap in the speed data): hide the badge when there's no speed instead.
 4. Hype transitions show mostly black for a moment (around 5, 11, 19 s) with a yellow slash: looks like a dropout, not an effect.
+
+## Your Reels: its own page (planned 7 Oct)
+- **Studio tab:** a "Your Reels" icon at the top right of the header, with a small count badge (e.g. 12). The tab itself is only about making: the "Make a Reel from your videos" card, then the rides list. The Reels grid and Recently deleted move off it.
+- **Your Reels page:**
+  - All Reels as covers, 3 per row, newest first; each shows length, vibe, ride name, and "In Journal" where it applies.
+  - Filters at the top: All · From rides · From your videos · In Journal.
+  - Storage at the top ("Reels · 180 MB").
+  - Tap a Reel to open it with everything: watch, Script, Cover, Share, Save, Duplicate, Delete.
+  - Long-press to select several: Delete, Send to Journal.
+  - Recently deleted at the bottom (Restore / Delete, 30 days), as today.
+- **Unchanged:** a ride's own Studio page keeps its "This ride's Reels" strip. Profile › Moments › Storage shows the Reels size, with a link to this page.
+- **Open question:** should the Studio tab also show the latest Reel as a small row, or should Reels live only behind the icon?
