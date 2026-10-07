@@ -364,7 +364,8 @@ class StudioRenderer(private val context: Context) {
                         ?: seg.bit.speedKmh.toInt().takeIf { it > 0 } ?: -1
                     wallNow = wall
                     kmhNow = kmh
-                    art.drawClip(c, f, if (seg.tail) emptyList() else lines, kmh, input.clockAt(wall), o.captions, opener, plan.captionLook)
+                    // The corner speed is off in some styles (a speed sticker may show it instead).
+                    art.drawClip(c, f, if (seg.tail) emptyList() else lines, if (o.speedBadge) kmh else -1, input.clockAt(wall), o.captions, opener, plan.captionLook)
                     seg.text?.let { t -> art.drawSectionText(c, plan.vibe, t, localMs) }
                 }
                 is TitleSegment -> art.drawTitle(c, f, input.card, o.map)

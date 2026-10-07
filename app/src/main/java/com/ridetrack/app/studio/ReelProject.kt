@@ -161,6 +161,7 @@ object ReelJson {
     private fun options(o: StudioOptions) = JSONObject()
         .put("vibe", o.vibe.name).put("lengthSec", o.lengthSec).put("intro", o.intro).put("outro", o.outro).put("loopEnd", o.loopEnd)
         .put("map", o.map).put("captions", o.captions).put("watermark", o.watermark).put("seed", o.seed).put("bpm", o.bpm ?: JSONObject.NULL).put("teaser", o.teaser)
+        .put("speedBadge", o.speedBadge).put("brand", o.brand)
 
     private fun readOptions(o: JSONObject) = StudioOptions(
         vibe = o.optStringOrNull("vibe")?.let { n -> Vibe.entries.firstOrNull { it.name == n } } ?: Vibe.HYPE,
@@ -174,6 +175,8 @@ object ReelJson {
         seed = o.optInt("seed", 1),
         bpm = o.optLongOrNull("bpm")?.toInt(),
         teaser = o.optBoolean("teaser"),
+        speedBadge = o.optBoolean("speedBadge", true),
+        brand = o.optBoolean("brand"),
     )
 
     private fun segment(s: Segment): JSONObject = when (s) {

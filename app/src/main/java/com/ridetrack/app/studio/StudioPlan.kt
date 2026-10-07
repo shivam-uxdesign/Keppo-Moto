@@ -165,6 +165,10 @@ data class StudioOptions(
     val seed: Int = 1,
     /** Open with a 1–2 s flash-forward of a later moment, before the hook. */
     val teaser: Boolean = false,
+    /** The speed in the corner of clips. */
+    val speedBadge: Boolean = true,
+    /** The rider's brand kit (logo, handle, font) on the video. */
+    val brand: Boolean = false,
 )
 
 /**
