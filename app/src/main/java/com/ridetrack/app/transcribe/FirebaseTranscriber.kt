@@ -50,12 +50,20 @@ class FirebaseTranscriber {
             Regex("models/(gemini-[a-z0-9.\\-]+)").findAll(text(e)).map { it.groupValues[1].trimEnd('.', '-') }.firstOrNull { it != current }
 
         /** The free tier's daily allowance is used up (it resets at midnight Pacific, about 12:30 PM in India). */
-        fun isDailyLimit(e: Throwable): Boolean = Regex("per ?day|PerDay|daily", RegexOption.IGNORE_CASE).containsMatchIn(text(e))
+        fun isDailyLimit(e: Throwable): Boolean = isDailyText(text(e))
 
-        /** What to tell the rider when every model is busy. */
-        fun busyMessage(e: Throwable): String =
-            if (isDailyLimit(e)) "Gemini's free daily limit is used up. It resets around 12:30 PM (India time); clips wait until then."
-            else "Gemini is busy (free-tier limit per minute). Trying again in a few minutes."
+        fun isDailyText(t: String): Boolean =
+            Regex("per ?day|PerDay|daily|free_tier_requests", RegexOption.IGNORE_CASE).containsMatchIn(t) || (GeminiQuota.retryAfterMs(t) ?: 0) > 3_600_000
+
+        /** What to tell the rider when every model is busy, with when it frees up. */
+        fun busyMessage(e: Throwable): String {
+            val wait = GeminiQuota.retryAfterMs(text(e))?.let { GeminiQuota.waitText(System.currentTimeMillis() + it) }
+            return if (isDailyLimit(e)) "Gemini's free daily limit is used up${wait?.let { "; it frees up in $it" } ?: " (it resets around 12:30 PM India time)"}. Clips wait until then."
+            else "Gemini is busy (free-tier limit per minute). Trying again${wait?.let { " in $it" } ?: " in a few minutes"}."
+        }
+
+        /** Models with a bigger free allowance, tried first for captions (names that don't exist are skipped). */
+        val LITE = listOf("gemini-3.8-flash-lite", "gemini-3-flash-lite")
 
         private fun text(e: Throwable) = "${e.message} ${e.cause?.message}"
     }

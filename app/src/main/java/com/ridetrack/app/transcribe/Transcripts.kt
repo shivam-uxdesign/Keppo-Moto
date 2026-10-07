@@ -83,32 +83,38 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val c = (applicationContext as RideTrackApp).container
         val t = c.transcripts
         if (!t.available || !c.settings.settings.first().moments.transcribe) return@withContext Result.success()
-        val gemini = FirebaseTranscriber()
         val waiting = c.moments.untranscribed().filter { it.timeMillis >= t.since }
         t.setWaiting(waiting.size)
         if (waiting.isEmpty()) return@withContext Result.success()
         val rides = HashSet<String>()
         try {
-            var models = listOfNotNull(t.model) + FirebaseTranscriber.MODELS.filter { it != t.model }
-            for ((i, m) in waiting.withIndex()) {
+            val g = com.ridetrack.app.studio.StudioGemini(preferred = { t.model }, onWorking = { t.model = it })
+            // Clips Studio already captioned need no request: their words become the transcript.
+            val todo = ArrayList<com.ridetrack.app.moments.Moment>()
+            for (m in waiting) {
+                val saved = com.ridetrack.app.studio.StudioText.load(m.file)
+                if (saved != null) { c.moments.setTranscript(m.id, saved.joinToString(" ") { it.text }); rides += m.rideId } else if (m.file.exists()) todo += m
+            }
+            // Several clips per request: the free tier allows only a few requests a day.
+            var left = todo.size
+            for (batch in batches(todo)) {
                 if (isStopped) break
-                if (!m.file.exists()) continue
-                val audio = File(applicationContext.cacheDir, "transcribe-${m.id}.m4a")
+                val audios = batch.map { m -> m to File(applicationContext.cacheDir, "transcribe-${m.id}.m4a") }
                 try {
-                    val text = if (ClipAudio.extract(m.file, audio)) {
-                        if (audio.length() > MAX_BYTES) "" else transcribe(gemini, models, audio.readBytes()) { working ->
-                            t.model = working
-                            models = listOf(working) + models.filter { it != working }
-                        }
-                    } else {
-                        ""
+                    val usable = audios.filter { (m, f) -> ClipAudio.extract(m.file, f) && f.length() <= MAX_BYTES }
+                    audios.filter { it !in usable }.forEach { (m, _) -> c.moments.setTranscript(m.id, ""); rides += m.rideId }
+                    val results = if (usable.isEmpty()) emptyList() else g.captionsBatch(usable.map { it.second })
+                    usable.forEachIndexed { i, (m, _) ->
+                        val lines = results.getOrNull(i) ?: return@forEachIndexed // skipped by Gemini: try next time
+                        com.ridetrack.app.studio.StudioText.save(m.file, lines)
+                        c.moments.setTranscript(m.id, lines.joinToString(" ") { it.text })
+                        rides += m.rideId
                     }
-                    c.moments.setTranscript(m.id, text)
-                    rides += m.rideId
                 } finally {
-                    audio.delete()
+                    audios.forEach { it.second.delete() }
                 }
-                t.setWaiting(waiting.size - i - 1)
+                left -= batch.size
+                t.setWaiting(left)
                 delay(BETWEEN_MILLIS)
             }
             t.setError(null)
@@ -135,52 +141,25 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         }
     }
 
-    /** Tries [models] in order until one exists; tells [onWorking] which one did. */
-    /**
-     * Tries [models] in order until one works, jumping to any replacement Google's error names;
-     * only when all of them fail, the name set in Firebase Remote Config (`gemini_model`).
-     * Tells [onWorking] which one did.
-     */
-    private suspend fun transcribe(t: FirebaseTranscriber, models: List<String>, audio: ByteArray, onWorking: (String) -> Unit): String {
-        val queue = ArrayDeque(models)
-        val tried = HashSet<String>()
-        var remoteTried = false
-        var last: Exception? = null
-        var busy: FirebaseTranscriber.Busy? = null
-        var refreshed = false
-        while (true) {
-            val name = queue.removeFirstOrNull() ?: if (!remoteTried) {
-                remoteTried = true
-                RemoteModel.get()?.takeIf { it !in tried } ?: continue
-            } else {
-                break
-            }
-            if (!tried.add(name)) continue
-            try {
-                // A request that hangs would hold up every clip after it.
-                val text = kotlinx.coroutines.withTimeoutOrNull(REQUEST_TIMEOUT_MS) { t.transcribe(name, audio, "audio/mp4") }
-                    ?: throw java.io.IOException("Gemini didn't answer within a minute")
-                return text.also { onWorking(name) }
-            } catch (e: FirebaseTranscriber.Busy) {
-                // Each model has its own free allowance: try the next one.
-                busy = e
-            } catch (e: Exception) {
-                // Rejected pass: get a fresh one and try this model again, once.
-                if (AppCheckSetup.isRejected(e) && !refreshed) {
-                    refreshed = true
-                    if (AppCheckSetup.refresh()) { tried.remove(name); queue.addFirst(name); continue }
-                }
-                if (!FirebaseTranscriber.isMissingModel(e)) throw e
-                last = e
-                FirebaseTranscriber.suggestedModel(e, name)?.takeIf { it !in tried }?.let { queue.addFirst(it) }
-            }
+    /** Up to 8 clips per request, and not more sound than Gemini takes inline. */
+    private fun batches(list: List<com.ridetrack.app.moments.Moment>): List<List<com.ridetrack.app.moments.Moment>> {
+        val out = ArrayList<List<com.ridetrack.app.moments.Moment>>()
+        var cur = ArrayList<com.ridetrack.app.moments.Moment>()
+        var bytes = 0L
+        for (m in list) {
+            // About 12 kB of sound per second of video.
+            val est = (m.durationMillis ?: 20_000) * 12
+            if (cur.isNotEmpty() && (cur.size == 8 || bytes + est > MAX_BATCH_BYTES)) { out += cur; cur = ArrayList(); bytes = 0 }
+            cur += m
+            bytes += est
         }
-        throw busy ?: last ?: IllegalStateException("no Gemini model")
+        if (cur.isNotEmpty()) out += cur
+        return out
     }
 
     private companion object {
+        const val MAX_BATCH_BYTES = 9L * 1024 * 1024
         const val BETWEEN_MILLIS = 5_000L
-        const val REQUEST_TIMEOUT_MS = 60_000L
         /** Gemini takes up to 20 MB inline; base64 adds a third. */
         const val MAX_BYTES = 14L * 1024 * 1024
     }

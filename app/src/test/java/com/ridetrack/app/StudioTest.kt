@@ -186,6 +186,28 @@ class StudioTest {
     }
 
     @Test
+    fun `several clips' captions come back from one reply, by clip number`() {
+        val reply = "{\"clips\":[{\"clip\":2,\"lines\":[{\"start\":0.5,\"end\":1.5,\"text\":\"sorry, cut!\"}]},{\"clip\":1,\"lines\":[]},{\"clip\":9,\"lines\":[]}]}"
+        val out = StudioText.parseBatch(reply, 3)
+        assertEquals(emptyList(), out[0])
+        assertEquals(listOf(CaptionLine(500, 1_500, "sorry, cut!")), out[1])
+        assertNull(out[2])
+        assertEquals(listOf(null, null), StudioText.parseBatch("nope", 2))
+    }
+
+    @Test
+    fun `Google's retry time is read, so a spent model isn't asked again until then`() {
+        val q = com.ridetrack.app.transcribe.GeminiQuota
+        assertEquals(((18 * 60 + 46) * 60 + 11.7) * 1000, q.retryAfterMs("Quota exceeded ... Please retry in 18h46m11.73350604s.")!!.toDouble(), 100.0)
+        assertEquals(67_000L, q.retryAfterMs("\"retryDelay\": \"67s\""))
+        assertNull(q.retryAfterMs("no time here"))
+        val msg = com.ridetrack.app.transcribe.FirebaseTranscriber.busyMessage(
+            com.ridetrack.app.transcribe.FirebaseTranscriber.Busy("Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20. Please retry in 18h46m11s."),
+        )
+        assertTrue("daily limit" in msg && "19 h" in msg, msg)
+    }
+
+    @Test
     fun `the director's reply keeps only known moments`() {
         val d = StudioText.parseDirection("{\"title\":\"Sixty-five, steady\",\"caption\":\"Evening run\",\"hook\":\"m9#0\",\"scores\":{\"m9#0\":9,\"x\":7,\"m4#0\":14}}", setOf("m9#0", "m4#0"))
         assertNotNull(d)

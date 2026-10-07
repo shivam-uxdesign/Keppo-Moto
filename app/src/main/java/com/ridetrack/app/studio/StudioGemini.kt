@@ -9,6 +9,7 @@ import com.google.firebase.ai.type.content
 import com.google.firebase.ai.type.generationConfig
 import com.ridetrack.app.transcribe.AppCheckSetup
 import com.ridetrack.app.transcribe.FirebaseTranscriber
+import com.ridetrack.app.transcribe.GeminiQuota
 import com.ridetrack.app.transcribe.RemoteModel
 import org.json.JSONArray
 import org.json.JSONObject
@@ -59,6 +60,27 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         return StudioText.parseDirection(text, bits.map { it.id }.toSet())
     }
 
+    /**
+     * Captions for several clips in one request (the free tier allows few requests a day): each
+     * clip's lines, in the same order; null for a clip Gemini skipped, empty for no speech.
+     */
+    suspend fun captionsBatch(audios: List<File>): List<List<CaptionLine>?> {
+        if (audios.isEmpty()) return emptyList()
+        val parts = audios.map { it.readBytes() }
+        val text = call(json = true, models = FirebaseTranscriber.LITE + FirebaseTranscriber.MODELS) { m ->
+            m.generateContent(
+                content {
+                    parts.forEachIndexed { i, bytes ->
+                        text("Clip ${i + 1}:")
+                        inlineData(bytes, "audio/mp4")
+                    }
+                    text(StudioText.batchPrompt(parts.size))
+                },
+            ).text.orEmpty()
+        }
+        return StudioText.parseBatch(text, audios.size)
+    }
+
     /** Tips for the next Reel, from a plain description of this one (text only). */
     suspend fun coach(summary: String): List<Tip> {
         val text = call(json = true) { m -> m.generateContent(StudioText.coachPrompt(summary)).text.orEmpty() }
@@ -66,8 +88,9 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
     }
 
     /** Tries the model that last worked, then the known names, then Remote Config's. */
-    private suspend fun call(json: Boolean, block: suspend (GenerativeModel) -> String): String {
-        val queue = ArrayDeque(listOfNotNull(preferred()) + FirebaseTranscriber.MODELS.filter { it != preferred() })
+    private suspend fun call(json: Boolean, models: List<String> = FirebaseTranscriber.MODELS, block: suspend (GenerativeModel) -> String): String {
+        val order = (if (models === FirebaseTranscriber.MODELS) listOfNotNull(preferred()) else emptyList()) + models
+        val queue = ArrayDeque(order.distinct())
         val tried = HashSet<String>()
         var remoteTried = false
         var last: Exception? = null
@@ -81,6 +104,12 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
                 break
             }
             if (!tried.add(name)) continue
+            // Over its free limit (Google said until when): don't spend a request finding out again.
+            if (GeminiQuota.blocked(name)) {
+                val left = ((GeminiQuota.freeAt(listOf(name)) ?: 0L) - System.currentTimeMillis()).coerceAtLeast(1_000) / 1000
+                busy = busy ?: FirebaseTranscriber.Busy("Quota exceeded for metric: free_tier_requests, model: $name. Please retry in ${left}s.")
+                continue
+            }
             val model = Firebase.ai(backend = GenerativeBackend.googleAI()).generativeModel(
                 modelName = name,
                 generationConfig = generationConfig {
@@ -94,7 +123,8 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
                     ?: throw java.io.IOException("Gemini didn't answer within a minute")
                 return reply.also { onWorking(name) }
             } catch (e: QuotaExceededException) {
-                // Each model has its own free allowance: try the next one.
+                // Each model has its own free allowance: remember this one is spent, try the next.
+                GeminiQuota.block(name, e.message)
                 busy = FirebaseTranscriber.Busy(e.message)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -125,6 +155,30 @@ object StudioText {
         Reply with JSON only: {"lines":[{"start":1.2,"end":3.4,"text":"..."}]} with start and end in seconds from the
         beginning of the recording. If there is no clear speech, reply {"lines":[]}.
     """.trimIndent()
+
+    fun batchPrompt(n: Int): String = """
+        These are $n clips of sound from a motorcycle helmet camera, labelled Clip 1 to Clip $n. For EACH clip, transcribe
+        what the rider says as timed caption lines, with start and end in seconds from the beginning of THAT clip.
+        The rider speaks English and Hinglish (Hindi mixed with English). Write everything in English letters (Latin script),
+        Hindi words the way people text them (for example "bhai ye road mast hai"). Do not translate, never use Devanagari.
+        Ignore wind, engine, horn and traffic noise. Split speech into short lines of at most 8 words, at natural pauses.
+        Reply with JSON only: {"clips":[{"clip":1,"lines":[{"start":1.2,"end":3.4,"text":"..."}]}]} with one entry per clip;
+        a clip with no clear speech has "lines":[].
+    """.trimIndent()
+
+    /** Each clip's lines from a batch reply, by position; null where the clip is missing. */
+    fun parseBatch(reply: String, n: Int): List<List<CaptionLine>?> {
+        val out = MutableList<List<CaptionLine>?>(n) { null }
+        runCatching {
+            val arr = JSONObject(jsonPart(reply)).optJSONArray("clips") ?: return out
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val k = (o.optInt("clip", i + 1) - 1).takeIf { it in 0 until n } ?: continue
+                out[k] = parseLines(o.toString())
+            }
+        }
+        return out
+    }
 
     fun directorPrompt(rideName: String, stats: String, bits: List<Bit>): String = buildString {
         appendLine("You are editing a 30–60 second Instagram Reel of a motorcycle ride: \"$rideName\" ($stats).")

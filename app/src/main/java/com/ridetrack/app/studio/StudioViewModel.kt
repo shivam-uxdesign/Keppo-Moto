@@ -20,7 +20,6 @@ import com.ridetrack.telemetry.model.TelemetrySample
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -487,44 +486,50 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
 
     // ---- captions and the director ---------------------------------------------------------
 
-    /** Asks Gemini for timed lines for the clips that likely have talking; returns a note if some were missed. */
+    /**
+     * Asks Gemini for timed lines for the clips that likely have talking, several clips per request
+     * (the free tier allows few requests a day); returns a note if some were missed.
+     */
     private suspend fun readCaptions(): String? {
         val todo = clips.filter { likelyTalking(it) && StudioText.load(it.file) == null }
             .sortedByDescending { (if (RideEventType.VOICE in it.types) 2 else 0) + (it.transcript?.length ?: 0).coerceAtMost(200) / 100 }
             .take(MAX_CAPTION_CLIPS)
+        if (todo.isEmpty()) return null
         val g = gemini()
         var missed = 0
         var note: String? = null
-        for ((i, m) in todo.withIndex()) {
+        var done = 0
+        for (batch in todo.chunked(BATCH)) {
             if (skipCaptions) break
-            step(0, 1, "${i + 1} of ${todo.size}")
-            val audio = File(c.appContext.cacheDir, "studio-${m.id}.m4a")
+            step(0, 1, "${done + 1}–${done + batch.size} of ${todo.size} clips")
+            val audios = batch.map { m -> m to File(c.appContext.cacheDir, "studio-${m.id}.m4a") }
             try {
-                if (!ClipAudio.extract(m.file, audio) || audio.length() > MAX_AUDIO_BYTES) { StudioText.save(m.file, emptyList()); continue }
-                val lines = try {
-                    g.captions(audio)
-                } catch (e: FirebaseTranscriber.Busy) {
-                    delay(20_000)
-                    g.captions(audio)
+                val usable = audios.filter { (m, f) -> ClipAudio.extract(m.file, f) && f.length() <= MAX_AUDIO_BYTES / 2 }
+                audios.filter { it !in usable }.forEach { (m, _) -> StudioText.save(m.file, emptyList()) }
+                val results = if (usable.isEmpty()) emptyList() else g.captionsBatch(usable.map { it.second })
+                usable.forEachIndexed { i, (m, _) ->
+                    val lines = results.getOrNull(i)
+                    if (lines == null) { missed++; return@forEachIndexed }
+                    StudioText.save(m.file, lines)
+                    // The words also become the clip's transcript (shown in the ride and the clip viewer).
+                    if (m.transcript == null) c.moments.setTranscript(m.id, lines.joinToString(" ") { it.text })
                 }
-                StudioText.save(m.file, lines)
-                // The words also become the clip's transcript (shown in the ride and the clip viewer).
-                if (m.transcript == null) c.moments.setTranscript(m.id, lines.joinToString(" ") { it.text })
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                c.errors.record("Studio captions", "Couldn't read clip ${m.file.name}", e)
-                missed++
+                c.errors.record("Studio captions", "Couldn't read ${batch.size} clips (${batch.joinToString { it.file.name }})", e)
+                missed += batch.size
                 note = when {
                     AppCheckSetup.isRejected(e) -> "Captions: Firebase didn't accept this phone (App Check). Add the debug token from Profile › Moments in Firebase."
-                    e is FirebaseTranscriber.Busy -> "Captions: ${FirebaseTranscriber.busyMessage(e)} Some clips have no captions; Remix later to try again."
+                    e is FirebaseTranscriber.Busy -> "Captions: ${FirebaseTranscriber.busyMessage(e)} Remix later to try again."
                     else -> "Captions: couldn't read $missed clip${if (missed > 1) "s" else ""} (${e.message?.take(80)})."
                 }
-                if (AppCheckSetup.isRejected(e)) break
+                // Out of allowance or refused: more requests won't help now.
+                if (AppCheckSetup.isRejected(e) || e is FirebaseTranscriber.Busy) break
             } finally {
-                audio.delete()
+                audios.forEach { it.second.delete() }
             }
-            if (i < todo.lastIndex) delay(BETWEEN_MS)
+            done += batch.size
         }
         captionsDone = !skipCaptions && missed == 0
         return note
@@ -603,8 +608,9 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
     }
 
     private companion object {
-        const val MAX_CAPTION_CLIPS = 12
-        const val BETWEEN_MS = 4_000L
+        const val MAX_CAPTION_CLIPS = 16
+        /** Clips read per Gemini request. */
+        const val BATCH = 8
         const val MAX_AUDIO_BYTES = 14L * 1024 * 1024
     }
 }
