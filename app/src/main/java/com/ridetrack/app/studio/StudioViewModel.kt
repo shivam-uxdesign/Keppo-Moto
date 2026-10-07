@@ -171,6 +171,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     private var pendingScript: Script? = null
 
     init {
+        followMaker()
         viewModelScope.launch {
             engine.load()?.let { why -> _state.update { it.copy(loading = false, blocked = why) }; return@launch }
             if (phoneOnly) {
@@ -401,18 +402,66 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     /** The app's own suggestions: a Reel as long as the footage fills well, and a 15 s Short. */
     private fun localPieces(fs: List<Footage>, reason: String): List<Script> = engine.localPieces(fs, reason, _state.value.title)
 
-    /** Makes a suggestion as a new Reel (whatever is on screen stays saved). */
+    /** The Reel being made by [ReelMaker] for this screen; null when none. */
+    @Volatile private var makingId: String? = null
+
+    /**
+     * Makes a suggestion as a new Reel (whatever is on screen stays saved). It's made by the
+     * background maker, so leaving the app doesn't stop it; this screen follows it and opens it.
+     */
     fun makePiece(key: String) {
-        if (job?.isActive == true) return
+        if (job?.isActive == true || makingId != null) return
         val piece = _state.value.pieces.firstOrNull { it.key == key } ?: return
-        pendingScript = piece.script
+        val vibe = piece.script.vibe ?: _state.value.options.vibe
         _state.update {
             it.copy(
                 piece = piece, reelId = null, takes = emptyList(), tips = null, coverFrames = emptyList(), title = card?.title ?: it.title,
-                options = it.options.copy(vibe = piece.script.vibe ?: it.options.vibe),
+                options = it.options.copy(vibe = vibe),
             )
         }
-        make()
+        val mj = engine.job(piece, _state.value) ?: return
+        makingId = mj.project.id
+        _state.update {
+            it.copy(
+                step = StudioStep.WORKING, error = null, video = null, renderProgress = null, notes = emptyList(),
+                plan = piece.plan, script = piece.script,
+                work = listOf(
+                    WorkStep("Fitting the script to your clips", 2, "${piece.plan.clips.size} clips · ${Format.clock(piece.plan.totalMs)}"),
+                    WorkStep("Making the video", 1, "Keeps going if you leave the app"),
+                ),
+            )
+        }
+        c.reelMaker.enqueue(listOf(mj))
+    }
+
+    /** Follows the maker for the Reel this screen asked for: progress, then open it (or say why not). */
+    private fun followMaker() {
+        viewModelScope.launch {
+            c.reelMaker.state.collect { m ->
+                val id = makingId ?: return@collect
+                if (m.currentId == id) {
+                    _state.update { it.copy(renderProgress = m.progress) }
+                } else {
+                    c.reelMaker.waitingBefore(id)?.let { n ->
+                        step(_state.value.work.lastIndex, 1, if (n == 0) "Next up" else "After $n other${if (n > 1) "s" else ""} being made")
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
+            c.reelMaker.events.collect { e ->
+                if (e.id != makingId) return@collect
+                makingId = null
+                when (e) {
+                    is MakerEvent.Made -> {
+                        open(e.project)
+                        _state.update { it.copy(renderProgress = null, notes = listOfNotNull(e.project.note)) }
+                        coach()
+                    }
+                    is MakerEvent.Failed -> _state.update { it.copy(step = StudioStep.SETUP, renderProgress = null, error = "Couldn't make the video (${e.message})") }
+                }
+            }
+        }
     }
 
     /** Makes every suggestion not made yet, in the background (a notification shows progress). */
@@ -444,6 +493,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             it.copy(
                 reelId = p.id,
                 step = StudioStep.READY,
+                notes = listOfNotNull(p.note),
                 coverFrames = emptyList(),
                 piece = null,
                 script = p.script,
@@ -467,7 +517,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     }
 
     /** Saves the Reel just made (a new one, or the one being changed) with its whole edit. */
-    private suspend fun persist(video: File) {
+    private suspend fun persist(video: File, note: String?) {
         val s = _state.value
         val plan = s.plan ?: return
         val isNew = s.reelId == null
@@ -501,6 +551,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             coverRoute = old?.coverRoute ?: false,
             idea = old?.idea ?: s.piece?.script?.title,
             script = s.script,
+            note = note,
         )
         val saved = c.reels.save(project, video, s.takes)
         _state.update { it.copy(reelId = saved.id, video = c.reels.video(saved.id), takes = c.reels.takes(saved), coverFrames = emptyList(), versions = c.reels.versions(saved.id)) }
@@ -895,6 +946,8 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
 
     fun cancel() {
         job?.cancel()
+        makingId?.let { c.reelMaker.cancel(it) }
+        makingId = null
         _state.update { it.copy(step = StudioStep.SETUP, renderProgress = null) }
     }
 
@@ -1127,13 +1180,14 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         }
         val input = renderInput(plan, s, baseCard, voice)
         val out = File(ShareImages.sharesDir(c.appContext), "keppo-reel-${System.currentTimeMillis()}.mp4")
-        val result = StudioRenderer(c.appContext).render(input, out) { p -> _state.update { it.copy(renderProgress = p) } }
+        // Keeps the app running if the rider leaves it meanwhile.
+        val result = c.reelMaker.keepRunning { StudioRenderer(c.appContext).render(input, out) { p -> _state.update { it.copy(renderProgress = p) } } }
         val done = result.getOrThrow()
-        persist(done.file)
+        persist(done.file, done.note ?: if (done.failures.isNotEmpty()) "Made with a simpler method on this phone" else null)
         // Attempts that failed before one worked are worth knowing about too.
         if (done.failures.isNotEmpty()) {
             val e = StudioRenderer.ExportFailed("Made on attempt ${done.failures.size + 1}").also { x -> done.failures.forEach { x.addSuppressed(it) } }
-            c.errors.record("Studio export", "Needed a fallback: ${done.note ?: "no note"}", e, describePlan(plan))
+            c.errors.warn("Studio export", "Needed a fallback: ${done.note ?: "a simpler method"}", e, describePlan(plan))
         }
         step(idx, 2)
         _state.update { it.copy(step = StudioStep.READY, renderProgress = null, notes = notes + listOfNotNull(done.note)) }
@@ -1161,6 +1215,36 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             _state.update { it.copy(tips = tips) }
             // The tips are kept with the saved Reel.
             _state.value.reelId?.let { id -> c.reels.update(id) { p -> p.copy(tips = tips) } }
+        }
+    }
+
+    /**
+     * Everything about this ride's Studio work, to send to the developer: the clips, the
+     * suggestions (with Gemini's answer and what the checks changed), the Reel on screen, and the
+     * recent Studio errors and warnings.
+     */
+    fun sendDetails() {
+        viewModelScope.launch {
+            val s = _state.value
+            val text = withContext(Dispatchers.IO) {
+                buildString {
+                    appendLine("Studio · ride $rideId · ${card?.title} · ${card?.subtitle}")
+                    appendLine("Clips: ${clips.size} moments, ${phone.size} phone videos, ${s.excluded.size} left out · ${engine.unreadCount()} not read yet · ${bits.size} usable parts")
+                    appendLine("Settings: ${ReelJson.writeOptionsJson(s.options)}")
+                    appendLine()
+                    appendLine("Suggestions shown: ${s.pieces.size}")
+                    s.pieces.forEach { pc ->
+                        appendLine("  ${pc.script.format.label} · \u201c${pc.script.title}\u201d · planned ${pc.plannedMs} ms · made ${pc.plan.totalMs} ms · ${pc.plan.clips.size} clips · ${pc.script.why.orEmpty().take(80)}")
+                    }
+                    engine.planDetails()?.let { appendLine(it) }
+                    s.plan?.let { appendLine(); appendLine("Reel on screen (${s.reelId ?: "not saved"}):"); append(describePlan(it)) }
+                    s.reelId?.let { id -> c.reels.get(id)?.note?.let { appendLine("Note: $it") } }
+                    appendLine()
+                    appendLine("Recent Studio errors and warnings:")
+                    c.errors.entries.value.filter { it.area.startsWith("Studio") || it.area.startsWith("Gemini") }.take(8).forEach { appendLine(it.text().take(6_000)); appendLine("----") }
+                }
+            }
+            c.errors.shareText("Keppo Moto Studio details", text)
         }
     }
 

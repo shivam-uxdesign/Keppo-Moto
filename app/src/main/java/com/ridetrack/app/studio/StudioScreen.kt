@@ -167,7 +167,13 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             if (!s.phoneOnly) RideReels(vm.rideId, onSendAll = vm::sendAllToJournal) { vm.openSaved(it) } else PhoneReels { vm.openSaved(it) }
             Suggestions(vm, s, made)
             AskFor(vm, s)
-            s.error?.let { ErrorBox(it) }
+            s.error?.let { ErrorBox(vm, it) }
+            Text(
+                "Something off? Send Studio details",
+                style = RtType.caption,
+                color = RtColors.TextTertiary,
+                modifier = Modifier.clickable(role = Role.Button) { vm.sendDetails() }.padding(vertical = 6.dp),
+            )
         }
         Spacer(Modifier.height(12.dp))
         when {
@@ -518,7 +524,7 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextPrimary) }
             s.notes.forEach { Text(it, style = RtType.caption, color = RtColors.Warning) }
             if (s.notes.isNotEmpty() && s.gemini) com.ridetrack.app.transcribe.rememberGeminiWait().line?.let { Text(it, style = RtType.caption, color = RtColors.Warning) }
-            if (s.notes.isNotEmpty()) ErrorActions()
+            if (s.notes.isNotEmpty()) ErrorActions(vm)
             if (s.musicUri == null) MusicGuide()
             Coach(s.tips) { vm.act(it) }
             if (s.postCaption.isNotBlank()) {
@@ -978,7 +984,7 @@ private fun Voice(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                     Text("Delete", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { vm.deleteTake(t) }.padding(8.dp))
                 }
             }
-            s.error?.let { ErrorBox(it) }
+            s.error?.let { ErrorBox(vm, it) }
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1008,30 +1014,29 @@ private fun Voice(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
 
 /** A failure, with buttons to send its full technical detail. */
 @Composable
-private fun ErrorBox(message: String) {
+private fun ErrorBox(vm: StudioViewModel, message: String) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(message, style = RtType.caption, color = RtColors.Error)
-        ErrorActions()
+        ErrorActions(vm)
     }
 }
 
-/** Share or copy the latest errors (full detail) to send to the developer. */
+/** Open the error log, or send everything about this Studio work to the developer. */
 @Composable
-private fun ErrorActions() {
-    val log = com.ridetrack.app.ui.appContainer().errors
-    var copied by remember { mutableStateOf(false) }
+private fun ErrorActions(vm: StudioViewModel) {
+    val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
-            "Send error details",
+            "Details",
             style = RtType.button,
             color = RtColors.Primary,
-            modifier = Modifier.clickable(role = Role.Button) { log.share(log.entries.value.take(5)) }.padding(vertical = 6.dp),
+            modifier = Modifier.clickable(role = Role.Button) { nav(com.ridetrack.app.ui.nav.Routes.profilePage(com.ridetrack.app.ui.profile.ProfilePage.ERRORS)) }.padding(vertical = 6.dp),
         )
         Text(
-            if (copied) "Copied" else "Copy",
+            "Send Studio details",
             style = RtType.button,
             color = RtColors.Primary,
-            modifier = Modifier.clickable(role = Role.Button) { copied = log.copy(log.entries.value.take(5)) }.padding(vertical = 6.dp),
+            modifier = Modifier.clickable(role = Role.Button) { vm.sendDetails() }.padding(vertical = 6.dp),
         )
     }
 }

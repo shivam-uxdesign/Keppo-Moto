@@ -324,6 +324,23 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         )
     }
 
+    /**
+     * What the renderer needs for a Reel still waiting to be made (picked up after the app was
+     * closed): loads the ride and finds its clips; null when they're gone.
+     */
+    suspend fun inputFor(p: ReelProject): RenderInput? {
+        if (load() != null) return null
+        val missing = p.plan.clips.filter { it.bit.source == null }.map { it.bit.momentId }.filter { id -> clips.none { it.id == id } }.toSet()
+        if (missing.isNotEmpty()) c.moments.all().filter { it.id in missing }.forEach { borrowed[it.id] = it }
+        val have = files()
+        if (p.plan.clips.any { it.bit.source == null && it.bit.momentId !in have }) return null
+        val s = StudioState(
+            title = p.title, series = p.series, episode = p.episode, hookLine = p.hookLine, options = p.options,
+            musicUri = p.musicUri?.let(Uri::parse), musicName = p.musicName,
+        )
+        return renderInput(p.plan, s, card ?: return null, voice = null)
+    }
+
     /** A suggestion as a job for [ReelMaker]: the Reel to save and what to render. */
     fun job(pc: ContentPiece, s: StudioState): MakeJob? {
         val cd = card ?: return null

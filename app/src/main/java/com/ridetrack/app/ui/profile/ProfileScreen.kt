@@ -148,8 +148,19 @@ fun ProfileScreen(onOpenPage: (ProfilePage) -> Unit, onOpenHudSettings: () -> Un
             Line()
             NavRow(Icons.Outlined.Info, "About & privacy", "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TAG})") { onOpenPage(ProfilePage.ABOUT) }
             Line()
-            val errorCount = com.ridetrack.app.ui.appContainer().errors.entries.collectAsStateWithLifecycle().value.size
-            NavRow(Icons.Outlined.BugReport, "Error log", if (errorCount == 0) "No errors" else "$errorCount recorded · tap to send") { onOpenPage(ProfilePage.ERRORS) }
+            val errors = com.ridetrack.app.ui.appContainer().errors
+            val logged = errors.entries.collectAsStateWithLifecycle().value
+            val seenAt = errors.seenAt.collectAsStateWithLifecycle().value
+            val fresh = logged.count { it.timeMillis > seenAt }
+            NavRow(
+                Icons.Outlined.BugReport,
+                "Error log",
+                when {
+                    logged.isEmpty() -> "No errors"
+                    fresh > 0 -> "$fresh new · ${logged.size} recorded"
+                    else -> "${logged.size} recorded · tap to send"
+                },
+            ) { onOpenPage(ProfilePage.ERRORS) }
         }
         Spacer(Modifier.height(RtDimens.lg))
     }

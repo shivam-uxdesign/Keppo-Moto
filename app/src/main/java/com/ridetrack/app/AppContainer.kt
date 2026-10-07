@@ -88,8 +88,14 @@ class AppContainer(context: Context) {
         appScope.launch { journal.onRideSaved(ride) }
     }
 
-    /** Make all: pieces made one after another in the background, with a notification. */
-    val reelMaker = com.ridetrack.app.studio.ReelMaker(appContext, reels, errors) { reelsChanged(it) }
+    /** Studio's making: pieces made one after another in the background, with a notification. */
+    val reelMaker: com.ridetrack.app.studio.ReelMaker by lazy {
+        com.ridetrack.app.studio.ReelMaker(
+            appContext, reels, errors,
+            rebuild = { p -> com.ridetrack.app.studio.StudioEngine(this, p.rideId ?: com.ridetrack.app.studio.PHONE_STUDIO).inputFor(p) },
+            alsoToGallery = { studio.alsoSaveToGallery },
+        ) { reelsChanged(it) }
+    }
 
     /** How the rider wants stories written: their rules and every change they made to a script. */
     val style = com.ridetrack.app.studio.StyleStore(appContext)

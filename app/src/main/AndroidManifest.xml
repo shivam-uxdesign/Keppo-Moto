@@ -7,6 +7,9 @@
     <!-- Keeps recording while the screen is off / another app is in front. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Studio keeps making Reels when the rider leaves the app. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Moments (opt-in): short rider-facing clips with sound around notable ride events. -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -134,5 +137,10 @@
             android:name=".ride.RideRecordingService"
             android:exported="false"
             android:foregroundServiceType="location|camera|microphone" />
+
+        <service
+            android:name=".studio.StudioService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|mediaProcessing" />
     </application>
 </manifest>

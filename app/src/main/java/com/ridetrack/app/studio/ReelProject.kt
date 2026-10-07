@@ -42,6 +42,8 @@ data class ReelProject(
     val idea: String? = null,
     /** The script it was made from (sections and shots); null for Reels made before scripts. */
     val script: Script? = null,
+    /** How it was made, when that's worth knowing ("Made with a simpler method on this phone"); null when as usual. */
+    val note: String? = null,
 ) {
     val vibe: Vibe get() = options.vibe
 }
@@ -80,6 +82,7 @@ object ReelJson {
         put("coverRoute", p.coverRoute)
         put("idea", p.idea ?: JSONObject.NULL)
         put("script", p.script?.let { ScriptJson.write(it) } ?: JSONObject.NULL)
+        put("note", p.note ?: JSONObject.NULL)
     }.toString()
 
     fun read(text: String): ReelProject? = runCatching {
@@ -124,6 +127,7 @@ object ReelJson {
             coverRoute = o.optBoolean("coverRoute"),
             idea = o.optStringOrNull("idea"),
             script = o.optJSONObject("script")?.let { ScriptJson.read(it) },
+            note = o.optStringOrNull("note"),
         )
     }.getOrNull()
 

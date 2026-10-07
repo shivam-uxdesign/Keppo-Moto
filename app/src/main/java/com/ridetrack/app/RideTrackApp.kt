@@ -36,6 +36,8 @@ class RideTrackApp : Application() {
         container.appScope.launch { container.trash.purgeExpired() }
         container.appScope.launch { container.reels.purgeExpired() }
         container.transcribeSoon()
+        // Reels still waiting when the app was closed are made now.
+        container.reelMaker.resume()
         container.appScope.launch { runCatching { container.fuel.checkRecent() } }
         // Why the app last stopped, into the log of the ride it interrupted.
         container.appScope.launch {

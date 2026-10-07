@@ -42,9 +42,11 @@ fun ErrorLogPage() {
     val log = appContainer().errors
     val entries by log.entries.collectAsStateWithLifecycle()
     var copied by remember { mutableStateOf(false) }
+    // Opening the log counts as seeing what's new.
+    androidx.compose.runtime.LaunchedEffect(Unit) { log.markSeen() }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            "When something fails (making a Reel, Gemini, transcripts), the full technical details are kept here. " +
+            "When something fails (making a Reel, Gemini, transcripts), or works only another way (a warning), the full technical details are kept here. " +
                 "Tap Share to send them (WhatsApp, email, or paste them into the chat).",
             style = RtType.caption,
             color = RtColors.TextSecondary,
@@ -60,7 +62,11 @@ fun ErrorLogPage() {
         entries.forEach { e ->
             var open by rememberSaveable(e.timeMillis) { mutableStateOf(false) }
             RtCard(onClick = { open = !open }) {
-                Text("${ErrorLog.stamp(e.timeMillis)} · ${e.area}", style = RtType.caption, color = RtColors.TextSecondary)
+                Text(
+                    "${ErrorLog.stamp(e.timeMillis)} · ${if (e.warning) "Warning · " else ""}${e.area}",
+                    style = RtType.caption,
+                    color = if (e.warning) RtColors.Warning else RtColors.TextSecondary,
+                )
                 Text(e.summary, style = RtType.body, color = RtColors.TextPrimary)
                 AnimatedVisibility(open) {
                     Column {

@@ -19,9 +19,16 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /** One failure, with everything needed to find its cause. */
-data class ErrorEntry(val timeMillis: Long, val area: String, val summary: String, val details: String) {
+data class ErrorEntry(
+    val timeMillis: Long,
+    val area: String,
+    val summary: String,
+    val details: String,
+    /** It worked another way (a fallback): worth knowing, not a failure. */
+    val warning: Boolean = false,
+) {
     /** The full text, as sent to the developer. */
-    fun text(): String = "[${ErrorLog.stamp(timeMillis)}] $area: $summary\n$details"
+    fun text(): String = "[${ErrorLog.stamp(timeMillis)}] ${if (warning) "Warning · " else ""}$area: $summary\n$details"
 }
 
 /**
@@ -33,14 +40,27 @@ class ErrorLog(private val context: Context) {
     private val file = File(context.filesDir, "errors.log")
     private val _entries = MutableStateFlow(read())
     val entries: StateFlow<List<ErrorEntry>> = _entries.asStateFlow()
+    private val prefs = context.getSharedPreferences("error_log", Context.MODE_PRIVATE)
+    private val _seenAt = MutableStateFlow(prefs.getLong("seen_at", 0L))
+    /** When the rider last opened the log: entries after it are new. */
+    val seenAt: StateFlow<Long> = _seenAt.asStateFlow()
+
+    fun markSeen() {
+        val now = System.currentTimeMillis()
+        prefs.edit().putLong("seen_at", now).apply()
+        _seenAt.value = now
+    }
+
+    /** Something worked another way (a fallback): kept like an error, marked as a warning. */
+    fun warn(area: String, summary: String, e: Throwable? = null, extra: String? = null): ErrorEntry = record(area, summary, e, extra, warning = true)
 
     /** Records [e] (with every cause and stack trace) under [area]; returns the entry. */
-    fun record(area: String, summary: String, e: Throwable? = null, extra: String? = null): ErrorEntry {
+    fun record(area: String, summary: String, e: Throwable? = null, extra: String? = null, warning: Boolean = false): ErrorEntry {
         val details = buildString {
             extra?.let { appendLine(it) }
             e?.let { appendLine(stackOf(it)) }
         }.trim()
-        val entry = ErrorEntry(System.currentTimeMillis(), area, summary.take(500), details)
+        val entry = ErrorEntry(System.currentTimeMillis(), area, summary.take(500), details, warning)
         Log.w("ErrorLog", "$area: $summary", e)
         synchronized(this) {
             val list = (listOf(entry) + _entries.value).take(MAX)
@@ -72,6 +92,21 @@ class ErrorLog(private val context: Context) {
         runCatching { context.startActivity(Intent.createChooser(send, "Send error report").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 
+    /** Opens the share sheet with [body] under the app build and phone line. */
+    fun shareText(subject: String, body: String) {
+        val text = buildString {
+            appendLine("Keppo Moto ${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TAG}) · ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+            appendLine()
+            append(body)
+        }
+        val send = Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_SUBJECT, subject)
+            .putExtra(Intent.EXTRA_TEXT, text.take(MAX_SHARE_CHARS))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(Intent.createChooser(send, subject).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+
     fun copy(entries: List<ErrorEntry> = _entries.value): Boolean {
         val cm = context.getSystemService(ClipboardManager::class.java) ?: return false
         cm.setPrimaryClip(ClipData.newPlainText("Keppo Moto error report", report(entries).take(MAX_SHARE_CHARS)))
@@ -79,7 +114,7 @@ class ErrorLog(private val context: Context) {
     }
 
     private fun write(list: List<ErrorEntry>) {
-        file.writeText(list.joinToString(SEP) { "${it.timeMillis}\n${it.area}\n${it.summary.replace('\n', ' ')}\n${it.details}" })
+        file.writeText(list.joinToString(SEP) { "${it.timeMillis}\n${if (it.warning) WARN else ""}${it.area}\n${it.summary.replace('\n', ' ')}\n${it.details}" })
     }
 
     private fun read(): List<ErrorEntry> = runCatching {
@@ -87,7 +122,8 @@ class ErrorLog(private val context: Context) {
         file.readText().split(SEP).mapNotNull { block ->
             val parts = block.split('\n', limit = 4)
             if (parts.size < 3) return@mapNotNull null
-            ErrorEntry(parts[0].toLongOrNull() ?: return@mapNotNull null, parts[1], parts[2], parts.getOrElse(3) { "" })
+            val warning = parts[1].startsWith(WARN)
+            ErrorEntry(parts[0].toLongOrNull() ?: return@mapNotNull null, parts[1].removePrefix(WARN), parts[2], parts.getOrElse(3) { "" }, warning)
         }
     }.getOrDefault(emptyList())
 
@@ -95,6 +131,8 @@ class ErrorLog(private val context: Context) {
         private const val MAX = 50
         private const val MAX_SHARE_CHARS = 90_000
         private const val SEP = "\n\u001E\n"
+        /** Marks a warning's area in the file. */
+        private const val WARN = "\u0007"
         private val FMT = DateTimeFormatter.ofPattern("d MMM HH:mm:ss", Locale.US)
 
         fun stamp(millis: Long): String = FMT.format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()))
