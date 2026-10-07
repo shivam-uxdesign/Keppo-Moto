@@ -42,7 +42,7 @@ data class MicChoice(val type: MicType, val name: String?) {
 }
 
 object Microphones {
-    /** Automatic picks the first of these that's connected: a USB-C receiver, a wired mic, the headset, then the phone. */
+    /** Automatic picks the first of these that's connected: a USB-C receiver, a wired mic, the headset (if allowed), then the phone. */
     val AUTO_ORDER = listOf(MicType.USB, MicType.WIRED, MicType.BLUETOOTH)
 
     /**
@@ -50,17 +50,19 @@ object Microphones {
      * connected falls back to the phone (never to a Bluetooth headset, which would cut its
      * music); Automatic goes down [AUTO_ORDER].
      */
-    fun pick(connected: List<MicChoice>, choice: MicChoice): MicChoice = when (choice.type) {
+    fun pick(connected: List<MicChoice>, choice: MicChoice, allowHeadset: Boolean = true): MicChoice = when (choice.type) {
         MicType.PHONE -> MicChoice.PHONE
-        MicType.AUTO -> AUTO_ORDER.firstNotNullOfOrNull { t -> connected.firstOrNull { it.type == t } } ?: MicChoice.PHONE
+        // A Bluetooth headset is skipped unless the rider allows it (its music stops while it records).
+        MicType.AUTO -> AUTO_ORDER.filter { allowHeadset || it != MicType.BLUETOOTH }
+            .firstNotNullOfOrNull { t -> connected.firstOrNull { it.type == t } } ?: MicChoice.PHONE
         else -> connected.firstOrNull { it.type == choice.type && it.name == choice.name }
             ?: connected.firstOrNull { it.type == choice.type }
             ?: MicChoice.PHONE
     }
 
     /** The device to record from for [choice] (resolved with [pick]); null = the phone mic. */
-    fun resolve(context: Context, choice: MicChoice): AudioDeviceInfo? {
-        val picked = pick(available(context).filter { it.type != MicType.PHONE }, choice)
+    fun resolve(context: Context, choice: MicChoice, allowHeadset: Boolean = true): AudioDeviceInfo? {
+        val picked = pick(available(context).filter { it.type != MicType.PHONE }, choice, allowHeadset)
         return if (picked.type == MicType.PHONE) null else find(context, picked)
     }
 

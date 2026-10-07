@@ -43,6 +43,9 @@ data class Moment(
     /** "back" for the back camera (road view); null = the selfie camera. */
     val camera: String? = null,
 ) {
+    /** The engine mic's sound for this clip (two-mic recording), next to it; may not exist. */
+    val engineFile: File get() = File(file.parentFile, file.nameWithoutExtension + ".engine.m4a")
+
     /** When the clip's first frame was filmed; estimated for clips saved before this was stored. */
     val videoStartMillis: Long get() = clipStartMillis ?: (timeMillis - 10_000)
 

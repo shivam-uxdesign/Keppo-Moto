@@ -189,7 +189,23 @@ internal fun MomentsSection(
             ValueMenu("Video quality", VideoQuality.entries, m.quality, { it.label }, editable) { vm.setMoments(m.copy(quality = it)) }
             Divider()
             Spacer(Modifier.height(RtDimens.sm))
-            MicPicker(m.mic, editable) { vm.setMoments(m.copy(mic = it)) }
+            MicPicker(m.mic, editable, m.headsetMic) { vm.setMoments(m.copy(mic = it)) }
+            ToggleRow(
+                "Allow Bluetooth headset mic",
+                "Off: Automatic never records from a Bluetooth headset (your music keeps playing).",
+                m.headsetMic,
+                { vm.setMoments(m.copy(headsetMic = it)) },
+                enabled = editable,
+            )
+            Divider()
+            ToggleRow(
+                "Two mics",
+                "With a two-transmitter receiver (DJI Mic Mini in mono): your voice and the engine are kept as separate sounds.",
+                m.twoMics,
+                { vm.setMoments(m.copy(twoMics = it)) },
+                enabled = editable,
+            )
+            if (m.twoMics && !s.rideActive) TwoMicTest(m.mic, m.swapMics) { vm.setMoments(m.copy(swapMics = it)) }
             if (m.voice) {
                 Divider()
                 Spacer(Modifier.height(RtDimens.sm))
@@ -379,7 +395,7 @@ internal fun <T> ChoiceRow(choices: List<T>, selected: T, label: (T) -> String, 
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MicPicker(saved: String?, enabled: Boolean, onPick: (String?) -> Unit) {
+private fun MicPicker(saved: String?, enabled: Boolean, headsetAllowed: Boolean, onPick: (String?) -> Unit) {
     val context = LocalContext.current
     var scan by remember { mutableIntStateOf(0) }
     val btPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { scan++ }
@@ -406,8 +422,12 @@ private fun MicPicker(saved: String?, enabled: Boolean, onPick: (String?) -> Uni
     }
     Text(
         when (current.type) {
-            MicType.AUTO -> "Uses a USB-C mic (like the DJI receiver) when it's plugged in, else your Bluetooth headset, else the phone. " +
-                "A Bluetooth headset can't play music while its mic records, so plug in the USB-C mic to keep your music."
+            MicType.AUTO -> if (headsetAllowed) {
+                "Uses a USB-C mic (like the DJI receiver) when it's plugged in, else your Bluetooth headset, else the phone. " +
+                    "A Bluetooth headset can't play music while its mic records, so plug in the USB-C mic to keep your music."
+            } else {
+                "Uses a USB-C mic (like the DJI receiver) when it's plugged in, else the phone. Never your Bluetooth headset, so your music keeps playing."
+            }
             MicType.BLUETOOTH -> "Music on this headset stops while its mic is recording (Bluetooth can't do both). For music and recording together, use a USB-C mic."
             MicType.PHONE -> "Records from the phone's own mic, even when other mics are connected."
             else -> "Clips record from this mic while it's connected; otherwise the phone mic (never your headset, so your music keeps playing)."
@@ -415,6 +435,70 @@ private fun MicPicker(saved: String?, enabled: Boolean, onPick: (String?) -> Uni
         style = RtType.caption,
         color = RtColors.TextSecondary,
     )
+}
+
+/**
+ * The two-mic test: with the receiver plugged in, a level bar per transmitter, so the rider
+ * sees which is the voice and which the engine (and swaps them), and whether they're really two.
+ */
+@Composable
+private fun TwoMicTest(mic: String?, swapped: Boolean, onSwap: (Boolean) -> Unit) {
+    val context = LocalContext.current
+    var left by remember { mutableStateOf<Float?>(null) }
+    var right by remember { mutableStateOf<Float?>(null) }
+    var status by remember { mutableStateOf("") }
+    val canListen = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    val device = remember(mic) { Microphones.resolve(context, MicChoice.decode(mic), allowHeadset = false)?.takeIf { Microphones.typeOf(it) == MicType.USB } }
+    DisposableEffect(device, canListen) {
+        val meter = if (device != null && canListen) {
+            runCatching {
+                AudioEncoder(context, RollingBuffer(2_000_000L), device, twoMics = true, onChannels = { l, r -> left = l; right = r })
+            }.getOrNull()
+        } else {
+            null
+        }
+        val check = Thread {
+            while (meter != null && !Thread.currentThread().isInterrupted) {
+                status = when {
+                    !meter.recordingTwo -> "This receiver sends one channel: one mic."
+                    !meter.twoKnown -> "Talk, then rev: listening…"
+                    meter.twoDifferent -> "Two different mics: voice and engine are kept apart."
+                    else -> "Both sides sound the same: set the receiver to mono (two transmitters), or it's one mic."
+                }
+                runCatching { Thread.sleep(400) }.onFailure { return@Thread }
+            }
+        }.apply { start() }
+        onDispose {
+            check.interrupt()
+            meter?.release()
+            left = null
+            right = null
+        }
+    }
+    Column(Modifier.fillMaxWidth().padding(vertical = RtDimens.xs), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        when {
+            !canListen -> Text("Allow the microphone to test the mics.", style = RtType.caption, color = RtColors.TextSecondary)
+            device == null -> Text("Plug in the USB-C receiver to test the two mics.", style = RtType.caption, color = RtColors.TextSecondary)
+            else -> {
+                ChannelBar(if (swapped) "Engine" else "Voice", "Transmitter 1", left)
+                ChannelBar(if (swapped) "Voice" else "Engine", "Transmitter 2", right)
+                Text(status, style = RtType.caption, color = RtColors.TextSecondary)
+                ToggleRow("Swap voice and engine", "If the bars move the wrong way round when you talk.", swapped, onSwap)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelBar(role: String, name: String, db: Float?) {
+    Column {
+        Text("$role · $name", style = RtType.caption, color = RtColors.TextPrimary)
+        BoxWithConstraints(Modifier.fillMaxWidth().height(8.dp).background(RtColors.Outline.copy(alpha = 0.5f), RoundedCornerShape(4.dp))) {
+            // -60 dBFS (quiet) to 0 (loudest).
+            val f = db?.let { ((it + 60f) / 60f).coerceIn(0f, 1f) } ?: 0f
+            Box(Modifier.fillMaxWidth(f).fillMaxHeight().background(RtColors.Primary, RoundedCornerShape(4.dp)))
+        }
+    }
 }
 
 /**

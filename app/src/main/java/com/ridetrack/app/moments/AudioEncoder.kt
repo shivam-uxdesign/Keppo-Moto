@@ -15,6 +15,7 @@ import android.media.MediaRecorder
 import android.util.Log
 import com.ridetrack.telemetry.moments.EncodedSample
 import com.ridetrack.telemetry.moments.RollingBuffer
+import com.ridetrack.telemetry.moments.TwoMics
 import com.ridetrack.telemetry.moments.VoiceBand
 import com.ridetrack.telemetry.moments.VoiceWindows
 
@@ -36,6 +37,15 @@ class AudioEncoder(
     private val onLevel: ((Long, Float, Long, Float) -> Unit)? = null,
     /** Silero, for "Film when I speak"; null = no voice check (probability reads 1). */
     private val vad: SileroVad? = null,
+    /**
+     * Records both channels of a two-transmitter receiver: the voice side goes on as usual,
+     * the other (the engine mic) into the buffer's second track. False = one mic, mono.
+     */
+    twoMics: Boolean = false,
+    /** The voice mic is on the right channel (the rider swapped them in the mic test). */
+    private val swap: Boolean = false,
+    /** Each chunk with two mics: (left dBFS, right dBFS). */
+    private val onChannels: ((Float, Float) -> Unit)? = null,
 ) {
     private val windows = VoiceWindows(SAMPLE_RATE)
     private var lastVoice = 0f
@@ -53,26 +63,55 @@ class AudioEncoder(
     private var running = true
     private val thread = Thread(::loop, "moments-audio")
 
+    // Bluetooth mics only arrive on the voice path; everything else films like a camcorder.
+    private val sourceType = if (bluetooth) MediaRecorder.AudioSource.MIC else MediaRecorder.AudioSource.CAMCORDER
+
     // RECORD_AUDIO is checked by the caller before constructing this.
     @SuppressLint("MissingPermission")
-    private val record = AudioRecord(
-        // Bluetooth mics only arrive on the voice path; everything else films like a camcorder.
-        if (bluetooth) MediaRecorder.AudioSource.MIC else MediaRecorder.AudioSource.CAMCORDER,
+    private fun open(channels: Int): AudioRecord = AudioRecord(
+        sourceType,
         SAMPLE_RATE,
-        AudioFormat.CHANNEL_IN_MONO,
+        channels,
         AudioFormat.ENCODING_PCM_16BIT,
-        maxOf(AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), 8192) * 2,
+        maxOf(AudioRecord.getMinBufferSize(SAMPLE_RATE, channels, AudioFormat.ENCODING_PCM_16BIT), 8192) * 2,
     )
+
+    /** Stereo when two mics are wanted and the input allows it; mono otherwise. */
+    private val record: AudioRecord = if (twoMics && !bluetooth) {
+        runCatching { open(AudioFormat.CHANNEL_IN_STEREO).takeIf { it.state == AudioRecord.STATE_INITIALIZED && it.channelCount == 2 } }
+            .getOrNull() ?: open(AudioFormat.CHANNEL_IN_MONO)
+    } else {
+        open(AudioFormat.CHANNEL_IN_MONO)
+    }
+    private val stereo = record.channelCount == 2
     private val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
+    /** The engine side's encoder (two mics only). */
+    private val engineCodec: MediaCodec? = if (stereo) MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC) else null
+    private val twoMicCheck = TwoMics()
+
+    /** Recording both channels of the receiver. */
+    val recordingTwo: Boolean get() = stereo
+
+    /** Enough sound heard to tell one mic from two. */
+    val twoKnown: Boolean get() = stereo && twoMicCheck.known
+
+    /** The two channels are really two different mics (so the engine track is worth keeping). */
+    val twoDifferent: Boolean get() = stereo && twoMicCheck.differ
+
+    @Volatile
+    var engineFormat: MediaFormat? = null
+        private set
 
     init {
-        val f = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, SAMPLE_RATE, 1).apply {
+        fun aac() = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, SAMPLE_RATE, 1).apply {
             setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
             setInteger(MediaFormat.KEY_BIT_RATE, 96_000)
             setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16_384)
         }
-        codec.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        codec.configure(aac(), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
         codec.start()
+        engineCodec?.configure(aac(), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        engineCodec?.start()
         if (bluetooth) openBluetoothRoute()
         if (device != null) record.setPreferredDevice(device)
         if (bluetooth) {
@@ -100,7 +139,7 @@ class AudioEncoder(
                 if (inIndex >= 0) {
                     val inBuf = codec.getInputBuffer(inIndex) ?: continue
                     inBuf.clear()
-                    val read = record.read(inBuf, minOf(inBuf.capacity(), 4096))
+                    val read = if (stereo) readStereo(inBuf) else record.read(inBuf, minOf(inBuf.capacity(), 4096))
                     val nowMicros = System.nanoTime() / 1000
                     if (read > 0) onLevel?.let { report ->
                         val samples = read / 2
@@ -128,9 +167,63 @@ class AudioEncoder(
                     }
                     codec.releaseOutputBuffer(outIndex, false)
                 }
+                engineCodec?.let { drainEngine(it, info, offsetMicros) }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Audio capture stopped", e)
+        }
+    }
+
+    private val pcm = ShortArray(FRAMES * 2)
+    private val left = ShortArray(FRAMES)
+    private val right = ShortArray(FRAMES)
+
+    /**
+     * Reads a stereo chunk: the voice side into [voiceBuf] (as the mono path would), the engine
+     * side into its own encoder. Returns the bytes put in [voiceBuf].
+     */
+    private fun readStereo(voiceBuf: java.nio.ByteBuffer): Int {
+        val frames = minOf(FRAMES, voiceBuf.capacity() / 2)
+        val got = record.read(pcm, 0, frames * 2)
+        if (got <= 0) return got
+        val n = got / 2
+        val (lDb, rDb) = twoMicCheck.split(pcm, n, left, right, SAMPLE_RATE)
+        onChannels?.invoke(lDb, rDb)
+        val voice = if (swap) right else left
+        val engine = if (swap) left else right
+        val vb = voiceBuf.order(java.nio.ByteOrder.nativeOrder())
+        for (i in 0 until n) vb.putShort(voice[i])
+        vb.flip()
+        val pts = System.nanoTime() / 1000 - n * 1_000_000L / SAMPLE_RATE
+        engineCodec?.let { ec ->
+            val idx = ec.dequeueInputBuffer(5_000)
+            if (idx >= 0) {
+                val eb = ec.getInputBuffer(idx)?.apply { clear(); order(java.nio.ByteOrder.nativeOrder()) }
+                if (eb != null) {
+                    val m = minOf(n, eb.capacity() / 2)
+                    for (i in 0 until m) eb.putShort(engine[i])
+                    ec.queueInputBuffer(idx, 0, m * 2, pts, 0)
+                }
+            }
+        }
+        return n * 2
+    }
+
+    private fun drainEngine(ec: MediaCodec, info: MediaCodec.BufferInfo, offsetMicros: Long) {
+        while (true) {
+            val out = ec.dequeueOutputBuffer(info, 0)
+            if (out == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) { engineFormat = ec.outputFormat; continue }
+            if (out < 0) break
+            val config = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+            if (!config && info.size > 0) {
+                ec.getOutputBuffer(out)?.let { b ->
+                    val bytes = ByteArray(info.size)
+                    b.position(info.offset)
+                    b.get(bytes, 0, info.size)
+                    buffer.addExtra(EncodedSample(info.presentationTimeUs + offsetMicros, true, bytes))
+                }
+            }
+            ec.releaseOutputBuffer(out, false)
         }
     }
 
@@ -198,12 +291,16 @@ class AudioEncoder(
         record.release()
         runCatching { codec.stop() }
         runCatching { codec.release() }
+        runCatching { engineCodec?.stop() }
+        runCatching { engineCodec?.release() }
         closeBluetoothRoute()
     }
 
     companion object {
         private const val TAG = "MomentsAudio"
         private const val SAMPLE_RATE = 44_100
+        /** Stereo frames read per chunk (as much as the mono path reads: 2048 samples). */
+        private const val FRAMES = 2048
         /** The call link takes a moment to come up; routing flips during it don't count as a drop. */
         private const val SETTLE_NANOS = 4_000_000_000L
     }

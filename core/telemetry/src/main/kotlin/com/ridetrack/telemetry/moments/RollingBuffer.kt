@@ -19,6 +19,8 @@ class EncodedSample(
 class RollingBuffer(private val capacityMicros: Long = 45_000_000L) {
     private val video = ArrayDeque<EncodedSample>()
     private val audio = ArrayDeque<EncodedSample>()
+    /** A second sound track (the engine mic of a two-mic receiver), kept alongside. */
+    private val extra = ArrayDeque<EncodedSample>()
     /** Gets every new sample (true = video) while a long recording streams out of the buffer. */
     private var tap: ((Boolean, EncodedSample) -> Unit)? = null
 
@@ -39,6 +41,17 @@ class RollingBuffer(private val capacityMicros: Long = 45_000_000L) {
         while (audio.isNotEmpty() && audio.first().wallMicros < cutoff) audio.removeFirst()
         tap?.invoke(false, s)
     }
+
+    @Synchronized
+    fun addExtra(s: EncodedSample) {
+        extra.addLast(s)
+        val cutoff = s.wallMicros - capacityMicros
+        while (extra.isNotEmpty() && extra.first().wallMicros < cutoff) extra.removeFirst()
+    }
+
+    /** The second sound track between [fromMicros] and [toMicros]. */
+    @Synchronized
+    fun extraBetween(fromMicros: Long, toMicros: Long): List<EncodedSample> = extra.filter { it.wallMicros in fromMicros..toMicros }
 
     /**
      * Starts streaming: [seed] gets what's buffered from [fromMicros] on (as [extract]), then
@@ -98,6 +111,7 @@ class RollingBuffer(private val capacityMicros: Long = 45_000_000L) {
     fun clear() {
         video.clear()
         audio.clear()
+        extra.clear()
     }
 
     /** Sample counts and the video time span, for diagnostics. */

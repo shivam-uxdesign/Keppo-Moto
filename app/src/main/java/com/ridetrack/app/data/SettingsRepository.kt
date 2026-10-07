@@ -88,6 +88,12 @@ data class MomentSettings(
     val transcribe: Boolean = false,
     /** Transcribe only on Wi-Fi. */
     val transcribeWifiOnly: Boolean = true,
+    /** A two-transmitter receiver: record both (voice and engine) when they differ. */
+    val twoMics: Boolean = true,
+    /** The voice mic is the receiver's second channel (swapped in the mic test). */
+    val swapMics: Boolean = false,
+    /** Automatic may pick a Bluetooth headset's mic; off = never, unless chosen by name. */
+    val headsetMic: Boolean = false,
 ) {
     val anyTrigger: Boolean get() = braking || acceleration || lean
 
@@ -236,6 +242,9 @@ class SettingsRepository(private val context: Context) {
         val momentsVoiceSensitivity = stringPreferencesKey("moments_voice_sensitivity")
         val momentsTranscribe = booleanPreferencesKey("moments_transcribe")
         val momentsTranscribeWifi = booleanPreferencesKey("moments_transcribe_wifi")
+        val momentsTwoMics = booleanPreferencesKey("moments_two_mics")
+        val momentsSwapMics = booleanPreferencesKey("moments_swap_mics")
+        val momentsHeadsetMic = booleanPreferencesKey("moments_headset_mic")
         val momentShareFields = stringSetPreferencesKey("moment_share_fields")
         val momentShareLayout = stringPreferencesKey("moment_share_layout")
         val safetyCrash = booleanPreferencesKey("safety_crash")
@@ -307,6 +316,9 @@ class SettingsRepository(private val context: Context) {
                 voiceSensitivity = VoiceSensitivity.of(p[Keys.momentsVoiceSensitivity]),
                 transcribe = p[Keys.momentsTranscribe] ?: false,
                 transcribeWifiOnly = p[Keys.momentsTranscribeWifi] ?: true,
+                twoMics = p[Keys.momentsTwoMics] ?: true,
+                swapMics = p[Keys.momentsSwapMics] ?: false,
+                headsetMic = p[Keys.momentsHeadsetMic] ?: false,
             ),
             momentShareFields = p[Keys.momentShareFields]
                 ?.mapNotNull { n -> MomentField.entries.firstOrNull { it.name == n } }
@@ -462,5 +474,8 @@ class SettingsRepository(private val context: Context) {
         it[Keys.momentsVoiceSensitivity] = m.voiceSensitivity.name
         it[Keys.momentsTranscribe] = m.transcribe
         it[Keys.momentsTranscribeWifi] = m.transcribeWifiOnly
+        it[Keys.momentsTwoMics] = m.twoMics
+        it[Keys.momentsSwapMics] = m.swapMics
+        it[Keys.momentsHeadsetMic] = m.headsetMic
     }
 }

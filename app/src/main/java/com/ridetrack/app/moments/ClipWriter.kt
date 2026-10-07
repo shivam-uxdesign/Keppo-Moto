@@ -58,6 +58,35 @@ object ClipWriter {
         }
     }
 
+    /**
+     * The engine mic's sound for a clip, as its own audio file, starting at [baseMicros] (the
+     * clip's first frame) so the two line up. False when there was nothing to write.
+     */
+    fun writeAudio(file: File, format: MediaFormat, samples: List<EncodedSample>, baseMicros: Long): Boolean {
+        val inClip = samples.filter { it.wallMicros >= baseMicros }
+        if (inClip.isEmpty()) return false
+        val muxer = MediaMuxer(file.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        try {
+            val track = muxer.addTrack(format)
+            muxer.start()
+            val info = MediaCodec.BufferInfo()
+            var last = -1L
+            for (s in inClip) {
+                val pts = maxOf(s.wallMicros - baseMicros, last + 1)
+                info.set(0, s.data.size, pts, MediaCodec.BUFFER_FLAG_KEY_FRAME)
+                muxer.writeSampleData(track, ByteBuffer.wrap(s.data), info)
+                last = pts
+            }
+            muxer.stop()
+            return true
+        } catch (e: Exception) {
+            file.delete()
+            throw e
+        } finally {
+            runCatching { muxer.release() }
+        }
+    }
+
     /** Frame at [atMillis] into the clip, upright and scaled down, saved as JPEG. */
     fun videoThumbnail(video: File, atMillis: Long, out: File): Boolean {
         val r = MediaMetadataRetriever()

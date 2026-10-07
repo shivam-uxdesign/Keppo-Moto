@@ -465,7 +465,7 @@ class MomentRecorder(
     /** The mic to use now: the saved choice resolved against what's connected (see [Microphones.pick]). */
     private fun pickMic(): MicChoice {
         val connected = Microphones.available(context).filter { it.type != MicType.PHONE && !(headsetSkipped && it.type == MicType.BLUETOOTH) }
-        return Microphones.pick(connected, MicChoice.decode(settings.mic))
+        return Microphones.pick(connected, MicChoice.decode(settings.mic), allowHeadset = settings.headsetMic)
     }
 
     private fun startAudio() {
@@ -482,7 +482,8 @@ class MomentRecorder(
             log.log("mic ${choice.label} not connected: using the phone mic")
         }
         audio = try {
-            AudioEncoder(context, buffer, device, onLevel = hub::reportLevel, vad = vad, onHeadsetLost = {
+            // Both channels of a USB-C receiver: its second transmitter can be the engine mic.
+            AudioEncoder(context, buffer, device, onLevel = hub::reportLevel, vad = vad, twoMics = settings.twoMics && mic.type == MicType.USB, swap = settings.swapMics, onHeadsetLost = {
                 scope.launch(Dispatchers.Main) {
                     log.log("headset left call mode: released it (its music can play again); switching mic")
                     headsetSkipped = true
@@ -493,7 +494,7 @@ class MomentRecorder(
                 hub.setMicType(mic.type)
                 if (mic.type != MicType.PHONE) lastExternal = mic
                 hub.setMicFallback(fallbackName(choice, mic))
-                log.log("audio from ${if (device == null) "phone mic" else "${mic.type.label} ${device.productName}"} (setting: ${choice.label})")
+                log.log("audio from ${if (device == null) "phone mic" else "${mic.type.label} ${device.productName}"} (setting: ${choice.label})${if (enc.recordingTwo) ", both channels (two mics)" else ""}")
                 // A mic that drops out (battery, range) falls back to the phone; note it in the log.
                 enc.addOnRoutingChanged { d -> log.log("audio now from ${d?.let { "${Microphones.typeOf(it)?.label ?: it.type} ${it.productName}" } ?: "default mic"}") }
             }
@@ -501,6 +502,17 @@ class MomentRecorder(
             log.error("audio unavailable, clips without sound", e)
             null
         }
+    }
+
+    /** With two different mics, the engine mic's sound goes next to the clip as its own file. */
+    private fun writeEngine(clip: File, fromMicros: Long, toMicros: Long) {
+        val enc = audio ?: return
+        if (!enc.twoDifferent) return
+        val format = enc.engineFormat ?: return
+        runCatching {
+            val out = File(clip.parentFile, clip.nameWithoutExtension + ".engine.m4a")
+            if (ClipWriter.writeAudio(out, format, buffer.extraBetween(fromMicros, toMicros), fromMicros)) log.log("engine mic kept: ${out.name}")
+        }.onFailure { log.error("engine mic sound couldn't be written", it) }
     }
 
     private fun stopAudio() {
@@ -691,6 +703,7 @@ class MomentRecorder(
             ClipWriter.writeMp4(file, vFormat, null, video, emptyList(), rotationDegrees)
         } ?: return
         val clipStartMillis = video.first().wallMicros / 1000
+        writeEngine(file, video.first().wallMicros, w.endMillis * 1000)
         val thumb = File(dir, file.nameWithoutExtension + ".jpg")
         val hasThumb = ClipWriter.videoThumbnail(file, (w.anchorMillis - clipStartMillis).coerceAtLeast(0), thumb)
         repo.add(
