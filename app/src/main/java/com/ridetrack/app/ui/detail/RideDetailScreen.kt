@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -115,7 +116,7 @@ import kotlin.math.abs
 import kotlin.math.exp
 
 @Composable
-fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, onOpenMoment: (String) -> Unit) {
+fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, onOpenMoment: (String) -> Unit, onStudio: () -> Unit = {}) {
     val vm = appViewModel(key = "detail-$rideId") { RideDetailViewModel(it, rideId) }
     val s by vm.state.collectAsStateWithLifecycle()
     val moments by vm.moments.collectAsStateWithLifecycle()
@@ -281,6 +282,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                 ) {
                     if (ride?.source == DataSourceKind.DEMO) DemoBadge()
                     if (ride != null) {
+                        RoundButton(Icons.Outlined.Movie, "Studio", onClick = onStudio)
                         RoundButton(Icons.Outlined.IosShare, "Share ride", onClick = onShare)
                         Box {
                             RoundButton(Icons.Outlined.MoreVert, "Ride options", onClick = { menuOpen = true })

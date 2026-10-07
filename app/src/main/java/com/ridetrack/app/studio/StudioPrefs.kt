@@ -43,6 +43,17 @@ class StudioPrefs(context: Context) {
         get() = prefs.getBoolean(GALLERY, false)
         set(v) = prefs.edit().putBoolean(GALLERY, v).apply()
 
+    /** What the rider asked Studio for, newest first (to reuse on the next ride). */
+    val recentAsks: List<String>
+        get() = runCatching { JSONArray(prefs.getString(ASKS, "[]")).let { a -> (0 until a.length()).map { a.getString(it) } } }.getOrDefault(emptyList())
+
+    fun rememberAsk(text: String) {
+        val t = text.trim().take(80)
+        if (t.isEmpty()) return
+        val list = (listOf(t) + recentAsks.filter { !it.equals(t, ignoreCase = true) }).take(6)
+        prefs.edit().putString(ASKS, JSONArray(list).toString()).apply()
+    }
+
     /** After each ride, Gemini suggests what to make (in the background, with a notification). */
     var autoSuggest: Boolean
         get() = prefs.getBoolean(AUTO_SUGGEST, true)
@@ -105,6 +116,7 @@ class StudioPrefs(context: Context) {
         const val MUSIC_GUIDE = "music_guide_seen"
         const val GALLERY = "also_gallery"
         const val AUTO_SUGGEST = "auto_suggest"
+        const val ASKS = "recent_asks"
         const val AUTO_MAKE = "auto_make_top"
         const val AUTO_MOBILE = "auto_mobile_data"
         const val OPTIONS = "options"

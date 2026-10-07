@@ -59,9 +59,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -129,6 +131,20 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
 }
 
 /** Studio for gallery videos only (from the Studio tab, when they aren't from a recorded ride). */
+/** A ride's own Studio page (from the Studio tab, the ride, or the after-ride notification). */
+@Composable
+fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit) {
+    val c = com.ridetrack.app.ui.appContainer()
+    val name by produceState("Studio", rideId) { value = c.rides.get(rideId)?.name?.let { "Studio · $it" } ?: "Studio" }
+    Column(
+        Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = com.ridetrack.app.ui.theme.RtDimens.screenPadding),
+    ) {
+        com.ridetrack.app.ui.components.ScreenHeader(name, onBack = onBack)
+        Spacer(Modifier.height(12.dp))
+        StudioPanel(rideId, Modifier.weight(1f), reelId)
+    }
+}
+
 @Composable
 fun PhoneStudioScreen(reelId: String?, onBack: () -> Unit) {
     Column(
@@ -163,10 +179,13 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                     Text("Studio settings", style = RtType.button, color = RtColors.TextSecondary)
                 }
             }
-            ClipStrip(vm, s)
-            if (!s.phoneOnly) RideReels(vm.rideId, onSendAll = vm::sendAllToJournal) { vm.openSaved(it) } else PhoneReels { vm.openSaved(it) }
+            // Suggestions first; the clips last, folded (gallery videos only: adding them comes first).
+            val startWithClips = s.phoneOnly && s.sources.isEmpty()
+            if (startWithClips) ClipStrip(vm, s, compact = false)
             Suggestions(vm, s, made)
             AskFor(vm, s)
+            if (!s.phoneOnly) RideReels(vm.rideId, onSendAll = vm::sendAllToJournal) { vm.openSaved(it) } else PhoneReels { vm.openSaved(it) }
+            if (!startWithClips) ClipStrip(vm, s, compact = true)
             s.error?.let { ErrorBox(vm, it) }
             Text(
                 "Something off? Send Studio details",
@@ -194,11 +213,15 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     if (settings) StudioSettings(vm, s) { settings = false }
 }
 
+private val QUICK_ASKS = listOf("Funnier", "15 s", "Just the road", "Only my voice", "Slow and cinematic", "For Shorts")
+
 /** Ask for a piece in your words; Gemini writes it and Studio makes it. */
 @Composable
 private fun AskFor(vm: StudioViewModel, s: StudioState) {
     if (!s.gemini || !s.canMake) return
     var text by remember { mutableStateOf("") }
+    val prefs = com.ridetrack.app.ui.appContainer().studio
+    val recent = remember(s.planning) { prefs.recentAsks }
     Section("Ask for something") {
         OutlinedTextField(
             value = text,
@@ -210,8 +233,22 @@ private fun AskFor(vm: StudioViewModel, s: StudioState) {
             modifier = Modifier.fillMaxWidth(),
             minLines = 2,
         )
+        // Tap to fill: quick prompts, then what you asked for before (on any ride).
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            (QUICK_ASKS + recent.filter { it !in QUICK_ASKS }).forEach { q ->
+                Text(
+                    q,
+                    style = RtType.caption,
+                    color = RtColors.TextPrimary,
+                    maxLines = 1,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(RtColors.Surface).border(1.dp, RtColors.Hairline, RoundedCornerShape(50))
+                        .clickable(role = Role.Button) { text = if (text.isBlank()) q else "${text.trim()}, ${q.lowercase()}" }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
         if (text.isNotBlank() && s.planning == null) {
-            Text("Make it", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.ask(text); text = "" }.padding(vertical = 6.dp))
+            Text("Make it", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { prefs.rememberAsk(text); vm.ask(text); text = "" }.padding(vertical = 6.dp))
         }
     }
 }
@@ -286,18 +323,27 @@ private fun StudioSettings(vm: StudioViewModel, s: StudioState, onClose: () -> U
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ClipStrip(vm: StudioViewModel, s: StudioState) {
+private fun ClipStrip(vm: StudioViewModel, s: StudioState, compact: Boolean) {
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(20)) { uris -> if (uris.isNotEmpty()) vm.addPhoneVideos(uris) }
     var preview by remember { mutableStateOf<StudioSource?>(null) }
+    var open by rememberSaveable { mutableStateOf(!compact) }
     val used = s.sources.size - s.excluded.count { id -> s.sources.any { it.id == id } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (s.sources.isEmpty()) "Add videos to start" else "Studio picks from these $used clips · ${s.talkingCount} with your voice",
+                if (s.sources.isEmpty()) "Add videos to start" else "From these $used clips · ${s.talkingCount} with your voice",
                 style = RtType.caption,
                 color = RtColors.TextSecondary,
                 modifier = Modifier.weight(1f),
             )
+            if (s.sources.isNotEmpty()) {
+                Text(
+                    if (open) "Hide" else "Show",
+                    style = RtType.button,
+                    color = RtColors.Primary,
+                    modifier = Modifier.clickable(role = Role.Button) { open = !open }.padding(vertical = 4.dp, horizontal = 8.dp),
+                )
+            }
             Text(
                 "Add videos",
                 style = RtType.button,
@@ -305,7 +351,7 @@ private fun ClipStrip(vm: StudioViewModel, s: StudioState) {
                 modifier = Modifier.clickable(role = Role.Button) { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) }.padding(vertical = 4.dp),
             )
         }
-        if (s.sources.isNotEmpty()) {
+        if (s.sources.isNotEmpty() && open) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 s.sources.forEach { src ->
                     val out = src.id in s.excluded

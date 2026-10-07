@@ -91,10 +91,11 @@ object Routes {
     const val RIDES_MAP = "rides-map"
     const val SHARE = "share/{rideId}?mode={mode}&reel={reel}"
     fun share(id: String) = "share/$id"
-    /** Share › Reel: Keppo Studio. */
-    fun reel(id: String) = "share/$id?mode=reel"
-    /** A saved Reel, opened in Studio. */
-    fun savedReel(rideId: String, reelId: String) = "share/$rideId?mode=reel&reel=$reelId"
+    /** A ride's Studio page. */
+    const val RIDE_STUDIO = "studio/{rideId}?reel={reel}"
+    fun reel(id: String) = "studio/$id"
+    /** A saved Reel, opened in its ride's Studio. */
+    fun savedReel(rideId: String, reelId: String) = "studio/$rideId?reel=$reelId"
     /** Studio › Your Reels. */
     const val REELS = "reels"
     /** Studio › Your style. */
@@ -271,6 +272,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         rideId = id,
                         onBack = { nav.popBackStack() },
                         onShare = { nav.navigate(Routes.share(id)) },
+                        onStudio = { nav.navigate(Routes.reel(id)) },
                         onOpenMoment = { nav.navigate(Routes.moments(id, it)) },
                     )
                 }
@@ -340,7 +342,21 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                             rideId = entry.arguments?.getString("rideId").orEmpty(),
                             onBack = { nav.popBackStack() },
                             startMode = entry.arguments?.getString("mode"),
+                        )
+                    }
+                }
+                composable(
+                    Routes.RIDE_STUDIO,
+                    arguments = listOf(
+                        navArgument("rideId") { type = NavType.StringType },
+                        navArgument("reel") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    ),
+                ) { entry ->
+                    DarkRoute {
+                        com.ridetrack.app.studio.RideStudioScreen(
+                            rideId = entry.arguments?.getString("rideId").orEmpty(),
                             reelId = entry.arguments?.getString("reel"),
+                            onBack = { nav.popBackStack() },
                         )
                     }
                 }
