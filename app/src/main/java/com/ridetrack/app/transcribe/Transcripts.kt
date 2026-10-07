@@ -147,6 +147,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         var remoteTried = false
         var last: Exception? = null
         var busy: FirebaseTranscriber.Busy? = null
+        var refreshed = false
         while (true) {
             val name = queue.removeFirstOrNull() ?: if (!remoteTried) {
                 remoteTried = true
@@ -164,6 +165,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 // Each model has its own free allowance: try the next one.
                 busy = e
             } catch (e: Exception) {
+                // Rejected pass: get a fresh one and try this model again, once.
+                if (AppCheckSetup.isRejected(e) && !refreshed) {
+                    refreshed = true
+                    if (AppCheckSetup.refresh()) { tried.remove(name); queue.addFirst(name); continue }
+                }
                 if (!FirebaseTranscriber.isMissingModel(e)) throw e
                 last = e
                 FirebaseTranscriber.suggestedModel(e, name)?.takeIf { it !in tried }?.let { queue.addFirst(it) }

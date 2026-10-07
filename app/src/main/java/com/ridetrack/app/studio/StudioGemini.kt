@@ -7,6 +7,7 @@ import com.google.firebase.ai.type.GenerativeBackend
 import com.google.firebase.ai.type.QuotaExceededException
 import com.google.firebase.ai.type.content
 import com.google.firebase.ai.type.generationConfig
+import com.ridetrack.app.transcribe.AppCheckSetup
 import com.ridetrack.app.transcribe.FirebaseTranscriber
 import com.ridetrack.app.transcribe.RemoteModel
 import org.json.JSONArray
@@ -71,6 +72,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         var remoteTried = false
         var last: Exception? = null
         var busy: FirebaseTranscriber.Busy? = null
+        var refreshed = false
         while (true) {
             val name = queue.removeFirstOrNull() ?: if (!remoteTried) {
                 remoteTried = true
@@ -97,6 +99,11 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // Rejected pass: get a fresh one and try this model again, once.
+                if (AppCheckSetup.isRejected(e) && !refreshed) {
+                    refreshed = true
+                    if (AppCheckSetup.refresh()) { tried.remove(name); queue.addFirst(name); continue }
+                }
                 if (!FirebaseTranscriber.isMissingModel(e)) throw e
                 last = e
                 FirebaseTranscriber.suggestedModel(e, name)?.takeIf { it !in tried }?.let { queue.addFirst(it) }

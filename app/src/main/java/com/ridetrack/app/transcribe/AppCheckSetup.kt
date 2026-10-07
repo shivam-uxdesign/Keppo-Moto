@@ -7,6 +7,7 @@ import com.google.firebase.appcheck.appCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.ridetrack.app.BuildConfig
+import kotlinx.coroutines.tasks.await
 
 /**
  * App Check: only the real Keppo Moto can use the project's Gemini allowance. Play Store builds
@@ -18,7 +19,12 @@ object AppCheckSetup {
         if (FirebaseApp.getApps(context).isEmpty()) return
         // A fixed token for test builds: the debug provider uses it instead of making a new one per install.
         if (BuildConfig.DEBUG && BuildConfig.APPCHECK_DEBUG_TOKEN.isNotBlank()) {
-            context.getSharedPreferences(store(), Context.MODE_PRIVATE).edit().putString(SECRET, BuildConfig.APPCHECK_DEBUG_TOKEN).apply()
+            val prefs = context.getSharedPreferences(store(), Context.MODE_PRIVATE)
+            if (prefs.getString(SECRET, null) != BuildConfig.APPCHECK_DEBUG_TOKEN) {
+                prefs.edit().putString(SECRET, BuildConfig.APPCHECK_DEBUG_TOKEN).commit()
+                // A pass made with the old token must not be reused.
+                context.getSharedPreferences(TOKEN_STORE.format(FirebaseApp.getInstance().persistenceKey), Context.MODE_PRIVATE).edit().clear().commit()
+            }
         }
         Firebase.appCheck.installAppCheckProviderFactory(
             if (BuildConfig.DEBUG) DebugAppCheckProviderFactory.getInstance() else PlayIntegrityAppCheckProviderFactory.getInstance(),
@@ -35,6 +41,17 @@ object AppCheckSetup {
 
     /** Firebase's App Check refused the request: this install's debug token isn't registered (or isn't valid). */
     fun isRejected(e: Throwable): Boolean = "${e.message} ${e.cause?.message}".contains("App Check", ignoreCase = true)
+
+    /**
+     * Gets a fresh App Check pass (after Firebase rejected the cached one, e.g. right after the
+     * debug token was added in the console). True if it got one.
+     */
+    suspend fun refresh(): Boolean = runCatching {
+        Firebase.appCheck.getAppCheckToken(true).await()
+        true
+    }.getOrDefault(false)
+
+    private const val TOKEN_STORE = "com.google.firebase.appcheck.store.%s"
 
     /** Where the debug provider keeps its token (Firebase's own names). */
     private fun store() = "com.google.firebase.appcheck.debug.store.${FirebaseApp.getInstance().persistenceKey}"
