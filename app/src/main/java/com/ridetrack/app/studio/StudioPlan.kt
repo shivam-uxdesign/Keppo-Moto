@@ -62,6 +62,8 @@ data class ClipSegment(
     val section: Int = -1,
     /** On-screen text for the start of its section (from the script); null = none. */
     val text: String? = null,
+    /** The clip's own sound: 1 = as recorded, 0 = muted, up to 1.5 = louder. */
+    val volume: Float = 1f,
 ) : Segment
 
 /** The route-sketch opening (optional); the stats over the last clip. Both play muted. */
@@ -86,7 +88,10 @@ data class StudioOptions(
     val teaser: Boolean = false,
 )
 
-data class StudioPlan(val segments: List<Segment>, val vibe: Vibe) {
+/** Text the rider placed on the timeline: shown from [startMs] to [endMs] (Reel time), [y] = 0 top … 1 bottom. */
+data class TextItem(val id: String, val startMs: Long, val endMs: Long, val text: String, val y: Float = 0.3f)
+
+data class StudioPlan(val segments: List<Segment>, val vibe: Vibe, val texts: List<TextItem> = emptyList()) {
     val totalMs: Long = segments.sumOf { it.durMs }
     /** The clips the rider chose (the loop tail and the flash-forward teaser are not among them). */
     val clips: List<ClipSegment> get() = segments.filterIsInstance<ClipSegment>().filter { !it.tail && !it.teaser }

@@ -229,6 +229,9 @@ class StudioRenderer(private val context: Context) {
                 is TitleSegment -> art.drawTitle(c, f, input.card, o.map)
                 is StatsSegment -> art.drawStats(c, f, input.card, o.map, o.watermark)
             }
+            // Text the rider placed on the timeline, in Reel time.
+            val global = segStart + localMs
+            plan.texts.forEach { t -> if (global in t.startMs until t.endMs) art.drawTextItem(c, plan.vibe, t.text, t.y, global - t.startMs, t.endMs - t.startMs) }
         }
         val video = ArrayList<Effect>()
         video += Presentation.createForWidthAndHeight(art.w, art.h, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP)
@@ -243,7 +246,7 @@ class StudioRenderer(private val context: Context) {
         // Talking clips at full volume, riding noise softer, the title and stats silent; short fades at the
         // cuts; the clip dips under the voice-over.
         val level = when (seg) {
-            is ClipSegment -> if (seg.lines.isNotEmpty()) 1f else 0.55f
+            is ClipSegment -> (if (seg.lines.isNotEmpty()) 1f else 0.55f) * seg.volume
             else -> 0f
         }
         val underVoice = GainProcessor.ducking(voiceRanges(input).map { (it.first - segStart)..(it.last - segStart) }, 0.3f)

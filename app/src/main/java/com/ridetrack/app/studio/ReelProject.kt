@@ -67,6 +67,7 @@ object ReelJson {
         put("musicName", p.musicName ?: JSONObject.NULL)
         put("vibe", p.plan.vibe.name)
         put("segments", JSONArray().apply { p.plan.segments.forEach { put(segment(it)) } })
+        put("texts", JSONArray().apply { p.plan.texts.forEach { t -> put(JSONObject().put("id", t.id).put("s", t.startMs).put("e", t.endMs).put("t", t.text).put("y", t.y.toDouble())) } })
         put("takes", JSONArray().apply { p.takes.forEach { t -> put(JSONObject().put("start", t.startMs).put("dur", t.durMs).put("file", t.file).put("lines", lines(t.lines))) } })
         put("tips", JSONArray().apply { p.tips.forEach { t -> put(JSONObject().put("text", t.text).put("action", t.action?.name ?: JSONObject.NULL).put("nextRide", t.nextRide)) } })
         put("durationMs", p.durationMs)
@@ -98,7 +99,13 @@ object ReelJson {
             options = readOptions(o.optJSONObject("options") ?: JSONObject()),
             musicUri = o.optStringOrNull("musicUri"),
             musicName = o.optStringOrNull("musicName"),
-            plan = StudioPlan(o.getJSONArray("segments").let { a -> (0 until a.length()).mapNotNull { readSegment(a.getJSONObject(it)) } }, vibe),
+            plan = StudioPlan(
+                o.getJSONArray("segments").let { a -> (0 until a.length()).mapNotNull { readSegment(a.getJSONObject(it)) } },
+                vibe,
+                o.optJSONArray("texts")?.let { a ->
+                    (0 until a.length()).map { i -> a.getJSONObject(i).let { t -> TextItem(t.getString("id"), t.getLong("s"), t.getLong("e"), t.getString("t"), t.optDouble("y", 0.3).toFloat()) } }
+                }.orEmpty(),
+            ),
             takes = o.optJSONArray("takes")?.let { a ->
                 (0 until a.length()).map { i -> a.getJSONObject(i).let { t -> SavedTake(t.getLong("start"), t.getLong("dur"), t.getString("file"), readLines(t.optJSONArray("lines"))) } }
             }.orEmpty(),
@@ -140,13 +147,13 @@ object ReelJson {
 
     private fun segment(s: Segment): JSONObject = when (s) {
         is ClipSegment -> JSONObject().put("type", "clip").put("bit", bit(s.bit)).put("in", s.inMs).put("dur", s.durMs).put("lines", lines(s.lines))
-            .put("hook", s.hook).put("tail", s.tail).put("teaser", s.teaser).put("section", s.section).put("text", s.text ?: JSONObject.NULL)
+            .put("hook", s.hook).put("tail", s.tail).put("teaser", s.teaser).put("section", s.section).put("text", s.text ?: JSONObject.NULL).put("volume", s.volume.toDouble())
         is TitleSegment -> JSONObject().put("type", "title").put("dur", s.durMs)
         is StatsSegment -> JSONObject().put("type", "stats").put("dur", s.durMs)
     }
 
     private fun readSegment(o: JSONObject): Segment? = when (o.optString("type")) {
-        "clip" -> ClipSegment(readBit(o.getJSONObject("bit")), o.getLong("in"), o.getLong("dur"), readLines(o.optJSONArray("lines")), o.optBoolean("hook"), o.optBoolean("tail"), o.optBoolean("teaser"), o.optInt("section", -1), o.optStringOrNull("text"))
+        "clip" -> ClipSegment(readBit(o.getJSONObject("bit")), o.getLong("in"), o.getLong("dur"), readLines(o.optJSONArray("lines")), o.optBoolean("hook"), o.optBoolean("tail"), o.optBoolean("teaser"), o.optInt("section", -1), o.optStringOrNull("text"), o.optDouble("volume", 1.0).toFloat())
         "title" -> TitleSegment(o.getLong("dur"))
         "stats" -> StatsSegment(o.getLong("dur"))
         else -> null

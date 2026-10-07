@@ -528,6 +528,15 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
         c.restore()
     }
 
+    /** Timeline text: in and out over 0.2 s, at height [y] (0 top … 1 bottom). */
+    fun drawTextItem(c: Canvas, vibe: Vibe, text: String, y: Float, localMs: Long, durMs: Long) {
+        val a = (cl(localMs / 200f) * cl((durMs - localMs) / 200f) * 255).toInt()
+        if (a <= 0) return
+        c.saveLayerAlpha(0f, 0f, W, H, a)
+        drawCoverText(c, vibe, text, cy = H * y.coerceIn(0.08f, 0.92f), shade = false)
+        c.restore()
+    }
+
     // ---- speed badge -------------------------------------------------------------------------
 
     private fun speedBadge(c: Canvas, vibe: Vibe, kmh: Int, clock: String) {
