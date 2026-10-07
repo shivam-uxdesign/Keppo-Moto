@@ -206,6 +206,17 @@ class EditHistory(start: StudioPlan) {
         current = next
     }
 
+    /** While a finger drags (a trim): show [next] without adding a step yet. */
+    fun preview(next: StudioPlan) { current = next }
+
+    /** The drag ended: one undo step back to [before]. */
+    fun settle(before: StudioPlan) {
+        if (before == current) return
+        undo.addLast(before)
+        if (undo.size > 100) undo.removeFirst()
+        redo.clear()
+    }
+
     fun undo() { undo.removeLastOrNull()?.let { redo.addLast(current); current = it } }
 
     fun redo() { redo.removeLastOrNull()?.let { undo.addLast(current); current = it } }

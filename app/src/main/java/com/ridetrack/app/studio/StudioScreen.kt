@@ -41,7 +41,7 @@ import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -95,7 +95,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
 
-private val VibeFonts = mapOf(
+internal val VibeFonts = mapOf(
     Vibe.HYPE to FontFamily(Font(R.font.anton)),
     Vibe.CINE to FontFamily(Font(R.font.instrument_serif_italic)),
     Vibe.CHILL to FontFamily(Font(R.font.permanent_marker)),
@@ -122,7 +122,7 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
             StudioStep.SETUP -> Setup(vm, s, modifier)
             StudioStep.WORKING -> Working(vm, s, modifier)
             StudioStep.READY -> Ready(vm, s, modifier)
-            StudioStep.EDIT -> Edit(vm, s, modifier)
+            StudioStep.EDIT -> TimelineEditor(vm, s, modifier)
             StudioStep.VOICE -> Voice(vm, s, modifier)
             StudioStep.COVER -> CoverEditor(vm, s, modifier)
             StudioStep.SCRIPT -> ScriptView(vm, s, modifier)
@@ -491,14 +491,14 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Action("Edit", Icons.Outlined.Edit, Modifier.weight(1f)) { vm.edit() }
+                Action("Script", Icons.Outlined.Notes, Modifier.weight(1f)) { vm.scriptView() }
                 Action("Remix", Icons.Outlined.Refresh, Modifier.weight(1f)) { vm.remix() }
-                Action("Script", Icons.Outlined.Edit, Modifier.weight(1f)) { vm.scriptView() }
                 Action("Voice-over", Icons.Outlined.Mic, Modifier.weight(1f)) { vm.voice() }
                 Action("Cover", Icons.Outlined.Image, Modifier.weight(1f)) { vm.cover() }
-                Action("Change", Icons.Outlined.Tune, Modifier.weight(1f)) { vm.back() }
             }
             UsedStrip(s) { seek = it to System.nanoTime() }
-            ReelMenu(onDuplicate = vm::duplicate, onDelete = vm::delete)
+            ReelMenu(onDuplicate = vm::duplicate, onDelete = vm::delete, onChange = vm::back)
             if (!s.phoneOnly) JournalCard(vm, s)
             s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextPrimary) }
             s.notes.forEach { Text(it, style = RtType.caption, color = RtColors.Warning) }
@@ -580,93 +580,6 @@ private fun Player(uri: android.net.Uri, modifier: Modifier, seek: Pair<Long, Lo
     }
 }
 
-// ---- 4. Edit ----------------------------------------------------------------------------------
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun Edit(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
-    val plan = s.plan ?: return
-    Column(modifier) {
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Section("Opening") {
-                Field(s.hookLine, "Hook line on the first frame, e.g. 3 hours in. No break?") { vm.setHookLine(it) }
-                Field(s.title, "Title") { vm.setTitle(it) }
-            }
-            Section("Clips, in order") {
-                plan.segments.forEachIndexed { i, seg ->
-                    if (seg !is ClipSegment || seg.tail || seg.teaser) return@forEachIndexed
-                    Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Thumb(s.thumbs[seg.bit.momentId], Modifier.size(width = 40.dp, height = 54.dp).clip(RoundedCornerShape(6.dp)))
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    (seg.bit.fromRide ?: Format.timeOfDay(seg.bit.atMillis)) + " · ${seg.bit.speedKmh.toInt()} km/h" + if (seg.hook) " · opens the Reel" else "",
-                                    style = RtType.body,
-                                    color = RtColors.TextPrimary,
-                                )
-                                Text(String.format(Locale.US, "%.1f s", seg.durMs / 1000.0), style = RtType.caption, color = RtColors.TextSecondary)
-                            }
-                        }
-                        Field(seg.lines.joinToString(" ") { it.text }, if (seg.lines.isEmpty()) "No words · add text for this clip" else "Caption") { vm.setText(i, it) }
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Choice("Start −½ s", false) { vm.nudge(i, -500, 0) }
-                            Choice("Start +½ s", false) { vm.nudge(i, 500, 0) }
-                            Choice("End −½ s", false) { vm.nudge(i, 0, -500) }
-                            Choice("End +½ s", false) { vm.nudge(i, 0, 500) }
-                            Choice("↑ Earlier", false) { vm.move(i, -1) }
-                            Choice("↓ Later", false) { vm.move(i, 1) }
-                            Choice("Swap", false) { vm.swap(i) }
-                            if (plan.clips.size > 1) Choice("Remove", false) { vm.remove(i) }
-                        }
-                    }
-                }
-            }
-            Section("Add from your phone") {
-                val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> if (uris.isNotEmpty()) vm.addPhoneVideos(uris) }
-                Text(
-                    "Add videos",
-                    style = RtType.button,
-                    color = RtColors.Primary,
-                    modifier = Modifier.clickable(role = Role.Button) { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) }.padding(vertical = 6.dp),
-                )
-                s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
-            }
-            Section("Add from another ride") {
-                val used = plan.clips.map { it.bit.id }.toSet()
-                val others = s.otherBits.filter { it.id !in used }
-                if (others.isEmpty()) Text("Your other rides' clips show here once Studio has read them.", style = RtType.caption, color = RtColors.TextTertiary)
-                others.forEach { b ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button) { vm.add(b) }.padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Thumb(s.thumbs[b.momentId], Modifier.size(width = 36.dp, height = 48.dp).clip(RoundedCornerShape(6.dp)))
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(b.lines.joinToString(" ") { it.text }.ifBlank { "Riding · ${b.speedKmh.toInt()} km/h" }, style = RtType.body, color = RtColors.TextPrimary, maxLines = 2)
-                            Text("${b.fromRide} · ${String.format(Locale.US, "%.1f s", (b.outMs - b.inMs) / 1000.0)}", style = RtType.caption, color = RtColors.TextSecondary)
-                        }
-                        Text("Add", style = RtType.button, color = RtColors.Primary)
-                    }
-                }
-            }
-            s.error?.let { ErrorBox(it) }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button("Back", primary = false, modifier = Modifier.weight(1f)) { vm.back() }
-            Button("Make it again · ${Format.clock(plan.totalMs)}", primary = true, modifier = Modifier.weight(2f)) { vm.remake() }
-        }
-        Spacer(Modifier.height(12.dp))
-    }
-}
-
-// ---- 7. Script --------------------------------------------------------------------------------
-
 /**
  * The script the Reel was made from, section by section. Change it directly, or tell Studio in
  * your words what to change; then Make it again. Earlier versions stay to go back to.
@@ -675,7 +588,6 @@ private fun Edit(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
 @Composable
 private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     val draft = s.draft ?: return
-    var swapFor by remember { mutableStateOf<Int?>(null) }
     val byId = s.footage.associateBy { it.momentId }
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -705,20 +617,12 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
                             sec.why?.let { Text(it, style = RtType.caption, color = RtColors.TextTertiary, maxLines = 2) }
                         }
                     }
-                    if (sec.shots.isNotEmpty()) {
-                        Field(sec.text.orEmpty(), "On-screen text (optional, a few words)") { vm.draftText(i, it) }
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Choice("−1 s", false) { vm.draftResize(i, -1_000) }
-                            Choice("+1 s", false) { vm.draftResize(i, 1_000) }
-                            Choice("↑", false) { vm.draftMove(i, -1) }
-                            Choice("↓", false) { vm.draftMove(i, 1) }
-                            Choice("Swap clip", false) { swapFor = i }
-                            Choice("Remove", false) { vm.draftRemove(i) }
-                        }
-                    } else {
-                        Choice("Remove", false) { vm.draftRemove(i) }
-                    }
+                    sec.text?.let { Text("Text: $it", style = RtType.caption, color = RtColors.TextSecondary) }
                 }
+            }
+            Section("Opening") {
+                Field(s.hookLine, "Hook line on the first frame, e.g. 3 hours in. No break?") { vm.setHookLine(it) }
+                Field(s.title, "Title") { vm.setTitle(it) }
             }
             val hooks = remember(s.footage) { ScriptEdits.hookChoices(s.footage) }
             if (hooks.isNotEmpty()) {
@@ -753,7 +657,7 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                Text("Fine-tune clips", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.edit() }.padding(vertical = 6.dp))
+                Text("Edit on the timeline", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.edit() }.padding(vertical = 6.dp))
                 val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
                 Text("Your style", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { nav(com.ridetrack.app.ui.nav.Routes.STUDIO_STYLE) }.padding(vertical = 6.dp))
             }
@@ -766,36 +670,14 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
         }
         Spacer(Modifier.height(12.dp))
     }
-    swapFor?.let { i ->
-        androidx.compose.ui.window.Dialog(onDismissRequest = { swapFor = null }) {
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.SurfaceRaised).padding(14.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text("Swap for", style = RtType.bodyStrong, color = RtColors.TextPrimary)
-                s.footage.forEach { f ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button) { vm.draftSwap(i, f.momentId); swapFor = null }.padding(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Thumb(s.thumbs[f.momentId], Modifier.size(width = 36.dp, height = 48.dp).clip(RoundedCornerShape(6.dp)))
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(f.lines.joinToString(" ") { it.text }.ifBlank { "No words · ${f.look}" }, style = RtType.body, color = RtColors.TextPrimary, maxLines = 2)
-                            Text("${f.label} · " + String.format(Locale.US, "%.0f s", f.durationMs / 1000.0), style = RtType.caption, color = RtColors.TextSecondary)
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 /** Duplicate (try another take, keep this one) and Delete (to Recently deleted, 30 days). */
 @Composable
-private fun ReelMenu(onDuplicate: () -> Unit, onDelete: () -> Unit) {
+private fun ReelMenu(onDuplicate: () -> Unit, onDelete: () -> Unit, onChange: () -> Unit) {
     var confirm by remember { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        Text("Change choices", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onChange).padding(vertical = 6.dp))
         Text("Duplicate", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onDuplicate).padding(vertical = 6.dp))
         Text("Delete", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { confirm = true }.padding(vertical = 6.dp))
     }
@@ -1137,7 +1019,7 @@ private fun ErrorActions() {
 // ---- small parts ------------------------------------------------------------------------------
 
 @Composable
-private fun Field(value: String, placeholder: String, onChange: (String) -> Unit) {
+internal fun Field(value: String, placeholder: String, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
@@ -1193,7 +1075,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
+internal fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
     FilterChip(
         selected = selected,
         onClick = onClick,
@@ -1209,7 +1091,7 @@ private fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Button(
+internal fun Button(
     label: String,
     primary: Boolean,
     modifier: Modifier = Modifier.fillMaxWidth(),

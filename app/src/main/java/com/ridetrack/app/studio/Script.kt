@@ -520,6 +520,21 @@ object ScriptEdits {
         return ScriptShot(f.momentId, (f.durationMs - len) / 2, (f.durationMs - len) / 2 + len)
     }
 
+    /**
+     * The script after timeline edits: each section gets the clips that now carry its number
+     * (in their new order); clips added on the timeline become their own sections.
+     */
+    fun sync(s: Script, plan: StudioPlan): Script {
+        val clips = plan.clips
+        val kept = s.sections.mapIndexedNotNull { k, sec ->
+            val shots = clips.filter { it.section == k }.map { ScriptShot(it.bit.momentId, it.inMs, it.inMs + it.durMs) }
+            if (shots.isEmpty() && sec.shots.isNotEmpty()) null else sec.copy(shots = shots)
+        }
+        val added = clips.filter { it.section !in s.sections.indices }.map { Section(SectionKind.PEAK, "take", listOf(ScriptShot(it.bit.momentId, it.inMs, it.inMs + it.durMs)), why = "Added on the timeline") }
+        val ending = kept.filter { it.kind == SectionKind.ENDING }
+        return s.copy(sections = kept.filter { it.kind != SectionKind.ENDING } + added + ending, lengthSec = (plan.totalMs / 1000).toInt().coerceAtLeast(1))
+    }
+
     /** A script for a Reel made before scripts: each clip one section, as it was. */
     fun fromPlan(plan: StudioPlan, title: String): Script = Script(
         PieceFormat.REEL, title, null, (plan.totalMs / 1000).toInt().coerceAtLeast(6), "story", null, null,

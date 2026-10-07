@@ -127,6 +127,13 @@ data class StudioState(
     val footage: List<Footage> = emptyList(),
     /** Earlier versions of this Reel: number and when it was made. */
     val versions: List<Pair<Int, Long>> = emptyList(),
+    /** The edit on the timeline (null outside the editor), and what's selected on it. */
+    val timeline: StudioPlan? = null,
+    val pick: TimelinePick? = null,
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false,
+    /** Bumped when the timeline changes for good (not mid-drag), so the preview reloads. */
+    val timelineVersion: Int = 0,
 ) {
     /** The small label on the first clip: the series and episode, or the title. */
     val label: String get() = if (series.isBlank()) title else "$series · ep $episode"
@@ -247,7 +254,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         bits = withContext(Dispatchers.IO) { buildBits() }
         refreshSources()
         if (_state.value.step == StudioStep.EDIT) {
-            added.forEach { p -> bits.filter { it.momentId == p.id }.maxByOrNull { it.punch }?.let { b -> editPlan { plan -> StudioPlanner.add(plan, b) } } }
+            added.forEach { p -> bits.filter { it.momentId == p.id }.maxByOrNull { it.punch }?.let { b -> insert(b) } }
             if (added.isNotEmpty()) say("Added. Their words get captions when you Remix.")
         }
         if (missed > 0) say("$missed couldn't be opened")
@@ -475,6 +482,9 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         return saved
     }
 
+    /** The clips' videos, for the editor's live preview. */
+    fun previewFiles(): Map<String, Uri> = files()
+
     /** Every clip's video by moment id: moments' files and gallery videos. */
     private fun files(): Map<String, Uri> =
         (clips + borrowed.values).associate { it.id to Uri.fromFile(it.file) } + phone.values.associate { it.id to it.uri }
@@ -554,11 +564,6 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
 
     fun editDraft(f: (Script) -> Script) = _state.update { s -> s.draft?.let { s.copy(draft = f(it)) } ?: s }
     fun setNote(t: String) = _state.update { it.copy(note = t) }
-    fun draftText(i: Int, t: String) = editDraft { ScriptEdits.setText(it, i, t) }
-    fun draftResize(i: Int, deltaMs: Long) = editDraft { ScriptEdits.resize(it, i, deltaMs, _state.value.footage) }
-    fun draftMove(i: Int, by: Int) = editDraft { ScriptEdits.move(it, i, by) }
-    fun draftRemove(i: Int) = editDraft { ScriptEdits.remove(it, i) }
-    fun draftSwap(i: Int, momentId: String) { _state.value.footage.firstOrNull { it.momentId == momentId }?.let { f -> editDraft { ScriptEdits.swap(it, i, f) } } }
     fun draftHook(shot: ScriptShot, text: String) = editDraft { ScriptEdits.hook(it, shot, ScriptWriter.isSound(text)) }
 
     /** How long the draft would be, after the app's checks. */
@@ -870,19 +875,88 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
 
     // ---- edit ------------------------------------------------------------------------------
 
-    fun edit() {
-        _state.update { it.copy(step = StudioStep.EDIT) }
-        if (_state.value.otherBits.isEmpty()) viewModelScope.launch { loadOtherRides() }
-    }
     fun setTitle(t: String) = _state.update { it.copy(title = t) }
     fun setHookLine(t: String) = _state.update { it.copy(hookLine = t) }
-    fun nudge(i: Int, start: Long, end: Long) = editPlan { StudioPlanner.nudge(it, i, start, end) }
-    fun setText(i: Int, text: String) = editPlan { StudioPlanner.setText(it, i, text) }
-    fun move(i: Int, by: Int) = editPlan { StudioPlanner.move(it, i, by) }
-    fun remove(i: Int) = editPlan { StudioPlanner.remove(it, i) }
-    fun swap(i: Int) = editPlan { StudioPlanner.swap(it, i, bits) }
-    fun add(b: Bit) = editPlan { StudioPlanner.add(it, b) }
-    private fun editPlan(f: (StudioPlan) -> StudioPlan) = _state.update { s -> s.plan?.let { s.copy(plan = f(it)) } ?: s }
+
+    // ---- timeline editor --------------------------------------------------------------------
+
+    private var history: EditHistory? = null
+    private var dragFrom: StudioPlan? = null
+    /** Where the editor's playhead is (Reel ms), for adding things there. */
+    @Volatile var playheadMs: Long = 0L
+
+    /** Opens the timeline editor on this Reel. */
+    fun edit() {
+        val plan = _state.value.plan ?: return
+        history = EditHistory(TimelineEdits.liftTexts(plan) { newTextId() })
+        _state.update { it.copy(step = StudioStep.EDIT, pick = null, footage = footage()) }
+        publish(reload = true)
+        if (_state.value.otherBits.isEmpty()) viewModelScope.launch { loadOtherRides() }
+    }
+
+    private fun newTextId() = "t" + java.util.UUID.randomUUID().toString().take(8)
+
+    private fun publish(reload: Boolean) {
+        val h = history ?: return
+        _state.update { it.copy(timeline = h.current, canUndo = h.canUndo, canRedo = h.canRedo, timelineVersion = it.timelineVersion + if (reload) 1 else 0) }
+    }
+
+    /** One change on the timeline (one undo step). */
+    fun change(f: (StudioPlan) -> StudioPlan) {
+        val h = history ?: return
+        h.apply(f(h.current))
+        publish(reload = true)
+    }
+
+    /** A trim being dragged: [f] gets the plan from before the drag. */
+    fun drag(f: (StudioPlan) -> StudioPlan) {
+        val h = history ?: return
+        val from = dragFrom ?: h.current.also { dragFrom = it }
+        h.preview(f(from))
+        publish(reload = false)
+    }
+
+    fun endDrag() {
+        val h = history ?: return
+        dragFrom?.let { h.settle(it) }
+        dragFrom = null
+        publish(reload = true)
+    }
+
+    fun pick(p: TimelinePick?) = _state.update { it.copy(pick = p) }
+    fun undo() { history?.undo(); _state.update { it.copy(pick = null) }; publish(reload = true) }
+    fun redo() { history?.redo(); _state.update { it.copy(pick = null) }; publish(reload = true) }
+
+    fun addText(text: String) = change { TimelineEdits.addText(it, playheadMs, text, newTextId()) }
+    fun addCaption(text: String) = change { TimelineEdits.addCaption(it, playheadMs, text) }
+    fun insert(b: Bit) = change { TimelineEdits.insert(it, b, playheadMs) }
+
+    /** Parts of this ride (and the other rides Studio read) that aren't in the edit yet. */
+    fun insertable(): List<Bit> {
+        val used = _state.value.timeline?.clips?.map { it.bit.momentId }.orEmpty().toSet()
+        return bits.filter { it.momentId !in used } + _state.value.otherBits.filter { it.momentId !in used }
+    }
+
+    /** Leaves the editor without keeping the changes. */
+    fun closeEdit() {
+        history = null
+        dragFrom = null
+        _state.update { it.copy(step = StudioStep.READY, timeline = null, pick = null) }
+    }
+
+    /** Keeps the edit and makes the video from it (the only render). The change is kept for Your style. */
+    fun saveEdit() {
+        val h = history ?: return
+        val edited = TimelineEdits.normalize(h.current)
+        val s = _state.value
+        val fs = s.footage.ifEmpty { footage() }
+        val before = s.script ?: s.plan?.let { ScriptEdits.fromPlan(it, s.title) }
+        val after = before?.let { ScriptEdits.sync(it, edited) }
+        if (before != null && after != null) c.style.record(before.describe(fs), after.describe(fs) + if (edited.texts.isNotEmpty()) " + text: " + edited.texts.joinToString { it.text } else "", "(edited on the timeline)")
+        history = null
+        _state.update { it.copy(plan = edited, script = after ?: it.script, timeline = null, pick = null, step = StudioStep.READY) }
+        remake()
+    }
 
     /** Done editing (or recording): make the video again from the edited plan. */
     fun remake() {
