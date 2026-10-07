@@ -462,3 +462,68 @@ data class StyleExample(val before: String, val after: String, val note: String?
 data class ContentPiece(val key: String, val script: Script, val plan: StudioPlan) {
     val opening: ClipSegment? get() = plan.clips.firstOrNull()
 }
+
+/** The rider's direct changes to a script, in the Script view. Pure, unit-tested. */
+object ScriptEdits {
+    fun setText(s: Script, i: Int, text: String): Script =
+        s.copy(sections = s.sections.mapIndexed { k, sec -> if (k == i) sec.copy(text = text.trim().takeIf { it.isNotEmpty() }) else sec })
+
+    /** Makes section [i] longer or shorter by [deltaMs] (its last shot), inside its clip. */
+    fun resize(s: Script, i: Int, deltaMs: Long, footage: List<Footage>): Script {
+        val sec = s.sections.getOrNull(i) ?: return s
+        val last = sec.shots.lastOrNull() ?: return s
+        val dur = footage.firstOrNull { it.momentId == last.clip }?.durationMs ?: return s
+        val out = (last.outMs + deltaMs).coerceIn(last.inMs + 500, dur)
+        val shots = sec.shots.dropLast(1) + last.copy(outMs = out)
+        return s.copy(sections = s.sections.toMutableList().also { it[i] = sec.copy(shots = shots) })
+    }
+
+    fun move(s: Script, i: Int, by: Int): Script {
+        val j = i + by
+        if (i !in s.sections.indices || j !in s.sections.indices) return s
+        val list = s.sections.toMutableList()
+        val a = list[i]; list[i] = list[j]; list[j] = a
+        return s.copy(sections = list)
+    }
+
+    fun remove(s: Script, i: Int): Script =
+        if (s.sections.count { it.shots.isNotEmpty() } <= 1 && s.sections.getOrNull(i)?.shots?.isNotEmpty() == true) s
+        else s.copy(sections = s.sections.filterIndexed { k, _ -> k != i })
+
+    /** Section [i] shows [f] instead: what was said in it, or 4 s from its middle. */
+    fun swap(s: Script, i: Int, f: Footage): Script {
+        val sec = s.sections.getOrNull(i) ?: return s
+        return s.copy(sections = s.sections.toMutableList().also { it[i] = sec.copy(shots = listOf(bestPart(f))) })
+    }
+
+    /** Puts [shot] first as the hook (replacing the hook there was). */
+    fun hook(s: Script, shot: ScriptShot, sound: Boolean): Script {
+        val rest = s.sections.filter { it.kind != SectionKind.HOOK }
+        val old = s.sections.firstOrNull { it.kind == SectionKind.HOOK }
+        return s.copy(sections = listOf(Section(SectionKind.HOOK, if (sound) "sound" else "line", listOf(shot), old?.text, "Your pick")) + rest)
+    }
+
+    /** Sounds and short lines that would open well: sounds first. */
+    fun hookChoices(footage: List<Footage>): List<Pair<ScriptShot, String>> = footage.flatMap { f ->
+        f.lines.filter { it.endMs - it.startMs <= 4_000 }.map { l ->
+            ScriptShot(f.momentId, (l.startMs - 150).coerceAtLeast(0), (l.endMs + 250).coerceAtMost(f.durationMs)) to l.text
+        }
+    }.sortedByDescending { ScriptWriter.isSound(it.second) }.take(12)
+
+    fun bestPart(f: Footage): ScriptShot {
+        val l = f.lines.firstOrNull()
+        if (l != null) {
+            val end = f.lines.takeWhile { it.endMs - l.startMs <= 12_000 }.last().endMs
+            return ScriptShot(f.momentId, (l.startMs - 150).coerceAtLeast(0), (end + 250).coerceAtMost(f.durationMs))
+        }
+        val len = minOf(4_000L, f.durationMs)
+        return ScriptShot(f.momentId, (f.durationMs - len) / 2, (f.durationMs - len) / 2 + len)
+    }
+
+    /** A script for a Reel made before scripts: each clip one section, as it was. */
+    fun fromPlan(plan: StudioPlan, title: String): Script = Script(
+        PieceFormat.REEL, title, null, (plan.totalMs / 1000).toInt().coerceAtLeast(6), "story", null, null,
+        plan.clips.mapIndexed { i, c -> Section(if (i == 0) SectionKind.HOOK else SectionKind.PEAK, "take", listOf(ScriptShot(c.bit.momentId, c.inMs, c.inMs + c.durMs)), c.text) } +
+            Section(SectionKind.ENDING, if (plan.segments.any { it is ClipSegment && it.tail }) "loop" else "cut", emptyList()),
+    )
+}

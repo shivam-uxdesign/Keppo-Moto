@@ -91,6 +91,9 @@ class AppContainer(context: Context) {
     /** Make all: pieces made one after another in the background, with a notification. */
     val reelMaker = com.ridetrack.app.studio.ReelMaker(appContext, reels, errors) { reelsChanged(it) }
 
+    /** How the rider wants stories written: their rules and every change they made to a script. */
+    val style = com.ridetrack.app.studio.StyleStore(appContext)
+
     /** Keppo Studio's series name and the shot list for the next ride. */
     val studio = com.ridetrack.app.studio.StudioPrefs(appContext)
 

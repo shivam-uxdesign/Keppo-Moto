@@ -9,6 +9,7 @@ import com.ridetrack.app.studio.SectionKind
 import com.ridetrack.app.studio.StatsSegment
 import com.ridetrack.app.studio.StudioOptions
 import com.ridetrack.app.studio.Vibe
+import com.ridetrack.app.studio.describe
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -102,5 +103,31 @@ class ScriptTest {
         assertEquals(5, s.clips)
         assertEquals(1, s.sounds)
         assertTrue(s.text.contains("of you talking"))
+    }
+
+    @Test
+    fun `script edits resize inside the clip, move, remove, swap, pick a hook`() {
+        val sc = ScriptWriter.parsePieces(reply, footage)[0]
+        val longer = com.ridetrack.app.studio.ScriptEdits.resize(sc, 1, 100_000, footage)
+        assertEquals(15_000, longer.sections[1].shots.last().outMs)
+        val moved = com.ridetrack.app.studio.ScriptEdits.move(sc, 1, -1)
+        assertEquals(SectionKind.PEAK, moved.sections[0].kind)
+        assertEquals(3, com.ridetrack.app.studio.ScriptEdits.remove(sc, 2).sections.size)
+        val swapped = com.ridetrack.app.studio.ScriptEdits.swap(sc, 1, footage[0])
+        assertEquals("m1", swapped.sections[1].shots.single().clip)
+        assertEquals(5_850, swapped.sections[1].shots.single().inMs)
+        val choices = com.ridetrack.app.studio.ScriptEdits.hookChoices(footage)
+        assertEquals("Tooooooo", choices.first().second)
+        val hooked = com.ridetrack.app.studio.ScriptEdits.hook(moved, choices[1].first, false)
+        assertEquals(SectionKind.HOOK, hooked.sections.first().kind)
+        assertEquals(1, hooked.sections.count { it.kind == SectionKind.HOOK })
+    }
+
+    @Test
+    fun `a script reads as one line for the style log`() {
+        val line = ScriptWriter.parsePieces(reply, footage)[0].describe(footage)
+        assertTrue(line.startsWith("Reel, story: Hook (sound, 3.4 s)"), line)
+        assertTrue(line.contains("Tooooooo"))
+        assertTrue(line.contains("Ending (stats)"))
     }
 }

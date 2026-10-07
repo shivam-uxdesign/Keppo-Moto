@@ -125,6 +125,7 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
             StudioStep.EDIT -> Edit(vm, s, modifier)
             StudioStep.VOICE -> Voice(vm, s, modifier)
             StudioStep.COVER -> CoverEditor(vm, s, modifier)
+            StudioStep.SCRIPT -> ScriptView(vm, s, modifier)
         }
     }
 }
@@ -491,7 +492,7 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Action("Remix", Icons.Outlined.Refresh, Modifier.weight(1f)) { vm.remix() }
-                Action("Edit", Icons.Outlined.Edit, Modifier.weight(1f)) { vm.edit() }
+                Action("Script", Icons.Outlined.Edit, Modifier.weight(1f)) { vm.scriptView() }
                 Action("Voice-over", Icons.Outlined.Mic, Modifier.weight(1f)) { vm.voice() }
                 Action("Cover", Icons.Outlined.Image, Modifier.weight(1f)) { vm.cover() }
                 Action("Change", Icons.Outlined.Tune, Modifier.weight(1f)) { vm.back() }
@@ -661,6 +662,132 @@ private fun Edit(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             Button("Make it again · ${Format.clock(plan.totalMs)}", primary = true, modifier = Modifier.weight(2f)) { vm.remake() }
         }
         Spacer(Modifier.height(12.dp))
+    }
+}
+
+// ---- 7. Script --------------------------------------------------------------------------------
+
+/**
+ * The script the Reel was made from, section by section. Change it directly, or tell Studio in
+ * your words what to change; then Make it again. Earlier versions stay to go back to.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
+    val draft = s.draft ?: return
+    var swapFor by remember { mutableStateOf<Int?>(null) }
+    val byId = s.footage.associateBy { it.momentId }
+    Column(modifier) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                "${draft.format.label} · ${draft.shape.replace('_', ' ')} · ${Format.clock(vm.draftLengthMs())}",
+                style = RtType.bodyStrong,
+                color = RtColors.TextPrimary,
+            )
+            draft.why?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
+            draft.sections.forEachIndexed { i, sec ->
+                val secs = sec.shots.sumOf { it.durMs } / 1000.0
+                val said = sec.shots.flatMap { sh -> byId[sh.clip]?.lines.orEmpty().filter { it.endMs > sh.inMs && it.startMs < sh.outMs } }.joinToString(" ") { it.text }
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        sec.shots.firstOrNull()?.let { sh -> Thumb(s.thumbs[sh.clip], Modifier.size(width = 40.dp, height = 54.dp).clip(RoundedCornerShape(6.dp))) }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "${sec.kind.label} · ${sec.form}" + if (secs > 0) " · " + String.format(Locale.US, "%.1f s", secs) else "",
+                                style = RtType.bodyStrong,
+                                color = RtColors.TextPrimary,
+                            )
+                            if (said.isNotBlank()) Text("\u201c$said\u201d", style = RtType.caption, color = RtColors.TextSecondary, maxLines = 3)
+                            sec.why?.let { Text(it, style = RtType.caption, color = RtColors.TextTertiary, maxLines = 2) }
+                        }
+                    }
+                    if (sec.shots.isNotEmpty()) {
+                        Field(sec.text.orEmpty(), "On-screen text (optional, a few words)") { vm.draftText(i, it) }
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Choice("−1 s", false) { vm.draftResize(i, -1_000) }
+                            Choice("+1 s", false) { vm.draftResize(i, 1_000) }
+                            Choice("↑", false) { vm.draftMove(i, -1) }
+                            Choice("↓", false) { vm.draftMove(i, 1) }
+                            Choice("Swap clip", false) { swapFor = i }
+                            Choice("Remove", false) { vm.draftRemove(i) }
+                        }
+                    } else {
+                        Choice("Remove", false) { vm.draftRemove(i) }
+                    }
+                }
+            }
+            val hooks = remember(s.footage) { ScriptEdits.hookChoices(s.footage) }
+            if (hooks.isNotEmpty()) {
+                Section("Open with") {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        hooks.forEach { (shot, text) -> Choice("\u201c${text.take(28)}\u201d", false) { vm.draftHook(shot, text) } }
+                    }
+                }
+            }
+            Section("Tell Studio what to change") {
+                OutlinedTextField(
+                    value = s.note,
+                    onValueChange = vm::setNote,
+                    placeholder = { Text("e.g. start with the Tooooo, fewer cuts, make it funnier", style = RtType.body, color = RtColors.TextTertiary) },
+                    textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                )
+                Text(
+                    if (s.gemini) "Gemini rewrites the script with your note. Studio also learns from it for the next ones." else "Gemini isn't available in this build: only your direct changes are used.",
+                    style = RtType.caption,
+                    color = RtColors.TextTertiary,
+                )
+            }
+            if (s.versions.isNotEmpty()) {
+                Section("Earlier versions") {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        s.versions.forEach { (n, at) -> Choice("v$n · ${Format.timeOfDay(at)}", false) { vm.restoreVersion(n) } }
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text("Fine-tune clips", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.edit() }.padding(vertical = 6.dp))
+                val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
+                Text("Your style", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { nav(com.ridetrack.app.ui.nav.Routes.STUDIO_STYLE) }.padding(vertical = 6.dp))
+            }
+            s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button("Back", primary = false, modifier = Modifier.weight(1f)) { vm.back() }
+            Button("Make it again", primary = true, modifier = Modifier.weight(2f)) { vm.applyDraft() }
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+    swapFor?.let { i ->
+        androidx.compose.ui.window.Dialog(onDismissRequest = { swapFor = null }) {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.SurfaceRaised).padding(14.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Swap for", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+                s.footage.forEach { f ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button) { vm.draftSwap(i, f.momentId); swapFor = null }.padding(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Thumb(s.thumbs[f.momentId], Modifier.size(width = 36.dp, height = 48.dp).clip(RoundedCornerShape(6.dp)))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(f.lines.joinToString(" ") { it.text }.ifBlank { "No words · ${f.look}" }, style = RtType.body, color = RtColors.TextPrimary, maxLines = 2)
+                            Text("${f.label} · " + String.format(Locale.US, "%.0f s", f.durationMs / 1000.0), style = RtType.caption, color = RtColors.TextSecondary)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

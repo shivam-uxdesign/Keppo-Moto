@@ -95,6 +95,8 @@ object Routes {
     fun reel(id: String) = "share/$id?mode=reel"
     /** A saved Reel, opened in Studio. */
     fun savedReel(rideId: String, reelId: String) = "share/$rideId?mode=reel&reel=$reelId"
+    /** Studio › Your style. */
+    const val STUDIO_STYLE = "studio-style"
     /** Studio with videos from the phone only (no ride). */
     const val STUDIO_PHONE = "studio-phone?reel={reel}"
     fun studioPhone(reelId: String?) = "studio-phone" + (reelId?.let { "?reel=$it" } ?: "")
@@ -118,6 +120,9 @@ private val tabs = listOf(
     Tab(Routes.BIKE, "Bike", Icons.Outlined.TwoWheeler),
     Tab(Routes.PROFILE, "Profile", Icons.Outlined.Person),
 )
+
+/** Opens a route from deep inside a screen (e.g. Studio › Your style). */
+val LocalNavigate = androidx.compose.runtime.staticCompositionLocalOf<(String) -> Unit> { {} }
 
 @Composable
 fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit = {}) {
@@ -158,6 +163,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                 .fillMaxSize()
                 .padding(bottom = padding.calculateBottomPadding()),
         ) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalNavigate provides { r -> nav.navigate(r) }) {
             NavHost(
                 navController = nav,
                 startDestination = Routes.HOME,
@@ -296,6 +302,9 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         )
                     }
                 }
+                composable(Routes.STUDIO_STYLE) {
+                    DarkRoute { com.ridetrack.app.studio.StyleScreen(onBack = { nav.popBackStack() }) }
+                }
                 composable(
                     Routes.STUDIO_PHONE,
                     arguments = listOf(navArgument("reel") { type = NavType.StringType; nullable = true; defaultValue = null }),
@@ -334,6 +343,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                 composable(Routes.CALIBRATE, arguments = listOf(navArgument("bikeId") { type = NavType.StringType })) { entry ->
                     CalibrationScreen(bikeId = entry.arguments?.getString("bikeId").orEmpty(), onDone = { nav.popBackStack() })
                 }
+            }
             }
         }
     }

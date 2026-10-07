@@ -87,6 +87,44 @@ class ReelStore(private val context: Context) {
         copy
     }
 
+    /**
+     * Keeps the Reel as it is now (video, cover, project) as a version before it's made again,
+     * so the rider can go back. The newest [MAX_VERSIONS] are kept.
+     */
+    suspend fun archive(id: String) = withContext(Dispatchers.IO) {
+        val p = get(id) ?: return@withContext
+        if (!video(id).isFile) return@withContext
+        val vd = File(dir(id), "versions").apply { mkdirs() }
+        val n = (versions(id).maxOfOrNull { it.first } ?: 0) + 1
+        val d = File(vd, "v$n").apply { mkdirs() }
+        video(id).copyTo(File(d, "reel.mp4"), overwrite = true)
+        cover(id).takeIf { it.isFile }?.copyTo(File(d, "cover.jpg"), overwrite = true)
+        File(d, PROJECT).writeText(ReelJson.write(p))
+        versions(id).sortedBy { it.first }.dropLast(MAX_VERSIONS).forEach { File(vd, "v${it.first}").deleteRecursively() }
+    }
+
+    /** Earlier versions of a Reel: number and when it was made, oldest first. */
+    fun versions(id: String): List<Pair<Int, Long>> =
+        File(dir(id), "versions").listFiles()?.mapNotNull { d ->
+            val n = d.name.removePrefix("v").toIntOrNull() ?: return@mapNotNull null
+            val p = File(d, PROJECT).takeIf { it.isFile }?.let { ReelJson.read(it.readText()) } ?: return@mapNotNull null
+            n to p.updatedAt
+        }?.sortedBy { it.first }.orEmpty()
+
+    /** Goes back to version [n]: the current one is kept as a version first. */
+    suspend fun restoreVersion(id: String, n: Int): ReelProject? = withContext(Dispatchers.IO) {
+        val d = File(File(dir(id), "versions"), "v$n")
+        val old = File(d, PROJECT).takeIf { it.isFile }?.let { ReelJson.read(it.readText()) } ?: return@withContext null
+        archive(id)
+        File(d, "reel.mp4").copyTo(video(id), overwrite = true)
+        File(d, "cover.jpg").takeIf { it.isFile }?.copyTo(cover(id), overwrite = true)
+        val p = old.copy(id = id, updatedAt = System.currentTimeMillis(), inJournal = get(id)?.inJournal ?: old.inJournal, journalCover = get(id)?.journalCover ?: old.journalCover)
+        File(dir(id), PROJECT).writeText(ReelJson.write(p))
+        d.deleteRecursively()
+        publish(p)
+        p
+    }
+
     suspend fun delete(id: String) = update(id) { it.copy(deletedAt = System.currentTimeMillis(), inJournal = false, journalCover = false) }
     suspend fun restore(id: String) = update(id) { it.copy(deletedAt = null) }
 
@@ -116,6 +154,7 @@ class ReelStore(private val context: Context) {
     companion object {
         const val PROJECT = "project.json"
         const val KEEP_MS = 30L * 24 * 3600 * 1000
+        const val MAX_VERSIONS = 5
 
         /** The frame at [atMs] of [video], upright. */
         fun frame(video: File, atMs: Long): Bitmap? = runCatching {

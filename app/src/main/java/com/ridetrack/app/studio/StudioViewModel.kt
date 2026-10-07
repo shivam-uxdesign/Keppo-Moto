@@ -49,7 +49,7 @@ data class StudioSource(
     val uri: Uri,
 )
 
-enum class StudioStep { SETUP, WORKING, READY, EDIT, VOICE, COVER }
+enum class StudioStep { SETUP, WORKING, READY, EDIT, VOICE, COVER, SCRIPT }
 
 /** One step of making the video, as the rider sees it. */
 data class WorkStep(val label: String, val state: Int /* 0 waiting, 1 running, 2 done, 3 skipped */, val detail: String? = null)
@@ -119,6 +119,14 @@ data class StudioState(
     val script: Script? = null,
     /** What the ride has to work with, in words ("40 s of you talking…"). */
     val content: String? = null,
+    /** The script being changed in the Script view; null outside it. */
+    val draft: Script? = null,
+    /** "Tell Studio what to change", in the rider's words. */
+    val note: String = "",
+    /** The clips, as the Script view shows and offers them. */
+    val footage: List<Footage> = emptyList(),
+    /** Earlier versions of this Reel: number and when it was made. */
+    val versions: List<Pair<Int, Long>> = emptyList(),
 ) {
     /** The small label on the first clip: the series and episode, or the title. */
     val label: String get() = if (series.isBlank()) title else "$series · ep $episode"
@@ -386,6 +394,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                 coverFrames = emptyList(),
                 piece = null,
                 script = p.script,
+                versions = c.reels.versions(p.id),
                 options = p.options,
                 plan = p.plan,
                 title = p.title,
@@ -411,6 +420,8 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         val isNew = s.reelId == null
         val id = s.reelId ?: c.reels.newId()
         val old = c.reels.get(id)
+        // Making it again: the Reel as it was stays as a version to go back to.
+        if (old != null) c.reels.archive(id)
         val project = ReelProject(
             id = id,
             rideId = rideId.takeIf { !phoneOnly },
@@ -439,7 +450,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             script = s.script,
         )
         val saved = c.reels.save(project, video, s.takes)
-        _state.update { it.copy(reelId = saved.id, video = c.reels.video(saved.id), takes = c.reels.takes(saved), coverFrames = emptyList()) }
+        _state.update { it.copy(reelId = saved.id, video = c.reels.video(saved.id), takes = c.reels.takes(saved), coverFrames = emptyList(), versions = c.reels.versions(saved.id)) }
         if (isNew && c.studio.alsoSaveToGallery) ShareImages.saveVideo(c.appContext, c.reels.video(saved.id), "Keppo Reel ${saved.id}")
         onSaved(saved)
     }
@@ -529,6 +540,66 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             val ok = bmp != null && ShareImages.saveToPhotos(c.appContext, bmp, "Keppo Reel cover $id", jpeg = true)
             bmp?.recycle()
             say(if (ok) "Cover saved to Photos" else "Couldn't save the cover")
+        }
+    }
+
+    // ---- script view -------------------------------------------------------------------------
+
+    /** Opens the Script view: the sections as they were made, to change and make again. */
+    fun scriptView() {
+        val s = _state.value
+        val sc = s.script ?: s.plan?.let { ScriptEdits.fromPlan(it, s.title) } ?: return
+        _state.update { it.copy(step = StudioStep.SCRIPT, draft = sc, note = "", footage = footage()) }
+    }
+
+    fun editDraft(f: (Script) -> Script) = _state.update { s -> s.draft?.let { s.copy(draft = f(it)) } ?: s }
+    fun setNote(t: String) = _state.update { it.copy(note = t) }
+    fun draftText(i: Int, t: String) = editDraft { ScriptEdits.setText(it, i, t) }
+    fun draftResize(i: Int, deltaMs: Long) = editDraft { ScriptEdits.resize(it, i, deltaMs, _state.value.footage) }
+    fun draftMove(i: Int, by: Int) = editDraft { ScriptEdits.move(it, i, by) }
+    fun draftRemove(i: Int) = editDraft { ScriptEdits.remove(it, i) }
+    fun draftSwap(i: Int, momentId: String) { _state.value.footage.firstOrNull { it.momentId == momentId }?.let { f -> editDraft { ScriptEdits.swap(it, i, f) } } }
+    fun draftHook(shot: ScriptShot, text: String) = editDraft { ScriptEdits.hook(it, shot, ScriptWriter.isSound(text)) }
+
+    /** How long the draft would be, after the app's checks. */
+    fun draftLengthMs(): Long {
+        val s = _state.value
+        val d = s.draft ?: return 0
+        return ScriptWriter.toPlan(d, s.footage, bits, s.options.vibe, s.options).plan.totalMs
+    }
+
+    /**
+     * Makes the Reel again from the changed script. With a note, Gemini first rewrites the script
+     * to do what the rider asked (one request). The change is kept to learn the rider's style.
+     */
+    fun applyDraft() {
+        val s = _state.value
+        val draft = s.draft ?: return
+        val before = s.script ?: ScriptEdits.fromPlan(s.plan ?: return, s.title)
+        val note = s.note.trim()
+        viewModelScope.launch {
+            var result = draft
+            if (note.isNotEmpty() && c.transcripts.available) {
+                _state.update { it.copy(toast = "Gemini is rewriting the script…") }
+                val fs = s.footage
+                runCatching { gemini().scripts(ScriptWriter.revisePrompt(card?.title ?: s.title, fs, style(), draft, note, ScriptWriter.keys(fs)), fs).firstOrNull() }
+                    .onFailure { c.errors.record("Studio script", "Gemini couldn't rewrite the script", it) }
+                    .getOrNull()?.let { result = it.copy(lengthSec = it.lengthSec.coerceAtLeast(draft.lengthSec / 2)) }
+                    ?: say("Gemini couldn't rewrite it, so your own changes were used")
+            }
+            c.style.record(before.describe(s.footage), result.describe(s.footage), note.ifEmpty { null })
+            pendingScript = result
+            _state.update { it.copy(draft = null, note = "") }
+            make()
+        }
+    }
+
+    /** Goes back to an earlier version of this Reel (the current one is kept as a version). */
+    fun restoreVersion(n: Int) {
+        val id = _state.value.reelId ?: return
+        viewModelScope.launch {
+            c.reels.restoreVersion(id, n)?.let { open(it); c.reelsChanged(it) }
+            say("Back to version $n")
         }
     }
 
@@ -640,7 +711,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     }
 
     fun back() = _state.update {
-        it.copy(step = if (it.step == StudioStep.EDIT || it.step == StudioStep.VOICE || it.step == StudioStep.COVER) StudioStep.READY else StudioStep.SETUP, error = null)
+        it.copy(step = if (it.step in setOf(StudioStep.EDIT, StudioStep.VOICE, StudioStep.COVER, StudioStep.SCRIPT)) StudioStep.READY else StudioStep.SETUP, error = null, draft = null)
     }
 
     /** Shared or saved: the next Reel of the series is the next episode. */
@@ -766,7 +837,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     }
 
     /** What Studio has learnt about the rider's style (see Your style). */
-    private fun style(): StyleContext? = null
+    private fun style(): StyleContext? = c.style.context()
 
     /** Another take: Gemini writes a script clearly different from this one (one request). */
     fun remix() {
