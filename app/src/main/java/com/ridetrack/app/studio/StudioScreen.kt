@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -97,8 +98,8 @@ private val VibeFonts = mapOf(
 
 /** Share ride › Reel: Keppo Studio turns the ride's clips into a 30–60 s Reel. */
 @Composable
-fun StudioPanel(rideId: String, modifier: Modifier = Modifier) {
-    val vm = appViewModel(key = "studio-$rideId") { StudioViewModel(it, rideId) }
+fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? = null) {
+    val vm = appViewModel(key = "studio-$rideId-${reelId.orEmpty()}") { StudioViewModel(it, rideId, reelId) }
     val s by vm.state.collectAsStateWithLifecycle()
     // Making a video takes a while: keep the screen on so the phone doesn't sleep through it.
     val view = LocalView.current
@@ -135,6 +136,7 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 style = RtType.caption,
                 color = RtColors.TextSecondary,
             )
+            RideReels(vm.rideId) { vm.openSaved(it) }
             Section("Vibe") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Vibe.entries.chunked(2).forEach { row ->
@@ -177,6 +179,9 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 Toggle("Map", "The route behind the stats (and in the route opening). Off: no map at all", o.map) { v -> vm.setOptions { it.copy(map = v) } }
                 Toggle("Captions", "What you said, word by word (Gemini reads the clips' sound)", o.captions) { v -> vm.setOptions { it.copy(captions = v) } }
                 Toggle("Keppo Moto mark", "Small, on the stats", o.watermark) { v -> vm.setOptions { it.copy(watermark = v) } }
+                val prefs = com.ridetrack.app.ui.appContainer().studio
+                var gallery by remember { mutableStateOf(prefs.alsoSaveToGallery) }
+                Toggle("Also save to Gallery", "Every Reel is kept in Studio; this also puts new ones in Movies/Keppo Moto", gallery) { v -> prefs.alsoSaveToGallery = v; gallery = v }
             }
             s.error?.let { ErrorBox(it) }
         }
@@ -275,6 +280,7 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 Action("Voice-over", Icons.Outlined.Mic, Modifier.weight(1f)) { vm.voice() }
                 Action("Change", Icons.Outlined.Tune, Modifier.weight(1f)) { vm.back() }
             }
+            ReelMenu(onDuplicate = vm::duplicate, onDelete = vm::delete)
             s.notes.forEach { Text(it, style = RtType.caption, color = RtColors.Warning) }
             if (s.notes.isNotEmpty()) ErrorActions()
             if (s.musicUri == null) MusicGuide()
@@ -424,6 +430,61 @@ private fun Edit(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             Button("Make it again · ${Format.clock(plan.totalMs)}", primary = true, modifier = Modifier.weight(2f)) { vm.remake() }
         }
         Spacer(Modifier.height(12.dp))
+    }
+}
+
+/** Duplicate (try another take, keep this one) and Delete (to Recently deleted, 30 days). */
+@Composable
+private fun ReelMenu(onDuplicate: () -> Unit, onDelete: () -> Unit) {
+    var confirm by remember { mutableStateOf(false) }
+    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        Text("Duplicate", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onDuplicate).padding(vertical = 6.dp))
+        Text("Delete", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { confirm = true }.padding(vertical = 6.dp))
+    }
+    if (confirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("Delete this Reel?") },
+            text = { Text("It moves to Recently deleted on the Studio tab, where you can restore it for 30 days.") },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { confirm = false; onDelete() }) { Text("Delete", color = RtColors.Error) } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirm = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+/** This ride's saved Reels, newest first; tap one to open it. */
+@Composable
+private fun RideReels(rideId: String, onOpen: (String) -> Unit) {
+    val all by com.ridetrack.app.ui.appContainer().reels.reels.collectAsStateWithLifecycle()
+    val list = all.filter { it.rideId == rideId && it.deletedAt == null }
+    if (list.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("THIS RIDE'S REELS", style = RtType.label, color = RtColors.TextSecondary)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            list.forEach { p -> ReelTile(p, Modifier.width(96.dp)) { onOpen(p.id) } }
+        }
+    }
+}
+
+/** A saved Reel as a cover tile with its length and vibe. */
+@Composable
+internal fun ReelTile(p: ReelProject, modifier: Modifier, onClick: () -> Unit) {
+    val store = com.ridetrack.app.ui.appContainer().reels
+    Column(modifier.clickable(role = Role.Button, onClickLabel = "Open Reel", onClick = onClick)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(RoundedCornerShape(10.dp)).background(RtColors.Surface)) {
+            Thumb(store.cover(p.id).takeIf { it.isFile }, Modifier.fillMaxSize(), maxEdge = 480)
+            Text(
+                Format.clock(p.durationMs),
+                style = RtType.caption,
+                color = Color.White,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 4.dp),
+            )
+            if (p.inJournal) {
+                Text("Journal", style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.TopStart).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 4.dp))
+            }
+        }
+        Text(p.title, style = RtType.caption, color = RtColors.TextPrimary, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
+        Text(p.vibe.label, style = RtType.caption, color = RtColors.TextTertiary, maxLines = 1)
     }
 }
 

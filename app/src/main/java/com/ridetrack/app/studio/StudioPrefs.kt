@@ -21,6 +21,11 @@ class StudioPrefs(context: Context) {
         get() = prefs.getString(SERIES, "").orEmpty()
         set(v) = prefs.edit().putString(SERIES, v.trim()).apply()
 
+    /** Each new Reel also goes to Movies/Keppo Moto. */
+    var alsoSaveToGallery: Boolean
+        get() = prefs.getBoolean(GALLERY, false)
+        set(v) = prefs.edit().putBoolean(GALLERY, v).apply()
+
     /** The "add a trending song in Instagram" guide was dismissed. */
     var musicGuideSeen: Boolean
         get() = prefs.getBoolean(MUSIC_GUIDE, false)
@@ -62,6 +67,7 @@ class StudioPrefs(context: Context) {
         const val EPISODE = "episode"
         const val SHOTS = "shots"
         const val MUSIC_GUIDE = "music_guide_seen"
+        const val GALLERY = "also_gallery"
         const val MAX = 4
     }
 }

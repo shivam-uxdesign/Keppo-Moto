@@ -156,7 +156,7 @@ private fun topSpeedInstant(ride: com.ridetrack.telemetry.model.Ride, samples: L
 
 /** Strava-style share: a full story card, or a transparent overlay for your own photo. */
 @Composable
-fun ShareRideScreen(rideId: String, onBack: () -> Unit, startMode: String? = null) {
+fun ShareRideScreen(rideId: String, onBack: () -> Unit, startMode: String? = null, reelId: String? = null) {
     val vm = appViewModel(key = "share-$rideId") { ShareRideViewModel(it, rideId) }
     val s by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -191,7 +191,7 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit, startMode: String? = nul
             return@Column
         }
         if (mode == ShareMode.REEL) {
-            com.ridetrack.app.studio.StudioPanel(rideId, Modifier.weight(1f))
+            com.ridetrack.app.studio.StudioPanel(rideId, Modifier.weight(1f), reelId)
             return@Column
         }
         LayoutPicker(s.thumbs, style, onSelect = { c -> scope.launch { pager.animateScrollToPage(choices.indexOf(c)) } })

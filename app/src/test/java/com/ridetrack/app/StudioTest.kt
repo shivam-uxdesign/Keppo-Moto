@@ -222,4 +222,20 @@ class StudioTest {
         assertTrue(ramp in 0.25f..1f && ramp < 1f, "$ramp")
         assertEquals(1f, g(2_500_000))
     }
+
+    @Test
+    fun `a saved Reel reopens exactly as it was saved`() {
+        val plan = StudioPlanner.plan(clip4(), StudioOptions(vibe = Vibe.CINE, lengthSec = 30, intro = true))
+        val p = com.ridetrack.app.studio.ReelProject(
+            id = "abc", rideId = "ride1", createdAt = 1, updatedAt = 2, title = "Tuesday Evening Ride", series = "Diaries", episode = 4,
+            hookLine = "3 hours in. No break?", postCaption = "Evening run", story = "the hydration debate",
+            options = StudioOptions(vibe = Vibe.CINE, lengthSec = 30, intro = true, seed = 3), musicUri = null, musicName = null, plan = plan,
+            takes = listOf(com.ridetrack.app.studio.SavedTake(1_000, 2_500, "voice-0.pcm", listOf(CaptionLine(0, 900, "Airport loop")))),
+            tips = listOf(com.ridetrack.app.studio.Tip("Film the road", nextRide = true)), durationMs = plan.totalMs,
+            inJournal = true, coverAtMs = 1_200, coverLine = "Sixty-five!",
+        )
+        val back = com.ridetrack.app.studio.ReelJson.read(com.ridetrack.app.studio.ReelJson.write(p))
+        assertEquals(p, back)
+        assertNull(com.ridetrack.app.studio.ReelJson.read("not json"))
+    }
 }

@@ -79,6 +79,15 @@ class AppContainer(context: Context) {
     /** Every failure with its full technical detail, to copy or share from Profile › Error log. */
     val errors = com.ridetrack.app.diag.ErrorLog(appContext)
 
+    /** Every Reel Studio made, with its edit, so it can be reopened. */
+    val reels = com.ridetrack.app.studio.ReelStore(appContext)
+
+    /** A Reel was saved, changed or deleted: Keppo Journal hears about it if the Reel is in the Journal. */
+    fun reelsChanged(p: com.ridetrack.app.studio.ReelProject) {
+        val ride = p.rideId ?: return
+        appScope.launch { journal.onRideSaved(ride) }
+    }
+
     /** Keppo Studio's series name and the shot list for the next ride. */
     val studio = com.ridetrack.app.studio.StudioPrefs(appContext)
 

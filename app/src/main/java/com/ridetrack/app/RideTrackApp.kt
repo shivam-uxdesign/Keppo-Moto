@@ -34,6 +34,7 @@ class RideTrackApp : Application() {
         container.crashAlerts.start()
         PurgeWorker.schedule(this)
         container.appScope.launch { container.trash.purgeExpired() }
+        container.appScope.launch { container.reels.purgeExpired() }
         container.transcribeSoon()
         container.appScope.launch { runCatching { container.fuel.checkRecent() } }
         // Why the app last stopped, into the log of the ride it interrupted.

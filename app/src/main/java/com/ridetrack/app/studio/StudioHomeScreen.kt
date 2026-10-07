@@ -2,6 +2,7 @@ package com.ridetrack.app.studio
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,30 +85,81 @@ class StudioHomeViewModel(c: AppContainer) : ViewModel() {
     }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 }
 
-/** The Studio tab: pick a ride, and Studio turns its clips into a Reel. */
+/** The Studio tab: your Reels, then the rides to make one from, then Recently deleted. */
 @Composable
-fun StudioHomeScreen(onOpenRide: (String) -> Unit) {
+fun StudioHomeScreen(onOpenRide: (String) -> Unit, onOpenReel: (rideId: String, reelId: String) -> Unit) {
     val vm = appViewModel { StudioHomeViewModel(it) }
     val rides by vm.rides.collectAsStateWithLifecycle()
+    val store = com.ridetrack.app.ui.appContainer().reels
+    val reels by store.reels.collectAsStateWithLifecycle()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val live = reels.filter { it.deletedAt == null && it.rideId != null }
+    val deleted = reels.filter { it.deletedAt != null }
+    var showDeleted by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        ScreenHeader("Studio", Modifier.padding(horizontal = RtDimens.screenPadding), subtitle = "Pick a ride. Studio turns its clips into a Reel.")
+        ScreenHeader("Studio", Modifier.padding(horizontal = RtDimens.screenPadding), subtitle = "Your Reels, and the rides to make one from.")
         val list = rides
-        when {
-            list == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp) }
-            list.isEmpty() -> EmptyState(
-                title = "No rides with clips yet",
-                message = "Turn on Moments on Home before a ride. Rides with 2 or more clips show up here, ready to become a Reel.",
-                icon = Icons.Outlined.Movie,
-                modifier = Modifier.padding(RtDimens.screenPadding),
-            )
-            else -> LazyColumn(
-                contentPadding = PaddingValues(horizontal = RtDimens.screenPadding, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(list, key = { it.id }) { r -> RideRow(r) { onOpenRide(r.id) } }
+        if (list == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp) }
+            return@Column
+        }
+        LazyColumn(
+            contentPadding = PaddingValues(horizontal = RtDimens.screenPadding, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (live.isNotEmpty()) {
+                item { Label("Your Reels · ${live.size}") }
+                // Three covers a row, newest first.
+                items(live.chunked(3), key = { row -> "r-" + row.first().id }) { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        row.forEach { p -> ReelTile(p, Modifier.weight(1f)) { onOpenReel(p.rideId!!, p.id) } }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+            item { Label(if (live.isEmpty()) "Make a Reel from a ride" else "Make another from a ride") }
+            if (list.isEmpty()) {
+                item {
+                    EmptyState(
+                        title = "No rides with clips yet",
+                        message = "Turn on Moments on Home before a ride. Rides with 2 or more clips show up here, ready to become a Reel.",
+                        icon = Icons.Outlined.Movie,
+                    )
+                }
+            }
+            items(list, key = { it.id }) { r -> RideRow(r) { onOpenRide(r.id) } }
+            if (deleted.isNotEmpty()) {
+                item {
+                    Text(
+                        if (showDeleted) "Hide Recently deleted" else "Recently deleted · ${deleted.size}",
+                        style = RtType.button,
+                        color = RtColors.TextSecondary,
+                        modifier = Modifier.clickable(role = Role.Button) { showDeleted = !showDeleted }.padding(vertical = 8.dp),
+                    )
+                }
+                if (showDeleted) {
+                    items(deleted, key = { "d-" + it.id }) { p ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ReelTile(p, Modifier.width(56.dp)) {}
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(p.title, style = RtType.body, color = RtColors.TextPrimary, maxLines = 1)
+                                val days = (30 - (System.currentTimeMillis() - (p.deletedAt ?: 0)) / 86_400_000L).coerceAtLeast(0)
+                                Text("Deleted for good in $days days", style = RtType.caption, color = RtColors.TextTertiary)
+                            }
+                            Text("Restore", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { scope.launch { store.restore(p.id) } }.padding(8.dp))
+                            Text("Delete", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { scope.launch { store.purge(p.id) } }.padding(8.dp))
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+@Composable
+private fun Label(text: String) {
+    Text(text.uppercase(java.util.Locale.getDefault()), style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 4.dp))
 }
 
 @Composable

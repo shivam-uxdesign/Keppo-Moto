@@ -89,10 +89,12 @@ object Routes {
     const val RECENTLY_DELETED = "recently-deleted?rideId={rideId}"
     fun recentlyDeleted(rideId: String? = null) = if (rideId == null) "recently-deleted" else "recently-deleted?rideId=$rideId"
     const val RIDES_MAP = "rides-map"
-    const val SHARE = "share/{rideId}?mode={mode}"
+    const val SHARE = "share/{rideId}?mode={mode}&reel={reel}"
     fun share(id: String) = "share/$id"
     /** Share › Reel: Keppo Studio. */
     fun reel(id: String) = "share/$id?mode=reel"
+    /** A saved Reel, opened in Studio. */
+    fun savedReel(rideId: String, reelId: String) = "share/$rideId?mode=reel&reel=$reelId"
     const val MOMENTS = "moments/{rideId}/{momentId}"
     fun moments(rideId: String, momentId: String) = "moments/$rideId/$momentId"
     const val MOMENT_SHARE = "moment-share/{rideId}/{momentId}"
@@ -182,7 +184,10 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                     )
                 }
                 composable(Routes.STUDIO) {
-                    com.ridetrack.app.studio.StudioHomeScreen(onOpenRide = { nav.navigate(Routes.reel(it)) })
+                    com.ridetrack.app.studio.StudioHomeScreen(
+                        onOpenRide = { nav.navigate(Routes.reel(it)) },
+                        onOpenReel = { ride, reel -> nav.navigate(Routes.savedReel(ride, reel)) },
+                    )
                 }
                 composable(Routes.RIDES_MAP) {
                     RidesMapScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) })
@@ -292,6 +297,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                     arguments = listOf(
                         navArgument("rideId") { type = NavType.StringType },
                         navArgument("mode") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("reel") { type = NavType.StringType; nullable = true; defaultValue = null },
                     ),
                 ) { entry ->
                     DarkRoute {
@@ -299,6 +305,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                             rideId = entry.arguments?.getString("rideId").orEmpty(),
                             onBack = { nav.popBackStack() },
                             startMode = entry.arguments?.getString("mode"),
+                            reelId = entry.arguments?.getString("reel"),
                         )
                     }
                 }

@@ -75,6 +75,8 @@ data class StudioState(
     val recordingAt: Long? = null,
     /** Good parts of other rides, for Edit › Add from another ride. */
     val otherBits: List<Bit> = emptyList(),
+    /** The saved Reel being shown or changed; null until the first video is made. */
+    val reelId: String? = null,
 ) {
     /** The small label on the first clip: the series and episode, or the title. */
     val label: String get() = if (series.isBlank()) title else "$series · ep $episode"
@@ -82,7 +84,7 @@ data class StudioState(
 
 /** Studio: turns a ride's clips into a Reel (captions, stories and tips by Gemini when it can). */
 @OptIn(UnstableApi::class)
-class StudioViewModel(private val c: AppContainer, private val rideId: String) : ViewModel() {
+class StudioViewModel(private val c: AppContainer, val rideId: String, private val openReelId: String? = null) : ViewModel() {
     private val _state = MutableStateFlow(StudioState())
     val state: StateFlow<StudioState> = _state.asStateFlow()
 
@@ -125,7 +127,101 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
                     thumbs = clips.associate { m -> m.id to m.thumb },
                 )
             }
+            openReelId?.let { id -> c.reels.get(id)?.let { open(it) } }
         }
+    }
+
+    // ---- saved Reels -----------------------------------------------------------------------
+
+    /** Shows a saved Reel, with everything it was made with, ready to change and make again. */
+    private suspend fun open(p: ReelProject) {
+        // Clips from other rides need their files to be made again.
+        val missing = p.plan.clips.map { it.bit.momentId }.filter { id -> clips.none { it.id == id } }.toSet()
+        if (missing.isNotEmpty()) c.moments.all().filter { it.id in missing }.forEach { borrowed[it.id] = it }
+        captionsDone = true
+        _state.update {
+            it.copy(
+                reelId = p.id,
+                step = StudioStep.READY,
+                options = p.options,
+                plan = p.plan,
+                title = p.title,
+                series = p.series,
+                episode = p.episode,
+                hookLine = p.hookLine,
+                postCaption = p.postCaption,
+                story = p.story,
+                musicUri = p.musicUri?.let(Uri::parse),
+                musicName = p.musicName,
+                takes = c.reels.takes(p),
+                tips = p.tips,
+                video = c.reels.video(p.id),
+                thumbs = it.thumbs + borrowed.values.associate { m -> m.id to m.thumb },
+            )
+        }
+    }
+
+    /** Saves the Reel just made (a new one, or the one being changed) with its whole edit. */
+    private suspend fun persist(video: File) {
+        val s = _state.value
+        val plan = s.plan ?: return
+        val isNew = s.reelId == null
+        val id = s.reelId ?: c.reels.newId()
+        val old = c.reels.get(id)
+        val project = ReelProject(
+            id = id,
+            rideId = rideId,
+            createdAt = old?.createdAt ?: System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis(),
+            title = s.title,
+            series = s.series,
+            episode = s.episode,
+            hookLine = s.hookLine,
+            postCaption = s.postCaption,
+            story = s.story,
+            options = s.options,
+            musicUri = s.musicUri?.toString(),
+            musicName = s.musicName,
+            plan = plan,
+            takes = emptyList(),
+            tips = s.tips.orEmpty(),
+            durationMs = plan.totalMs,
+            inJournal = old?.inJournal ?: false,
+            journalCover = old?.journalCover ?: false,
+            coverAtMs = old?.coverAtMs,
+            coverText = old?.coverText ?: true,
+            coverLine = old?.coverLine,
+            coverRoute = old?.coverRoute ?: false,
+        )
+        val saved = c.reels.save(project, video, s.takes)
+        _state.update { it.copy(reelId = saved.id, video = c.reels.video(saved.id), takes = c.reels.takes(saved)) }
+        if (isNew && c.studio.alsoSaveToGallery) ShareImages.saveVideo(c.appContext, c.reels.video(saved.id), "Keppo Reel ${saved.id}")
+        onSaved(saved)
+    }
+
+    /** After a save: hooks for covers and Keppo Journal. */
+    private suspend fun onSaved(p: ReelProject) {
+        c.reelsChanged(p)
+    }
+
+    /** A copy of this Reel to try another take; the original stays as it is. */
+    fun duplicate() {
+        val id = _state.value.reelId ?: return
+        viewModelScope.launch { c.reels.duplicate(id)?.let { open(it) } }
+    }
+
+    /** Moves this Reel to Recently deleted and starts a fresh one. */
+    fun delete() {
+        val id = _state.value.reelId ?: return
+        viewModelScope.launch {
+            c.reels.delete(id)
+            c.reels.get(id)?.let { c.reelsChanged(it) }
+            _state.update { it.copy(reelId = null, video = null, step = StudioStep.SETUP, tips = null) }
+        }
+    }
+
+    fun openSaved(id: String) {
+        viewModelScope.launch { c.reels.get(id)?.let { open(it) } }
     }
 
     // ---- choices ---------------------------------------------------------------------------
@@ -406,13 +502,14 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
         val out = File(ShareImages.sharesDir(c.appContext), "keppo-reel-${System.currentTimeMillis()}.mp4")
         val result = StudioRenderer(c.appContext).render(input, out) { p -> _state.update { it.copy(renderProgress = p) } }
         val done = result.getOrThrow()
+        persist(done.file)
         // Attempts that failed before one worked are worth knowing about too.
         if (done.failures.isNotEmpty()) {
             val e = StudioRenderer.ExportFailed("Made on attempt ${done.failures.size + 1}").also { x -> done.failures.forEach { x.addSuppressed(it) } }
             c.errors.record("Studio export", "Needed a fallback: ${done.note ?: "no note"}", e, describePlan(plan))
         }
         step(idx, 2)
-        _state.update { it.copy(step = StudioStep.READY, video = done.file, renderProgress = null, notes = notes + listOfNotNull(done.note)) }
+        _state.update { it.copy(step = StudioStep.READY, renderProgress = null, notes = notes + listOfNotNull(done.note)) }
         coach()
     }
 
@@ -433,6 +530,8 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
             }).ifEmpty { StudioCoach.localTips(plan, s.options, bits, d, voiceOver) }
             c.studio.setShots(tips.filter { it.nextRide }.map { it.text })
             _state.update { it.copy(tips = tips) }
+            // The tips are kept with the saved Reel.
+            _state.value.reelId?.let { id -> c.reels.update(id) { p -> p.copy(tips = tips) } }
         }
     }
 

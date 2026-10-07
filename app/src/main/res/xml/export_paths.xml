@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- FileProvider paths. "shares" = ride share graphics; "moments" = ride clips/photos; "exports" = BETA ride data export (see data/export). -->
+<!-- FileProvider paths. "shares" = ride share graphics; "moments" = ride clips/photos; "reels" = Studio Reels and covers; "exports" = BETA ride data export (see data/export). -->
 <paths>
     <cache-path name="shares" path="shares/" />
     <files-path name="moments" path="moments/" />
+    <files-path name="reels" path="reels/" />
     <cache-path name="exports" path="exports/" />
 </paths>

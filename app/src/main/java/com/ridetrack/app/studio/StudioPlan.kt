@@ -33,6 +33,10 @@ data class Bit(
     val punch: Float,
     /** From another ride: its date ("Mon 5 Oct"), shown in Edit; null for this ride. */
     val fromRide: String? = null,
+    /** A video from the phone's gallery: its content URI (the clip isn't a moment); null for moments. */
+    val source: String? = null,
+    /** Which camera filmed it: "back" for road shots; null = the selfie camera. */
+    val camera: String? = null,
 ) {
     val talking: Boolean get() = lines.isNotEmpty()
 }
@@ -45,7 +49,16 @@ sealed interface Segment {
  * A clip part on screen from [inMs] (ms into the clip) for [durMs]; [lines] in ms from the segment start.
  * The [tail] is a split second of the hook at the very end, so the Reel loops back into its start.
  */
-data class ClipSegment(val bit: Bit, val inMs: Long, override val durMs: Long, val lines: List<CaptionLine>, val hook: Boolean, val tail: Boolean = false) : Segment
+data class ClipSegment(
+    val bit: Bit,
+    val inMs: Long,
+    override val durMs: Long,
+    val lines: List<CaptionLine>,
+    val hook: Boolean,
+    val tail: Boolean = false,
+    /** A 1–2 s flash-forward of a later moment at the very start (the one case a clip shows twice). */
+    val teaser: Boolean = false,
+) : Segment
 
 /** The route-sketch opening (optional); the stats over the last clip. Both play muted. */
 data class TitleSegment(override val durMs: Long) : Segment
