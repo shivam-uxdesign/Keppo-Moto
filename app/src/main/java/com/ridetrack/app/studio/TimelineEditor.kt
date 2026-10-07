@@ -700,8 +700,18 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 Text("From your phone", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) {
                     pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)); adding = null
                 }.padding(vertical = 6.dp))
+                var find by remember { mutableStateOf("") }
+                OutlinedTextField(
+                    value = find,
+                    onValueChange = { find = it },
+                    placeholder = { Text("Find what you said…", style = RtType.body, color = RtColors.TextTertiary) },
+                    singleLine = true,
+                    textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 val list = if (what == AddWhat.LAYER) vm.insertable() + vm.layerable() else vm.insertable()
-                list.distinctBy { it.id }.take(50).forEach { b ->
+                list.distinctBy { it.id }.filter { find.isBlank() || ClipSearch.matches(find, it.lines.joinToString(" ") { l -> l.text }) }.take(50).forEach { b ->
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button) {
                             when (what) {

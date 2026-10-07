@@ -61,6 +61,8 @@ class AfterRideWorker(context: Context, params: WorkerParameters) : CoroutineWor
                     Result.success()
                 }
                 is Suggested.Scripts -> {
+                    // What's in the new clips, so search finds it (while Gemini's allowance lasts).
+                    runCatching { ClipSeen.look(c, engine.clips, limit = 24) }
                     val pieces = engine.pieces(r.scripts)
                     val top = pieces.firstOrNull()?.takeIf { c.studio.autoMakeTop }
                     notifyReady(rideId, title, pieces.size, top?.script?.title)

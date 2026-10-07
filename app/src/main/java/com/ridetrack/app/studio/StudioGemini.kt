@@ -108,6 +108,22 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         return StyleJson.fromGemini(text, id)
     }
 
+    /** What can be seen in each clip, from two frames of each (one request for several clips). */
+    suspend fun seen(frames: List<List<ByteArray>>): List<List<String>>? {
+        val text = call(json = true, models = FirebaseTranscriber.LITE + FirebaseTranscriber.MODELS, timeoutMs = 90_000) { m ->
+            m.generateContent(
+                content {
+                    frames.forEachIndexed { i, fs ->
+                        text("Clip ${i + 1}:")
+                        fs.forEach { inlineData(it, "image/jpeg") }
+                    }
+                    text(ClipSearch.seenPrompt(frames.size))
+                },
+            ).text.orEmpty()
+        }
+        return ClipSearch.parseSeen(text, frames.size)
+    }
+
     /** Tips for the next Reel, from a plain description of this one (text only). */
     suspend fun coach(summary: String): List<Tip> {
         val text = call(json = true) { m -> m.generateContent(StudioText.coachPrompt(summary)).text.orEmpty() }

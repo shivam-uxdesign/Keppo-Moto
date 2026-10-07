@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -159,7 +160,7 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
 
 /** The Studio tab: for making. Your Reels are behind the icon at the top right. */
 @Composable
-fun StudioHomeScreen(onOpenRide: (String) -> Unit, onOpenPhone: (reelId: String?) -> Unit, onOpenReels: () -> Unit, onOpenStyles: () -> Unit = {}) {
+fun StudioHomeScreen(onOpenRide: (String) -> Unit, onOpenPhone: (reelId: String?) -> Unit, onOpenReels: () -> Unit, onOpenStyles: () -> Unit = {}, onOpenSearch: () -> Unit = {}) {
     val vm = appViewModel { StudioHomeViewModel(it) }
     val rides by vm.rides.collectAsStateWithLifecycle()
     val store = com.ridetrack.app.ui.appContainer().reels
@@ -174,6 +175,9 @@ fun StudioHomeScreen(onOpenRide: (String) -> Unit, onOpenPhone: (reelId: String?
             Modifier.padding(horizontal = RtDimens.screenPadding),
             subtitle = "Pick a ride, or your own videos.",
             actions = {
+                Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClickLabel = "Search", onClick = onOpenSearch).padding(8.dp)) {
+                    androidx.compose.material3.Icon(Icons.Outlined.Search, contentDescription = "Search what you said", tint = RtColors.TextPrimary, modifier = Modifier.size(26.dp))
+                }
                 Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClickLabel = "Styles", onClick = onOpenStyles).padding(8.dp)) {
                     androidx.compose.material3.Icon(Icons.Outlined.Palette, contentDescription = "Styles", tint = RtColors.TextPrimary, modifier = Modifier.size(26.dp))
                 }
