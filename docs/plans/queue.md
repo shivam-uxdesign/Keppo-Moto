@@ -214,3 +214,11 @@ Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds
 - Can also pick Front/Back on the viewfinder before starting. The timer shows which camera: "● 0:12 · back".
 - Event and voice moments always stay on the selfie camera; when a manual recording stops, the camera returns to selfie.
 - Each clip stores which camera filmed it (and where it switched) so Studio can cut between face and road; the coach's "film the road ahead" shot ticks itself off; the clip strip labels back-camera clips "Road".
+
+## 5. Music: let Instagram add it (the rider doesn't like the library; trends change daily)
+1. Studio's default music is "No music · add yours in Instagram": the Reel goes out with the rider's voice and ride sound, clean and loud enough for a song underneath.
+2. Cut to a tempo, not a song: each vibe cuts on a beat grid shown as "Cut for ~120 BPM songs" (Hype; slower for Cinematic/Chill), so a trending song of a similar tempo added in Instagram feels in time.
+3. Share screen, shown once (with "Don't show again"): how to add a trending song in Instagram: Music → Trending ↗ → pick one; set Original audio high and the song low so the voice stays clear. Trending sounds also help reach.
+4. Remove the built-in library: the song pack, "Add the song pack", MusicLibrary and src/music go (the app doesn't grow).
+5. Keep "Your own song" for WhatsApp or keeping; note that Instagram may mute copyrighted songs added outside it.
+- Later (optional): "Trending now" suggestions: Gemini with Google Search lists three songs trending for moto Reels this week (India) to search in Instagram. Uses Gemini allowance and Search grounding (5,000 free a month, then paid); names can be a bit off.
