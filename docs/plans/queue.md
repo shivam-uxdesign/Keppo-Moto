@@ -246,9 +246,9 @@ Prototype: https://claude.ai/artifact/AhQg2FK3PPZuzsdHbf8qm1 (real route, speeds
 
 ---
 
-# Studio, rethought: script first (planned 7 Oct; discuss only, build when the rider says "build")
+# Studio, rethought: script first, change after (planned 7 Oct; discuss only, build when the rider says "build")
 
-The rider's notes on the first real Reel (Tuesday Evening Ride, 30 s, Hype; shared as VID-20261007-WA0005): too many cuts, no storyline, feels abrupt; wants to approve a script and have Studio learn how they like stories written; not happy with the outcome, partly because there wasn't much footage.
+The rider's notes on the first real Reel (Tuesday Evening Ride, 30 s, Hype; shared as VID-20261007-WA0005): too many cuts, no storyline, feels abrupt; wants to shape the script and have Studio learn how they like stories written; not happy with the outcome, partly because there wasn't much footage.
 
 ## What was wrong with that Reel (frame-by-frame review)
 - ~16 cuts in 30 s (one every ~1.8 s): the Hype beat grid applied to mostly silent 2–4 s riding bits.
@@ -259,7 +259,7 @@ The rider's notes on the first real Reel (Tuesday Evening Ride, 30 s, Hype; shar
 - No captions (likely skipped: Gemini limit), so nothing ties the shots together on mute.
 - Why, in the code: the planner fills the length with the best-scored pieces (cut at 1.5 s pauses, silent bits 2–4 s, on the vibe's beat). Gemini's "story" only boosts a list of clips; nothing decides what's first, middle or last, or why. The teaser, a transition on every cut, the stats card and the loop tail add more jumps.
 
-## New approach: Gemini writes a script, the rider approves it, then the video is made
+## New approach: Gemini writes a script and the video is made; the rider changes it afterwards
 
 ### Sections: each has a job and several forms, with its own length
 Gemini picks the form and length per section from what was actually filmed. Sections are optional and their order can change.
@@ -297,13 +297,18 @@ Gemini picks the form and length per section from what was actually filmed. Sect
 - A broken section is fixed quietly (trimmed, extended or swapped), not a failure.
 - Without Gemini (offline or out of allowance): fewer, longer shots with text cards, not a fast montage.
 
-### Script approval
-- Before any video is made: the script as section cards (form, length, clip thumbnail, the words, the on-screen text, Gemini's reason).
-- Edit text, change a shot's length, swap the clip, reorder or remove sections, change the hook; "Try another script"; then **Approve & make**. Changing the script costs no rendering.
-- Open question: approve every time, or only when wanted with "Make it straight away" kept.
+### Make first, change after (no approval step; rider's decision 7 Oct)
+- **Make my Reel** works as today: Gemini writes the script and the video is made straight away.
+- Under the finished Reel, a **Script** view: the sections as Gemini built them (form, length, words, on-screen text, its one-line reason). Tapping a section jumps the video there.
+- Two ways to change it, then **Make it again**:
+  - **Edit directly:** change text, make a shot longer or shorter, swap the clip, move or remove a section, pick a different hook. Remade from the edits with no Gemini request.
+  - **Tell it in your words:** "start with the Tooooo", "too many cuts", "make it funnier", "focus on the water thing", "end on the flyover". Gemini rewrites the script with the note (1 request), then it's remade.
+  - Both can be combined in one remake.
+- Every version is kept (v1, v2, v3…) so the rider can go back.
+- Rendering time on each remake is fine (rider's call); the Script view shows the new length at once.
 
 ### Learning the rider's style
-- Each approved script saves the draft, the rider's final version and an optional one-line note ("too formal", "more Hinglish").
+- Each change after a Reel is made saves the script before, the script after and the rider's note ("too formal", "more Hinglish").
 - Studio turns repeated edits into style rules ("prefers one-word reaction hooks", "keeps long monologues"); the rider can see and edit them (Studio › Your style).
 - The next scripts get the rules plus the last few before/after pairs.
 - Export the whole log (before/after/note) to share with the developer, to improve Studio's instructions.
