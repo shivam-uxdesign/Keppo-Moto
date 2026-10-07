@@ -238,4 +238,26 @@ class StudioTest {
         assertEquals(p, back)
         assertNull(com.ridetrack.app.studio.ReelJson.read("not json"))
     }
+
+    @Test
+    fun `cover frames map Reel time to the source clip and favour the hook`() {
+        val b = clip4()
+        val plan = com.ridetrack.app.studio.StudioPlan(
+            listOf(
+                com.ridetrack.app.studio.TitleSegment(2_000),
+                com.ridetrack.app.studio.ClipSegment(b[0], 1_000, 4_000, emptyList(), hook = false),
+                com.ridetrack.app.studio.ClipSegment(b[1], 14_000, 3_000, emptyList(), hook = true),
+                com.ridetrack.app.studio.ClipSegment(b[0], 1_000, 600, emptyList(), hook = false, tail = true),
+            ),
+            com.ridetrack.app.studio.Vibe.HYPE,
+        )
+        // 3 s into the Reel is 1 s into the first clip segment.
+        val spot = com.ridetrack.app.studio.ReelCover.spotAt(plan, 3_000)!!
+        assertEquals(2_000, spot.sourceMs)
+        // The title maps to the nearest clip; the tail is never used.
+        assertEquals(1_000, com.ridetrack.app.studio.ReelCover.spotAt(plan, 500)!!.sourceMs)
+        assertEquals(b[1], com.ridetrack.app.studio.ReelCover.spotAt(plan, 9_400)!!.segment.bit)
+        val c = com.ridetrack.app.studio.ReelCover.candidates(plan, 2)
+        assertEquals(listOf(7_000L, 8_000L), c)
+    }
 }

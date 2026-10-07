@@ -22,8 +22,9 @@ class ReelStore(private val context: Context) {
     val reels: StateFlow<List<ReelProject>> = _reels.asStateFlow()
 
     fun dir(id: String) = File(root, id)
-    fun video(id: String) = File(dir(id), VIDEO)
-    fun cover(id: String) = File(dir(id), COVER)
+    /** Unique names, so Keppo Journal's shared folder can list several Reels of a ride side by side. */
+    fun video(id: String) = File(dir(id), "reel-$id.mp4")
+    fun cover(id: String) = File(dir(id), "reel-$id.jpg")
     fun get(id: String): ReelProject? = _reels.value.firstOrNull { it.id == id }
 
     fun newId(): String = UUID.randomUUID().toString().take(13)
@@ -64,7 +65,7 @@ class ReelStore(private val context: Context) {
     }
 
     fun writeCover(id: String, bmp: Bitmap) {
-        val tmp = File(dir(id), "$COVER.part")
+        val tmp = File(dir(id), "cover.part")
         tmp.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
         tmp.renameTo(cover(id))
     }
@@ -76,7 +77,11 @@ class ReelStore(private val context: Context) {
     suspend fun duplicate(id: String): ReelProject? = withContext(Dispatchers.IO) {
         val p = get(id) ?: return@withContext null
         val copy = p.copy(id = newId(), createdAt = System.currentTimeMillis(), title = p.title, inJournal = false, journalCover = false)
-        dir(id).copyRecursively(dir(copy.id), overwrite = true)
+        dir(copy.id).mkdirs()
+        dir(id).listFiles()?.forEach { f ->
+            val name = f.name.replace(id, copy.id)
+            f.copyTo(File(dir(copy.id), name), overwrite = true)
+        }
         File(dir(copy.id), PROJECT).writeText(ReelJson.write(copy))
         publish(copy)
         copy
@@ -109,8 +114,6 @@ class ReelStore(private val context: Context) {
             .orEmpty()
 
     companion object {
-        const val VIDEO = "reel.mp4"
-        const val COVER = "cover.jpg"
         const val PROJECT = "project.json"
         const val KEEP_MS = 30L * 24 * 3600 * 1000
 

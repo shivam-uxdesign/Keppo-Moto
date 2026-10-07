@@ -98,7 +98,7 @@ class AppContainer(context: Context) {
     val continuation = RideContinuation(appContext, rides, bikes, moments, session)
 
     val routeImages = RouteImages(appContext, database)
-    val journal = JournalSource(appContext, database, settings, routeImages)
+    val journal = JournalSource(appContext, database, settings, routeImages, reels)
     val backup = BackupRepository(appContext, database, settings, journal::routePng) { journal.onRideSaved(null) }
     val trash = RecentlyDeleted(appContext, database, journal) { backUpSoon() }
 

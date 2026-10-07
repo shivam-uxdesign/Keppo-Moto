@@ -434,6 +434,82 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
         }
     }
 
+    // ---- cover ------------------------------------------------------------------------------
+
+    /**
+     * A Reel cover's text, still, in the vibe's caption style. Kept inside the middle 3:4 so
+     * Instagram's profile grid doesn't crop it.
+     */
+    fun drawCoverText(c: Canvas, vibe: Vibe, line: String) {
+        val words = line.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.isEmpty()) return
+        // A soft shade under the text so it reads on any frame.
+        p.reset(); p.shader = LinearGradient(0f, H * 0.42f, 0f, H * 0.82f, Color.TRANSPARENT, Color.argb(150, 0, 0, 0), Shader.TileMode.CLAMP)
+        c.drawRect(0f, H * 0.42f, W, H * 0.82f, p)
+        p.shader = null
+        val cy = H * 0.64f
+        when (vibe) {
+            Vibe.HYPE -> {
+                text(anton, 96 * s, Color.WHITE, Paint.Align.CENTER)
+                val rows = wrap(words.map { it.uppercase() }, W * 0.8f).take(3)
+                val lh = p.textSize * 1.05f
+                rows.forEachIndexed { i, row ->
+                    val y = cy + (i - (rows.size - 1) / 2f) * lh
+                    val t = row.joinToString(" ")
+                    val last = i == rows.lastIndex
+                    if (last) {
+                        val tw = p.measureText(t)
+                        p.color = INK; c.drawRect(W / 2 - tw / 2 - 7 * s, y - lh / 2 + 7 * s, W / 2 + tw / 2 + 21 * s, y + lh / 2 + 7 * s, p)
+                        p.color = YELLOW; c.drawRect(W / 2 - tw / 2 - 14 * s, y - lh / 2, W / 2 + tw / 2 + 14 * s, y + lh / 2, p)
+                        p.color = INK; c.drawText(t, W / 2, mid(y + 3 * s), p)
+                    } else {
+                        p.color = INK; c.drawText(t, W / 2 + 5 * s, mid(y + 7 * s), p)
+                        p.color = Color.WHITE; c.drawText(t, W / 2, mid(y + 3 * s), p)
+                    }
+                }
+            }
+            Vibe.CINE -> {
+                text(serif, 58 * s, CREAM_TEXT, Paint.Align.CENTER)
+                val rows = wrap(words, W * 0.74f).take(4)
+                val lh = 70 * s
+                val top = cy - (rows.size - 1) * lh / 2
+                p.strokeWidth = 1.5f * s; p.color = Color.argb(180, 255, 236, 210)
+                c.drawLine(W / 2 - 70 * s, top - 58 * s, W / 2 + 70 * s, top - 58 * s, p)
+                text(serif, 58 * s, CREAM_TEXT, Paint.Align.CENTER)
+                p.setShadowLayer(16 * s, 0f, 0f, Color.argb(140, 0, 0, 0))
+                rows.forEachIndexed { i, row -> c.drawText(row.joinToString(" "), W / 2, top + i * lh + 18 * s, p) }
+                p.clearShadowLayer()
+            }
+            Vibe.CHILL -> {
+                text(marker, 54 * s, INK, Paint.Align.CENTER)
+                val rows = wrap(words, W * 0.72f).take(3)
+                val lh = 70 * s
+                val bw = rows.maxOf { p.measureText(it.joinToString(" ")) } + 64 * s
+                val bh = rows.size * lh + 36 * s
+                c.save(); c.translate(W / 2, cy); c.rotate(-2.9f)
+                p.color = Color.argb(90, 0, 0, 0); c.drawRoundRect(RectF(-bw / 2 + 8 * s, -bh / 2 + 10 * s, bw / 2 + 8 * s, bh / 2 + 10 * s), 10 * s, 10 * s, p)
+                p.color = CREAM; c.drawRoundRect(RectF(-bw / 2, -bh / 2, bw / 2, bh / 2), 10 * s, 10 * s, p)
+                p.color = INK
+                rows.forEachIndexed { i, row -> c.drawText(row.joinToString(" "), 0f, mid((i - (rows.size - 1) / 2f) * lh), p) }
+                c.restore()
+            }
+            Vibe.VLOG -> {
+                text(geist, 38 * s, INK, Paint.Align.LEFT)
+                val rows = wrap(words, W * 0.66f).take(4)
+                val lh = 50 * s
+                val bw = rows.maxOf { p.measureText(it.joinToString(" ")) } + 52 * s
+                val bh = rows.size * lh + 36 * s
+                val x = (W - bw) / 2
+                val by = cy - bh / 2
+                p.color = Color.argb(64, 0, 0, 0); c.drawRoundRect(RectF(x + 4 * s, by + 6 * s, x + bw + 4 * s, by + bh + 6 * s), 30 * s, 30 * s, p)
+                p.color = Color.WHITE; c.drawRoundRect(RectF(x, by, x + bw, by + bh), 30 * s, 30 * s, p)
+                c.drawPath(Path().apply { moveTo(x + 22 * s, by + bh - 6 * s); lineTo(x - 6 * s, by + bh + 14 * s); lineTo(x + 46 * s, by + bh - 2 * s); close() }, p)
+                p.color = INK
+                rows.forEachIndexed { i, row -> c.drawText(row.joinToString(" "), x + 26 * s, by + 18 * s + lh / 2 + i * lh + mid(2 * s), p) }
+            }
+        }
+    }
+
     // ---- speed badge -------------------------------------------------------------------------
 
     private fun speedBadge(c: Canvas, vibe: Vibe, kmh: Int, clock: String) {

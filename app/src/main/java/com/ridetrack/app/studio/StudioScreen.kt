@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.rounded.Stop
@@ -118,6 +120,7 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
             StudioStep.READY -> Ready(vm, s, modifier)
             StudioStep.EDIT -> Edit(vm, s, modifier)
             StudioStep.VOICE -> Voice(vm, s, modifier)
+            StudioStep.COVER -> CoverEditor(vm, s, modifier)
         }
     }
 }
@@ -136,7 +139,7 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 style = RtType.caption,
                 color = RtColors.TextSecondary,
             )
-            RideReels(vm.rideId) { vm.openSaved(it) }
+            RideReels(vm.rideId, onSendAll = vm::sendAllToJournal) { vm.openSaved(it) }
             Section("Vibe") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Vibe.entries.chunked(2).forEach { row ->
@@ -278,9 +281,12 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 Action("Remix", Icons.Outlined.Refresh, Modifier.weight(1f)) { vm.remix() }
                 Action("Edit", Icons.Outlined.Edit, Modifier.weight(1f)) { vm.edit() }
                 Action("Voice-over", Icons.Outlined.Mic, Modifier.weight(1f)) { vm.voice() }
+                Action("Cover", Icons.Outlined.Image, Modifier.weight(1f)) { vm.cover() }
                 Action("Change", Icons.Outlined.Tune, Modifier.weight(1f)) { vm.back() }
             }
             ReelMenu(onDuplicate = vm::duplicate, onDelete = vm::delete)
+            JournalCard(vm, s)
+            s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextPrimary) }
             s.notes.forEach { Text(it, style = RtType.caption, color = RtColors.Warning) }
             if (s.notes.isNotEmpty()) ErrorActions()
             if (s.musicUri == null) MusicGuide()
@@ -454,12 +460,17 @@ private fun ReelMenu(onDuplicate: () -> Unit, onDelete: () -> Unit) {
 
 /** This ride's saved Reels, newest first; tap one to open it. */
 @Composable
-private fun RideReels(rideId: String, onOpen: (String) -> Unit) {
+private fun RideReels(rideId: String, onSendAll: () -> Unit, onOpen: (String) -> Unit) {
     val all by com.ridetrack.app.ui.appContainer().reels.reels.collectAsStateWithLifecycle()
     val list = all.filter { it.rideId == rideId && it.deletedAt == null }
     if (list.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("THIS RIDE'S REELS", style = RtType.label, color = RtColors.TextSecondary)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("THIS RIDE'S REELS", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
+            if (list.size > 1 && list.any { !it.inJournal }) {
+                Text("Send all to Journal", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onSendAll).padding(vertical = 4.dp))
+            }
+        }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             list.forEach { p -> ReelTile(p, Modifier.width(96.dp)) { onOpen(p.id) } }
         }
@@ -472,7 +483,8 @@ internal fun ReelTile(p: ReelProject, modifier: Modifier, onClick: () -> Unit) {
     val store = com.ridetrack.app.ui.appContainer().reels
     Column(modifier.clickable(role = Role.Button, onClickLabel = "Open Reel", onClick = onClick)) {
         Box(Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(RoundedCornerShape(10.dp)).background(RtColors.Surface)) {
-            Thumb(store.cover(p.id).takeIf { it.isFile }, Modifier.fillMaxSize(), maxEdge = 480)
+            // The cover is redrawn in place: a new update time loads it again.
+            androidx.compose.runtime.key(p.updatedAt) { Thumb(store.cover(p.id).takeIf { it.isFile }, Modifier.fillMaxSize(), maxEdge = 480) }
             Text(
                 Format.clock(p.durationMs),
                 style = RtType.caption,
@@ -485,6 +497,92 @@ internal fun ReelTile(p: ReelProject, modifier: Modifier, onClick: () -> Unit) {
         }
         Text(p.title, style = RtType.caption, color = RtColors.TextPrimary, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
         Text(p.vibe.label, style = RtType.caption, color = RtColors.TextTertiary, maxLines = 1)
+    }
+}
+
+/** Send to Keppo Journal, or (once sent) its cover choice and Remove. */
+@Composable
+private fun JournalCard(vm: StudioViewModel, s: StudioState) {
+    val all by com.ridetrack.app.ui.appContainer().reels.reels.collectAsStateWithLifecycle()
+    val p = all.firstOrNull { it.id == s.reelId } ?: return
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("KEPPO JOURNAL", style = RtType.label, color = RtColors.TextSecondary)
+        if (!p.inJournal) {
+            Text("The Reel and its cover go into this ride's Journal entry, and the cover becomes the entry's cover.", style = RtType.caption, color = RtColors.TextSecondary)
+            Text("Send to Journal", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.sendToJournal() }.padding(vertical = 6.dp))
+        } else {
+            Text(if (p.journalCover) "In the Journal · its cover is the entry's cover" else "In the Journal", style = RtType.body, color = RtColors.TextPrimary)
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                if (!p.journalCover) Text("Use as Journal cover", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.useAsJournalCover() }.padding(vertical = 6.dp))
+                Text("Remove", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button) { vm.removeFromJournal() }.padding(vertical = 6.dp))
+            }
+        }
+    }
+}
+
+// ---- 6. Cover ---------------------------------------------------------------------------------
+
+/** The Reel's cover: pick the frame, the text on it (or none), or the route card. */
+@Composable
+private fun CoverEditor(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
+    val store = com.ridetrack.app.ui.appContainer().reels
+    val all by store.reels.collectAsStateWithLifecycle()
+    val p = all.firstOrNull { it.id == s.reelId } ?: return
+    var line by remember(p.id) { mutableStateOf(p.coverLine ?: p.hookLine.ifBlank { p.title }) }
+    Column(modifier) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(
+                Modifier.align(Alignment.CenterHorizontally).height(380.dp).aspectRatio(9f / 16f)
+                    .clip(RoundedCornerShape(18.dp)).border(1.dp, RtColors.Hairline, RoundedCornerShape(18.dp)).background(Color.Black),
+            ) {
+                androidx.compose.runtime.key(s.coverVersion) { Thumb(store.cover(p.id).takeIf { it.isFile }, Modifier.fillMaxSize(), maxEdge = 960) }
+                // Instagram's grid shows the middle 3:4 of a Reel's cover.
+                val band = Modifier.fillMaxWidth().fillMaxHeight(0.125f).background(Color.Black.copy(alpha = 0.35f))
+                Box(band.align(Alignment.TopCenter))
+                Box(band.align(Alignment.BottomCenter))
+                if (s.coverBusy) CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp, modifier = Modifier.align(Alignment.Center).size(28.dp))
+            }
+            Text("The shaded edges are hidden on your profile grid.", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Section("Frame") {
+                if (s.coverFrames.isEmpty()) {
+                    Text("Loading frames…", style = RtType.caption, color = RtColors.TextTertiary)
+                } else {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val chosen = p.coverAtMs
+                        val near = chosen?.let { at -> s.coverFrames.minByOrNull { kotlin.math.abs(it.first - at) }?.first }
+                        s.coverFrames.forEach { (t, f) ->
+                            val on = !p.coverRoute && t == near
+                            Thumb(
+                                f,
+                                Modifier.size(width = 54.dp, height = 96.dp).clip(RoundedCornerShape(8.dp))
+                                    .border(2.dp, if (on) RtColors.Primary else Color.Transparent, RoundedCornerShape(8.dp))
+                                    .clickable(role = Role.Button, onClickLabel = "Use this frame") { vm.setCover { it.copy(coverAtMs = t, coverRoute = false) } },
+                            )
+                        }
+                    }
+                }
+                Toggle("Route card", "Your route on the dark map instead of a frame", p.coverRoute) { on -> vm.setCover { it.copy(coverRoute = on) } }
+            }
+            Section("Text") {
+                Toggle("Text on the cover", "In the ${p.vibe.label} style", p.coverText) { on -> vm.setCover { it.copy(coverText = on) } }
+                if (p.coverText) {
+                    Field(line, "A few words, e.g. 3 hours in. No break?") { line = it }
+                    if (line != (p.coverLine ?: p.hookLine.ifBlank { p.title })) {
+                        Text("Update cover", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.setCover { it.copy(coverLine = line.trim()) } }.padding(vertical = 6.dp))
+                    }
+                }
+            }
+            s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextPrimary) }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button("Save cover", primary = false, icon = Icons.Outlined.Download, modifier = Modifier.weight(1f)) { vm.saveCover() }
+            Button("Done", primary = true, modifier = Modifier.weight(1f)) { vm.back() }
+        }
+        Spacer(Modifier.height(12.dp))
     }
 }
 

@@ -34,7 +34,7 @@ import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.roundToInt
 
-enum class StudioStep { SETUP, WORKING, READY, EDIT, VOICE }
+enum class StudioStep { SETUP, WORKING, READY, EDIT, VOICE, COVER }
 
 /** One step of making the video, as the rider sees it. */
 data class WorkStep(val label: String, val state: Int /* 0 waiting, 1 running, 2 done, 3 skipped */, val detail: String? = null)
@@ -77,6 +77,13 @@ data class StudioState(
     val otherBits: List<Bit> = emptyList(),
     /** The saved Reel being shown or changed; null until the first video is made. */
     val reelId: String? = null,
+    /** Frames to pick the cover from: ms into the Reel → a small picture. */
+    val coverFrames: List<Pair<Long, File>> = emptyList(),
+    /** Bumped each time the cover is drawn again, so pictures of it refresh. */
+    val coverVersion: Int = 0,
+    val coverBusy: Boolean = false,
+    /** A short message after Journal or cover actions. */
+    val toast: String? = null,
 ) {
     /** The small label on the first clip: the series and episode, or the title. */
     val label: String get() = if (series.isBlank()) title else "$series · ep $episode"
@@ -143,6 +150,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             it.copy(
                 reelId = p.id,
                 step = StudioStep.READY,
+                coverFrames = emptyList(),
                 options = p.options,
                 plan = p.plan,
                 title = p.title,
@@ -194,14 +202,163 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             coverRoute = old?.coverRoute ?: false,
         )
         val saved = c.reels.save(project, video, s.takes)
-        _state.update { it.copy(reelId = saved.id, video = c.reels.video(saved.id), takes = c.reels.takes(saved)) }
+        _state.update { it.copy(reelId = saved.id, video = c.reels.video(saved.id), takes = c.reels.takes(saved), coverFrames = emptyList()) }
         if (isNew && c.studio.alsoSaveToGallery) ShareImages.saveVideo(c.appContext, c.reels.video(saved.id), "Keppo Reel ${saved.id}")
         onSaved(saved)
     }
 
-    /** After a save: hooks for covers and Keppo Journal. */
+    /** After a save: draw the cover, then let Keppo Journal know if the Reel is in it. */
     private suspend fun onSaved(p: ReelProject) {
-        c.reelsChanged(p)
+        val saved = drawCover(p)
+        c.reelsChanged(saved)
+    }
+
+    // ---- cover -----------------------------------------------------------------------------
+
+    /**
+     * Draws [p]'s cover from its settings; with no frame chosen yet, picks the best of the hook
+     * clip (sharp, lit, a face if there is one) and remembers it.
+     */
+    private suspend fun drawCover(p: ReelProject): ReelProject = withContext(Dispatchers.Default) {
+        val ctx = c.appContext
+        val at = p.coverAtMs ?: ReelCover.candidates(p.plan).mapNotNull { t ->
+            sourceFrame(p.plan, t)?.let { b -> (t to ReelCover.score(b)).also { b.recycle() } }
+        }.maxByOrNull { it.second }?.first ?: (p.durationMs / 6)
+        val frame = sourceFrame(p.plan, at) ?: ReelStore.frame(c.reels.video(p.id), at)
+        val route = if (p.coverRoute) routePicture() else null
+        val line = if (p.coverText) (p.coverLine ?: p.hookLine.ifBlank { p.title }) else null
+        val bmp = ReelCover.render(ctx, frame, route, p.vibe, line)
+        withContext(Dispatchers.IO) { c.reels.writeCover(p.id, bmp) }
+        bmp.recycle(); frame?.recycle(); route?.recycle()
+        val saved = c.reels.update(p.id) { it.copy(coverAtMs = at) } ?: p
+        _state.update { it.copy(coverVersion = it.coverVersion + 1) }
+        saved
+    }
+
+    /** The source frame (not the finished Reel, so no captions) at [atMs] into the Reel. */
+    private fun sourceFrame(plan: StudioPlan, atMs: Long): android.graphics.Bitmap? {
+        val spot = ReelCover.spotAt(plan, atMs) ?: return null
+        val file = (clips + borrowed.values).firstOrNull { it.id == spot.segment.bit.momentId }?.file
+        return ReelCover.frame(c.appContext, file, spot.segment.bit.source, spot.sourceMs)
+    }
+
+    private suspend fun routePicture(): android.graphics.Bitmap? = withContext(Dispatchers.IO) {
+        c.journal.ride(rideId)?.let { c.journal.routePng(it) }?.let { android.graphics.BitmapFactory.decodeFile(it.path) }
+    }
+
+    /** Opens the cover editor, with a strip of frames from the Reel to pick from. */
+    fun cover() {
+        _state.update { it.copy(step = StudioStep.COVER) }
+        val plan = _state.value.plan ?: return
+        if (_state.value.coverFrames.isNotEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val dir = File(c.appContext.cacheDir, "studio-cover").apply { deleteRecursively(); mkdirs() }
+            val n = 10
+            val frames = (0 until n).mapNotNull { i ->
+                val t = plan.totalMs * (2 * i + 1) / (2 * n)
+                sourceFrame(plan, t)?.let { b ->
+                    val r = ReelCover.crop(b.width, b.height)
+                    val small = android.graphics.Bitmap.createBitmap(b, r.left, r.top, r.width(), r.height()).let { cr ->
+                        android.graphics.Bitmap.createScaledBitmap(cr, 135, 240, true).also { if (it != cr) cr.recycle() }
+                    }
+                    b.recycle()
+                    val f = File(dir, "f$i.jpg")
+                    f.outputStream().use { small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }
+                    small.recycle()
+                    t to f
+                }
+            }
+            _state.update { it.copy(coverFrames = frames) }
+        }
+    }
+
+    /** Changes the cover's settings and draws it again. */
+    fun setCover(f: (ReelProject) -> ReelProject) {
+        val id = _state.value.reelId ?: return
+        if (_state.value.coverBusy) return
+        _state.update { it.copy(coverBusy = true) }
+        viewModelScope.launch {
+            try {
+                c.reels.update(id, f)?.let { drawCover(it) }?.let { c.reelsChanged(it) }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                c.errors.record("Studio cover", e.message ?: "Couldn't draw the cover", e, null)
+            } finally {
+                _state.update { it.copy(coverBusy = false) }
+            }
+        }
+    }
+
+    fun saveCover() {
+        val id = _state.value.reelId ?: return
+        viewModelScope.launch {
+            val bmp = withContext(Dispatchers.IO) { android.graphics.BitmapFactory.decodeFile(c.reels.cover(id).path) }
+            val ok = bmp != null && ShareImages.saveToPhotos(c.appContext, bmp, "Keppo Reel cover $id", jpeg = true)
+            bmp?.recycle()
+            say(if (ok) "Cover saved to Photos" else "Couldn't save the cover")
+        }
+    }
+
+    // ---- Keppo Journal ---------------------------------------------------------------------
+
+    /** Sends this Reel (video and cover) to the ride's Keppo Journal entry; its cover becomes the entry's cover. */
+    fun sendToJournal() {
+        val id = _state.value.reelId ?: return
+        viewModelScope.launch { sendToJournal(listOf(id)) }
+    }
+
+    /** Sends all of this ride's Reels; the newest one's cover becomes the entry's cover. */
+    fun sendAllToJournal() {
+        val ids = c.reels.reels.value.filter { it.rideId == rideId && it.deletedAt == null }.map { it.id }
+        if (ids.isEmpty()) return
+        viewModelScope.launch { sendToJournal(ids) }
+    }
+
+    private suspend fun sendToJournal(ids: List<String>) {
+        val coverId = ids.first()
+        c.reels.reels.value.filter { it.rideId == rideId }.forEach { p ->
+            val send = p.id in ids
+            if (send || p.journalCover) c.reels.update(p.id) { it.copy(inJournal = it.inJournal || send, journalCover = it.id == coverId) }
+        }
+        c.journal.onRideSaved(rideId)
+        say(
+            if (!c.journal.enabled()) "Saved for Keppo Journal. Turn on sharing in Profile › Keppo Journal to see it there."
+            else if (ids.size > 1) "${ids.size} Reels sent to Keppo Journal" else "Sent to Keppo Journal · its cover is the entry's cover",
+        )
+    }
+
+    /** Takes this Reel out of Keppo Journal; the entry's cover falls back to the newest other sent Reel, or the route. */
+    fun removeFromJournal() {
+        val id = _state.value.reelId ?: return
+        viewModelScope.launch {
+            val was = c.reels.get(id)?.journalCover == true
+            c.reels.update(id) { it.copy(inJournal = false, journalCover = false) }
+            if (was) c.reels.reels.value.firstOrNull { it.rideId == rideId && it.inJournal && it.deletedAt == null }?.let { next ->
+                c.reels.update(next.id) { it.copy(journalCover = true) }
+            }
+            c.journal.onRideSaved(rideId)
+            say("Removed from Keppo Journal")
+        }
+    }
+
+    /** Makes this Reel's cover the Journal entry's cover. */
+    fun useAsJournalCover() {
+        val id = _state.value.reelId ?: return
+        viewModelScope.launch {
+            c.reels.reels.value.filter { it.rideId == rideId && (it.journalCover || it.id == id) }.forEach { p ->
+                c.reels.update(p.id) { it.copy(journalCover = it.id == id) }
+            }
+            c.journal.onRideSaved(rideId)
+            say("This cover is now the Journal entry's cover")
+        }
+    }
+
+    private fun say(text: String) {
+        _state.update { it.copy(toast = text) }
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(2_600)
+            _state.update { if (it.toast == text) it.copy(toast = null) else it }
+        }
     }
 
     /** A copy of this Reel to try another take; the original stays as it is. */
@@ -248,7 +405,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     }
 
     fun back() = _state.update {
-        it.copy(step = if (it.step == StudioStep.EDIT || it.step == StudioStep.VOICE) StudioStep.READY else StudioStep.SETUP, error = null)
+        it.copy(step = if (it.step == StudioStep.EDIT || it.step == StudioStep.VOICE || it.step == StudioStep.COVER) StudioStep.READY else StudioStep.SETUP, error = null)
     }
 
     /** Shared or saved: the next Reel of the series is the next episode. */

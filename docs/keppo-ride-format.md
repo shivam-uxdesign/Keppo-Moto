@@ -195,3 +195,26 @@ If Keppo Moto isn't installed, the journal can offer "Sync from Google Drive": i
   - `""` means no clear speech.
   - `null` (or missing) means not transcribed (yet).
 - When transcripts arrive, Keppo Moto sends `RIDE_SAVED` with the `rideId` (and `ride.json` changes), so the journal can add them.
+
+## Reels (keppo.ride v1 additions)
+
+Keppo Moto's Studio makes Reels from a ride's clips. The rider chooses which ones go to the journal (Send to Journal on a Reel, or Send all for a ride). Only those appear, on the phone only (not on Drive).
+
+| File | What |
+|---|---|
+| `reel-<id>.mp4` | The Reel: 1080×1920 H.264 with AAC sound |
+| `reel-<id>.jpg` | Its cover, 1080×1920; any text sits inside the middle 3:4 |
+
+`ride.json` gains:
+
+```json
+ "reels": [
+  { "file": "reel-3f9a1c2b-77d0.mp4", "cover": "reel-3f9a1c2b-77d0.jpg", "title": "Sunday at Nahan",
+    "durationMs": 30500, "createdAt": 1790010000000, "postCaption": "Ep 3 · …" }
+ ],
+ "cover": "reel-3f9a1c2b-77d0.jpg"
+```
+
+- `reels` is newest first, and is left out when no Reel was sent.
+- `cover`, when present, names the picture to use as the journal entry's cover instead of `route.png`. It is the cover of the Reel sent most recently (or the one the rider picked with "Use as Journal cover"). When that Reel is removed, `cover` moves to the newest other sent Reel, or disappears (back to `route.png`).
+- A Reel that is changed and made again keeps its file names; re-read them when `COLUMN_LAST_MODIFIED` changes. Removed or deleted Reels simply stop being listed.

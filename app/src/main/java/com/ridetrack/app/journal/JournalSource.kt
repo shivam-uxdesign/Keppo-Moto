@@ -14,6 +14,10 @@ import com.ridetrack.app.share.ShareCardData
 import com.ridetrack.app.share.ShareCardRenderer
 import com.ridetrack.app.share.RouteImages
 import com.ridetrack.app.moments.MomentRepository
+import com.ridetrack.app.studio.ReelProject
+import com.ridetrack.app.studio.ReelStore
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.flow.first
 import java.io.File
 
@@ -26,6 +30,7 @@ class JournalSource(
     private val db: RideTrackDatabase,
     private val settings: SettingsRepository,
     private val routeImages: RouteImages,
+    private val reels: ReelStore,
 ) {
     @Volatile private var lastReadRecorded = 0L
 
@@ -40,12 +45,17 @@ class JournalSource(
 
     private suspend fun shareDemo() = settings.settings.first().journalShareDemo
 
-    /** Moment files present on the phone for [rideId] (clips, photos, thumbnails). */
+    /** Moment files present on the phone for [rideId] (clips, photos, thumbnails), then the Reels sent to the journal. */
     suspend fun momentFiles(rideId: String): List<File> {
         val dir = momentsDir(rideId)
         return db.momentDao().forRide(rideId).flatMap { listOfNotNull(it.file, it.thumbFile) }
-            .map { File(dir, it) }.filter { it.isFile }
+            .map { File(dir, it) }.filter { it.isFile } +
+            journalReels(rideId).flatMap { listOf(reels.video(it.id), reels.cover(it.id)) }.filter { it.isFile }
     }
+
+    /** Reels of [rideId] the rider sent to Keppo Journal, newest first. */
+    private fun journalReels(rideId: String): List<ReelProject> =
+        reels.reels.value.filter { it.rideId == rideId && it.inJournal && it.deletedAt == null && reels.video(it.id).isFile }
 
     fun momentFile(rideId: String, name: String): File = File(momentsDir(rideId), name)
 
@@ -55,6 +65,8 @@ class JournalSource(
      */
     suspend fun thumbnail(rideId: String, name: String): File? {
         if (name == JournalTree.ROUTE_PNG) return ride(rideId)?.let { routePng(it) }
+        journalReels(rideId).firstOrNull { reels.video(it.id).name == name || reels.cover(it.id).name == name }
+            ?.let { return reels.cover(it.id).takeIf(File::isFile) }
         val dir = momentsDir(rideId)
         val clip = db.momentDao().forRide(rideId).firstOrNull { it.file == name && it.kind == "CLIP" }
         val f = when {
@@ -71,10 +83,32 @@ class JournalSource(
         MomentRepository(context, db.momentDao()).fillTopSpeeds(ride.id, db.rideDao().samples(ride.id).map { it.toModel() })
         val moments = db.momentDao().forRide(ride.id)
         val bike = db.bikeDao().get(ride.bikeId)
-        val text = BackupFormat.rideJson(RideBundle(ride, db.rideDao().events(ride.id), moments), bike?.let { "${it.make} ${it.model}".trim() })
+        val text = withReels(
+            BackupFormat.rideJson(RideBundle(ride, db.rideDao().events(ride.id), moments), bike?.let { "${it.make} ${it.model}".trim() }),
+            journalReels(ride.id),
+        )
         val f = File(cacheDir(ride.id), JournalTree.RIDE_JSON)
         if (!f.exists() || f.readText() != text) f.writeText(text)
         return f
+    }
+
+    /**
+     * Adds the sent Reels (`reels[]`) and, when one is chosen, the entry's `cover` (that Reel's
+     * cover picture; otherwise the journal keeps using `route.png`).
+     */
+    private fun withReels(json: String, list: List<ReelProject>): String {
+        if (list.isEmpty()) return json
+        val o = JSONObject(json)
+        o.put("reels", JSONArray().apply {
+            list.forEach { p ->
+                put(
+                    JSONObject().put("file", reels.video(p.id).name).put("cover", reels.cover(p.id).name).put("title", p.title)
+                        .put("durationMs", p.durationMs).put("createdAt", p.createdAt).put("postCaption", p.postCaption),
+                )
+            }
+        })
+        list.firstOrNull { it.journalCover && reels.cover(it.id).isFile }?.let { o.put("cover", reels.cover(it.id).name) }
+        return o.toString(1)
     }
 
     /**
