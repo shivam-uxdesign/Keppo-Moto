@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -78,6 +79,7 @@ enum class ProfilePage(val route: String, val title: String) {
     APPEARANCE("appearance", "Appearance"),
     DEVELOPER("developer", "Developer"),
     ABOUT("about", "About & privacy"),
+    ERRORS("errors", "Error log"),
     ;
 
     companion object {
@@ -140,6 +142,9 @@ fun ProfileScreen(onOpenPage: (ProfilePage) -> Unit, onOpenHudSettings: () -> Un
             NavRow(Icons.Outlined.Code, "Developer", if (st.demoMode) "Demo mode on" else "Demo mode, testing") { onOpenPage(ProfilePage.DEVELOPER) }
             Line()
             NavRow(Icons.Outlined.Info, "About & privacy", "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TAG})") { onOpenPage(ProfilePage.ABOUT) }
+            Line()
+            val errorCount = com.ridetrack.app.ui.appContainer().errors.entries.collectAsStateWithLifecycle().value.size
+            NavRow(Icons.Outlined.BugReport, "Error log", if (errorCount == 0) "No errors" else "$errorCount recorded · tap to send") { onOpenPage(ProfilePage.ERRORS) }
         }
         Spacer(Modifier.height(RtDimens.lg))
     }
@@ -170,6 +175,7 @@ fun ProfilePageScreen(page: ProfilePage, onBack: () -> Unit) {
             ProfilePage.APPEARANCE -> AppearancePage(s, vm)
             ProfilePage.DEVELOPER -> DeveloperPage(s, vm)
             ProfilePage.ABOUT -> AboutPage()
+            ProfilePage.ERRORS -> ErrorLogPage()
         }
         Spacer(Modifier.height(RtDimens.lg))
     }

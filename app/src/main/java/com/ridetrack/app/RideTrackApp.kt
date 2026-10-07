@@ -21,6 +21,12 @@ class RideTrackApp : Application() {
         keepCrashTrace()
         AppCheckSetup.install(this)
         container = AppContainer(this)
+        // A crash is written to the error log (with its stack trace) before the app closes.
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, e ->
+            runCatching { container.errors.record("Crash", "The app stopped (${e.javaClass.simpleName}) on ${thread.name}", e) }
+            previous?.uncaughtException(thread, e)
+        }
         MapLibre.getInstance(this)
         createNotificationChannel()
         container.hud.start()

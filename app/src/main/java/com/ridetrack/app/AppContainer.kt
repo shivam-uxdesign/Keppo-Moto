@@ -76,6 +76,9 @@ class AppContainer(context: Context) {
         }
     }
 
+    /** Every failure with its full technical detail, to copy or share from Profile › Error log. */
+    val errors = com.ridetrack.app.diag.ErrorLog(appContext)
+
     /** Keppo Studio's series name and the shot list for the next ride. */
     val studio = com.ridetrack.app.studio.StudioPrefs(appContext)
 

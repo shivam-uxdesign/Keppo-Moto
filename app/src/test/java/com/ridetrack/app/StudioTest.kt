@@ -147,6 +147,14 @@ class StudioTest {
     }
 
     @Test
+    fun `with a song, talking clips end on the song's beat`() {
+        val plan = StudioPlanner.plan(clip4(), StudioOptions(vibe = Vibe.HYPE, lengthSec = 15, outro = false, loopEnd = false, bpm = 100))
+        plan.clips.forEach { assertEquals(0, it.durMs % 600, "${it.durMs}") }
+        assertTrue(com.ridetrack.app.studio.MusicLibrary.TRACKS.size >= 16)
+        Vibe.entries.forEach { assertTrue(com.ridetrack.app.studio.MusicLibrary.forVibe(it).size >= 3, "$it") }
+    }
+
+    @Test
     fun `only lengths the clips can fill are offered`() {
         assertEquals(listOf(15), StudioPlanner.lengthsFor(clip4(), Vibe.HYPE))
         assertEquals(listOf(15, 30, 45, 60), StudioPlanner.lengthsFor(List(20) { i -> clip4()[0].copy(id = "b$i") }, Vibe.HYPE))

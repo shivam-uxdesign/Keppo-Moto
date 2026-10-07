@@ -67,8 +67,11 @@ data class RenderInput(
 @UnstableApi
 class StudioRenderer(private val context: Context) {
 
-    /** The finished file, and a note when it had to leave something out to work on this phone. */
-    data class Rendered(val file: File, val note: String?)
+    /** The finished file, a note when it had to leave something out, and the attempts that failed on the way. */
+    data class Rendered(val file: File, val note: String?, val failures: List<Throwable> = emptyList())
+
+    /** Every export attempt failed; each attempt's error is attached (suppressed) with its stack trace. */
+    class ExportFailed(message: String) : Exception(message)
 
     /** One way of exporting; later ones leave things out, in case a phone's encoder or muxer chokes. */
     private data class Attempt(val inAppMuxer: Boolean, val extraTracks: Boolean, val sound: Boolean, val note: String?)
@@ -86,16 +89,20 @@ class StudioRenderer(private val context: Context) {
             Attempt(inAppMuxer = true, extraTracks = false, sound = false, note = "Made without sound: this phone couldn't write the sound track. Send me the error below."),
         )
         val reasons = ArrayList<String>()
+        val failures = ArrayList<Throwable>()
         for (a in attempts) {
             val r = export(input, a, output, onProgress)
-            r.onSuccess { return Result.success(Rendered(it, a.note?.let { n -> if (a.sound) n else "$n (${reasons.joinToString(" / ")})" })) }
+            r.onSuccess { return Result.success(Rendered(it, a.note?.let { n -> if (a.sound) n else "$n (${reasons.joinToString(" / ")})" }, failures)) }
             val e = r.exceptionOrNull()!!
             if (e is kotlinx.coroutines.CancellationException) throw e
             reasons += describe(e)
+            failures += IllegalStateException("Attempt ${failures.size + 1} ($a) failed: ${describe(e)}", e)
             Log.w(TAG, "Export attempt $a failed", e)
             onProgress(0)
         }
-        return Result.failure(IllegalStateException(reasons.distinct().joinToString(" / ")))
+        val all = ExportFailed(reasons.distinct().joinToString(" / "))
+        failures.forEach { all.addSuppressed(it) }
+        return Result.failure(all)
     }
 
     /** "Muxer error (ERROR_CODE_MUXING_FAILED: Failed to write sample …)" — enough to find the cause. */

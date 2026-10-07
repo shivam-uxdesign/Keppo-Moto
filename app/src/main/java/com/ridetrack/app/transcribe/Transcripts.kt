@@ -117,9 +117,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             // Stopped by the system (or a newer job): not an error, the clips wait for the next run.
             throw e
         } catch (e: FirebaseTranscriber.Busy) {
+            c.errors.record("Transcripts", FirebaseTranscriber.busyMessage(e), e)
             t.setError(FirebaseTranscriber.busyMessage(e))
             Result.retry()
         } catch (e: Exception) {
+            c.errors.record("Transcripts", "Couldn't transcribe", e)
             t.setError(
                 if (AppCheckSetup.isRejected(e)) "Firebase didn't accept this phone (App Check). Add the debug token shown below in Firebase › App Check › Manage debug tokens."
                 else "Couldn't transcribe: ${e.message}",

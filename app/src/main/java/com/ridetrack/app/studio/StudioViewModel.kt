@@ -208,7 +208,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
                     bits = withContext(Dispatchers.IO) { buildBits() }
                 }
                 step(1, 1)
-                if (gemini && direction == null) direction = runCatching { direct() }.getOrNull()
+                if (gemini && direction == null) direction = runCatching { direct() }.onFailure { c.errors.record("Studio director", "Gemini couldn't pick the story", it) }.getOrNull()
                 replan()
                 val s = _state.value
                 step(1, 2, listOfNotNull(s.story?.let { "“$it”" }, "${s.plan?.clips?.size} clips · ${Format.clock(s.plan?.totalMs ?: 0)}").joinToString(" · "))
@@ -217,6 +217,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
                 _state.update { it.copy(step = StudioStep.SETUP, canSkipCaptions = false) }
                 throw e
             } catch (e: Exception) {
+                c.errors.record("Studio", "Couldn't make the video", e, _state.value.plan?.let(::describePlan))
                 _state.update { it.copy(step = StudioStep.SETUP, canSkipCaptions = false, error = "Couldn't make the video (${e.message ?: e.javaClass.simpleName})") }
             }
         }
@@ -303,6 +304,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
                 _state.update { it.copy(step = from) }
                 throw e
             } catch (e: Exception) {
+                c.errors.record("Studio", "Couldn't make the video again", e, _state.value.plan?.let(::describePlan))
                 _state.update { it.copy(step = from, error = "Couldn't make the video (${e.message ?: e.javaClass.simpleName})") }
             }
         }
@@ -373,7 +375,8 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
                         if (t.lines.isNotEmpty() || t.durMs < 500) return@map t
                         val wav = File(c.appContext.cacheDir, "take.wav")
                         try {
-                            t.copy(lines = runCatching { withContext(Dispatchers.IO) { g.captions(VoiceRecorder.takeWav(t, wav), "audio/wav") } }.getOrDefault(emptyList()))
+                            t.copy(lines = runCatching { withContext(Dispatchers.IO) { g.captions(VoiceRecorder.takeWav(t, wav), "audio/wav") } }
+                                .onFailure { c.errors.record("Studio voice-over", "Couldn't caption a take", it) }.getOrDefault(emptyList()))
                         } finally {
                             wav.delete()
                         }
@@ -386,6 +389,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
                 _state.update { it.copy(step = StudioStep.VOICE) }
                 throw e
             } catch (e: Exception) {
+                c.errors.record("Studio", "Couldn't make the video with the voice-over", e, _state.value.plan?.let(::describePlan))
                 _state.update { it.copy(step = StudioStep.VOICE, error = "Couldn't make the video (${e.message ?: e.javaClass.simpleName})") }
             }
         }
@@ -417,6 +421,11 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
         val out = File(ShareImages.sharesDir(c.appContext), "keppo-reel-${System.currentTimeMillis()}.mp4")
         val result = StudioRenderer(c.appContext).render(input, out) { p -> _state.update { it.copy(renderProgress = p) } }
         val done = result.getOrThrow()
+        // Attempts that failed before one worked are worth knowing about too.
+        if (done.failures.isNotEmpty()) {
+            val e = StudioRenderer.ExportFailed("Made on attempt ${done.failures.size + 1}").also { x -> done.failures.forEach { x.addSuppressed(it) } }
+            c.errors.record("Studio export", "Needed a fallback: ${done.note ?: "no note"}", e, describePlan(plan))
+        }
         step(idx, 2)
         _state.update { it.copy(step = StudioStep.READY, video = done.file, renderProgress = null, notes = notes + listOfNotNull(done.note)) }
         coach()
@@ -432,12 +441,28 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
             val story = d?.stories?.getOrNull(storyIndex)
             val voiceOver = s.takes.isNotEmpty()
             val tips = (if (c.transcripts.available) {
-                runCatching { gemini().coach(StudioCoach.summary(plan, s.options, bits, d, story, voiceOver, s.musicUri != null || s.track != null)) }.getOrDefault(emptyList())
+                runCatching { gemini().coach(StudioCoach.summary(plan, s.options, bits, d, story, voiceOver, s.musicUri != null || s.track != null)) }
+                    .onFailure { c.errors.record("Studio coach", "Gemini couldn't write tips", it) }.getOrDefault(emptyList())
             } else {
                 emptyList()
             }).ifEmpty { StudioCoach.localTips(plan, s.options, bits, d, voiceOver) }
             c.studio.setShots(tips.filter { it.nextRide }.map { it.text })
             _state.update { it.copy(tips = tips) }
+        }
+    }
+
+    /** The plan in a few lines, so an error report shows what was being made. */
+    private fun describePlan(p: StudioPlan): String = buildString {
+        val s = _state.value
+        appendLine("Plan: ${p.vibe} · ${p.totalMs} ms · ${p.segments.size} segments · length ${s.options.lengthSec}s · music ${s.track?.id ?: s.musicUri?.let { "own" } ?: "none"} · voice takes ${s.takes.size}")
+        p.segments.forEachIndexed { i, seg ->
+            appendLine(
+                "  $i " + when (seg) {
+                    is ClipSegment -> "clip ${seg.bit.momentId} in=${seg.inMs} dur=${seg.durMs} clipDur=${seg.bit.clipDurationMs}${if (seg.tail) " tail" else ""}${if (seg.bit.fromRide != null) " other-ride" else ""} file=${(clips + borrowed.values).firstOrNull { it.id == seg.bit.momentId }?.file?.let { f -> "${f.name} ${f.length() / 1024}KB" }}"
+                    is TitleSegment -> "title dur=${seg.durMs}"
+                    is StatsSegment -> "stats dur=${seg.durMs}"
+                },
+            )
         }
     }
 
@@ -473,6 +498,7 @@ class StudioViewModel(private val c: AppContainer, private val rideId: String) :
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                c.errors.record("Studio captions", "Couldn't read clip ${m.file.name}", e)
                 missed++
                 note = when {
                     AppCheckSetup.isRejected(e) -> "Captions: Firebase didn't accept this phone (App Check). Add the debug token from Profile › Moments in Firebase."
