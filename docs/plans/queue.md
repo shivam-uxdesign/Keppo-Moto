@@ -374,7 +374,13 @@ Hook: "Tooooooo" plus the text "3 hours. No water." (3 s) → Setup: "Arre yaar,
 - **Story card and 3D video stay separate** (under Share) for now.
 - More ideas, UX changes and workflows from the rider to follow.
 
-## Open questions on "ready after the ride"
-- When to run: as soon as the ride is saved, only on Wi-Fi, only while charging, or a mix?
-- Tell the rider when it's ready? (a quiet notification "3 suggestions ready for Tuesday Evening Ride")
-- Gemini's daily limit: if it's used up, wait for the reset and run then.
+## Ready after the ride (decided)
+- **When:** battery above 50% → as soon as the ride ends, on any connection. 50% or less → wait for Wi-Fi, with a switch to allow mobile data.
+- **Tell the rider:** a notification ("3 suggestions ready for Tuesday Evening Ride") that opens the ride's Studio page.
+- **Gemini's daily limit used up:** wait for the reset and run by itself then; the countdown shows meanwhile.
+
+## Reuse a clip in the editor (proposed)
+- Today, + Clip only offers clips not in the Reel yet, so a clip can't be used twice.
+- **Duplicate** (clip toolbar): copies the selected clip right after itself, the same seconds. Good for an instant replay or a punch-in (later with slow-mo or zoom). Trim or move the copy as usual.
+- **+ Clip shows every clip**, with the used ones marked "In this Reel" (×2 when used twice). Picking one opens a small clip trimmer: the whole clip with in/out handles and a preview, to choose which part (e.g. a different moment of a long clip).
+- Gemini's first draft still avoids repeating the same seconds (except a flash hook); in the editor the rider can reuse anything.
