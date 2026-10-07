@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.TwoWheeler
 import androidx.compose.material3.Icon
@@ -74,6 +75,7 @@ import com.ridetrack.app.ui.theme.RtType
 object Routes {
     const val HOME = "home"
     const val RIDES = "rides"
+    const val STUDIO = "studio"
     const val BIKE = "bike"
     const val PROFILE = "profile"
     const val LIVE = "live"
@@ -107,6 +109,7 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 private val tabs = listOf(
     Tab(Routes.HOME, "Home", Icons.Outlined.Home),
     Tab(Routes.RIDES, "Rides", Icons.Outlined.History),
+    Tab(Routes.STUDIO, "Studio", Icons.Outlined.Movie),
     Tab(Routes.BIKE, "Bike", Icons.Outlined.TwoWheeler),
     Tab(Routes.PROFILE, "Profile", Icons.Outlined.Person),
 )
@@ -177,6 +180,9 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onStartRide = { nav.switchTab(Routes.HOME) },
                         onOpenMap = { nav.navigate(Routes.RIDES_MAP) },
                     )
+                }
+                composable(Routes.STUDIO) {
+                    com.ridetrack.app.studio.StudioHomeScreen(onOpenRide = { nav.navigate(Routes.reel(it)) })
                 }
                 composable(Routes.RIDES_MAP) {
                     RidesMapScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) })
