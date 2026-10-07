@@ -43,6 +43,21 @@ class StudioPrefs(context: Context) {
         get() = prefs.getBoolean(GALLERY, false)
         set(v) = prefs.edit().putBoolean(GALLERY, v).apply()
 
+    /** After each ride, Gemini suggests what to make (in the background, with a notification). */
+    var autoSuggest: Boolean
+        get() = prefs.getBoolean(AUTO_SUGGEST, true)
+        set(v) = prefs.edit().putBoolean(AUTO_SUGGEST, v).apply()
+
+    /** The first suggestion is also made, so it's waiting in Your Reels. */
+    var autoMakeTop: Boolean
+        get() = prefs.getBoolean(AUTO_MAKE, true)
+        set(v) = prefs.edit().putBoolean(AUTO_MAKE, v).apply()
+
+    /** On a low battery the after-ride work waits for Wi-Fi; this lets it use mobile data too. */
+    var autoMobileData: Boolean
+        get() = prefs.getBoolean(AUTO_MOBILE, false)
+        set(v) = prefs.edit().putBoolean(AUTO_MOBILE, v).apply()
+
     /** The "add a trending song in Instagram" guide was dismissed. */
     var musicGuideSeen: Boolean
         get() = prefs.getBoolean(MUSIC_GUIDE, false)
@@ -89,6 +104,9 @@ class StudioPrefs(context: Context) {
         const val SHOTS = "shots"
         const val MUSIC_GUIDE = "music_guide_seen"
         const val GALLERY = "also_gallery"
+        const val AUTO_SUGGEST = "auto_suggest"
+        const val AUTO_MAKE = "auto_make_top"
+        const val AUTO_MOBILE = "auto_mobile_data"
         const val OPTIONS = "options"
         const val MUSIC_URI = "music_uri"
         const val MUSIC_NAME = "music_name"

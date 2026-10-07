@@ -59,6 +59,9 @@ class AppContainer(context: Context) {
             transcribeSoon()
             appScope.launch { runCatching { fuel.checkRide(id) } }
             appScope.launch { journal.onRideSaved(id) }
+            // Studio's suggestions for the ride, ready by the time the rider looks.
+            runCatching { com.ridetrack.app.studio.AfterRideWorker.schedule(appContext, id) }
+                .onFailure { errors.record("Studio after ride", "Couldn't plan the suggestions after the ride", it) }
         },
     )
 

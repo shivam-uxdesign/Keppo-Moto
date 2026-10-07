@@ -91,12 +91,16 @@ class ReelMaker(
     private val queueFile = File(context.filesDir, "studio-queue.json")
     private var current: MakeJob? = null
 
-    fun enqueue(jobs: List<MakeJob>) {
+    /**
+     * Adds [jobs] to the queue. [service]: keep the app running with the foreground service (only
+     * allowed while the app is on screen; background work keeps itself running instead).
+     */
+    fun enqueue(jobs: List<MakeJob>, service: Boolean = true) {
         if (jobs.isEmpty()) return
         synchronized(pending) { pending.addAll(jobs) }
         save()
         _state.update { it.copy(queued = synchronized(pending) { pending.size }) }
-        start()
+        start(service)
     }
 
     /** Keeps the app running while [block] makes a Reel on the Studio screen. */
@@ -141,9 +145,9 @@ class ReelMaker(
         }
     }
 
-    private fun start() {
+    private fun start(service: Boolean = true) {
         if (worker?.isActive != true) worker = scope.launch { drain() }
-        StudioService.start(context)
+        if (service) StudioService.start(context)
     }
 
     /** Stops after nothing more: the one being made is cancelled, the rest dropped. */

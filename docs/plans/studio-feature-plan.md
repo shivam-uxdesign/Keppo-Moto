@@ -308,10 +308,15 @@ Kept on the list, not for the next builds.
 
 ---
 
-## Build order (proposed 7 Oct; waiting for the rider's go-ahead)
+## Build order (approved 7 Oct)
 Each build ends with one APK to test on the phone before the next starts.
 
-1. **Suggestions you can trust** (A1, A2, A3, A4, B1, B3). Medium-large.
+1. **Suggestions you can trust** (A1, A2, A3, A4, B1, B3). Medium-large. **Built 7 Oct, waiting for the rider's test.**
+   - Built: every clip read once (voice and filmed-on-purpose first, no cap); making a suggestion never reads again; gentler checks and the fill to 70%; "Planned 0:30 · 0:24 after checks" on cards; Gemini's answer and the fixes kept for Studio details.
+   - Built: a foreground service while making; suggestions are made by the background maker; the queue is saved and picked up when the app starts again.
+   - Built: after each ride (above 50% battery straight away, otherwise on Wi-Fi or with the mobile-data switch), a notification that opens the ride's Studio, and the top suggestion made. Switches in Studio settings › After each ride.
+   - Built: warnings in the error log, "N new" on Profile, the "made a simpler way" note on a Reel, and Send Studio details.
+   - Not covered: a Reel being remade from Edit, Script or Voice-over keeps going when you switch apps, but stops if the app is swiped away (suggestions and Make all carry on).
    - Read all clips once and remember them; the new rule for how many pieces; gentler checks; show plan vs result.
    - A real background service (keeps going in other apps and after a swipe-away).
    - Auto-read and suggest after each ride, with the battery and Wi-Fi rules; make the top suggestion automatically.

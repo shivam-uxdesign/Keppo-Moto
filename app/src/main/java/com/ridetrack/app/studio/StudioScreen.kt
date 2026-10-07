@@ -266,6 +266,15 @@ private fun StudioSettings(vm: StudioViewModel, s: StudioState, onClose: () -> U
                 val prefs = com.ridetrack.app.ui.appContainer().studio
                 var gallery by remember { mutableStateOf(prefs.alsoSaveToGallery) }
                 Toggle("Also save to Gallery", "Every piece is kept in Your Reels; this also puts new ones in Movies/Keppo Moto", gallery) { v -> prefs.alsoSaveToGallery = v; gallery = v }
+                Text("AFTER EACH RIDE", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 8.dp))
+                var auto by remember { mutableStateOf(prefs.autoSuggest) }
+                var top by remember { mutableStateOf(prefs.autoMakeTop) }
+                var mobile by remember { mutableStateOf(prefs.autoMobileData) }
+                Toggle("Suggestions after each ride", "Ready when the ride ends (above 50% battery), or on Wi-Fi when it's lower", auto) { v -> prefs.autoSuggest = v; auto = v }
+                if (auto) {
+                    Toggle("Make the top suggestion", "So one piece is waiting in Your Reels", top) { v -> prefs.autoMakeTop = v; top = v }
+                    Toggle("Use mobile data on low battery", "Otherwise it waits for Wi-Fi", mobile) { v -> prefs.autoMobileData = v; mobile = v }
+                }
             }
         }
     }

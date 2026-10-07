@@ -61,11 +61,15 @@ class MainActivity : ComponentActivity() {
         if (intent?.action == ACTION_END_RIDE) (application as RideTrackApp).container.session.requestEnd()
     }
 
+    /** The ride to open; "studio:<id>" opens its Studio (from the suggestions notification). */
     private fun rideToOpen(intent: Intent?): String? =
         intent?.takeIf { it.action == ACTION_OPEN_RIDE }?.getStringExtra("rideId")?.takeIf { it.isNotBlank() }
+            ?.let { if (intent.getBooleanExtra(EXTRA_STUDIO, false)) STUDIO_PREFIX + it else it }
 
     companion object {
         const val ACTION_OPEN_RIDE = "com.keppo.action.OPEN_RIDE"
         const val ACTION_END_RIDE = "com.ridetrack.app.END_RIDE"
+        const val EXTRA_STUDIO = "studio"
+        const val STUDIO_PREFIX = "studio:"
     }
 }

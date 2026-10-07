@@ -63,7 +63,10 @@ class StudioService : Service() {
         fun start(context: Context) {
             runCatching { ContextCompat.startForegroundService(context, Intent(context, StudioService::class.java)) }
                 .onFailure { e ->
-                    (context.applicationContext as? RideTrackApp)?.container?.errors?.warn("Studio making", "Couldn't keep making in the background: it stops if you leave the app", e)
+                    // Not allowed while the app is in the background (picking up the queue at start-up):
+                    // expected, the making carries on while the app runs.
+                    val background = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && e is android.app.ForegroundServiceStartNotAllowedException
+                    if (!background) (context.applicationContext as? RideTrackApp)?.container?.errors?.warn("Studio making", "Couldn't keep making in the background: it stops if you leave the app", e)
                 }
         }
     }

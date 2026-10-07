@@ -143,11 +143,13 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
 
     // OPEN_RIDE from Keppo Journal (or any app): the ride, Recently deleted, or the rides list.
     LaunchedEffect(openRideId) {
-        val id = openRideId ?: return@LaunchedEffect
+        val asked = openRideId ?: return@LaunchedEffect
         onOpenRideHandled()
         if (session.state.value.isActive) return@LaunchedEffect
+        val studio = asked.startsWith(com.ridetrack.app.MainActivity.STUDIO_PREFIX)
+        val id = asked.removePrefix(com.ridetrack.app.MainActivity.STUDIO_PREFIX)
         when (container.rides.lookup(id)) {
-            RideLookup.LIVE -> nav.navigate(Routes.detail(id))
+            RideLookup.LIVE -> nav.navigate(if (studio) Routes.reel(id) else Routes.detail(id))
             RideLookup.DELETED -> nav.navigate(Routes.recentlyDeleted(id))
             RideLookup.MISSING -> {
                 nav.navigate(Routes.RIDES) { popUpTo(Routes.HOME); launchSingleTop = true }
