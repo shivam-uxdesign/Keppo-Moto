@@ -1,11 +1,13 @@
 package com.ridetrack.app.studio
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +21,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -125,6 +129,18 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
     }
 }
 
+/** Studio for gallery videos only (from the Studio tab, when they aren't from a recorded ride). */
+@Composable
+fun PhoneStudioScreen(reelId: String?, onBack: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = com.ridetrack.app.ui.theme.RtDimens.screenPadding),
+    ) {
+        com.ridetrack.app.ui.components.ScreenHeader("Reel from your videos", onBack = onBack)
+        Spacer(Modifier.height(12.dp))
+        StudioPanel(PHONE_STUDIO, Modifier.weight(1f), reelId)
+    }
+}
+
 // ---- 1. Setup ---------------------------------------------------------------------------------
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -134,12 +150,8 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     val pickSong = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.setMusic(uri) }
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(
-                "${s.clipCount} clips · ${s.talkingCount} with your voice. Studio picks the best parts and cuts them into a Reel.",
-                style = RtType.caption,
-                color = RtColors.TextSecondary,
-            )
-            RideReels(vm.rideId, onSendAll = vm::sendAllToJournal) { vm.openSaved(it) }
+            ClipStrip(vm, s)
+            if (!s.phoneOnly) RideReels(vm.rideId, onSendAll = vm::sendAllToJournal) { vm.openSaved(it) } else PhoneReels { vm.openSaved(it) }
             if (s.ideas.isNotEmpty()) Ideas(vm, s)
             Section("Or make your own · vibe") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -191,8 +203,113 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             s.error?.let { ErrorBox(it) }
         }
         Spacer(Modifier.height(12.dp))
-        Button("Make my Reel", primary = true) { vm.makePlain() }
+        if (s.canMake) Button("Make my Reel", primary = true) { vm.makePlain() }
+        else Text("Studio needs at least 2 clips. Add videos from your phone above.", style = RtType.caption, color = RtColors.TextSecondary)
         Spacer(Modifier.height(12.dp))
+    }
+}
+
+/**
+ * "Studio picks from these 12 clips": every clip, in filming order, with its length, 🗣 when you
+ * talk, and where it's from. Tap to watch; long-press to leave it out (or put it back).
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun ClipStrip(vm: StudioViewModel, s: StudioState) {
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(20)) { uris -> if (uris.isNotEmpty()) vm.addPhoneVideos(uris) }
+    var preview by remember { mutableStateOf<StudioSource?>(null) }
+    val used = s.sources.size - s.excluded.count { id -> s.sources.any { it.id == id } }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (s.sources.isEmpty()) "Add videos to start" else "Studio picks from these $used clips · ${s.talkingCount} with your voice",
+                style = RtType.caption,
+                color = RtColors.TextSecondary,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "Add videos",
+                style = RtType.button,
+                color = RtColors.Primary,
+                modifier = Modifier.clickable(role = Role.Button) { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) }.padding(vertical = 4.dp),
+            )
+        }
+        if (s.sources.isNotEmpty()) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                s.sources.forEach { src ->
+                    val out = src.id in s.excluded
+                    Box(
+                        Modifier.size(width = 54.dp, height = 96.dp).clip(RoundedCornerShape(8.dp))
+                            .combinedClickable(onClickLabel = "Watch", onLongClickLabel = if (out) "Put back" else "Leave out", onLongClick = { vm.toggleExclude(src.id) }) { preview = src },
+                    ) {
+                        Thumb(src.thumb, Modifier.fillMaxSize())
+                        if (out) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.65f)))
+                        Text(
+                            (if (src.talking) "🗣 " else "") + "${(src.durationMs / 1000).coerceAtLeast(1)}s",
+                            style = RtType.caption,
+                            color = Color.White,
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(3.dp),
+                        )
+                        (if (out) "Left out" else src.label)?.let {
+                            Text(it, style = RtType.caption, color = Color.White, maxLines = 1, modifier = Modifier.align(Alignment.TopStart).padding(3.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 3.dp))
+                        }
+                    }
+                }
+            }
+            Text("Tap to watch · long-press to leave one out", style = RtType.caption, color = RtColors.TextTertiary)
+        }
+    }
+    preview?.let { src ->
+        androidx.compose.ui.window.Dialog(onDismissRequest = { preview = null }) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Player(src.uri, Modifier, height = 480.dp)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(if (src.id in s.excluded) "Put back" else "Leave out", primary = false, modifier = Modifier.weight(1f)) { vm.toggleExclude(src.id); preview = null }
+                    Button("Close", primary = true, modifier = Modifier.weight(1f)) { preview = null }
+                }
+            }
+        }
+    }
+}
+
+/** The clips in the finished Reel, in order, the opening one marked; tap one to jump there. */
+@Composable
+private fun UsedStrip(s: StudioState, onSeek: (Long) -> Unit) {
+    val plan = s.plan ?: return
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("IN THIS REEL · ${plan.clips.size} CLIPS", style = RtType.label, color = RtColors.TextSecondary)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            plan.segments.forEachIndexed { i, seg ->
+                if (seg !is ClipSegment || seg.tail || seg.teaser) return@forEachIndexed
+                val label = when {
+                    seg.hook -> "Opens"
+                    seg.bit.fromRide != null -> seg.bit.fromRide
+                    seg.bit.source != null -> "Phone"
+                    seg.bit.camera == "back" -> "Road"
+                    else -> null
+                }
+                Box(Modifier.size(width = 44.dp, height = 78.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClickLabel = "Jump here") { onSeek(plan.startOf(i)) }) {
+                    Thumb(s.thumbs[seg.bit.momentId], Modifier.fillMaxSize())
+                    label?.let {
+                        Text(it, style = RtType.caption, color = if (seg.hook) RtColors.OnPrimary else Color.White, maxLines = 1, modifier = Modifier.align(Alignment.TopStart).padding(2.dp).clip(RoundedCornerShape(4.dp)).background(if (seg.hook) RtColors.Primary else Color.Black.copy(alpha = 0.55f)).padding(horizontal = 3.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Reels made from phone videos only. */
+@Composable
+private fun PhoneReels(onOpen: (String) -> Unit) {
+    val all by com.ridetrack.app.ui.appContainer().reels.reels.collectAsStateWithLifecycle()
+    val list = all.filter { it.rideId == null && it.deletedAt == null }
+    if (list.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("FROM YOUR VIDEOS", style = RtType.label, color = RtColors.TextSecondary)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            list.forEach { p -> ReelTile(p, Modifier.width(96.dp)) { onOpen(p.id) } }
+        }
     }
 }
 
@@ -308,9 +425,10 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     var toast by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(toast) { if (toast != null) { delay(2_200); toast = null } }
     val video = s.video ?: return
+    var seek by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Player(video, Modifier.align(Alignment.CenterHorizontally))
+            Player(android.net.Uri.fromFile(video), Modifier.align(Alignment.CenterHorizontally), seek = seek)
             Text(
                 listOfNotNull(s.idea?.takeIf { it.kind != IdeaKind.STORY }?.title, s.story?.let { "“$it”" }, s.options.vibe.label, Format.clock(s.plan?.totalMs ?: 0), "${s.plan?.clips?.size ?: 0} clips", s.musicName?.let { "♪ $it" }).joinToString(" · "),
                 style = RtType.caption,
@@ -324,8 +442,9 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 Action("Cover", Icons.Outlined.Image, Modifier.weight(1f)) { vm.cover() }
                 Action("Change", Icons.Outlined.Tune, Modifier.weight(1f)) { vm.back() }
             }
+            UsedStrip(s) { seek = it to System.nanoTime() }
             ReelMenu(onDuplicate = vm::duplicate, onDelete = vm::delete)
-            JournalCard(vm, s)
+            if (!s.phoneOnly) JournalCard(vm, s)
             s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextPrimary) }
             s.notes.forEach { Text(it, style = RtType.caption, color = RtColors.Warning) }
             if (s.notes.isNotEmpty()) ErrorActions()
@@ -372,23 +491,24 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     }
 }
 
-/** The finished Reel, playing on a loop. */
+/** The finished Reel (or a clip), playing on a loop; [seek] (ms, a nonce) jumps to a point. */
 @Composable
-private fun Player(file: File, modifier: Modifier) {
+private fun Player(uri: android.net.Uri, modifier: Modifier, seek: Pair<Long, Long>? = null, height: androidx.compose.ui.unit.Dp = 440.dp) {
     val context = LocalContext.current
-    val player = remember(file) {
+    val player = remember(uri) {
         ExoPlayer.Builder(context).build().apply {
             repeatMode = Player.REPEAT_MODE_ONE
-            setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)))
+            setMediaItem(MediaItem.fromUri(uri))
             prepare()
             playWhenReady = true
         }
     }
     DisposableEffect(player) { onDispose { player.release() } }
+    LaunchedEffect(seek) { seek?.let { player.seekTo(it.first); player.playWhenReady = true } }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { player.playWhenReady = false }
     Box(
         modifier
-            .height(440.dp)
+            .height(height)
             .aspectRatio(9f / 16f)
             .clip(RoundedCornerShape(18.dp))
             .border(1.dp, RtColors.Hairline, RoundedCornerShape(18.dp))
@@ -448,6 +568,16 @@ private fun Edit(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                         }
                     }
                 }
+            }
+            Section("Add from your phone") {
+                val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> if (uris.isNotEmpty()) vm.addPhoneVideos(uris) }
+                Text(
+                    "Add videos",
+                    style = RtType.button,
+                    color = RtColors.Primary,
+                    modifier = Modifier.clickable(role = Role.Button) { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) }.padding(vertical = 6.dp),
+                )
+                s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
             }
             Section("Add from another ride") {
                 val used = plan.clips.map { it.bit.id }.toSet()

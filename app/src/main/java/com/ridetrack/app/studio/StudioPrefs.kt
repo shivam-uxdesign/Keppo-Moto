@@ -16,6 +16,13 @@ class StudioPrefs(context: Context) {
     private val _shots = MutableStateFlow(readShots())
     val shots: StateFlow<List<Shot>> = _shots.asStateFlow()
 
+    /** Videos picked on the Studio tab, waiting for the Studio page that opens next. */
+    @Volatile private var pending: List<android.net.Uri> = emptyList()
+
+    fun setPending(uris: List<android.net.Uri>) { pending = uris }
+
+    fun takePending(): List<android.net.Uri> = pending.also { pending = emptyList() }
+
     /** e.g. "Evening Ride Diaries"; empty = no series. */
     var series: String
         get() = prefs.getString(SERIES, "").orEmpty()

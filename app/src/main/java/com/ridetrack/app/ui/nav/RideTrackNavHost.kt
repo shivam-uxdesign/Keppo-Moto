@@ -95,6 +95,9 @@ object Routes {
     fun reel(id: String) = "share/$id?mode=reel"
     /** A saved Reel, opened in Studio. */
     fun savedReel(rideId: String, reelId: String) = "share/$rideId?mode=reel&reel=$reelId"
+    /** Studio with videos from the phone only (no ride). */
+    const val STUDIO_PHONE = "studio-phone?reel={reel}"
+    fun studioPhone(reelId: String?) = "studio-phone" + (reelId?.let { "?reel=$it" } ?: "")
     const val MOMENTS = "moments/{rideId}/{momentId}"
     fun moments(rideId: String, momentId: String) = "moments/$rideId/$momentId"
     const val MOMENT_SHARE = "moment-share/{rideId}/{momentId}"
@@ -187,6 +190,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                     com.ridetrack.app.studio.StudioHomeScreen(
                         onOpenRide = { nav.navigate(Routes.reel(it)) },
                         onOpenReel = { ride, reel -> nav.navigate(Routes.savedReel(ride, reel)) },
+                        onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
                     )
                 }
                 composable(Routes.RIDES_MAP) {
@@ -290,6 +294,14 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                             momentId = entry.arguments?.getString("momentId").orEmpty(),
                             onBack = { nav.popBackStack() },
                         )
+                    }
+                }
+                composable(
+                    Routes.STUDIO_PHONE,
+                    arguments = listOf(navArgument("reel") { type = NavType.StringType; nullable = true; defaultValue = null }),
+                ) { entry ->
+                    DarkRoute {
+                        com.ridetrack.app.studio.PhoneStudioScreen(reelId = entry.arguments?.getString("reel"), onBack = { nav.popBackStack() })
                     }
                 }
                 composable(

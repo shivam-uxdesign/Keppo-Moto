@@ -513,6 +513,7 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920) {
     // ---- speed badge -------------------------------------------------------------------------
 
     private fun speedBadge(c: Canvas, vibe: Vibe, kmh: Int, clock: String) {
+        if (kmh < 0) return
         when (vibe) {
             Vibe.HYPE -> {
                 text(anton, 64 * s, Color.WHITE, Paint.Align.LEFT)

@@ -302,4 +302,12 @@ class StudioTest {
         assertTrue(plan.clips.first().hook)
         assertTrue(plan.totalMs <= 30_000)
     }
+
+    @Test
+    fun `phone video dates are read from the container, missing ones are unknown`() {
+        assertEquals(java.time.Instant.parse("2026-10-05T12:34:56Z").toEpochMilli(), com.ridetrack.app.studio.PhoneVideos.parseDate("20261005T123456.000Z"))
+        assertEquals(0, com.ridetrack.app.studio.PhoneVideos.parseDate("19040101T000000.000Z"))
+        assertEquals(0, com.ridetrack.app.studio.PhoneVideos.parseDate(null))
+        assertEquals(0, com.ridetrack.app.studio.PhoneVideos.parseDate("garbage"))
+    }
 }

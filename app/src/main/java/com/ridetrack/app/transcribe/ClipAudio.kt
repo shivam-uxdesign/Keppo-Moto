@@ -1,19 +1,26 @@
 package com.ridetrack.app.transcribe
 
+import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMuxer
+import android.net.Uri
 import java.io.File
 import java.nio.ByteBuffer
 
 /** A clip's sound on its own (AAC in .m4a), a fraction of the video's size, to send for transcription. */
 object ClipAudio {
     /** Writes the audio of [video] to [out]; false if the clip has no sound. */
-    fun extract(video: File, out: File): Boolean {
+    fun extract(video: File, out: File): Boolean = extract(out) { it.setDataSource(video.path) }
+
+    /** The same for a video from the phone's gallery. */
+    fun extract(context: Context, video: Uri, out: File): Boolean = extract(out) { it.setDataSource(context, video, null) }
+
+    private fun extract(out: File, open: (MediaExtractor) -> Unit): Boolean {
         val ex = MediaExtractor()
         try {
-            ex.setDataSource(video.path)
+            open(ex)
             val track = (0 until ex.trackCount).firstOrNull { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
                 ?: return false
             ex.selectTrack(track)

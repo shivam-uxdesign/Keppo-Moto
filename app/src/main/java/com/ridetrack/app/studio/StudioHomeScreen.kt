@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,6 +50,7 @@ import com.ridetrack.telemetry.model.RideEventType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
@@ -59,13 +61,14 @@ data class StudioRide(
     val id: String,
     val name: String,
     val startMillis: Long,
+    val endMillis: Long,
     val distanceM: Double,
     val clips: Int,
     val talking: Int,
     val thumbs: List<File>,
 )
 
-class StudioHomeViewModel(c: AppContainer) : ViewModel() {
+class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
     /** Rides with at least 2 clips, newest first; null while loading. */
     val rides: StateFlow<List<StudioRide>?> = c.rides.observeCompleted().map { rides ->
         val clips = c.moments.all().filter { it.kind == MomentKind.CLIP && it.file.isFile && (it.durationMillis ?: 0) >= 1_500 }.groupBy { it.rideId }
@@ -76,6 +79,7 @@ class StudioHomeViewModel(c: AppContainer) : ViewModel() {
                 id = r.id,
                 name = r.name,
                 startMillis = r.startTimeMillis,
+                endMillis = r.endTimeMillis ?: r.startTimeMillis,
                 distanceM = r.stats.distanceM,
                 clips = ms.size,
                 talking = ms.count { m -> RideEventType.VOICE in m.types || !m.transcript.isNullOrBlank() },
@@ -83,17 +87,36 @@ class StudioHomeViewModel(c: AppContainer) : ViewModel() {
             )
         }.sortedByDescending { it.startMillis }
     }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * Videos picked on the Studio tab: when all were filmed during one recorded ride, that ride's
+     * Studio opens with them (real speed and route); otherwise Studio for phone videos only.
+     */
+    fun picked(uris: List<android.net.Uri>, openRide: (String) -> Unit, openPhone: () -> Unit) {
+        viewModelScope.launch {
+            val times = kotlinx.coroutines.withContext(Dispatchers.IO) { uris.mapNotNull { PhoneVideos.read(c.appContext, it)?.startMillis } }
+            val ride = c.rides.observeCompleted().first().firstOrNull { r ->
+                val end = r.endTimeMillis ?: return@firstOrNull false
+                times.isNotEmpty() && times.all { it in (r.startTimeMillis - 120_000)..(end + 120_000) }
+            }
+            c.studio.setPending(uris)
+            if (ride != null) openRide(ride.id) else openPhone()
+        }
+    }
 }
 
 /** The Studio tab: your Reels, then the rides to make one from, then Recently deleted. */
 @Composable
-fun StudioHomeScreen(onOpenRide: (String) -> Unit, onOpenReel: (rideId: String, reelId: String) -> Unit) {
+fun StudioHomeScreen(onOpenRide: (String) -> Unit, onOpenReel: (rideId: String, reelId: String) -> Unit, onOpenPhone: (reelId: String?) -> Unit) {
     val vm = appViewModel { StudioHomeViewModel(it) }
     val rides by vm.rides.collectAsStateWithLifecycle()
     val store = com.ridetrack.app.ui.appContainer().reels
     val reels by store.reels.collectAsStateWithLifecycle()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val live = reels.filter { it.deletedAt == null && it.rideId != null }
+    val live = reels.filter { it.deletedAt == null }
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia(20)) { uris ->
+        if (uris.isNotEmpty()) vm.picked(uris, onOpenRide) { onOpenPhone(null) }
+    }
     val deleted = reels.filter { it.deletedAt != null }
     var showDeleted by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -107,12 +130,27 @@ fun StudioHomeScreen(onOpenRide: (String) -> Unit, onOpenReel: (rideId: String, 
             contentPadding = PaddingValues(horizontal = RtDimens.screenPadding, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.Surface)
+                        .clickable(role = Role.Button) { pick.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.VideoOnly)) }
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    androidx.compose.material3.Icon(Icons.Outlined.VideoLibrary, contentDescription = null, tint = RtColors.Primary, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Make a Reel from your videos", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+                        Text("Pick videos from your gallery. Ones filmed on a recorded ride get its speed and route.", style = RtType.caption, color = RtColors.TextSecondary)
+                    }
+                }
+            }
             if (live.isNotEmpty()) {
                 item { Label("Your Reels · ${live.size}") }
                 // Three covers a row, newest first.
                 items(live.chunked(3), key = { row -> "r-" + row.first().id }) { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        row.forEach { p -> ReelTile(p, Modifier.weight(1f)) { onOpenReel(p.rideId!!, p.id) } }
+                        row.forEach { p -> ReelTile(p, Modifier.weight(1f)) { p.rideId?.let { onOpenReel(it, p.id) } ?: onOpenPhone(p.id) } }
                         repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }

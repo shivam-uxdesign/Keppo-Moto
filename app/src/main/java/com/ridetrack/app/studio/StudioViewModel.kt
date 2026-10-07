@@ -34,6 +34,21 @@ import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.roundToInt
 
+/** Studio for gallery videos only, with no ride (the rider id Studio is opened with). */
+const val PHONE_STUDIO = "phone"
+
+/** One clip Studio can pick from, for the strip: a moment, or a video from the phone. */
+data class StudioSource(
+    val id: String,
+    val thumb: File?,
+    val durationMs: Long,
+    val talking: Boolean,
+    /** "Phone", "Road" (filmed with the back camera); null for an ordinary moment. */
+    val label: String?,
+    val atMillis: Long,
+    val uri: Uri,
+)
+
 enum class StudioStep { SETUP, WORKING, READY, EDIT, VOICE, COVER }
 
 /** One step of making the video, as the rider sees it. */
@@ -90,6 +105,14 @@ data class StudioState(
     val idea: ReelIdea? = null,
     /** Ideas still waiting in Make all. */
     val queued: Int = 0,
+    /** Every clip Studio can pick from (moments and phone videos), in filming order. */
+    val sources: List<StudioSource> = emptyList(),
+    /** Clips the rider left out (long-press in the strip). */
+    val excluded: Set<String> = emptySet(),
+    /** Enough to make a Reel (2+ usable parts). */
+    val canMake: Boolean = false,
+    /** Gallery videos only, no ride. */
+    val phoneOnly: Boolean = false,
 ) {
     /** The small label on the first clip: the series and episode, or the title. */
     val label: String get() = if (series.isBlank()) title else "$series · ep $episode"
@@ -102,6 +125,9 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     val state: StateFlow<StudioState> = _state.asStateFlow()
 
     private var clips: List<Moment> = emptyList()
+    /** Videos from the phone's gallery, by id. */
+    private val phone = LinkedHashMap<String, PhoneClip>()
+    private val phoneOnly = rideId == PHONE_STUDIO
     /** Clips from other rides the rider added (their files are needed to render). */
     private val borrowed = HashMap<String, Moment>()
     private var samples: List<TelemetrySample> = emptyList()
@@ -120,6 +146,15 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
 
     init {
         viewModelScope.launch {
+            if (phoneOnly) {
+                card = RideCard(title = "My videos", subtitle = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()).format(java.time.LocalDate.now()), route = emptyList(), stats = emptyList())
+                _state.update {
+                    it.copy(loading = false, phoneOnly = true, title = "My videos", series = c.studio.series, episode = c.studio.nextEpisode, options = it.options.copy(outro = false, map = false))
+                }
+                c.studio.takePending().takeIf { it.isNotEmpty() }?.let { addPhoneVideos(it).join() }
+                openReelId?.let { id -> c.reels.get(id)?.let { open(it) } }
+                return@launch
+            }
             val ride = c.rides.get(rideId)
             if (ride == null) { _state.update { it.copy(loading = false, blocked = "Ride not found") }; return@launch }
             samples = withContext(Dispatchers.IO) { c.rides.track(rideId).samples }
@@ -131,7 +166,6 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             _state.update {
                 it.copy(
                     loading = false,
-                    blocked = if (clips.size < 2) "Studio needs at least 2 clips. This ride has ${clips.size}." else null,
                     clipCount = clips.size,
                     talkingCount = talking,
                     posters = clips.sortedByDescending { m -> m.starred }.mapNotNull { m -> m.thumb?.takeIf(File::isFile) }.take(4),
@@ -142,8 +176,74 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                     thumbs = clips.associate { m -> m.id to m.thumb },
                 )
             }
+            c.studio.takePending().takeIf { it.isNotEmpty() }?.let { addPhoneVideos(it).join() }
+            refreshSources()
             refreshIdeas()
             openReelId?.let { id -> c.reels.get(id)?.let { open(it) } }
+        }
+    }
+
+    // ---- clips: moments and phone videos -----------------------------------------------------
+
+    private fun refreshSources() {
+        val day = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
+        val list = clips.map { m ->
+            StudioSource(m.id, m.thumb, m.durationMillis ?: 0, likelyTalking(m) || StudioText.load(m.file).orEmpty().isNotEmpty(), null, m.videoStartMillis, Uri.fromFile(m.file))
+        } + phone.values.map { p ->
+            val lines = StudioText.load(PhoneVideos.captionKey(c.appContext, p.id))
+            val label = if (!phoneOnly && card != null && (samples.isEmpty() || p.startMillis !in samples.first().timeMillis..samples.last().timeMillis)) {
+                "Phone · " + day.format(Instant.ofEpochMilli(p.startMillis).atZone(ZoneId.systemDefault()))
+            } else {
+                "Phone"
+            }
+            StudioSource(p.id, p.thumb, p.durationMs, lines.orEmpty().isNotEmpty(), label, p.startMillis, p.uri)
+        }
+        _state.update { s ->
+            s.copy(
+                sources = list.sortedBy { it.atMillis },
+                clipCount = list.size,
+                talkingCount = list.count { it.talking },
+                canMake = bits.size >= 2,
+                thumbs = s.thumbs + phone.values.associate { it.id to it.thumb },
+                lengths = StudioPlanner.lengthsFor(bits, s.options.vibe),
+                posters = s.posters.ifEmpty { phone.values.mapNotNull { it.thumb }.take(4) },
+            )
+        }
+    }
+
+    /**
+     * Adds videos from the phone's gallery (they aren't copied). In Edit, each one's best part also
+     * goes into the Reel. Returns the job, so callers can wait for it.
+     */
+    fun addPhoneVideos(uris: List<Uri>): Job = viewModelScope.launch {
+        val added = withContext(Dispatchers.IO) {
+            uris.mapIndexedNotNull { i, u ->
+                PhoneVideos.read(c.appContext, u)?.let { p ->
+                    // Undated videos go after the ride (or now), apart from each other.
+                    if (p.startMillis > 0) p else p.copy(startMillis = (samples.lastOrNull()?.timeMillis ?: System.currentTimeMillis()) + (i + 1) * 600_000L)
+                }
+            }
+        }
+        val missed = uris.size - added.size
+        added.forEach { phone[it.id] = it }
+        if (added.isNotEmpty()) captionsDone = false
+        bits = withContext(Dispatchers.IO) { buildBits() }
+        refreshSources()
+        refreshIdeas()
+        if (_state.value.step == StudioStep.EDIT) {
+            added.forEach { p -> bits.filter { it.momentId == p.id }.maxByOrNull { it.punch }?.let { b -> editPlan { plan -> StudioPlanner.add(plan, b) } } }
+            if (added.isNotEmpty()) say("Added. Their words get captions when you Remix.")
+        }
+        if (missed > 0) say("$missed couldn't be opened")
+    }
+
+    /** Leaves a clip out of what Studio picks from (or puts it back). */
+    fun toggleExclude(id: String) {
+        _state.update { it.copy(excluded = if (id in it.excluded) it.excluded - id else it.excluded + id) }
+        viewModelScope.launch {
+            bits = withContext(Dispatchers.IO) { buildBits() }
+            refreshSources()
+            refreshIdeas()
         }
     }
 
@@ -203,8 +303,14 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     /** Shows a saved Reel, with everything it was made with, ready to change and make again. */
     private suspend fun open(p: ReelProject) {
         // Clips from other rides need their files to be made again.
-        val missing = p.plan.clips.map { it.bit.momentId }.filter { id -> clips.none { it.id == id } }.toSet()
+        val missing = p.plan.clips.filter { it.bit.source == null }.map { it.bit.momentId }.filter { id -> clips.none { it.id == id } }.toSet()
         if (missing.isNotEmpty()) c.moments.all().filter { it.id in missing }.forEach { borrowed[it.id] = it }
+        val gallery = p.plan.clips.mapNotNull { it.bit.source }.distinct().filter { u -> phone.values.none { it.uri.toString() == u } }
+        if (gallery.isNotEmpty()) {
+            withContext(Dispatchers.IO) { gallery.mapNotNull { PhoneVideos.read(c.appContext, Uri.parse(it)) } }.forEach { phone[it.id] = it }
+            bits = withContext(Dispatchers.IO) { buildBits() }
+            refreshSources()
+        }
         captionsDone = true
         _state.update {
             it.copy(
@@ -239,7 +345,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         val old = c.reels.get(id)
         val project = ReelProject(
             id = id,
-            rideId = rideId,
+            rideId = rideId.takeIf { !phoneOnly },
             createdAt = old?.createdAt ?: System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis(),
             title = s.title,
@@ -726,9 +832,21 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         val voice = s.takes.takeIf { it.isNotEmpty() }?.let { takes ->
             withContext(Dispatchers.IO) { VoiceRecorder.mix(takes, plan.totalMs, File(c.appContext.cacheDir, "studio-voice.wav")) }
         }
+        val gone = plan.clips.mapNotNull { it.bit.source }.distinct().filter { u -> !withContext(Dispatchers.IO) { PhoneVideos.exists(c.appContext, Uri.parse(u)) } }.toSet()
+        if (gone.isNotEmpty()) {
+            var p = plan
+            while (true) {
+                val i = p.segments.indexOfFirst { it is ClipSegment && !it.tail && it.bit.source in gone }
+                if (i < 0 || p.clips.size <= 1) break
+                p = StudioPlanner.remove(p, i)
+            }
+            if (p.clips.any { it.bit.source in gone }) error("The phone videos in this Reel are gone from the gallery")
+            _state.update { it.copy(plan = p) }
+            return render(notes + "${gone.size} phone video${if (gone.size > 1) "s" else ""} gone from the gallery, left out.")
+        }
         val input = RenderInput(
             plan = plan,
-            files = (clips + borrowed.values).associate { it.id to it.file },
+            files = (clips + borrowed.values).associate { it.id to Uri.fromFile(it.file) } + phone.values.associate { it.id to it.uri },
             card = baseCard.copy(title = s.title.ifBlank { baseCard.title }),
             options = s.options,
             speedAt = ::speedAt,
@@ -800,9 +918,19 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
      * (the free tier allows few requests a day); returns a note if some were missed.
      */
     private suspend fun readCaptions(): String? {
-        val todo = clips.filter { likelyTalking(it) && StudioText.load(it.file) == null }
+        val out = _state.value.excluded
+        val moments = clips.filter { it.id !in out && likelyTalking(it) && StudioText.load(it.file) == null }
             .sortedByDescending { (if (RideEventType.VOICE in it.types) 2 else 0) + (it.transcript?.length ?: 0).coerceAtMost(200) / 100 }
-            .take(MAX_CAPTION_CLIPS)
+            .map { m ->
+                CaptionJob(m.file.name, m.file, { f -> ClipAudio.extract(m.file, f) }) { lines ->
+                    // The words also become the clip's transcript (shown in the ride and the clip viewer).
+                    if (m.transcript == null) c.moments.setTranscript(m.id, lines.joinToString(" ") { it.text })
+                }
+            }
+        // Phone videos are filmed on purpose: always worth reading.
+        val gallery = phone.values.filter { it.id !in out && StudioText.load(PhoneVideos.captionKey(c.appContext, it.id)) == null }
+            .map { p -> CaptionJob("phone ${p.id}", PhoneVideos.captionKey(c.appContext, p.id), { f -> ClipAudio.extract(c.appContext, p.uri, f) }) {} }
+        val todo = (gallery + moments).take(MAX_CAPTION_CLIPS)
         if (todo.isEmpty()) return null
         val g = gemini()
         var missed = 0
@@ -811,22 +939,21 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         for (batch in todo.chunked(BATCH)) {
             if (skipCaptions) break
             step(0, 1, "${done + 1}–${done + batch.size} of ${todo.size} clips")
-            val audios = batch.map { m -> m to File(c.appContext.cacheDir, "studio-${m.id}.m4a") }
+            val audios = batch.mapIndexed { k, j -> j to File(c.appContext.cacheDir, "studio-cap-$done-$k.m4a") }
             try {
-                val usable = audios.filter { (m, f) -> ClipAudio.extract(m.file, f) && f.length() <= MAX_AUDIO_BYTES / 2 }
-                audios.filter { it !in usable }.forEach { (m, _) -> StudioText.save(m.file, emptyList()) }
+                val usable = audios.filter { (j, f) -> j.extract(f) && f.length() <= MAX_AUDIO_BYTES / 2 }
+                audios.filter { it !in usable }.forEach { (j, _) -> StudioText.save(j.key, emptyList()) }
                 val results = if (usable.isEmpty()) emptyList() else g.captionsBatch(usable.map { it.second })
-                usable.forEachIndexed { i, (m, _) ->
+                usable.forEachIndexed { i, (j, _) ->
                     val lines = results.getOrNull(i)
                     if (lines == null) { missed++; return@forEachIndexed }
-                    StudioText.save(m.file, lines)
-                    // The words also become the clip's transcript (shown in the ride and the clip viewer).
-                    if (m.transcript == null) c.moments.setTranscript(m.id, lines.joinToString(" ") { it.text })
+                    StudioText.save(j.key, lines)
+                    j.saved(lines)
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                c.errors.record("Studio captions", "Couldn't read ${batch.size} clips (${batch.joinToString { it.file.name }})", e)
+                c.errors.record("Studio captions", "Couldn't read ${batch.size} clips (${batch.joinToString { it.name }})", e)
                 missed += batch.size
                 note = when {
                     AppCheckSetup.isRejected(e) -> "Captions: Firebase didn't accept this phone (App Check). Add the debug token from Profile › Moments in Firebase."
@@ -844,6 +971,9 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         return note
     }
 
+    /** One clip whose words Gemini reads: [key] is where its captions are kept. */
+    private class CaptionJob(val name: String, val key: File, val extract: (File) -> Boolean, val saved: suspend (List<CaptionLine>) -> Unit)
+
     private suspend fun direct(): Direction? {
         val cd = card ?: return null
         val talking = bits.filter { it.talking }
@@ -858,11 +988,16 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     private fun likelyTalking(m: Moment) =
         RideEventType.VOICE in m.types || m.source == MomentSource.MANUAL || !m.transcript.isNullOrBlank()
 
-    private fun buildBits(): List<Bit> = clips.flatMap { m ->
-        val dur = m.durationMillis ?: 0
-        val lines = StudioText.load(m.file).orEmpty()
-        val focus = (m.timeMillis - m.videoStartMillis).coerceIn(0, dur)
-        StudioPlanner.bitsOf(m.id, m.videoStartMillis, dur, lines, { t -> speedAt(t).toDouble() }, focus)
+    private fun buildBits(): List<Bit> {
+        val out = _state.value.excluded
+        return clips.filter { it.id !in out }.flatMap { m ->
+            val dur = m.durationMillis ?: 0
+            val lines = StudioText.load(m.file).orEmpty()
+            val focus = (m.timeMillis - m.videoStartMillis).coerceIn(0, dur)
+            StudioPlanner.bitsOf(m.id, m.videoStartMillis, dur, lines, { t -> speedAt(t).toDouble() }, focus)
+        } + phone.values.filter { it.id !in out }.flatMap { p ->
+            PhoneVideos.bits(p, StudioText.load(PhoneVideos.captionKey(c.appContext, p.id)).orEmpty()) { t -> speedAt(t).toDouble() }
+        }
     }
 
     // ---- ride numbers ----------------------------------------------------------------------

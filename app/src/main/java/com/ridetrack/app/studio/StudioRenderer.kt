@@ -40,8 +40,8 @@ import kotlin.coroutines.resume
 /** Everything the video needs besides the plan. */
 data class RenderInput(
     val plan: StudioPlan,
-    /** Each moment's clip file, by moment id. */
-    val files: Map<String, File>,
+    /** Each clip's video by moment id: a moment's file, or a gallery video's content URI. */
+    val files: Map<String, Uri>,
     val card: RideCard,
     val options: StudioOptions,
     /** Speed (km/h) and clock text at a wall time. */
@@ -188,9 +188,9 @@ class StudioRenderer(private val context: Context) {
             is StatsSegment -> lastClip to 0L
         }
         val dur = seg.durMs.coerceAtMost(clip.bit.clipDurationMs - from).coerceAtLeast(500)
-        val file = input.files[clip.bit.momentId] ?: error("Clip file missing")
+        val uri = input.files[clip.bit.momentId] ?: clip.bit.source?.let(Uri::parse) ?: error("Clip file missing")
         val media = MediaItem.Builder()
-            .setUri(Uri.fromFile(file))
+            .setUri(uri)
             .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setStartPositionMs(from).setEndPositionMs(from + dur).build())
             .build()
 
@@ -218,7 +218,9 @@ class StudioRenderer(private val context: Context) {
                 is ClipSegment -> {
                     val wall = clipStart + from + localMs
                     // Clips from other rides have no samples here: their own speed.
-                    val kmh = input.speedAt(wall).takeIf { it > 0 || seg.bit.fromRide == null } ?: seg.bit.speedKmh.toInt()
+                    // A phone video filmed outside the ride has no speed: no badge (-1).
+                    val kmh = input.speedAt(wall).takeIf { it > 0 || (seg.bit.fromRide == null && seg.bit.source == null) }
+                        ?: seg.bit.speedKmh.toInt().takeIf { it > 0 || seg.bit.source == null } ?: -1
                     art.drawClip(c, f, if (seg.tail) emptyList() else lines, kmh, input.clockAt(wall), o.captions, opener)
                 }
                 is TitleSegment -> art.drawTitle(c, f, input.card, o.map)
@@ -252,7 +254,11 @@ class StudioRenderer(private val context: Context) {
 
     /** What a transition says about segment [s]: speed and time for a clip, "That's a wrap" for the stats. */
     private fun describe(input: RenderInput, s: Segment?): Pair<String, String> = when (s) {
-        is ClipSegment -> "${input.speedAt(s.bit.atMillis).takeIf { it > 0 } ?: s.bit.speedKmh.toInt()} km/h" to (s.bit.fromRide ?: input.clockAt(s.bit.atMillis))
+        is ClipSegment -> {
+            val kmh = input.speedAt(s.bit.atMillis).takeIf { it > 0 } ?: s.bit.speedKmh.toInt()
+            // A phone video with no speed: just its time.
+            if (kmh <= 0 && s.bit.source != null) input.clockAt(s.bit.atMillis) to "" else "$kmh km/h" to (s.bit.fromRide ?: input.clockAt(s.bit.atMillis))
+        }
         is StatsSegment -> "That's a wrap" to input.card.title
         else -> "" to ""
     }
