@@ -348,3 +348,12 @@ Hook: "Tooooooo" plus the text "3 hours. No water." (3 s) → Setup: "Arre yaar,
   - Your voice carrying over a road shot (J/L cuts) isn't there yet: each shot plays its own sound.
   - Suggestions are made when the ride's Studio page opens, not automatically after the ride.
   - The posting plan is left out (rider's call).
+
+---
+
+# Timeline editor (BUILT 7 Oct, c298b9a; replaces Fine-tune)
+- Built: a live preview with no rendering; scrubbing under a fixed playhead; zoom; tracks for clips, captions, text and voice-over; trim by dragging the edges; split, move, sound (mute/50/100/150%), delete; edit captions (words, timing, add, delete); text with time and height; + Clip at the playhead (this ride, other rides, phone); undo/redo; safe zones; Save renders once and syncs the script and Your style.
+- Preview limits: the vibe's colour and camera moves only show in the saved video; captions in the preview are a plain white style.
+- Next (should have): speed (slow-mo, 2×, ramps); reframe (zoom and pan in a clip); freeze frame with text; voice-over recorded on the timeline; overlays you can turn on and off (speed, lean, map); a transition choice per cut; long-press drag to reorder; a pinch to zoom.
+- Later: J/L cuts; beat markers for an Instagram song; colour per clip; stabilise; templates; stickers.
+- To think about after this build: editing on the iPad (send a Reel project to the iPad: an iOS app, or a web app working on the same project files; how to sync).
