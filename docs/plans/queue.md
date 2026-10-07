@@ -433,3 +433,5 @@ Today: transitions follow the vibe and only play between script sections; text h
 - "Reading what you said" runs again when making a suggestion (clips read state is forgotten between visits; only 32 clips read per pass).
 - Making Reels stops when the rider switches to another app: not really in the background.
 - Microphone: the rider never wants recording from a headset (Bluetooth). Other riders may want a Bluetooth mic, so it has to be a choice, not removed.
+- Editor: multiple audio and multiple video layers (picture-in-picture, overlays), with effects and transitions placed on the timeline itself.
+- Recording with two microphones on the next ride: one in the helmet (voice), one for the engine sound. Each should be its own audio track (record both, mix in the editor).
