@@ -94,6 +94,7 @@ import com.ridetrack.app.ui.theme.RtType
 import com.ridetrack.app.ui.theme.rememberHaptics
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.text.style.TextOverflow
 import java.util.Locale
 
 internal val VibeFonts = mapOf(
@@ -487,7 +488,7 @@ private fun Suggestions(vm: StudioViewModel, s: StudioState, made: Set<String>) 
             val sc = pc.script
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.Surface)
-                    .clickable(role = Role.Button, onClickLabel = "Make this") { vm.makePiece(pc.key) }
+                    .clickable(role = Role.Button, onClickLabel = "Read the script") { vm.openPiece(pc.key) }
                     .padding(10.dp),
             ) {
                 Box(Modifier.width(90.dp).aspectRatio(9f / 16f).clip(RoundedCornerShape(10.dp)).background(RtColors.SurfaceRaised)) {
@@ -506,6 +507,10 @@ private fun Suggestions(vm: StudioViewModel, s: StudioState, made: Set<String>) 
                     Text("${pc.plan.clips.size} shots · ${sc.shape.replace('_', ' ')}", style = RtType.caption, color = RtColors.TextTertiary)
                     // The app's checks changed it noticeably: say so, so the length isn't a surprise.
                     if (pc.lengthChanged) Text("Planned ${Format.clock(pc.plannedMs)} · ${Format.clock(pc.plan.totalMs)} after checks", style = RtType.caption, color = RtColors.Warning)
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text("Read the script", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.openPiece(pc.key) }.padding(vertical = 4.dp))
+                        Text("Make it", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.makePiece(pc.key) }.padding(vertical = 4.dp))
+                    }
                 }
             }
         }
@@ -760,6 +765,11 @@ internal fun Player(uri: android.net.Uri, modifier: Modifier, seek: Pair<Long, L
 private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     val draft = s.draft ?: return
     val byId = s.footage.associateBy { it.momentId }
+    // A caption being changed: its clip, the line, the words so far.
+    var editing by remember { mutableStateOf<Triple<String, CaptionLine, String>?>(null) }
+    var addTo by remember { mutableStateOf<Int?>(null) }
+    editing?.let { (clip, line, now) -> CaptionEdit(line.text, now, onSave = { vm.setCaption(clip, line.startMs, it); editing = null }, onClose = { editing = null }) }
+    addTo?.let { sec -> ScriptAddClip(vm, s, onPick = { b -> vm.addScriptClip(sec, b); addTo = null }, onClose = { addTo = null }) }
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
@@ -768,27 +778,58 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
                 color = RtColors.TextPrimary,
             )
             draft.why?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text("THE STORY", style = RtType.label, color = RtColors.TextSecondary)
+                Text(draft.story ?: ScriptWriter.storyOf(draft, s.footage), style = RtType.body, color = RtColors.TextPrimary)
+            }
             draft.sections.forEachIndexed { i, sec ->
                 val secs = sec.shots.sumOf { it.durMs } / 1000.0
-                val said = sec.shots.flatMap { sh -> byId[sh.clip]?.lines.orEmpty().filter { it.endMs > sh.inMs && it.startMs < sh.outMs } }.joinToString(" ") { it.text }
                 Column(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        sec.shots.firstOrNull()?.let { sh -> Thumb(s.thumbs[sh.clip], Modifier.size(width = 40.dp, height = 54.dp).clip(RoundedCornerShape(6.dp))) }
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                "${sec.kind.label} · ${sec.form}" + if (secs > 0) " · " + String.format(Locale.US, "%.1f s", secs) else "",
-                                style = RtType.bodyStrong,
-                                color = RtColors.TextPrimary,
-                            )
-                            if (said.isNotBlank()) Text("\u201c$said\u201d", style = RtType.caption, color = RtColors.TextSecondary, maxLines = 3)
-                            sec.why?.let { Text(it, style = RtType.caption, color = RtColors.TextTertiary, maxLines = 2) }
+                    Text(
+                        "${sec.kind.label} · ${sec.form}" + if (secs > 0) " · " + String.format(Locale.US, "%.1f s", secs) else "",
+                        style = RtType.bodyStrong,
+                        color = RtColors.TextPrimary,
+                    )
+                    sec.why?.let { Text(it, style = RtType.caption, color = RtColors.TextTertiary, maxLines = 2) }
+                    sec.text?.let { Text("Text on screen: $it", style = RtType.caption, color = RtColors.TextSecondary) }
+                    sec.shots.forEachIndexed { k, sh ->
+                        val f = byId[sh.clip]
+                        val lines = f?.lines.orEmpty().filter { it.endMs > sh.inMs && it.startMs < sh.outMs }
+                        Row(verticalAlignment = Alignment.Top) {
+                            Thumb(s.thumbs[sh.clip], Modifier.size(width = 36.dp, height = 48.dp).clip(RoundedCornerShape(6.dp)))
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(
+                                    listOfNotNull(f?.label?.takeIf { it.isNotBlank() }, f?.look?.takeIf { it != "selfie" }, "${Format.clock(sh.inMs)}–${Format.clock(sh.outMs)}").joinToString(" · "),
+                                    style = RtType.caption,
+                                    color = RtColors.TextTertiary,
+                                )
+                                if (lines.isEmpty()) Text("No talking", style = RtType.caption, color = RtColors.TextTertiary)
+                                lines.forEach { l ->
+                                    val changed = draft.captions[ScriptWriter.captionKey(sh.clip, l.startMs)]
+                                    Text("Said: ${l.text}", style = RtType.caption, color = RtColors.TextSecondary)
+                                    Text(
+                                        when {
+                                            changed == null -> "Caption: ${l.text}  ✎"
+                                            changed.isBlank() -> "Caption hidden  ✎"
+                                            else -> "Caption: $changed  ✎"
+                                        },
+                                        style = RtType.body,
+                                        color = if (changed?.isBlank() == true) RtColors.TextTertiary else RtColors.TextPrimary,
+                                        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Change caption") { editing = Triple(sh.clip, l, changed ?: l.text) },
+                                    )
+                                }
+                            }
+                            Text("✕", style = RtType.button, color = RtColors.TextTertiary, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Remove this shot") { vm.removeScriptShot(i, k) }.padding(6.dp))
                         }
                     }
-                    sec.text?.let { Text("Text: $it", style = RtType.caption, color = RtColors.TextSecondary) }
+                    Text("+ Add a clip", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { addTo = i }.padding(vertical = 4.dp))
                 }
             }
             Section("Vibe") {
@@ -842,9 +883,76 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button("Back", primary = false, modifier = Modifier.weight(1f)) { vm.back() }
-            Button("Make it again", primary = true, modifier = Modifier.weight(2f)) { vm.applyDraft() }
+            Button(if (s.scriptPiece != null) "Make this" else "Make it again", primary = true, modifier = Modifier.weight(2f)) { vm.applyDraft() }
         }
         Spacer(Modifier.height(12.dp))
+    }
+}
+
+/** Change a caption's words, or hide it; what was said stays shown above. */
+@Composable
+private fun CaptionEdit(said: String, now: String, onSave: (String) -> Unit, onClose: () -> Unit) {
+    var text by remember { mutableStateOf(now) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Caption") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Said: $said", style = RtType.caption, color = RtColors.TextSecondary)
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Hide it", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button) { onSave("") }.padding(vertical = 4.dp))
+                    Text("As said", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button) { onSave(said) }.padding(vertical = 4.dp))
+                }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { onSave(text.ifBlank { said }) }) { Text("Save") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onClose) { Text("Cancel") } },
+    )
+}
+
+/** Clips to add to a script section: this ride's, other rides' and Saved clips; type to find what was said. */
+@Composable
+private fun ScriptAddClip(vm: StudioViewModel, s: StudioState, onPick: (Bit) -> Unit, onClose: () -> Unit) {
+    var find by remember { mutableStateOf("") }
+    val all = remember(s.otherBits, s.draft) { vm.scriptAddable() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.SurfaceRaised).padding(14.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Add a clip", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+            OutlinedTextField(
+                value = find,
+                onValueChange = { find = it },
+                placeholder = { Text("Find what you said…", style = RtType.body, color = RtColors.TextTertiary) },
+                singleLine = true,
+                textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            all.filter { find.isBlank() || ClipSearch.matches(find, it.lines.joinToString(" ") { l -> l.text }) }.take(60).forEach { b ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button) { onPick(b) }.padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Thumb(s.thumbs[b.momentId], Modifier.size(width = 36.dp, height = 48.dp).clip(RoundedCornerShape(6.dp)))
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(b.lines.joinToString(" ") { it.text }.ifBlank { "Riding · ${b.speedKmh.toInt()} km/h" }, style = RtType.body, color = RtColors.TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(listOfNotNull(b.fromRide ?: "This ride", if (b.camera == "back") "Road" else null, String.format(Locale.US, "%.1f s", (b.outMs - b.inMs) / 1000.0)).joinToString(" · "), style = RtType.caption, color = RtColors.TextSecondary)
+                    }
+                }
+            }
+            if (all.isEmpty()) Text("No other clips yet", style = RtType.caption, color = RtColors.TextTertiary)
+        }
     }
 }
 

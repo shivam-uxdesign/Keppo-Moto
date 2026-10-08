@@ -101,6 +101,8 @@ data class StudioState(
     val planning: String? = null,
     /** The suggestion being made; null for a Reel of your own choices. */
     val piece: ContentPiece? = null,
+    /** The suggestion open in the Script view before it's made (its key); null otherwise. */
+    val scriptPiece: String? = null,
     /** Every clip Studio can pick from (moments and phone videos), in filming order. */
     val sources: List<StudioSource> = emptyList(),
     /** Clips the rider left out (long-press in the strip). */
@@ -683,9 +685,54 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         val s = _state.value
         val sc = s.script ?: s.plan?.let { ScriptEdits.fromPlan(it, s.title) } ?: return
         _state.update { it.copy(step = StudioStep.SCRIPT, draft = sc, note = "", footage = footage()) }
+        if (_state.value.otherBits.isEmpty()) viewModelScope.launch { loadOtherRides() }
+    }
+
+    /** Opens a suggestion in the Script view to read (story, what was said, captions) and change before it's made. */
+    fun openPiece(key: String) {
+        val piece = _state.value.pieces.firstOrNull { it.key == key } ?: return
+        _state.update { it.copy(step = StudioStep.SCRIPT, draft = piece.script, scriptPiece = key, note = "", footage = footage()) }
+        if (_state.value.otherBits.isEmpty()) viewModelScope.launch { loadOtherRides() }
     }
 
     fun editDraft(f: (Script) -> Script) = _state.update { s -> s.draft?.let { s.copy(draft = f(it)) } ?: s }
+
+    /** A caption's new words ("" hides it); [startMs] is where the line starts in its clip. */
+    fun setCaption(momentId: String, startMs: Long, text: String) = editDraft { sc ->
+        val k = ScriptWriter.captionKey(momentId, startMs)
+        val original = _state.value.footage.firstOrNull { it.momentId == momentId }?.lines?.firstOrNull { it.startMs == startMs }?.text
+        sc.copy(captions = if (text.trim() == original) sc.captions - k else sc.captions + (k to text.trim()))
+    }
+
+    /** Clips that can go into the script: this ride's parts not used yet, other rides' and Saved clips. */
+    fun scriptAddable(): List<Bit> {
+        val used = _state.value.draft?.sections?.flatMap { sec -> sec.shots.map { it.clip } }.orEmpty().toSet()
+        val saved = c.savedClips.clips.value.map(c.savedClips::bit)
+        return (bits.filter { it.momentId !in used } + _state.value.otherBits.filter { it.momentId !in used } + saved.filter { it.momentId !in used }).distinctBy { it.id }
+    }
+
+    /** Puts [b] at the end of section [section]; the piece gets longer by as much, so the checks keep it. */
+    fun addScriptClip(section: Int, b: Bit) {
+        viewModelScope.launch {
+            if (b.fromRide != null) {
+                engine.extras[b.momentId] = b.copy(inMs = 0, outMs = b.clipDurationMs)
+                engine.refreshBits()
+            }
+            val fs = withContext(Dispatchers.Default) { footage() }
+            _state.update { it.copy(footage = fs) }
+            editDraft { sc ->
+                val secs = sc.sections.toMutableList()
+                val i = section.coerceIn(0, secs.lastIndex)
+                secs[i] = secs[i].copy(shots = secs[i].shots + ScriptShot(b.momentId, b.inMs, b.outMs))
+                sc.copy(sections = secs, lengthSec = (sc.lengthSec + ((b.outMs - b.inMs) / 1000).toInt()).coerceAtMost(sc.format.maxSec))
+            }
+        }
+    }
+
+    /** Takes shot [shot] out of section [section]. */
+    fun removeScriptShot(section: Int, shot: Int) = editDraft { sc ->
+        sc.copy(sections = sc.sections.mapIndexed { i, sec -> if (i == section) sec.copy(shots = sec.shots.filterIndexed { k, _ -> k != shot }) else sec })
+    }
     fun setNote(t: String) = _state.update { it.copy(note = t) }
     /** Another look for this Reel (the next Make it again uses it). */
     fun draftVibe(v: Vibe) {
@@ -709,7 +756,22 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     fun applyDraft() {
         val s = _state.value
         val draft = s.draft ?: return
-        val before = s.script ?: ScriptEdits.fromPlan(s.plan ?: return, s.title)
+        val piece = s.scriptPiece?.let { k -> s.pieces.firstOrNull { it.key == k } }
+        if (piece != null) {
+            // Unchanged: made in the background like any suggestion.
+            if (draft == piece.script && s.note.isBlank()) {
+                _state.update { it.copy(draft = null, scriptPiece = null) }
+                makePiece(piece.key)
+                return
+            }
+            _state.update {
+                it.copy(
+                    piece = piece, reelId = null, takes = emptyList(), tips = null, coverFrames = emptyList(), scriptPiece = null,
+                    title = card?.title ?: it.title, options = it.options.copy(vibe = draft.vibe ?: piece.script.vibe ?: it.options.vibe),
+                )
+            }
+        }
+        val before = piece?.script ?: s.script ?: ScriptEdits.fromPlan(s.plan ?: return, s.title)
         val note = s.note.trim()
         viewModelScope.launch {
             var result = draft
@@ -847,7 +909,10 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     }
 
     fun back() = _state.update {
-        it.copy(step = if (it.step in setOf(StudioStep.EDIT, StudioStep.VOICE, StudioStep.COVER, StudioStep.SCRIPT)) StudioStep.READY else StudioStep.SETUP, error = null, draft = null)
+        it.copy(
+            step = if (it.step in setOf(StudioStep.EDIT, StudioStep.VOICE, StudioStep.COVER, StudioStep.SCRIPT) && it.scriptPiece == null && it.video != null) StudioStep.READY else StudioStep.SETUP,
+            error = null, draft = null, scriptPiece = null,
+        )
     }
 
     /** Shared or saved: the next Reel of the series is the next episode. */

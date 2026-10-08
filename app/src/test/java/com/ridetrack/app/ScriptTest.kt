@@ -35,6 +35,27 @@ class ScriptTest {
     """.trimIndent()
 
     @Test
+    fun `changed captions show in the plan, a blank one is hidden, and both are saved`() {
+        val script = ScriptWriter.parsePieces(reply, footage)[0].copy(
+            story = "No water for three hours.",
+            captions = mapOf(ScriptWriter.captionKey("m2", 2_000) to "No water for 3 hours", ScriptWriter.captionKey("m2", 6_800) to ""),
+        )
+        val planned = ScriptWriter.toPlan(script, footage, emptyList(), Vibe.HYPE, StudioOptions(outro = false, loopEnd = false))
+        val peak = planned.plan.segments.filterIsInstance<ClipSegment>().first { it.bit.momentId == "m2" }
+        assertEquals(listOf("No water for 3 hours"), peak.lines.map { it.text })
+        val back = com.ridetrack.app.studio.ScriptJson.read(com.ridetrack.app.studio.ScriptJson.write(script))!!
+        assertEquals(script.captions, back.captions)
+        assertEquals("No water for three hours.", back.story)
+    }
+
+    @Test
+    fun `a script without a written story gets one from what was said`() {
+        val script = ScriptWriter.parsePieces(reply, footage)[0]
+        val story = ScriptWriter.storyOf(script, footage)
+        assertTrue(story.startsWith("${SectionKind.HOOK.label}: \u201cTooooooo\u201d"), story)
+    }
+
+    @Test
     fun `reaction sounds are spotted`() {
         assertTrue(ScriptWriter.isSound("Tooooooo"))
         assertTrue(ScriptWriter.isSound("Aaaahh!"))

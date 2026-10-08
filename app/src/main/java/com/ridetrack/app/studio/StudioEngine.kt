@@ -52,6 +52,8 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
     val phone = LinkedHashMap<String, PhoneClip>()
     /** Clips from other rides the rider added (their files are needed to render). */
     val borrowed = HashMap<String, Moment>()
+    /** Clips from other rides or Saved clips added to a script, by moment id: the whole clip's bit. */
+    val extras = LinkedHashMap<String, Bit>()
     var samples: List<TelemetrySample> = emptyList()
         private set
     var card: RideCard? = null
@@ -104,7 +106,17 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
                 label = "phone video",
             )
         }
-        return list.sortedBy { it.startMillis }.mapIndexed { i, f -> f.copy(key = "c${i + 1}") }
+        val added = extras.values.filter { b -> list.none { it.momentId == b.momentId } }.map { b ->
+            Footage(
+                key = "", momentId = b.momentId, durationMs = b.clipDurationMs, startMillis = b.atMillis - b.inMs,
+                look = if (b.source != null) "saved" else "other ride",
+                // The whole clip's words (a bit holds only its own part's).
+                lines = borrowed[b.momentId]?.let { StudioText.load(it.file) } ?: b.lines,
+                kmhMax = b.speedKmh.toInt(),
+                label = b.fromRide ?: "",
+            )
+        }
+        return (list + added).sortedBy { it.startMillis }.mapIndexed { i, f -> f.copy(key = "c${i + 1}") }
     }
 
     private fun buildBits(): List<Bit> {
@@ -116,7 +128,7 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
             StudioPlanner.bitsOf(m.id, m.videoStartMillis, dur, lines, { t -> speedAt(t).coerceAtLeast(0).toDouble() }, focus).map { it.copy(camera = m.camera) }
         } + phone.values.filter { it.id !in out }.flatMap { p ->
             PhoneVideos.bits(p, StudioText.load(PhoneVideos.captionKey(c.appContext, p.id)).orEmpty()) { t -> speedAt(t).coerceAtLeast(0).toDouble() }
-        }
+        } + extras.values
     }
 
     /** Every clip's video by moment id: moments' files and gallery videos. */

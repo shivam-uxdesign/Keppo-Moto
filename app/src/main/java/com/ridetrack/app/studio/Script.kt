@@ -47,6 +47,10 @@ data class Script(
     val vibe: Vibe? = null,
     /** One of the rider's styles Gemini chose for it (its id); null = the vibe only. */
     val style: String? = null,
+    /** The story it tells, beginning to end, in a few sentences; null for older scripts. */
+    val story: String? = null,
+    /** Captions the rider changed: [captionKey] → new text ("" hides that caption). */
+    val captions: Map<String, String> = emptyMap(),
 ) {
     val totalMs: Long get() = sections.sumOf { s -> s.shots.sumOf { it.durMs } }
 }
@@ -154,7 +158,7 @@ object ScriptWriter {
         }
     }
 
-    private const val SCHEMA = "{\"pieces\":[{\"format\":\"reel|short|story|long\",\"vibe\":\"hype|cine|chill|vlog\",\"style\":\"a style id from the list, or empty\",\"title\":\"max 5 words\",\"why\":\"one line: why this piece works\"," +
+    private const val SCHEMA = "{\"pieces\":[{\"format\":\"reel|short|story|long\",\"vibe\":\"hype|cine|chill|vlog\",\"style\":\"a style id from the list, or empty\",\"title\":\"max 5 words\",\"why\":\"one line: why this piece works\",\"story\":\"2–4 sentences: the story it tells, start to end\"," +
         "\"lengthSec\":30,\"shape\":\"story\",\"hookLine\":\"max 6 words for the first frame or empty\",\"caption\":\"post caption, 1–2 lines + 3–5 hashtags\"," +
         "\"sections\":[{\"kind\":\"hook\",\"form\":\"sound\",\"text\":\"on-screen text or empty\",\"why\":\"short\",\"shots\":[{\"clip\":\"c3\",\"in\":12.4,\"out\":13.2}]}]}]}"
 
@@ -256,6 +260,7 @@ object ScriptWriter {
                 sections = sections,
                 vibe = p.optString("vibe").trim().uppercase().let { v -> Vibe.entries.firstOrNull { it.name == v || (v == "CINEMATIC" && it == Vibe.CINE) } },
                 style = p.optString("style").trim().takeIf { it.startsWith("st-") || it in setOf("hype", "cine", "chill", "vlog") },
+                story = p.optString("story").trim().takeIf { it.isNotEmpty() }?.take(600),
             )
         }
     }.getOrDefault(emptyList())
@@ -435,7 +440,17 @@ object ScriptWriter {
         val segs = ArrayList<Segment>()
         placed.forEachIndexed { i, p ->
             val bit = bits.firstOrNull { it.momentId == p.f.momentId }
-            val lines = p.f.lines.filter { it.endMs > p.inMs && it.startMs < p.outMs }.map { it.copy(startMs = it.startMs - p.inMs, endMs = it.endMs - p.inMs) }
+            val lines = p.f.lines.filter { it.endMs > p.inMs && it.startMs < p.outMs }
+                .mapNotNull { l ->
+                    // The rider's words for it; blank = hidden.
+                    val t = script.captions[captionKey(p.f.momentId, l.startMs)]
+                    when {
+                        t == null -> l
+                        t.isBlank() -> null
+                        else -> l.copy(text = t)
+                    }
+                }
+                .map { it.copy(startMs = it.startMs - p.inMs, endMs = it.endMs - p.inMs) }
             val b = Bit(
                 id = "${p.f.momentId}@${p.inMs}",
                 momentId = p.f.momentId,
@@ -461,6 +476,22 @@ object ScriptWriter {
         return Planned(StudioPlan(segs, vibe), fixes, script.lengthSec * 1000L)
     }
 
+    /** Which caption a rider's change is for: the clip and where the line starts in it. */
+    fun captionKey(momentId: String, startMs: Long): String = "$momentId@$startMs"
+
+    /**
+     * The story, for scripts that don't have one written out: what each section says or shows,
+     * in order ("Hook: “Paani hi paani”. Then riding at 62 km/h…").
+     */
+    fun storyOf(script: Script, footage: List<Footage>): String {
+        val byId = footage.associateBy { it.momentId }
+        return script.sections.joinToString(" ") { sec ->
+            val said = sec.shots.flatMap { sh -> byId[sh.clip]?.lines.orEmpty().filter { it.endMs > sh.inMs && it.startMs < sh.outMs } }.joinToString(" ") { it.text }
+            val shown = sec.shots.mapNotNull { byId[it.clip] }.let { fs -> if (fs.any { it.look == "road" }) "the road" else if (fs.isNotEmpty()) "riding" else "" }
+            "${sec.kind.label}: " + (if (said.isNotBlank()) "\u201c${said.take(140)}\u201d" else shown.ifEmpty { sec.form }) + "."
+        }
+    }
+
     /** Footage keys ("c1"…) in filming order. */
     fun keys(footage: List<Footage>): Map<String, String> = footage.associate { it.momentId to it.key }
 }
@@ -472,6 +503,8 @@ object ScriptJson {
         .put("shape", s.shape).put("hookLine", s.hookLine ?: JSONObject.NULL).put("caption", s.postCaption ?: JSONObject.NULL)
         .put("vibe", s.vibe?.name ?: JSONObject.NULL)
         .put("style", s.style ?: JSONObject.NULL)
+        .put("story", s.story ?: JSONObject.NULL)
+        .put("captions", JSONObject().apply { s.captions.forEach { (k, v) -> put(k, v) } })
         .put("sections", JSONArray().apply {
             s.sections.forEach { sec ->
                 put(
@@ -493,6 +526,8 @@ object ScriptJson {
                 postCaption = o.optStringOrNull("caption"),
                 vibe = o.optStringOrNull("vibe")?.let { v -> Vibe.entries.firstOrNull { it.name == v } },
                 style = o.optStringOrNull("style"),
+                story = o.optStringOrNull("story"),
+                captions = o.optJSONObject("captions")?.let { c -> c.keys().asSequence().associateWith { k -> c.optString(k) } }.orEmpty(),
                 sections = o.getJSONArray("sections").let { a ->
                     (0 until a.length()).mapNotNull { i ->
                         val so = a.getJSONObject(i)
