@@ -76,4 +76,13 @@ class FuelTest {
         assertEquals(1, stops.size)
         assertEquals(239_000L, stops[0].toMillis - stops[0].fromMillis)
     }
+
+    @Test
+    fun `today's petrol price is read from Gemini's answer, and only if it's believable`() {
+        assertEquals(103.44, com.ridetrack.app.fuel.FuelPriceText.parse("""{"price": 103.44, "place": "Pune", "date": "2026-10-08"}"""))
+        assertEquals(94.72, com.ridetrack.app.fuel.FuelPriceText.parse("Today petrol in Delhi costs ₹94.72 per litre."))
+        assertNull(com.ridetrack.app.fuel.FuelPriceText.parse("""{"price": null}"""))
+        assertNull(com.ridetrack.app.fuel.FuelPriceText.parse("""{"price": 1.5}"""))
+        assertEquals(4.83, com.ridetrack.app.fuel.FuelPriceText.litres(500.0, 103.44))
+    }
 }

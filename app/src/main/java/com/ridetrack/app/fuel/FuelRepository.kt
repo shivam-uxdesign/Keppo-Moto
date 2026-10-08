@@ -25,6 +25,8 @@ class FuelRepository(
     private val context: Context,
     private val settings: SettingsRepository,
     private val rides: RideRepository,
+    /** Today's petrol price where the rider filled up; null = not looked up (no Gemini). */
+    private val prices: FuelPrices? = null,
 ) {
     val fills: Flow<List<FuelFill>> = settings.settings.map { Fuel.decodeFills(it.fuelLog) }
     val prompts: Flow<List<FuelPrompt>> = settings.settings.map { Fuel.decodePrompts(it.fuelPrompts) }
@@ -54,16 +56,39 @@ class FuelRepository(
         if (stops.isEmpty()) return markChecked(rideId)
         val readSms = settings.settings.first().fuelReadSms && canReadSms()
         var offline = false
-        val found = stops.mapNotNull { stop ->
+        val asked = stops.mapNotNull { stop ->
             val station = runCatching { nearestPump(stop.latitude, stop.longitude) }.onFailure { offline = true }.getOrNull() ?: return@mapNotNull null
             val sms = if (readSms) cardPayments(stop.fromMillis - SMS_BEFORE_MILLIS, stop.toMillis + SMS_AFTER_MILLIS) else emptyList()
-            FuelPrompt(rideId, ride.bikeId, stop.toMillis, station, CardSms.pick(sms, stop.toMillis)?.amount)
+            stop to FuelPrompt(rideId, ride.bikeId, stop.toMillis, station, CardSms.pick(sms, stop.toMillis)?.amount)
         }
         // No internet: look again later (on the next launch).
         if (!offline) markChecked(rideId)
+        // With the amount from the card SMS and today's price, the fill is saved without asking (Undo in the notification).
+        val found = asked.mapNotNull { (stop, prompt) -> if (prompt.amount != null && autoFill(prompt, stop)) null else prompt }
         if (found.isEmpty()) return
         val now = Fuel.decodePrompts(settings.settings.first().fuelPrompts)
         settings.setFuelPrompts(Fuel.encodePrompts(now + found.filter { f -> now.none { it.rideId == f.rideId && it.timeMillis == f.timeMillis } }))
+    }
+
+    /** Saves [prompt]'s fill with today's price for the place; false when no price is known (it's asked instead). */
+    private suspend fun autoFill(prompt: FuelPrompt, stop: Stop): Boolean {
+        val amount = prompt.amount ?: return false
+        val all = Fuel.decodeFills(settings.settings.first().fuelLog)
+        // Already in the log (typed, or saved before): nothing to do.
+        if (all.any { it.bikeId == prompt.bikeId && kotlin.math.abs(it.timeMillis - prompt.timeMillis) < 30 * 60_000L }) return true
+        val last = all.filter { it.pricePerLitre != null }.maxByOrNull { it.timeMillis }?.pricePerLitre
+        val price = prices?.let { runCatching { it.at(stop.latitude, stop.longitude, last) }.getOrNull() } ?: return false
+        val fill = Fuel.newFill(prompt.bikeId, prompt.timeMillis, FuelPriceText.litres(amount, price.perLitre), amount, price.perLitre, prompt.station, if (price.exact) "auto" else "auto-about")
+        add(fill)
+        FuelNotice.saved(context, fill, prompt, price)
+        return true
+    }
+
+    /** Undo from the notification: the fill goes, and "Filled up here?" comes back to correct it by hand. */
+    suspend fun undoAuto(fillId: String, prompt: FuelPrompt) {
+        delete(fillId)
+        val now = Fuel.decodePrompts(settings.settings.first().fuelPrompts)
+        if (now.none { it.rideId == prompt.rideId && it.timeMillis == prompt.timeMillis }) settings.setFuelPrompts(Fuel.encodePrompts(now + prompt))
     }
 
     /** Rides of the last few days not yet checked for pump stops (e.g. saved while offline). */

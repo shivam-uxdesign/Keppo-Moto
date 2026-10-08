@@ -138,6 +138,10 @@
             android:exported="false"
             android:foregroundServiceType="location|camera|microphone" />
 
+        <receiver
+            android:name=".fuel.FuelUndoReceiver"
+            android:exported="false" />
+
         <service
             android:name=".studio.StudioService"
             android:exported="false"

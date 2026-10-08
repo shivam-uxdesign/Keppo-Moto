@@ -91,7 +91,7 @@ fun FuelSection(bike: Bike, fuel: BikeFuel, vm: BikesViewModel) {
             Column(Modifier.weight(1f)) {
                 Text("Read card SMS at petrol pumps", style = RtType.body, color = RtColors.TextPrimary)
                 Text(
-                    "Fills in the amount from your bank's card message, read only around a pump stop. Needs SMS access; off by default.",
+                    "Reads the amount from your bank's card message, only around a pump stop, then looks up today's petrol price for the city and saves the fill by itself (Undo in the notification). Needs SMS access; off by default.",
                     style = RtType.caption,
                     color = RtColors.TextSecondary,
                 )

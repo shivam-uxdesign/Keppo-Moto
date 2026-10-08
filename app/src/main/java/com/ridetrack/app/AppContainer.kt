@@ -66,7 +66,14 @@ class AppContainer(context: Context) {
     )
 
     /** Fill-ups, petrol pump stops and mileage. */
-    val fuel = FuelRepository(appContext, settings, rides)
+    val fuel = FuelRepository(
+        appContext, settings, rides,
+        // Today's petrol price for the city, found by Gemini with Google Search.
+        com.ridetrack.app.fuel.FuelPrices(appContext) { prompt ->
+            if (!transcripts.available) null
+            else com.ridetrack.app.studio.StudioGemini(preferred = { transcripts.model }, onWorking = { transcripts.model = it }).searched(prompt)
+        },
+    )
 
     /** "Write down what I say": Gemini transcripts of talking clips. */
     val transcripts = Transcripts(appContext)

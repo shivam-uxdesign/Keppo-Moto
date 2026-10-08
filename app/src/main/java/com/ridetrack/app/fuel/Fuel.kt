@@ -17,7 +17,7 @@ data class FuelFill(
     val pricePerLitre: Double?,
     val station: String? = null,
     val fullTank: Boolean = true,
-    /** "sms" when the amount came from the card message, "typed" otherwise. */
+    /** "sms" when the amount came from the card message, "typed" otherwise; "auto" saved with today's price looked up ("auto-about": the last known price). */
     val source: String = "typed",
 )
 
@@ -159,4 +159,28 @@ object CardSms {
     /** The payment most likely to be this fill-up: fuel merchants first, then the closest in time to [atMillis]. */
     fun pick(payments: List<CardPayment>, atMillis: Long): CardPayment? =
         payments.sortedWith(compareBy<CardPayment>({ !it.fuel }, { kotlin.math.abs(it.timeMillis - atMillis) })).firstOrNull()
+}
+
+/** Petrol's price per litre, looked up online for [place]; [exact] = found today, else the last known one. */
+data class PetrolPrice(val perLitre: Double, val place: String, val exact: Boolean)
+
+/** Asking for today's petrol price and reading the answer. Pure, unit-tested. */
+object FuelPriceText {
+    fun prompt(place: String, today: String): String =
+        "What is today's ($today) retail price of regular petrol per litre in $place, India? Search the web for today's rate in that city. " +
+            "Reply with JSON only: {\"price\": 103.44, \"place\": \"the city\", \"date\": \"YYYY-MM-DD\"}, price in rupees, or null if you can't find it."
+
+    /** The price in the reply, if it's a believable petrol price in rupees (₹60–200). */
+    fun parse(reply: String): Double? {
+        val fromJson = runCatching {
+            val a = reply.indexOf('{')
+            val b = reply.lastIndexOf('}')
+            org.json.JSONObject(reply.substring(a, b + 1)).optDouble("price", Double.NaN)
+        }.getOrNull()?.takeIf { !it.isNaN() }
+        val v = fromJson ?: Regex("""(?:₹|Rs\.?|INR)\s*(\d{2,3}(?:\.\d{1,2})?)""").find(reply)?.groupValues?.get(1)?.toDoubleOrNull()
+        return v?.takeIf { it in 60.0..200.0 }
+    }
+
+    /** Litres for [amount] at [price], to two places. */
+    fun litres(amount: Double, price: Double): Double = kotlin.math.round(amount / price * 100) / 100
 }

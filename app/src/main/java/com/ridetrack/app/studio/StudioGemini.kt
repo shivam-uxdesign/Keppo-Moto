@@ -149,6 +149,10 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         return Posting.parseHook(text)
     }
 
+    /** A plain answer that needs today's facts: Gemini searches Google first (e.g. the petrol price in a city). */
+    suspend fun searched(prompt: String): String =
+        call(json = false, temperature = 0f, tools = listOf(com.google.firebase.ai.type.Tool.googleSearch())) { m -> m.generateContent(prompt).text.orEmpty() }
+
     /** Tips for the next Reel, from a plain description of this one (text only). */
     suspend fun coach(summary: String): List<Tip> {
         val text = call(json = true) { m -> m.generateContent(StudioText.coachPrompt(summary)).text.orEmpty() }
@@ -156,7 +160,14 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
     }
 
     /** Tries the model that last worked, then the known names, then Remote Config's. */
-    private suspend fun call(json: Boolean, models: List<String> = FirebaseTranscriber.MODELS, temperature: Float = 0.2f, timeoutMs: Long = REQUEST_TIMEOUT_MS, block: suspend (GenerativeModel) -> String): String {
+    private suspend fun call(
+        json: Boolean,
+        models: List<String> = FirebaseTranscriber.MODELS,
+        temperature: Float = 0.2f,
+        timeoutMs: Long = REQUEST_TIMEOUT_MS,
+        tools: List<com.google.firebase.ai.type.Tool>? = null,
+        block: suspend (GenerativeModel) -> String,
+    ): String {
         val order = (if (models === FirebaseTranscriber.MODELS) listOfNotNull(preferred()) else emptyList()) + models
         val queue = ArrayDeque(order.distinct())
         val tried = HashSet<String>()
@@ -184,6 +195,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
                     this.temperature = temperature
                     if (json) responseMimeType = "application/json"
                 },
+                tools = tools,
             )
             try {
                 // A hung request would leave Studio waiting forever.
