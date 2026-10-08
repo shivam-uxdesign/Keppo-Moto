@@ -54,6 +54,8 @@ data class Script(
     val captions: Map<String, String> = emptyMap(),
     /** Text written on the video, shown in turn (a caption clip's 1–3 funny lines); empty for most pieces. */
     val onScreen: List<String> = emptyList(),
+    /** Listed by Show all from a part of the clips (not one of Gemini's ideas); Make all leaves these out. */
+    val every: Boolean = false,
 ) {
     val totalMs: Long get() = sections.sumOf { s -> s.shots.sumOf { it.durMs } }
 }
@@ -551,6 +553,92 @@ object ScriptWriter {
         }
     }
 
+    /**
+     * "Show all": a piece for every part of the ride that [taken] (Gemini's ideas) doesn't use,
+     * in filming order. Each take of what the rider said (lines less than 2.5 s apart, up to
+     * 45 s), uncut; each riding shot without words, as a caption clip (lines to be written).
+     */
+    fun everyMoment(footage: List<Footage>, taken: List<Script>): List<Script> {
+        val used = taken.flatMap { sc -> sc.sections.flatMap { it.shots } }.toMutableList()
+        fun free(clip: String, a: Long, b: Long) = used.none { it.clip == clip && it.inMs < b - 500 && a + 500 < it.outMs }
+        val out = ArrayList<Pair<Long, Script>>()
+        footage.forEach { f ->
+            // What was said: takes.
+            val takes = ArrayList<MutableList<CaptionLine>>()
+            f.lines.sortedBy { it.startMs }.forEach { l ->
+                val cur = takes.lastOrNull()
+                if (cur != null && l.startMs - cur.last().endMs < 2_500 && l.endMs - cur.first().startMs <= 45_000) cur += l else takes += mutableListOf(l)
+            }
+            takes.forEach { t ->
+                val a = (t.first().startMs - 300).coerceAtLeast(0)
+                val b = (t.last().endMs + 500).coerceAtMost(f.durationMs)
+                if (b - a < 1_200 || !free(f.momentId, a, b)) return@forEach
+                val text = t.joinToString(" ") { it.text }
+                val sec = ((b - a + 999) / 1000).toInt()
+                val sound = isSound(text) && b - a < 4_000
+                val shot = ScriptShot(f.momentId, a, b)
+                used += shot
+                out += (f.startMillis + a) to Script(
+                    format = if (sec <= 20) PieceFormat.SHORT else PieceFormat.REEL,
+                    title = titleOf(text),
+                    why = if (sound) "Your reaction, on its own" else "What you said here, uncut",
+                    lengthSec = sec.coerceIn(PieceFormat.SHORT.minSec, PieceFormat.REEL.maxSec),
+                    shape = "one_take", hookLine = null, postCaption = null,
+                    sections = listOf(Section(SectionKind.PEAK, "take", listOf(shot))),
+                    story = text.take(300), every = true,
+                )
+            }
+            // Riding without words: a caption clip of up to 18 s.
+            if (f.durationMs < 8_000) return@forEach
+            val len = minOf(18_000L, f.durationMs)
+            var a = (f.durationMs - len) / 2
+            if (f.lines.any { it.endMs > a && it.startMs < a + len }) {
+                val after = (f.lines.maxOfOrNull { it.endMs } ?: 0) + 300
+                if (f.durationMs - after < 8_000) return@forEach
+                a = after
+            }
+            val b = minOf(a + len, f.durationMs)
+            if (!free(f.momentId, a, b)) return@forEach
+            val shot = ScriptShot(f.momentId, a, b)
+            used += shot
+            out += (f.startMillis + a) to Script(
+                format = PieceFormat.CAPTION,
+                title = listOfNotNull(if (f.look == "road") "The road" else "Riding", f.kmhMax.takeIf { it > 0 }?.let { "$it km/h" }, f.label.takeIf { it.isNotBlank() }).joinToString(" · "),
+                why = "One riding shot with something funny written on it",
+                lengthSec = ((b - a) / 1000).toInt().coerceIn(PieceFormat.CAPTION.minSec, PieceFormat.CAPTION.maxSec),
+                shape = "one_take", hookLine = null, postCaption = null,
+                sections = listOf(Section(SectionKind.PEAK, "take", listOf(shot))),
+                every = true,
+            )
+        }
+        return out.sortedBy { it.first }.map { it.second }
+    }
+
+    /** A short title from what was said: its first few words. */
+    private fun titleOf(text: String): String {
+        val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        return (words.take(5).joinToString(" ") + if (words.size > 5) "…" else "").replaceFirstChar { it.uppercase() }.ifBlank { "A moment" }
+    }
+
+    /** Asks for funny lines for caption clips (one request for many); keys are "k1", "k2"… */
+    fun jokesPrompt(clips: List<Pair<String, Footage>>): String = buildString {
+        appendLine("A motorcycle rider (Hinglish is fine) posts short riding clips with funny or relatable text written on them, like memes.")
+        appendLine("For each riding shot below, write 1–3 short lines shown one after another (the joke, not a description): falling, loving the bike, fuel prices, mom asking where you are, traffic, the road.")
+        clips.forEach { (k, f) -> appendLine("$k: ${f.look} shot, up to ${f.kmhMax} km/h" + (if (f.events.isNotBlank()) ", ${f.events}" else "") + (if (f.label.isNotBlank()) ", at ${f.label}" else "")) }
+        append("Reply with JSON only: {\"clips\":[{\"key\":\"k1\",\"lines\":[\"...\"]}]}")
+    }
+
+    fun parseJokes(reply: String): Map<String, List<String>> = runCatching {
+        val a = reply.indexOf('{')
+        val b = reply.lastIndexOf('}')
+        val arr = JSONObject(reply.substring(a, b + 1)).getJSONArray("clips")
+        (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val lines = o.optJSONArray("lines")?.let { l -> (0 until l.length()).mapNotNull { l.optString(it).trim().takeIf { t -> t.isNotEmpty() }?.take(80) } }.orEmpty().take(3)
+            o.optString("key").takeIf { it.isNotEmpty() && lines.isNotEmpty() }?.let { it to lines }
+        }.toMap()
+    }.getOrDefault(emptyMap())
+
     /** How many pieces Gemini's answer has, readable or not (to say when some couldn't be used). */
     fun piecesAsked(reply: String?): Int = runCatching {
         val a = reply!!.indexOf('{')
@@ -571,6 +659,7 @@ object ScriptJson {
         .put("style", s.style ?: JSONObject.NULL)
         .put("story", s.story ?: JSONObject.NULL)
         .put("onScreen", JSONArray(s.onScreen))
+        .put("every", s.every)
         .put("captions", JSONObject().apply { s.captions.forEach { (k, v) -> put(k, v) } })
         .put("sections", JSONArray().apply {
             s.sections.forEach { sec ->
@@ -595,6 +684,7 @@ object ScriptJson {
                 style = o.optStringOrNull("style"),
                 story = o.optStringOrNull("story"),
                 onScreen = o.optJSONArray("onScreen")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty(),
+                every = o.optBoolean("every"),
                 captions = o.optJSONObject("captions")?.let { c -> c.keys().asSequence().associateWith { k -> c.optString(k) } }.orEmpty(),
                 sections = o.getJSONArray("sections").let { a ->
                     (0 until a.length()).mapNotNull { i ->

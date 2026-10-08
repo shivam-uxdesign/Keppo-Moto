@@ -327,10 +327,12 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
             lastAnswer = answer
             if (scripts.isEmpty()) {
                 val why = "Gemini's answer couldn't be read"
-                Suggested.Scripts(localPieces(fs, "Made by the app: $why", title), why).also { savePlan(it.scripts, answer, why) }
+                val local = localPieces(fs, "Made by the app: $why", title)
+                Suggested.Scripts(if (all) withEvery(fs, local) else local, why).also { savePlan(it.scripts, answer, why) }
             } else {
-                savePlan(scripts, answer)
-                Suggested.Scripts(scripts)
+                val list = if (all) withEvery(fs, scripts) else scripts
+                savePlan(list, answer)
+                Suggested.Scripts(list)
             }
         } catch (e: CancellationException) {
             throw e
@@ -345,6 +347,25 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
                 }
             }
         }
+    }
+
+    /**
+     * Show all: after Gemini's ideas, a piece for every other part of the clips (each take of
+     * what was said, each riding shot as a caption clip). Gemini writes the caption clips' lines
+     * in one more request; without it they're listed with no text, to write by hand.
+     */
+    private suspend fun withEvery(fs: List<Footage>, ideas: List<Script>): List<Script> {
+        val extra = ScriptWriter.everyMoment(fs, ideas)
+        val byId = fs.associateBy { it.momentId }
+        val blank = extra.filter { it.format == PieceFormat.CAPTION && it.onScreen.isEmpty() }.take(30)
+        val keyed = blank.mapIndexedNotNull { i, sc -> byId[sc.sections.first().shots.first().clip]?.let { "k${i + 1}" to it } }
+        val jokes = if (keyed.isEmpty() || !c.transcripts.available) emptyMap() else
+            runCatching { gemini().jokes(ScriptWriter.jokesPrompt(keyed)) }.onFailure { c.errors.warn("Studio content plan", "Gemini couldn't write the caption clips' lines", it) }.getOrDefault(emptyMap())
+        val withLines = extra.map { sc ->
+            val i = blank.indexOf(sc)
+            jokes["k${i + 1}"]?.takeIf { i >= 0 }?.let { sc.copy(onScreen = it, title = it.first().take(40)) } ?: sc
+        }
+        return ideas + withLines
     }
 
     /** The app's own suggestions: a Reel as long as the footage fills well, and a 15 s Short. */

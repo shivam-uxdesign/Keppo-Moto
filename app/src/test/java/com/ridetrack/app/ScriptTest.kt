@@ -82,6 +82,27 @@ class ScriptTest {
     }
 
     @Test
+    fun `show all lists every take and riding shot that Gemini's ideas don't use`() {
+        val ideas = ScriptWriter.parsePieces(reply, footage)
+        val every = ScriptWriter.everyMoment(footage, ideas)
+        assertTrue(every.all { it.every })
+        // m1's talking isn't in Gemini's ideas: it's listed, uncut, with what was said.
+        val m1 = every.first { it.sections[0].shots[0].clip == "m1" && it.format != PieceFormat.CAPTION }
+        assertEquals("Arre yaar, ye toh thoda garmi hai", m1.story)
+        assertEquals(5_700L, m1.sections[0].shots[0].inMs)
+        // The long road clip (no words) becomes a caption clip; nothing overlaps an idea's shots.
+        assertTrue(every.any { it.format == PieceFormat.CAPTION && it.sections[0].shots[0].clip == "m4" })
+        val usedByIdeas = ideas.flatMap { sc -> sc.sections.flatMap { it.shots } }
+        every.flatMap { sc -> sc.sections.flatMap { it.shots } }.forEach { s ->
+            assertTrue(usedByIdeas.none { it.clip == s.clip && it.inMs < s.outMs - 500 && s.inMs + 500 < it.outMs }, "$s overlaps an idea")
+        }
+        val jokes = ScriptWriter.parseJokes("""{"clips":[{"key":"k1","lines":["Me: slow ride today","Also me:"]},{"key":"k2","lines":[]}]}""")
+        assertEquals(mapOf("k1" to listOf("Me: slow ride today", "Also me:")), jokes)
+        // Every one can be made.
+        every.forEach { assertTrue(ScriptWriter.toPlan(it, footage, emptyList(), Vibe.HYPE, StudioOptions()).plan.clips.isNotEmpty(), it.title) }
+    }
+
+    @Test
     fun `reaction sounds are spotted`() {
         assertTrue(ScriptWriter.isSound("Tooooooo"))
         assertTrue(ScriptWriter.isSound("Aaaahh!"))

@@ -153,6 +153,12 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
     suspend fun searched(prompt: String): String =
         call(json = false, temperature = 0f, tools = listOf(com.google.firebase.ai.type.Tool.googleSearch())) { m -> m.generateContent(prompt).text.orEmpty() }
 
+    /** Funny lines for caption clips, by key (one request for many). */
+    suspend fun jokes(prompt: String): Map<String, List<String>> {
+        val text = call(json = true, temperature = 0.9f) { m -> m.generateContent(prompt).text.orEmpty() }
+        return ScriptWriter.parseJokes(text)
+    }
+
     /** Tips for the next Reel, from a plain description of this one (text only). */
     suspend fun coach(summary: String): List<Tip> {
         val text = call(json = true) { m -> m.generateContent(StudioText.coachPrompt(summary)).text.orEmpty() }

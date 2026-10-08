@@ -335,10 +335,11 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                 showPieces(scripts)
                 // Say when some of Gemini's suggestions couldn't be used, and keep why for Studio details.
                 val asked = ScriptWriter.piecesAsked(engine.lastAnswer)
-                val shown = _state.value.pieces.size
+                // Gemini's own ideas only (Show all adds every moment of the clips after them).
+                val shown = _state.value.pieces.count { !it.script.every }
                 if (asked > shown) {
-                    val unread = asked - scripts.size
-                    val unfit = scripts.size - shown
+                    val unread = asked - scripts.count { !it.every }
+                    val unfit = scripts.count { !it.every } - shown
                     val note = "Gemini suggested $asked · " + listOfNotNull(
                         unread.takeIf { it > 0 }?.let { "$it couldn't be read" },
                         unfit.takeIf { it > 0 }?.let { "$it didn't fit your clips" },
@@ -511,7 +512,8 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     fun makeAll() {
         val made = engine.madeIdeas()
         val s = _state.value
-        val jobs = s.pieces.filter { it.script.title !in made }.mapNotNull { engine.job(it, s) }
+        // Gemini's ideas only: Show all's list of every moment would be dozens of videos.
+        val jobs = s.pieces.filter { it.script.title !in made && !it.script.every }.mapNotNull { engine.job(it, s) }
         c.reelMaker.enqueue(jobs)
         say(if (jobs.isEmpty()) "All suggestions are made already" else "Making ${jobs.size} in the background. They'll be in Your Reels.")
     }

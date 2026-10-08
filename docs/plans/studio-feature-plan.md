@@ -407,6 +407,11 @@ Options, which can be combined:
   - Suggested whenever there are riding shots with speed, acceleration or lean, and in "Show all".
   - A "Caption clip" quick prompt under Ask for something.
   - The lines show and can be changed in the Script view.
+- **"Show all" still gave 1** (8 Oct): it relied on Gemini writing up to 15 full scripts in one answer.
+  - Now, after Gemini's ideas, Show all lists a piece for every other part of the clips, in filming order, marked "From your clips":
+    - each take of what the rider said (lines less than 2.5 s apart, up to 45 s), uncut
+    - each riding shot without words, as a caption clip, with Gemini writing the funny lines for all of them in one more request
+  - Make all still makes only Gemini's ideas, not dozens of videos.
 
 ---
 

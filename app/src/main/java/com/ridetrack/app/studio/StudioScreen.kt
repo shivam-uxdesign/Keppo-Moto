@@ -168,7 +168,7 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     val all by c.reels.reels.collectAsStateWithLifecycle()
     val maker by c.reelMaker.state.collectAsStateWithLifecycle()
     val made = all.filter { it.deletedAt == null && (it.rideId == vm.rideId || (s.phoneOnly && it.rideId == null)) }.mapNotNull { it.idea }.toSet()
-    val toMake = s.pieces.count { it.script.title !in made }
+    val toMake = s.pieces.count { it.script.title !in made && !it.script.every }
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -502,6 +502,7 @@ private fun Suggestions(vm: StudioViewModel, s: StudioState, made: Set<String>) 
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(sc.format.label, style = RtType.caption, color = RtColors.OnPrimary, modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(RtColors.Primary).padding(horizontal = 6.dp))
                         Text((sc.vibe ?: s.options.vibe).label, style = RtType.caption, color = RtColors.TextSecondary)
+                        if (sc.every) Text("· From your clips", style = RtType.caption, color = RtColors.TextTertiary)
                         if (sc.title in made) Text("· Made", style = RtType.caption, color = RtColors.Primary)
                     }
                     Text(sc.title, style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 2)
