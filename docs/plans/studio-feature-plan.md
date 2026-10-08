@@ -528,4 +528,11 @@ The rider: "Studio got way too complicated; make it very simple and intuitive", 
   - The editor zooms open; sheets rise from the bottom and their backdrops fade.
   - The bottom bar's tools rise in one by one when the selection changes; a selected clip lifts.
   - The style name pops on the video when you swipe; Share slides in from the right.
+- **Previous rides, own videos, adding more (rider, 8 Oct):**
+  - Studio has a strip of rides under the title (newest first, each with its date and number of ideas), then "All rides ›" for older ones. Tapping a ride shows its ideas.
+  - A ride with no ideas yet shows "Find ideas".
+  - A + at the top starts a new Reel: from the phone's videos, from Saved clips, or from a ride's clips in your own order. The editor opens with them.
+  - In the editor:
+    - + at the end of the clips adds videos: from the phone, this or another ride, Saved clips, or over the video (picture in picture).
+    - "+ Sound" under the sound rows adds music, a voice-over or a sound from another clip, each on its own row from the playhead, as many as you like. The video above shrinks a little to make room.
 - Also seen on the rider's phone (8 Oct): the editor showed "Simple preview" on every clip. One failure turns the exact preview off for the whole session. The cause is in the error log ("Studio preview"); waiting for it.
