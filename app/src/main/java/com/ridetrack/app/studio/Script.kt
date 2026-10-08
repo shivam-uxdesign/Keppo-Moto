@@ -9,7 +9,8 @@ enum class PieceFormat(val label: String, val minSec: Int, val maxSec: Int, val 
     REEL("Reel", 6, 90, "Instagram Reel"),
     SHORT("Short", 6, 60, "YouTube Short"),
     STORY("Story", 5, 60, "Instagram Story: casual, of the day"),
-    LONG("Long video", 120, 300, "YouTube video, 2–5 min, chapters");
+    LONG("Long video", 120, 300, "YouTube video, 2–5 min, chapters"),
+    CAPTION("Caption clip", 12, 25, "ONE uncut riding shot of 15–20 s (accelerating, leaning, a fast or pretty stretch) with funny or relatable text on screen; no talking needed");
 
     companion object {
         fun of(name: String?): PieceFormat = entries.firstOrNull { it.name.equals(name?.trim(), ignoreCase = true) } ?: REEL
@@ -51,6 +52,8 @@ data class Script(
     val story: String? = null,
     /** Captions the rider changed: [captionKey] → new text ("" hides that caption). */
     val captions: Map<String, String> = emptyMap(),
+    /** Text written on the video, shown in turn (a caption clip's 1–3 funny lines); empty for most pieces. */
+    val onScreen: List<String> = emptyList(),
 ) {
     val totalMs: Long get() = sections.sumOf { s -> s.shots.sumOf { it.durMs } }
 }
@@ -168,7 +171,14 @@ object ScriptWriter {
         }
     }
 
-    private const val SCHEMA = "{\"pieces\":[{\"format\":\"reel|short|story|long\",\"vibe\":\"hype|cine|chill|vlog\",\"style\":\"a style id from the list, or empty\",\"title\":\"max 5 words\",\"why\":\"one line: why this piece works\",\"story\":\"2–4 sentences: the story it tells, start to end\"," +
+    /** The caption clip: one riding shot with text written on it (a meme-style Reel). */
+    private const val CAPTION_RULE =
+        "Caption clips: when there are riding shots with speed, acceleration or lean (see kmh and events), include at least one piece with format \"caption\": " +
+            "ONE section (kind \"peak\", form \"take\") with ONE shot of 15–20 s from a single clip, hookLine empty, and in onScreen 1–3 short funny or " +
+            "relatable lines about riding (falling, loving the bike, fuel prices, mom asking where you are; Hinglish is fine), shown one after another. " +
+            "The text is the joke: don't just describe the shot."
+
+    private const val SCHEMA = "{\"pieces\":[{\"format\":\"reel|short|story|long|caption\",\"vibe\":\"hype|cine|chill|vlog\",\"style\":\"a style id from the list, or empty\",\"title\":\"max 5 words\",\"why\":\"one line: why this piece works\",\"story\":\"2–4 sentences: the story it tells, start to end\",\"onScreen\":[\"caption clips only: 1–3 short lines shown in turn, else empty\"]," +
         "\"lengthSec\":30,\"shape\":\"story\",\"hookLine\":\"max 6 words for the first frame or empty\",\"caption\":\"post caption, 1–2 lines + 3–5 hashtags\"," +
         "\"sections\":[{\"kind\":\"hook\",\"form\":\"sound\",\"text\":\"on-screen text or empty\",\"why\":\"short\",\"shots\":[{\"clip\":\"c3\",\"in\":12.4,\"out\":13.2}]}]}]}"
 
@@ -184,10 +194,12 @@ object ScriptWriter {
         appendLine(footageText(footage))
         if (all) {
             appendLine("List EVERY piece worth making from THIS ride, smaller ones too: each story, reaction, funny or useful line, tip and fast stretch. As many as the footage supports, at most 15.")
+            appendLine(CAPTION_RULE)
         } else {
             val least = leastPieces(footage)
             appendLine("Suggest one piece for every strong moment in THIS ride: a story, a reaction, a funny or useful line, a fast stretch. At least $least, at most 6.")
             appendLine("Each reaction sound and each separate story or funny or useful line can be its own short piece; don't put everything into one.")
+            appendLine(CAPTION_RULE)
         }
         appendLine("List them best first: the first one is made automatically. Each piece must fill at least 80% of its own length with real content.")
         appendLine("Formats allowed: ${formats.joinToString { "${it.name.lowercase()} (${it.hint}, ${it.minSec}–${it.maxSec} s)" }}.")
@@ -220,6 +232,7 @@ object ScriptWriter {
         appendLine(footageText(footage))
         appendLine("The rider asks for: \"${ask.replace("\"", "'")}\". Write ONE piece that does that, from this footage (format, length and vibe as they asked, or what suits it).")
         appendLine("Vibes: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm), vlog (the voice leads).")
+        appendLine("If they ask for a caption clip: $CAPTION_RULE")
         append(stylesText(styles))
         appendLine(CRAFT)
         append(styleText(style))
@@ -277,7 +290,8 @@ object ScriptWriter {
                 vibe = p.optString("vibe").trim().uppercase().let { v -> Vibe.entries.firstOrNull { it.name == v || (v == "CINEMATIC" && it == Vibe.CINE) } },
                 style = p.optString("style").trim().takeIf { it.startsWith("st-") || it in setOf("hype", "cine", "chill", "vlog") },
                 story = p.optString("story").trim().takeIf { it.isNotEmpty() }?.take(600),
-            )
+                onScreen = p.optJSONArray("onScreen")?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).trim().takeIf { t -> t.isNotEmpty() && !t.startsWith("caption clips only") }?.take(80) } }.orEmpty().take(3),
+            ).let { sc -> if (sc.format == PieceFormat.CAPTION) sc.copy(hookLine = null) else sc }
         }
     }.getOrDefault(emptyList())
 
@@ -489,7 +503,21 @@ object ScriptWriter {
             val first = segs.filterIsInstance<ClipSegment>().first()
             segs += ClipSegment(first.bit, first.inMs, StudioPlanner.TAIL_MS.coerceAtMost(first.durMs), emptyList(), hook = false, tail = true)
         }
-        return Planned(StudioPlan(segs, vibe), fixes, script.lengthSec * 1000L)
+        return Planned(withOnScreen(StudioPlan(segs, vibe), script.onScreen), fixes, script.lengthSec * 1000L)
+    }
+
+    /** The lines written on the video, one after another across its clips (top of the frame, on a box). */
+    fun withOnScreen(plan: StudioPlan, lines: List<String>): StudioPlan {
+        if (lines.isEmpty()) return plan
+        val clips = plan.segments.withIndex().filter { (_, s) -> s is ClipSegment && !s.tail }
+        if (clips.isEmpty()) return plan
+        val from = plan.startOf(clips.first().index)
+        val to = plan.startOf(clips.last().index) + clips.last().value.durMs
+        val each = (to - from) / lines.size
+        val items = lines.mapIndexed { i, t ->
+            TextItem("os-$i", from + i * each, if (i == lines.lastIndex) to else from + (i + 1) * each, t, y = 0.2f, look = TextLook.BOX, animIn = TextAnim.POP)
+        }
+        return plan.copy(texts = plan.texts + items)
     }
 
     /** Which caption a rider's change is for: the clip and where the line starts in it. */
@@ -542,6 +570,7 @@ object ScriptJson {
         .put("vibe", s.vibe?.name ?: JSONObject.NULL)
         .put("style", s.style ?: JSONObject.NULL)
         .put("story", s.story ?: JSONObject.NULL)
+        .put("onScreen", JSONArray(s.onScreen))
         .put("captions", JSONObject().apply { s.captions.forEach { (k, v) -> put(k, v) } })
         .put("sections", JSONArray().apply {
             s.sections.forEach { sec ->
@@ -565,6 +594,7 @@ object ScriptJson {
                 vibe = o.optStringOrNull("vibe")?.let { v -> Vibe.entries.firstOrNull { it.name == v } },
                 style = o.optStringOrNull("style"),
                 story = o.optStringOrNull("story"),
+                onScreen = o.optJSONArray("onScreen")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty(),
                 captions = o.optJSONObject("captions")?.let { c -> c.keys().asSequence().associateWith { k -> c.optString(k) } }.orEmpty(),
                 sections = o.getJSONArray("sections").let { a ->
                     (0 until a.length()).mapNotNull { i ->

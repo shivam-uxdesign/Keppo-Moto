@@ -1114,7 +1114,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                 script = used,
                 story = null,
                 title = if (it.title == card?.title && used.title.isNotBlank() && used.why?.startsWith("Made by the app") != true) used.title else it.title,
-                hookLine = used.hookLine ?: hook?.text ?: it.hookLine,
+                hookLine = if (used.format == PieceFormat.CAPTION) "" else used.hookLine ?: hook?.text ?: it.hookLine,
                 postCaption = used.postCaption ?: fallbackCaption(),
                 content = ScriptWriter.summary(fs).text,
             )

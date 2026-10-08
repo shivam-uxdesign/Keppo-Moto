@@ -394,6 +394,20 @@ Options, which can be combined:
   - If no price is found, the last known one is used and marked "about".
   - Not tested against live Gemini yet: the first real fill-up will show whether the price search answers well.
 
+### Rider's feedback (8 Oct, afternoon) · Built 8 Oct
+- **Only 1 suggestion from a ride with lots of talking:**
+  - Gemini is now asked for at least 2–4 pieces when there's lots of talking (4 for 24+ talking clips).
+  - When some of its suggestions can't be used, Studio says how many and why.
+  - The talking time is shown in minutes, with how many clips have the rider's voice.
+- **Connection drop while reading clips** (error log, 8 Oct 12:56):
+  - The phone lost the internet for a moment. Studio now waits up to 30 s for it and reads those clips again.
+  - It's logged as a warning, not an error.
+- **New: caption clips:**
+  - One uncut 15–20 s riding shot (accelerating, leaning, a fast or pretty stretch) with 1–3 funny or relatable lines written on it, shown in turn.
+  - Suggested whenever there are riding shots with speed, acceleration or lean, and in "Show all".
+  - A "Caption clip" quick prompt under Ask for something.
+  - The lines show and can be changed in the Script view.
+
 ---
 
 ## Build order (approved 7 Oct)

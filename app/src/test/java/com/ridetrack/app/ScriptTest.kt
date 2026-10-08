@@ -67,6 +67,21 @@ class ScriptTest {
     }
 
     @Test
+    fun `a caption clip is one riding shot with its lines written on it in turn`() {
+        val r = """{"pieces":[{"format":"caption","title":"Mom calling","lengthSec":18,"hookLine":"no","onScreen":["Me: I'll ride slow today","Also me:"],
+            "sections":[{"kind":"peak","form":"take","shots":[{"clip":"c4","in":5,"out":23}]}]}]}"""
+        val sc = ScriptWriter.parsePieces(r, footage).single()
+        assertEquals(PieceFormat.CAPTION, sc.format)
+        assertEquals(null, sc.hookLine)
+        val plan = ScriptWriter.toPlan(sc, footage, emptyList(), Vibe.HYPE, StudioOptions(outro = false, loopEnd = false)).plan
+        assertEquals(1, plan.clips.size)
+        assertEquals(listOf("Me: I'll ride slow today", "Also me:"), plan.texts.map { it.text })
+        assertEquals(plan.totalMs, plan.texts.last().endMs)
+        assertEquals(plan.texts[0].endMs, plan.texts[1].startMs)
+        assertEquals(sc.onScreen, com.ridetrack.app.studio.ScriptJson.read(com.ridetrack.app.studio.ScriptJson.write(sc))!!.onScreen)
+    }
+
+    @Test
     fun `reaction sounds are spotted`() {
         assertTrue(ScriptWriter.isSound("Tooooooo"))
         assertTrue(ScriptWriter.isSound("Aaaahh!"))

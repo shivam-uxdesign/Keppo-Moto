@@ -216,7 +216,7 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     if (settings) StudioSettings(vm, s) { settings = false }
 }
 
-private val QUICK_ASKS = listOf("Funnier", "15 s", "Just the road", "Only my voice", "Slow and cinematic", "For Shorts")
+private val QUICK_ASKS = listOf("Caption clip", "Funnier", "15 s", "Just the road", "Only my voice", "Slow and cinematic", "For Shorts")
 
 /** Ask for a piece in your words; Gemini writes it and Studio makes it. */
 @Composable
@@ -773,6 +773,23 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
     // A caption being changed: its clip, the line, the words so far.
     var editing by remember { mutableStateOf<Triple<String, CaptionLine, String>?>(null) }
     var addTo by remember { mutableStateOf<Int?>(null) }
+    // A line written on the video being changed (its index; one past the end = a new line).
+    var onScreenEdit by remember { mutableStateOf<Int?>(null) }
+    onScreenEdit?.let { i ->
+        val now = draft.onScreen.getOrNull(i).orEmpty()
+        CaptionEdit(now, now, title = "Text on the video", onSave = { t ->
+            vm.editDraft { sc ->
+                val lines = sc.onScreen.toMutableList()
+                when {
+                    t.isBlank() -> if (i < lines.size) lines.removeAt(i)
+                    i < lines.size -> lines[i] = t.trim()
+                    else -> lines += t.trim()
+                }
+                sc.copy(onScreen = lines)
+            }
+            onScreenEdit = null
+        }, onClose = { onScreenEdit = null })
+    }
     editing?.let { (clip, line, now) -> CaptionEdit(line.text, now, onSave = { vm.setCaption(clip, line.startMs, it); editing = null }, onClose = { editing = null }) }
     addTo?.let { sec -> ScriptAddClip(vm, s, onPick = { b -> vm.addScriptClip(sec, b); addTo = null }, onClose = { addTo = null }) }
     Column(modifier) {
@@ -789,6 +806,23 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
             ) {
                 Text("THE STORY", style = RtType.label, color = RtColors.TextSecondary)
                 Text(draft.story ?: ScriptWriter.storyOf(draft, s.footage), style = RtType.body, color = RtColors.TextPrimary)
+            }
+            if (draft.onScreen.isNotEmpty()) {
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("WRITTEN ON THE VIDEO, IN TURN", style = RtType.label, color = RtColors.TextSecondary)
+                    draft.onScreen.forEachIndexed { i, line ->
+                        Text(
+                            "${i + 1}. $line  ✎",
+                            style = RtType.body,
+                            color = RtColors.TextPrimary,
+                            modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Change this text") { onScreenEdit = i },
+                        )
+                    }
+                    if (draft.onScreen.size < 3) Text("+ Add a line", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { onScreenEdit = draft.onScreen.size }.padding(vertical = 4.dp))
+                }
             }
             draft.sections.forEachIndexed { i, sec ->
                 val secs = sec.shots.sumOf { it.durMs } / 1000.0
@@ -896,14 +930,15 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
 
 /** Change a caption's words, or hide it; what was said stays shown above. */
 @Composable
-private fun CaptionEdit(said: String, now: String, onSave: (String) -> Unit, onClose: () -> Unit) {
+private fun CaptionEdit(said: String, now: String, title: String = "Caption", onSave: (String) -> Unit, onClose: () -> Unit) {
     var text by remember { mutableStateOf(now) }
+    val spoken = title == "Caption"
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onClose,
-        title = { Text("Caption") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Said: $said", style = RtType.caption, color = RtColors.TextSecondary)
+                if (spoken) Text("Said: $said", style = RtType.caption, color = RtColors.TextSecondary)
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
@@ -914,11 +949,11 @@ private fun CaptionEdit(said: String, now: String, onSave: (String) -> Unit, onC
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text("Hide it", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button) { onSave("") }.padding(vertical = 4.dp))
-                    Text("As said", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button) { onSave(said) }.padding(vertical = 4.dp))
+                    if (spoken) Text("As said", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button) { onSave(said) }.padding(vertical = 4.dp))
                 }
             }
         },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = { onSave(text.ifBlank { said }) }) { Text("Save") } },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { onSave(if (spoken) text.ifBlank { said } else text) }) { Text("Save") } },
         dismissButton = { androidx.compose.material3.TextButton(onClick = onClose) { Text("Cancel") } },
     )
 }
