@@ -292,13 +292,13 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
      * Asks Gemini what to make from the ride (one request). Reads no captions: call
      * [readCaptions] first. Without Gemini, or when its answer is unusable, the app suggests itself.
      */
-    suspend fun suggest(title: String): Suggested {
+    suspend fun suggest(title: String, all: Boolean = false): Suggested {
         val fs = withContext(Dispatchers.Default) { footage() }
         val cd = card ?: return Suggested.Scripts(emptyList())
         if (!c.transcripts.available) return Suggested.Scripts(localPieces(fs, "Made by the app (Gemini isn't in this build)", title), "Gemini isn't in this build")
         var answer: String? = null
         return try {
-            val scripts = gemini().scripts(ScriptWriter.planPrompt(cd.title, cd.subtitle, fs, style(), PieceFormat.entries, c.styles.forSuggestions(), Posting.performance(c.reels.reels.value)), fs, onAnswer = { answer = it }) { raw ->
+            val scripts = gemini().scripts(ScriptWriter.planPrompt(cd.title, cd.subtitle, fs, style(), PieceFormat.entries, c.styles.forSuggestions(), Posting.performance(c.reels.reels.value), all), fs, onAnswer = { answer = it }) { raw ->
                 c.errors.record("Studio content plan", "Gemini's answer couldn't be read", null, raw.take(4_000))
             }
             if (scripts.isEmpty()) {

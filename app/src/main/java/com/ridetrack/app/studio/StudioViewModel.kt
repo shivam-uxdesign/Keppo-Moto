@@ -307,7 +307,7 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
      * Gemini reads the ride (captions once) and suggests what to make from it, as scripts
      * (one request). Without Gemini, the app suggests a Reel and a Short itself.
      */
-    fun suggest() {
+    fun suggest(all: Boolean = false) {
         if (job?.isActive == true || _state.value.planning != null) return
         retryJob?.cancel()
         job = viewModelScope.launch {
@@ -321,8 +321,8 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                     // Couldn't reach Gemini: suggesting would fail the same way. Wait for the internet.
                     read.unreachable?.let { e -> waitForGemini(e); return@launch }
                 }
-                if (gemini) _state.update { it.copy(planning = "Gemini is suggesting what to make", work = emptyList()) }
-                val scripts = when (val r = engine.suggest(_state.value.title)) {
+                if (gemini) _state.update { it.copy(planning = if (all) "Gemini is finding every story in this ride" else "Gemini is suggesting what to make", work = emptyList()) }
+                val scripts = when (val r = engine.suggest(_state.value.title, all)) {
                     is Suggested.Scripts -> r.scripts
                     is Suggested.Unreachable -> { waitForGemini(r.error); return@launch }
                     Suggested.Busy -> {
@@ -367,6 +367,12 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     fun retryGemini() {
         retries = 0
         suggest()
+    }
+
+    /** Every story, reaction, line and fast stretch Gemini can find in the ride (one more request). */
+    fun suggestAll() {
+        retries = 0
+        suggest(all = true)
     }
 
     /** Suggestions the app makes itself, when the rider doesn't want to wait for Gemini. */

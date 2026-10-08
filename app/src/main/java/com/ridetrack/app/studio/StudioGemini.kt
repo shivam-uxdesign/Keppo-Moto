@@ -83,8 +83,8 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
 
     /** Scripts for [prompt] (a content plan, one piece, or a rewrite); text only, clips by their keys. */
     suspend fun scripts(prompt: String, footage: List<Footage>, onAnswer: (String) -> Unit = {}, onUnreadable: (String) -> Unit = {}): List<Script> {
-        // Several scripts are a long answer: give it two minutes.
-        val text = call(json = true, temperature = 0.7f, timeoutMs = 120_000) { m -> m.generateContent(prompt).text.orEmpty() }
+        // Several scripts are a long answer (up to 15 with Show all): give it three minutes.
+        val text = call(json = true, temperature = 0.7f, timeoutMs = 180_000) { m -> m.generateContent(prompt).text.orEmpty() }
         onAnswer(text)
         return ScriptWriter.parsePieces(text, footage).also { if (it.isEmpty()) onUnreadable(text) }
     }

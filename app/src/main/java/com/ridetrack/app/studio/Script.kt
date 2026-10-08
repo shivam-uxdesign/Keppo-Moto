@@ -168,11 +168,15 @@ object ScriptWriter {
         "The rider's styles (prefer the first ones; pick one per piece by its id when it suits, else just a vibe): " +
             styles.joinToString("; ") { "${it.id} = ${it.describe()}" } + ".\n"
 
-    fun planPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, formats: List<PieceFormat>, styles: List<StudioStyle> = emptyList(), performance: String = ""): String = buildString {
+    fun planPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, formats: List<PieceFormat>, styles: List<StudioStyle> = emptyList(), performance: String = "", all: Boolean = false): String = buildString {
         appendLine("You are the editor and social media manager for a motorcycle rider who posts motovlogs (often Hinglish).")
         appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
         appendLine(footageText(footage))
-        appendLine("Suggest one piece for every strong moment in THIS ride: a story, a reaction, a funny or useful line, a fast stretch. At least 1, at most 6.")
+        if (all) {
+            appendLine("List EVERY piece worth making from THIS ride, smaller ones too: each story, reaction, funny or useful line, tip and fast stretch. As many as the footage supports, at most 15.")
+        } else {
+            appendLine("Suggest one piece for every strong moment in THIS ride: a story, a reaction, a funny or useful line, a fast stretch. At least 1, at most 6.")
+        }
         appendLine("List them best first: the first one is made automatically. Each piece must fill at least 80% of its own length with real content.")
         appendLine("Formats allowed: ${formats.joinToString { "${it.name.lowercase()} (${it.hint}, ${it.minSec}–${it.maxSec} s)" }}.")
         appendLine("Make them different from each other: different hooks, shapes and lengths; no two pieces open on the same moment or share a shape. Clips may be reused across pieces.")

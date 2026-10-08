@@ -450,6 +450,7 @@ private fun Suggestions(vm: StudioViewModel, s: StudioState, made: Set<String>) 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("SUGGESTED FOR THIS RIDE", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
             if (s.planning == null && s.pieces.isNotEmpty() && s.gemini) {
+                Text("Show all", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.suggestAll() }.padding(vertical = 4.dp, horizontal = 8.dp))
                 Text("Suggest again", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.retryGemini() }.padding(vertical = 4.dp))
             }
         }
