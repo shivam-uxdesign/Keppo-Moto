@@ -368,6 +368,32 @@ Options, which can be combined:
 - R7: save on its own, with Undo.
 - Build order: R6 → R3 → R2 → R1 → R4 + R5 → R7, one commit each, one APK at the end.
 
+### Built 8 Oct
+- **R6:** Your Reels selection bar has Save to phone and Share (several at once) next to Send to Journal and Delete.
+- **R3:**
+  - Picking a transition, or tapping its mark, plays across the cut three times.
+  - The simple preview now draws the transition's graphic and camera move too.
+  - Every cut with a transition has a mark on the timeline; tap it to change it.
+- **R2:**
+  - Tapping a suggestion opens its script, with "Make this" (cards also have "Make it").
+  - The story is written out. Each shot shows what was said and its caption; tap a caption to change or hide it.
+  - "+ Add a clip" in each section (this ride, other rides, Saved clips), and ✕ to remove a shot.
+- **R1:** "Show all" next to "Suggest again": up to 15 pieces, smaller ones too (one more Gemini request).
+- **R4:**
+  - A Style button in the editor puts a style on the edit (Undo takes it off).
+  - Edit any style, or make a new one, from the same sheet.
+  - "Save this style ›" on the finished video.
+- **R5:**
+  - Captions: any colour, the colour of the word being said, a font, size and height sliders, a dark band behind them.
+  - Text: font, size and height.
+  - Transitions: an exact length (0.15–2 s).
+  - Colour: sliders.
+- **R7:**
+  - After a ride, a pump stop with a card SMS amount: the city's petrol price for today is looked up (Gemini with Google Search), the litres are worked out and the fill is saved.
+  - A notification shows it, with Undo; Undo brings back "Filled up here?".
+  - If no price is found, the last known one is used and marked "about".
+  - Not tested against live Gemini yet: the first real fill-up will show whether the price search answers well.
+
 ---
 
 ## Build order (approved 7 Oct)
