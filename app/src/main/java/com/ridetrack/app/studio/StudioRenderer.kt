@@ -333,23 +333,7 @@ class StudioRenderer(private val context: Context) {
         val voLines = input.voiceLines.filter { it.endMs > segStart && it.startMs < segStart + dur }.map { it.copy(startMs = it.startMs - segStart, endMs = it.endMs - segStart) }
         val lines = if (seg is ClipSegment) (seg.lines + voLines).sortedBy { it.startMs } else voLines
         val opener = input.opener.takeIf { seg is ClipSegment && seg.hook && !seg.tail }
-        val frameAt = { localMs: Long ->
-            FrameAt(
-                vibe = plan.vibe,
-                localMs = localMs,
-                durMs = dur,
-                // Inside a script section the cut is plain; the vibe's transition plays between sections.
-                // A transition the rider chose on a cut always plays (a Cut never does).
-                hasPrev = i > 0 && (cs?.transition?.let { it.kind != TransitionKind.CUT } ?: boundary(segs[i - 1], seg)),
-                hasNext = i < segs.lastIndex && ((segs[i + 1] as? ClipSegment)?.transition?.let { it.kind != TransitionKind.CUT } ?: boundary(seg, segs[i + 1])),
-                inKind = cs?.transition?.kind ?: TransitionKind.STYLE,
-                inMs = cs?.transition?.ms(plan.vibe) ?: plan.vibe.transitionMs,
-                outKind = (segs.getOrNull(i + 1) as? ClipSegment)?.transition?.kind ?: TransitionKind.STYLE,
-                outMs = (segs.getOrNull(i + 1) as? ClipSegment)?.transition?.ms(plan.vibe) ?: plan.vibe.transitionMs,
-                nextLabel = describe(input, segs.getOrNull(if (localMs < dur / 2) i else i + 1)).first,
-                nextTime = describe(input, segs.getOrNull(if (localMs < dur / 2) i else i + 1)).second,
-            )
-        }
+        val frameAt = { localMs: Long -> Cuts.frameAt(plan, i, localMs, dur) { k -> describe(input, segs.getOrNull(k)) } }
         val clipStart = clip.bit.atMillis - clip.bit.inMs
         val overlay = SegmentOverlay(overlayBitmap(art.w, art.h), clock) { c, localMs ->
             val f = frameAt(localMs)
@@ -463,9 +447,6 @@ class StudioRenderer(private val context: Context) {
     private fun voiceRanges(input: RenderInput): List<LongRange> = input.voiceLines.map { (it.startMs - 150)..(it.endMs + 250) }
 
     /** What a transition says about segment [s]: speed and time for a clip, "That's a wrap" for the stats. */
-    /** A transition between [a] and [b]: always, unless both are clips of the same script section. */
-    private fun boundary(a: Segment, b: Segment): Boolean =
-        !(a is ClipSegment && b is ClipSegment && a.section >= 0 && a.section == b.section && !b.tail)
 
     private fun describe(input: RenderInput, s: Segment?): Pair<String, String> = when (s) {
         is ClipSegment -> {

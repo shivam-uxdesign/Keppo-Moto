@@ -61,7 +61,9 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalContext
@@ -77,7 +79,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.media3.common.Player
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.ridetrack.app.ui.moments.Thumb
 import com.ridetrack.app.ui.theme.RtColors
@@ -137,6 +138,10 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var captionsOpen by remember { mutableStateOf(false) }
     var compare by remember { mutableStateOf(false) }
     var discard by remember { mutableStateOf(false) }
+    // A cut whose transition is playing on a loop (ms into the Reel); null when not.
+    var loopAt by remember { mutableStateOf<Long?>(null) }
+    // Transitions drawn over the simple preview (the exact one has them in the video).
+    val art = remember { StudioArt(context, w = 540, h = 960) }
     val pxPerMs = with(density) { 64.dp.toPx() } * zoom / 1000f
     val scroll = rememberScrollState()
     val current by rememberUpdatedState(plan)
@@ -190,6 +195,22 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             if (snap != null && snap != pos && !scroll.isScrollInProgress) scroll.animateScrollTo((snap * pxPerMs).roundToInt())
         }
     }
+    // A transition just picked (or its mark tapped): play across the cut, three times.
+    LaunchedEffect(loopAt, s.timelineVersion) {
+        val at = loopAt ?: return@LaunchedEffect
+        delay(350) // the new edit loads first
+        repeat(3) {
+            val t = (at - 1_200).coerceAtLeast(0)
+            pos = t
+            if (exactOn) exact.seek(t) else simple.seek(t)
+            scroll.scrollTo((t * pxPerMs).roundToInt())
+            active.play()
+            delay(2_400)
+        }
+        active.pause()
+        loopAt = null
+    }
+    LaunchedEffect(dragged) { if (dragged) loopAt = null }
     BackHandler { if (s.canUndo) discard = true else vm.closeEdit() }
 
     fun seekTo(ms: Long) {
@@ -223,13 +244,39 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 Modifier.fillMaxHeight().aspectRatio(9f / 16f).clip(RoundedCornerShape(14.dp)).background(Color.Black)
                     .clickable(role = Role.Button, onClickLabel = "Play or pause") { if (active.isPlaying) active.pause() else active.play() },
             ) {
-                AndroidView(
-                    factory = { ctx -> PlayerView(ctx).apply { useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM; player = active } },
-                    update = { v -> if (v.player !== active) v.player = active },
-                    modifier = Modifier.fillMaxSize(),
-                )
                 val boxW = maxWidth
                 val boxH = maxHeight
+                // In the simple preview the transition's camera move and graphic are drawn here.
+                val (ti, tl) = TimelineEdits.at(plan, pos)
+                val cut = if (exactOn) null else plan.segments.getOrNull(ti)?.let { seg ->
+                    Cuts.frameAt(plan, ti, tl, seg.durMs) { k -> ((plan.segments.getOrNull(k) as? ClipSegment)?.bit?.speedKmh?.toInt()?.takeIf { it > 0 }?.let { "$it km/h" } ?: "") to "" }
+                }?.takeIf { art.edge(it) != null }
+                val cam = cut?.let { art.camera(it) }
+                val unit = with(density) { boxW.toPx() } / art.w
+                AndroidView(
+                    // A TextureView, so the camera move below can scale and shift the picture.
+                    factory = { ctx -> (android.view.LayoutInflater.from(ctx).inflate(com.ridetrack.app.R.layout.moment_popup_player, null) as PlayerView).apply { player = active } },
+                    update = { v -> if (v.player !== active) v.player = active },
+                    modifier = Modifier.fillMaxSize().graphicsLayer {
+                        val k = cam?.k?.div(1.03f)?.coerceAtLeast(1f) ?: 1f
+                        scaleX = k; scaleY = k
+                        translationX = (cam?.x ?: 0f) * unit
+                        translationY = (cam?.y ?: 0f) * unit
+                        rotationZ = cam?.deg ?: 0f
+                    },
+                )
+                cut?.let { f ->
+                    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                        val t = art.edge(f) ?: return@Canvas
+                        drawIntoCanvas { c ->
+                            val nc = c.nativeCanvas
+                            nc.save()
+                            nc.scale(size.width / art.w, size.height / art.h)
+                            art.transition(nc, f, t)
+                            nc.restore()
+                        }
+                    }
+                }
                 // Layers, as still frames where they'll be (they move in the saved video).
                 plan.layers.filter { pos in it.startMs until it.endMs }.forEach { l ->
                     LayerPreview(vm, s, l, pos, boxW.value, boxH.value, selected = (s.pick as? TimelinePick.Layer)?.id == l.id)
@@ -328,7 +375,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                     )
                                 }
                             }
-                            // Clips
+                            // Clips, with a mark on each cut that plays a transition
+                            Box(Modifier.height(52.dp)) {
                             Row(Modifier.height(52.dp)) {
                                 plan.segments.forEachIndexed { i, seg ->
                                     val selected = (s.pick as? TimelinePick.Clip)?.index == i || many?.contains(i) == true
@@ -359,6 +407,20 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                         }
                                     }
                                 }
+                            }
+                            Cuts.marks(plan).forEach { m ->
+                                val half = with(density) { 11.dp.toPx() }.roundToInt()
+                                Box(
+                                    Modifier.offset { IntOffset((m.atMs * pxPerMs).roundToInt() - half, with(density) { 15.dp.toPx() }.roundToInt()) }
+                                        .size(22.dp).clip(RoundedCornerShape(6.dp))
+                                        .background(if (m.chosen) RtColors.Primary else Color.Black.copy(alpha = 0.65f))
+                                        .border(1.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
+                                        .clickable(role = Role.Button, onClickLabel = "Transition: ${m.kind.label}") {
+                                            vm.pick(TimelinePick.Clip(m.segment)); clipTab = ClipTab.CUT; loopAt = m.atMs
+                                        },
+                                    contentAlignment = Alignment.Center,
+                                ) { Text("⧓", style = RtType.caption, color = Color.White) }
+                            }
                             }
                             // Layers
                             if (plan.layers.isNotEmpty()) {
@@ -499,9 +561,12 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 Text("The first clip has no cut before it.", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
                             } else {
                                 val tr = seg?.transition ?: Transition()
-                                TransitionKind.entries.forEach { k -> Choice(k.label, tr.kind == k) { vm.change("Transition") { ClipTools.transition(it, p.index, tr.copy(kind = k)) } } }
+                                val at = plan.startOf(p.index)
+                                Choice(if (loopAt != null) "■ Stop" else "▶ Preview", loopAt != null) { if (loopAt != null) { loopAt = null; active.pause() } else loopAt = at }
                                 Spacer(Modifier.width(10.dp))
-                                TransitionLength.entries.forEach { l -> Choice(l.label, tr.length == l) { vm.change("Transition length") { ClipTools.transition(it, p.index, tr.copy(length = l)) } } }
+                                TransitionKind.entries.forEach { k -> Choice(k.label, tr.kind == k) { vm.change("Transition") { ClipTools.transition(it, p.index, tr.copy(kind = k)) }; loopAt = at } }
+                                Spacer(Modifier.width(10.dp))
+                                TransitionLength.entries.forEach { l -> Choice(l.label, tr.length == l) { vm.change("Transition length") { ClipTools.transition(it, p.index, tr.copy(length = l)) }; loopAt = at } }
                                 Spacer(Modifier.width(10.dp))
                                 Choice("Use on all cuts", false) { vm.change("Transition on all cuts") { ClipTools.transitionAll(it, tr) } }
                             }
