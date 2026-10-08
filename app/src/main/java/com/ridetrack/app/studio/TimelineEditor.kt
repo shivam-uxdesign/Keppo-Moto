@@ -254,10 +254,19 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 }?.takeIf { art.edge(it) != null }
                 val cam = cut?.let { art.camera(it) }
                 val unit = with(density) { boxW.toPx() } / art.w
+                // The exact preview only plays into a SurfaceView (Media3's composition player refuses a
+                // TextureView). The simple preview uses a TextureView, so the transition's camera move
+                // below can scale and shift the picture. A new view when the preview changes.
+                androidx.compose.runtime.key(exactOn) {
                 AndroidView(
-                    // A TextureView, so the camera move below can scale and shift the picture.
-                    factory = { ctx -> (android.view.LayoutInflater.from(ctx).inflate(com.ridetrack.app.R.layout.moment_popup_player, null) as PlayerView).apply { player = active } },
-                    update = { v -> if (v.player !== active) v.player = active },
+                    factory = { ctx ->
+                        val v = if (exactOn) PlayerView(ctx).apply { useController = false; resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM }
+                        else android.view.LayoutInflater.from(ctx).inflate(com.ridetrack.app.R.layout.moment_popup_player, null) as PlayerView
+                        // Never crash the editor over the video view: fall back to the simple preview.
+                        runCatching { v.player = active }.onFailure { e -> if (exactOn) { exactOn = false; vm.previewFailed(e) } }
+                        v
+                    },
+                    update = { v -> if (v.player !== active) runCatching { v.player = active } },
                     modifier = Modifier.fillMaxSize().graphicsLayer {
                         val k = cam?.k?.div(1.03f)?.coerceAtLeast(1f) ?: 1f
                         scaleX = k; scaleY = k
@@ -266,6 +275,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         rotationZ = cam?.deg ?: 0f
                     },
                 )
+                }
                 cut?.let { f ->
                     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
                         val t = art.edge(f) ?: return@Canvas
