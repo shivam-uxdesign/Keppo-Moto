@@ -522,4 +522,10 @@ The rider: "Studio got way too complicated; make it very simple and intuitive", 
   - One feed across rides, or a list of rides?
   - The story inside Captions, or its own button?
   - What can go behind ⋯ or away?
+- **Motion (rider, 8 Oct):** things move, never just appear.
+  - Tapping a cut: the timeline glides to centre it, the clips part (left ones slide left, right ones right) with the cut mark growing between them, and the transition picker rises in under the timeline. Circles slide to the centre as you swipe; Done glides everything back.
+  - Ideas slide up and down like a pager.
+  - The editor zooms open; sheets rise from the bottom and their backdrops fade.
+  - The bottom bar's tools rise in one by one when the selection changes; a selected clip lifts.
+  - The style name pops on the video when you swipe; Share slides in from the right.
 - Also seen on the rider's phone (8 Oct): the editor showed "Simple preview" on every clip. One failure turns the exact preview off for the whole session. The cause is in the error log ("Studio preview"); waiting for it.
