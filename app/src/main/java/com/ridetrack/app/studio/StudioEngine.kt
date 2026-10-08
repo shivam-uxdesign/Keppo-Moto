@@ -182,39 +182,57 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         var note: String? = null
         var unreachable: Throwable? = null
         var done = 0
-        for (batch in todo.chunked(BATCH)) {
+        var dropped = 0
+        batches@ for (batch in todo.chunked(BATCH)) {
             if (skip()) break
             onProgress("${done + 1}–${done + batch.size} of ${todo.size} clips")
-            val audios = batch.mapIndexed { k, j -> j to File(c.appContext.cacheDir, "studio-cap-$rideId-$done-$k.m4a") }
-            try {
-                val usable = audios.filter { (j, f) -> j.extract(f) && f.length() <= MAX_AUDIO_BYTES / 2 }
-                audios.filter { it !in usable }.forEach { (j, _) -> StudioText.save(j.key, emptyList()) }
-                val results = if (usable.isEmpty()) emptyList() else g.captionsBatch(usable.map { it.second })
-                usable.forEachIndexed { i, (j, _) ->
-                    val lines = results.getOrNull(i)
-                    if (lines == null) { missed++; return@forEachIndexed }
-                    StudioText.save(j.key, lines)
-                    j.saved(lines)
+            var attempt = 0
+            while (true) {
+                val audios = batch.mapIndexed { k, j -> j to File(c.appContext.cacheDir, "studio-cap-$rideId-$done-$k.m4a") }
+                try {
+                    val usable = audios.filter { (j, f) -> j.extract(f) && f.length() <= MAX_AUDIO_BYTES / 2 }
+                    audios.filter { it !in usable }.forEach { (j, _) -> StudioText.save(j.key, emptyList()) }
+                    val results = if (usable.isEmpty()) emptyList() else g.captionsBatch(usable.map { it.second })
+                    usable.forEachIndexed { i, (j, _) ->
+                        val lines = results.getOrNull(i)
+                        if (lines == null) { missed++; return@forEachIndexed }
+                        StudioText.save(j.key, lines)
+                        j.saved(lines)
+                    }
+                    break
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // The connection dropped for a moment (Wi-Fi to mobile data, a tunnel): wait up to
+                    // 30 s for it to come back and read the same clips again, once.
+                    if (GeminiNet.isUnreachable(e) && attempt++ == 0 &&
+                        kotlinx.coroutines.withTimeoutOrNull(30_000) { GeminiNet.awaitOnline(c.appContext); true } == true
+                    ) {
+                        dropped++
+                        kotlinx.coroutines.delay(2_000)
+                        continue
+                    }
+                    val what = "Couldn't read ${batch.size} clips (${batch.joinToString { it.name }})"
+                    // No internet is the phone's state, not a fault: a warning, and they're read next time.
+                    if (GeminiNet.isUnreachable(e)) c.errors.warn("Studio captions", "$what: no internet. They're read next time.", e) else c.errors.record("Studio captions", what, e)
+                    missed += batch.size
+                    if (GeminiNet.isUnreachable(e)) unreachable = e
+                    note = when {
+                        AppCheckSetup.isRejected(e) -> "Captions: Firebase didn't accept this phone (App Check). Add the debug token from Profile › Moments in Firebase."
+                        e is FirebaseTranscriber.Busy -> "Captions were skipped: Gemini's free limit is used up. Remix once it's free again."
+                        GeminiNet.isUnreachable(e) -> "Captions were skipped. " + GeminiNet.message(e)
+                        else -> "Captions: couldn't read $missed clip${if (missed > 1) "s" else ""} (${e.message?.take(80)})."
+                    }
+                    // Out of allowance, refused or unreachable: more requests won't help now.
+                    if (AppCheckSetup.isRejected(e) || e is FirebaseTranscriber.Busy || GeminiNet.isUnreachable(e)) break@batches
+                    break
+                } finally {
+                    audios.forEach { it.second.delete() }
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                c.errors.record("Studio captions", "Couldn't read ${batch.size} clips (${batch.joinToString { it.name }})", e)
-                missed += batch.size
-                if (GeminiNet.isUnreachable(e)) unreachable = e
-                note = when {
-                    AppCheckSetup.isRejected(e) -> "Captions: Firebase didn't accept this phone (App Check). Add the debug token from Profile › Moments in Firebase."
-                    e is FirebaseTranscriber.Busy -> "Captions were skipped: Gemini's free limit is used up. Remix once it's free again."
-                    GeminiNet.isUnreachable(e) -> "Captions were skipped. " + GeminiNet.message(e)
-                    else -> "Captions: couldn't read $missed clip${if (missed > 1) "s" else ""} (${e.message?.take(80)})."
-                }
-                // Out of allowance, refused or unreachable: more requests won't help now.
-                if (AppCheckSetup.isRejected(e) || e is FirebaseTranscriber.Busy || GeminiNet.isUnreachable(e)) break
-            } finally {
-                audios.forEach { it.second.delete() }
             }
             done += batch.size
         }
+        if (dropped > 0) c.errors.warn("Studio captions", "The connection dropped $dropped time${if (dropped > 1) "s" else ""} while reading; those clips were read again when it came back")
         if (missed > 0 || skip()) captionsTried = true
         buildBits().also { bits = it }
         CaptionsRead(note, unreachable, missed)
