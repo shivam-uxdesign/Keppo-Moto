@@ -499,3 +499,27 @@ Each build ends with one APK to test on the phone before the next starts.
   - The rider sees it where it happened: a small note on the Reel ("Made with a simpler method on this phone · Details"), and a "Simple preview" label in the editor when the preview fell back.
   - A count on Profile › Error log when there are new entries ("2 new").
   - Send to the developer: the existing Send/Copy, plus "Send Studio details" for a Reel (its plan, checks, fallbacks and Gemini's answer).
+
+---
+
+## Studio redesign: simple, like Instagram's editor (proposal, 8 Oct, not built)
+
+The rider: "Studio got way too complicated; make it very simple and intuitive", with gestures, not only buttons. Prototype: https://claude.ai/artifact/DmWPHLWsGSQXBcPhBhw3QP (private).
+
+- **Three places:**
+  - **Studio:** a feed of ideas, one big card at a time; Search and Your Reels icons on top; an Ask pill at the bottom; settings behind ⋯.
+  - **Editor:** opens a suggestion straight away, playing live (no making first). It replaces Ready, Script and Edit.
+    - Top: close, Ideas, →. Then the preview, play/time/undo, the timeline (clips, captions, sound).
+    - A bottom bar that changes with the selection: nothing, a clip, a caption or text, or the sound.
+  - **Share:** after →. The video is made once, here: cover, captions for Instagram and YouTube, Check the hook, Save, Share.
+- **Gestures (buttons stay too):**
+  - Ideas: swipe up/down for the next idea, swipe left to hide, tap to open, hold for options.
+  - Video: tap to play/pause, swipe sideways for the next style, hold to see it before your changes, swipe down to close, drag/pinch text.
+  - Timeline: drag to scrub, pinch to zoom, tap to select, drag edges to trim, hold and drag to move a clip, flick up to remove. Tap a cut mark for the transition picker (swipe the circles).
+  - Sheets: swipe down to close. Share: swipe down to go back.
+- **Open questions:**
+  - Making the video only at → (a 30–60 s wait at share; the top idea is still made after each ride)?
+  - One feed across rides, or a list of rides?
+  - The story inside Captions, or its own button?
+  - What can go behind ⋯ or away?
+- Also seen on the rider's phone (8 Oct): the editor showed "Simple preview" on every clip. One failure turns the exact preview off for the whole session. The cause is in the error log ("Studio preview"); waiting for it.
