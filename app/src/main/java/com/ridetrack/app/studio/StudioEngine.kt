@@ -274,6 +274,10 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         }
     }.getOrNull()
 
+    /** Gemini's last content-plan answer as it came; null when there was none. */
+    @Volatile var lastAnswer: String? = null
+        private set
+
     /** The suggestions as pieces to show and make (each turned into a plan by the app's checks). */
     fun pieces(scripts: List<Script>, o: StudioOptions = c.studio.options): List<ContentPiece> {
         val fs = footage()
@@ -297,10 +301,12 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         val cd = card ?: return Suggested.Scripts(emptyList())
         if (!c.transcripts.available) return Suggested.Scripts(localPieces(fs, "Made by the app (Gemini isn't in this build)", title), "Gemini isn't in this build")
         var answer: String? = null
+        lastAnswer = null
         return try {
             val scripts = gemini().scripts(ScriptWriter.planPrompt(cd.title, cd.subtitle, fs, style(), PieceFormat.entries, c.styles.forSuggestions(), Posting.performance(c.reels.reels.value), all), fs, onAnswer = { answer = it }) { raw ->
                 c.errors.record("Studio content plan", "Gemini's answer couldn't be read", null, raw.take(4_000))
             }
+            lastAnswer = answer
             if (scripts.isEmpty()) {
                 val why = "Gemini's answer couldn't be read"
                 Suggested.Scripts(localPieces(fs, "Made by the app: $why", title), why).also { savePlan(it.scripts, answer, why) }

@@ -56,6 +56,17 @@ class ScriptTest {
     }
 
     @Test
+    fun `rides with lots of talking ask for several pieces`() {
+        val talk = (1..31).map { Footage("c$it", "m$it", 10_000, it * 60_000L, "selfie", listOf(CaptionLine(1_000, 3_000, "bhai ye road mast hai")), 40) }
+        assertEquals(4, ScriptWriter.leastPieces(talk))
+        assertEquals(1, ScriptWriter.leastPieces(footage))
+        assertTrue(ScriptWriter.planPrompt("Tuesday", "30 km", talk, null, PieceFormat.entries).contains("At least 4, at most 6"))
+        assertEquals(2, ScriptWriter.piecesAsked(reply))
+        val many = (1..31).map { Footage("c$it", "m$it", 12_000, it * 60_000L, "selfie", listOf(CaptionLine(0, 9_130, "bhai")), 40) }
+        assertTrue(ScriptWriter.summary(many).text.contains("4 min 43 s of you talking in 31"), ScriptWriter.summary(many).text)
+    }
+
+    @Test
     fun `reaction sounds are spotted`() {
         assertTrue(ScriptWriter.isSound("Tooooooo"))
         assertTrue(ScriptWriter.isSound("Aaaahh!"))

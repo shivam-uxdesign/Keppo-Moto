@@ -101,6 +101,8 @@ data class StudioState(
     val planning: String? = null,
     /** The suggestion being made; null for a Reel of your own choices. */
     val piece: ContentPiece? = null,
+    /** Gemini suggested more than are shown ("Gemini suggested 5 · 2 couldn't be fitted to your clips"); null when all are. */
+    val suggestNote: String? = null,
     /** The suggestion open in the Script view before it's made (its key); null otherwise. */
     val scriptPiece: String? = null,
     /** Every clip Studio can pick from (moments and phone videos), in filming order. */
@@ -331,6 +333,21 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
                     }
                 }
                 showPieces(scripts)
+                // Say when some of Gemini's suggestions couldn't be used, and keep why for Studio details.
+                val asked = ScriptWriter.piecesAsked(engine.lastAnswer)
+                val shown = _state.value.pieces.size
+                if (asked > shown) {
+                    val unread = asked - scripts.size
+                    val unfit = scripts.size - shown
+                    val note = "Gemini suggested $asked · " + listOfNotNull(
+                        unread.takeIf { it > 0 }?.let { "$it couldn't be read" },
+                        unfit.takeIf { it > 0 }?.let { "$it didn't fit your clips" },
+                    ).joinToString(", ")
+                    _state.update { it.copy(suggestNote = note) }
+                    c.errors.warn("Studio content plan", note, extra = engine.planDetails()?.take(8_000))
+                } else {
+                    _state.update { it.copy(suggestNote = null) }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

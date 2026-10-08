@@ -72,7 +72,7 @@ data class Footage(
 }
 
 /** What the ride has, in words, so the rider (and Gemini) know how much there is to work with. */
-data class ContentSummary(val clips: Int, val talkingSec: Int, val sounds: Int, val looks: Int) {
+data class ContentSummary(val clips: Int, val talkingSec: Int, val sounds: Int, val looks: Int, val talkingClips: Int = 0) {
     /** The longest Reel this footage fills well. */
     val goodLengthSec: Int get() = when {
         talkingSec >= 45 || (talkingSec >= 25 && looks >= 2) -> 60
@@ -82,10 +82,19 @@ data class ContentSummary(val clips: Int, val talkingSec: Int, val sounds: Int, 
     }
     val text: String get() = buildString {
         append("$clips clip${if (clips == 1) "" else "s"}")
-        append(" · ${talkingSec} s of you talking")
+        // Minutes past a minute ("4 min 43 s"), and in how many clips you talk.
+        val said = if (talkingSec >= 60) "${talkingSec / 60} min ${talkingSec % 60} s" else "$talkingSec s"
+        append(" · $said of you talking")
+        if (talkingClips > 0) append(" in $talkingClips")
         if (sounds > 0) append(" · $sounds reaction${if (sounds == 1) "" else "s"}")
         append(". Enough for ")
-        append(if (goodLengthSec >= 60) "a long Reel or several short ones" else "a ${goodLengthSec} s Reel")
+        append(
+            when {
+                talkingSec >= 180 -> "several Reels and Shorts"
+                goodLengthSec >= 60 -> "a long Reel or several short ones"
+                else -> "a ${goodLengthSec} s Reel"
+            },
+        )
         append(".")
     }
 }
@@ -102,6 +111,7 @@ object ScriptWriter {
         talkingSec = (footage.sumOf { it.talkingMs } / 1000).toInt(),
         sounds = footage.sumOf { f -> f.lines.count { isSound(it.text) } },
         looks = footage.map { it.look }.distinct().size,
+        talkingClips = footage.count { it.lines.isNotEmpty() },
     )
 
     // ---- prompts -----------------------------------------------------------------------------
@@ -175,7 +185,9 @@ object ScriptWriter {
         if (all) {
             appendLine("List EVERY piece worth making from THIS ride, smaller ones too: each story, reaction, funny or useful line, tip and fast stretch. As many as the footage supports, at most 15.")
         } else {
-            appendLine("Suggest one piece for every strong moment in THIS ride: a story, a reaction, a funny or useful line, a fast stretch. At least 1, at most 6.")
+            val least = leastPieces(footage)
+            appendLine("Suggest one piece for every strong moment in THIS ride: a story, a reaction, a funny or useful line, a fast stretch. At least $least, at most 6.")
+            appendLine("Each reaction sound and each separate story or funny or useful line can be its own short piece; don't put everything into one.")
         }
         appendLine("List them best first: the first one is made automatically. Each piece must fill at least 80% of its own length with real content.")
         appendLine("Formats allowed: ${formats.joinToString { "${it.name.lowercase()} (${it.hint}, ${it.minSec}–${it.maxSec} s)" }}.")
@@ -495,6 +507,28 @@ object ScriptWriter {
             "${sec.kind.label}: " + (if (said.isNotBlank()) "\u201c${said.take(140)}\u201d" else shown.ifEmpty { sec.form }) + "."
         }
     }
+
+    /**
+     * The fewest pieces to ask for: rides with lots of talking have several stories in them
+     * (31 clips with talking → 4), a quiet ride may have one.
+     */
+    fun leastPieces(footage: List<Footage>): Int {
+        val talking = footage.count { it.lines.isNotEmpty() }
+        val sounds = footage.sumOf { f -> f.lines.count { isSound(it.text) } }
+        return when {
+            talking >= 24 -> 4
+            talking >= 12 -> 3
+            talking >= 5 || sounds >= 2 -> 2
+            else -> 1
+        }
+    }
+
+    /** How many pieces Gemini's answer has, readable or not (to say when some couldn't be used). */
+    fun piecesAsked(reply: String?): Int = runCatching {
+        val a = reply!!.indexOf('{')
+        val b = reply.lastIndexOf('}')
+        JSONObject(reply.substring(a, b + 1)).optJSONArray("pieces")?.length() ?: 1
+    }.getOrDefault(0)
 
     /** Footage keys ("c1"…) in filming order. */
     fun keys(footage: List<Footage>): Map<String, String> = footage.associate { it.momentId to it.key }

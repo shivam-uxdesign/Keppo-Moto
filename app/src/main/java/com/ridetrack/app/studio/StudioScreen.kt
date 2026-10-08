@@ -455,6 +455,7 @@ private fun Suggestions(vm: StudioViewModel, s: StudioState, made: Set<String>) 
             }
         }
         s.content?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
+        s.suggestNote?.let { Text("$it. Studio details has why.", style = RtType.caption, color = RtColors.Warning) }
         s.geminiIssue?.let { issue ->
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Warning.copy(alpha = 0.12f)).padding(14.dp),
