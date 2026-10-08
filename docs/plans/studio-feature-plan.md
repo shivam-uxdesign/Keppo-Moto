@@ -362,6 +362,12 @@ Options, which can be combined:
   - It only looks when a pump stop is found after a ride, never by tracking location in the background, so there's no extra battery use.
 - **Risk:** a card payment at the pump that isn't fuel (snacks, air) would be saved as a fill; Undo covers it.
 
+### Decisions (8 Oct)
+- R1–R4 and R6: build as planned.
+- R5: **more freedom in each part** (option C): any colour, size, position and font for captions and text; your own transition length; colour sliders. Mix and match, per-section looks and shape templates are not wanted for now.
+- R7: save on its own, with Undo.
+- Build order: R6 → R3 → R2 → R1 → R4 + R5 → R7, one commit each, one APK at the end.
+
 ---
 
 ## Build order (approved 7 Oct)

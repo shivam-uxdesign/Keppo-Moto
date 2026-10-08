@@ -47,6 +47,18 @@ object ShareImages {
         runCatching { context.startActivity(Intent.createChooser(send, "Share ride")) }
     }
 
+    /** Shares several files at once (e.g. Reels to WhatsApp or Instagram). */
+    fun shareMany(context: Context, uris: List<Uri>, mime: String) {
+        if (uris.size == 1) return share(context, uris[0], mime)
+        if (uris.isEmpty()) return
+        val send = Intent(Intent.ACTION_SEND_MULTIPLE)
+            .setType(mime)
+            .putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        send.clipData = ClipData.newRawUri("", uris[0]).apply { uris.drop(1).forEach { addItem(ClipData.Item(it)) } }
+        runCatching { context.startActivity(Intent.createChooser(send, "Share")) }
+    }
+
     /** Copies the image so it can be pasted as a sticker (e.g. into an Instagram story). */
     fun copy(context: Context, uri: Uri): Boolean {
         val cm = context.getSystemService<ClipboardManager>() ?: return false

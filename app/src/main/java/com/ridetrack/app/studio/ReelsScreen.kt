@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ridetrack.app.share.ShareImages
 import com.ridetrack.app.ui.appContainer
 import com.ridetrack.app.ui.components.EmptyState
 import com.ridetrack.app.ui.components.ScreenHeader
@@ -61,7 +62,7 @@ private enum class ReelFilter(val label: String) { ALL("All"), DRAFTS("Not poste
 
 /**
  * Your Reels: everything Studio made (Reels, Shorts, Stories, long videos), newest first, with
- * filters, storage, multi-select (Delete, Send to Journal) and Recently deleted at the bottom.
+ * filters, storage, multi-select (Send to Journal, Save to phone, Share, Delete) and Recently deleted at the bottom.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -73,6 +74,9 @@ fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String)
     var filter by rememberSaveable { mutableStateOf(ReelFilter.ALL) }
     var selected by remember { mutableStateOf(setOf<String>()) }
     var confirm by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(note) { if (note != null && !note!!.endsWith("…")) { kotlinx.coroutines.delay(3_000); note = null } }
     var bytes by remember { mutableStateOf<Long?>(null) }
     var showDeleted by rememberSaveable { mutableStateOf(false) }
     // Reels | Saved clips.
@@ -110,14 +114,30 @@ fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String)
                 }
             }
         }
+        note?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(bottom = 6.dp)) }
         if (savedTab && !selecting) {
             SavedClipsGrid()
             return@Column
         }
         if (selecting) {
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
                 Text("Send to Journal", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) {
                     scope.launch { sendToJournal(c, all.filter { it.id in selected && it.rideId != null }); selected = emptySet() }
+                }.padding(vertical = 6.dp))
+                Text("Save to phone", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) {
+                    val ids = selected
+                    scope.launch {
+                        note = "Saving ${ids.size}…"
+                        val ok = ids.count { id -> store.video(id).takeIf { it.isFile }?.let { f -> ShareImages.saveVideo(context, f, "Keppo Reel $id") } == true }
+                        ids.forEach { id -> store.update(id) { it.copy(posted = true) } }
+                        note = if (ok == ids.size) "Saved $ok to Movies/Keppo Moto" else "Saved $ok of ${ids.size}"
+                        selected = emptySet()
+                    }
+                }.padding(vertical = 6.dp))
+                Text("Share", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) {
+                    val files = selected.map { store.video(it) }.filter { it.isFile }
+                    ShareImages.shareMany(context, files.map { ShareImages.uriFor(context, it) }, "video/mp4")
+                    scope.launch { selected.forEach { id -> store.update(id) { it.copy(posted = true) } } }
                 }.padding(vertical = 6.dp))
                 Text("Delete", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { confirm = true }.padding(vertical = 6.dp))
             }
