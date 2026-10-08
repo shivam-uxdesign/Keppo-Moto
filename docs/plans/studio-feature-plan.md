@@ -308,6 +308,62 @@ Kept on the list, not for the next builds.
 
 ---
 
+## Rider's review (8 Oct, after testing the APK)
+
+Planned, not built yet. Waiting for the rider's answers on the questions below.
+
+### R1 Suggest every possible story from a ride
+- **Today:** Gemini suggests 1–6 pieces, and only the strongest moments.
+- **Change:** "Show all" asks Gemini for every story, reaction, useful line and fast stretch in the ride, not just the best few, then lists them best first. It's one more request, made only when asked.
+
+### R2 Open a suggestion and read everything
+- **Today:** the Script view shows each section's shots and a short quote of what was said.
+- **Change:**
+  - The story in full, written out.
+  - For each shot, two lines: what was said (the transcription) and the caption that will show on screen.
+  - Tap a caption to change it. Captions can be split, joined or hidden.
+  - "Add a clip" in the Script view itself, from this ride, another ride, Saved clips or Search, without going to the editor.
+
+### R3 See transitions
+- **Today:** the editor's Transition tab picks the kind and length, but the preview shows a straight cut, and the timeline shows nothing between clips.
+- **Change:**
+  - A transition plays in the preview when it's picked: about 1.5 s around the cut, on a loop.
+  - The timeline shows a small mark between clips with a transition. Tap the mark to change it.
+
+### R4 Styles inside Studio
+- **Today:** the Ready screen has Style, but full editing and creating is only on the Styles page.
+- **Change:**
+  - A Style button in the editor too: switch style, or "Edit this style" in a sheet without leaving the edit.
+  - "New style" in the same sheet.
+  - After a video is made: "Save this style", which makes a style from the video's current look (captions, colour, cuts, pace, stickers), then names it.
+
+### R5 Styles feel restrictive (to discuss)
+Where they're limited today:
+1. One style covers the whole video: the hook, the middle and the ending all look the same.
+2. A style is all or nothing: you can't take the captions from one style and the colour from another.
+3. Each part is a fixed list (caption looks, text animations, transition kinds), with little control over size, position, font or colour.
+4. A style changes the look only, not the shape (how long the hook is, a stats card in the middle, how it ends).
+Options, which can be combined:
+- **A. Mix and match:** a style is made of parts (Captions, Text, Colour, Cuts, Overlays, Sound), and each part can come from any style.
+- **B. Per section:** a different look for the hook, the middle and the ending.
+- **C. More freedom in each part:** any colour, size, position and font for captions and text; your own transition length; colour sliders.
+- **D. Shape templates:** a style can carry a structure ("3 s hook → fast montage → talking → stat card → sign-off").
+
+### R6 Your Reels: select several, then delete or save
+- **Today:** long-press selects several, with Delete only.
+- **Change:** add "Save to phone" (all selected go to Movies/Keppo Moto) and "Share" (several at once) to the selection bar.
+
+### R7 Petrol price updates itself
+- **Today:** after a ride with a stop at a pump, Keppo asks about the fill and takes the amount from the card SMS. The rider types the price or litres.
+- **Change:**
+  - When a pump stop and its card SMS are found, Keppo looks up today's petrol price for that city online, works out the litres (amount ÷ price) and saves the fill. No input.
+  - A notification says what was saved, with Undo: "Saved fill · ₹500 · 4.6 L at ₹103.4 (Pune)".
+  - The price is looked up through Gemini with Google Search. There's no free official price feed. If the lookup fails, the last known price is used and marked as "about".
+  - It only looks when a pump stop is found after a ride, never by tracking location in the background, so there's no extra battery use.
+- **Risk:** a card payment at the pump that isn't fuel (snacks, air) would be saved as a fill; Undo covers it.
+
+---
+
 ## Build order (approved 7 Oct)
 Each build ends with one APK to test on the phone before the next starts.
 
