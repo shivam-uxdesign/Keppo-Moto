@@ -140,9 +140,14 @@ enum class TransitionKind(val label: String) {
 
 enum class TransitionLength(val label: String, val factor: Float) { SHORT("Short", 0.5f), NORMAL("Normal", 1f), LONG("Long", 1.6f) }
 
-data class Transition(val kind: TransitionKind = TransitionKind.STYLE, val length: TransitionLength = TransitionLength.NORMAL) {
+data class Transition(
+    val kind: TransitionKind = TransitionKind.STYLE,
+    val length: TransitionLength = TransitionLength.NORMAL,
+    /** The rider's own length in ms (150–2000); null = [length] with the vibe's timing. */
+    val customMs: Long? = null,
+) {
     /** How long it takes across the cut with [vibe]'s timing. */
-    fun ms(vibe: Vibe): Long = (vibe.transitionMs * length.factor).toLong()
+    fun ms(vibe: Vibe): Long = customMs ?: (vibe.transitionMs * length.factor).toLong()
 }
 
 /** The route-sketch opening (optional); the stats over the last clip. Both play muted. */
@@ -188,6 +193,8 @@ data class TextItem(
     /** Its colour (ARGB); null = the look's own. */
     val color: Int? = null,
     val align: TextAlignment = TextAlignment.CENTER,
+    /** Its typeface; Style's = the look's own. */
+    val font: FontChoice = FontChoice.STYLE,
     val animIn: TextAnim = TextAnim.FADE,
     val animOut: TextAnim = TextAnim.FADE,
 )
@@ -208,7 +215,44 @@ data class CaptionLook(
     val y: Float? = null,
     /** Light up the word being said (karaoke); off = the whole line at once (plain captions). */
     val karaoke: Boolean = true,
+    /** The words' colour (ARGB; for labels and chat bubbles, the paper's); null = the look's own. */
+    val color: Int? = null,
+    /** The colour of the word being said; null = yellow. */
+    val highlight: Int? = null,
+    val font: FontChoice = FontChoice.STYLE,
+    /** A dark band behind the captions, so they read on any shot. */
+    val box: Boolean = false,
 )
+
+/** Typefaces the rider can pick for captions and text; Style's = the look's own, Brand = the brand kit's font. */
+enum class FontChoice(val label: String) { STYLE("Style's"), BOLD("Bold"), SERIF("Serif"), CLEAN("Clean"), HAND("Handwritten"), BRAND("My brand") }
+
+/** Captions' look and a transition ↔ JSON, shared by saved Reels and styles (older files read as before). */
+object LookJson {
+    fun caption(c: CaptionLook): org.json.JSONObject = org.json.JSONObject().put("kind", c.kind.name).put("size", c.size.toDouble()).put("y", c.y?.toDouble() ?: org.json.JSONObject.NULL)
+        .put("karaoke", c.karaoke).put("color", c.color ?: org.json.JSONObject.NULL).put("hi", c.highlight ?: org.json.JSONObject.NULL).put("font", c.font.name).put("box", c.box)
+
+    fun caption(o: org.json.JSONObject?): CaptionLook = o?.let { c ->
+        CaptionLook(
+            CaptionKind.entries.firstOrNull { it.name == c.optString("kind") } ?: CaptionKind.STYLE,
+            c.optDouble("size", 1.0).toFloat(),
+            if (c.isNull("y") || !c.has("y")) null else c.getDouble("y").toFloat(),
+            c.optBoolean("karaoke", true),
+            color = if (c.isNull("color") || !c.has("color")) null else c.getInt("color"),
+            highlight = if (c.isNull("hi") || !c.has("hi")) null else c.getInt("hi"),
+            font = FontChoice.entries.firstOrNull { it.name == c.optString("font") } ?: FontChoice.STYLE,
+            box = c.optBoolean("box"),
+        )
+    } ?: CaptionLook()
+
+    fun transition(t: Transition): org.json.JSONObject = org.json.JSONObject().put("kind", t.kind.name).put("length", t.length.name).put("ms", t.customMs ?: org.json.JSONObject.NULL)
+
+    fun transition(o: org.json.JSONObject): Transition = Transition(
+        TransitionKind.entries.firstOrNull { it.name == o.optString("kind") } ?: TransitionKind.STYLE,
+        TransitionLength.entries.firstOrNull { it.name == o.optString("length") } ?: TransitionLength.NORMAL,
+        if (o.isNull("ms") || !o.has("ms")) null else o.getLong("ms").coerceIn(150, 2_000),
+    )
+}
 
 enum class CaptionKind(val label: String) { STYLE("Style"), PUNCH("Punch"), SERIF("Serif"), LABEL("Label"), CHAT("Chat"), PLAIN("Plain") }
 

@@ -78,7 +78,7 @@ object ReelJson {
         put("vibe", p.plan.vibe.name)
         put("segments", JSONArray().apply { p.plan.segments.forEach { put(segment(it)) } })
         put("texts", JSONArray().apply { p.plan.texts.forEach { t -> put(textItem(t)) } })
-        put("captionLook", JSONObject().put("kind", p.plan.captionLook.kind.name).put("size", p.plan.captionLook.size.toDouble()).put("y", p.plan.captionLook.y?.toDouble() ?: JSONObject.NULL).put("karaoke", p.plan.captionLook.karaoke))
+        put("captionLook", LookJson.caption(p.plan.captionLook))
         put("stickers", JSONArray().apply { p.plan.stickers.forEach { st -> put(JSONObject().put("id", st.id).put("kind", st.kind.name).put("s", st.startMs).put("e", st.endMs).put("x", st.x.toDouble()).put("y", st.y.toDouble()).put("size", st.size.toDouble()).put("rot", st.rotation.toDouble()).put("t", st.text)) } })
         put("layers", JSONArray().apply { p.plan.layers.forEach { put(layer(it)) } })
         put("audio", JSONArray().apply { p.plan.audio.forEach { put(audio(it)) } })
@@ -130,9 +130,7 @@ object ReelJson {
                 layers = o.optJSONArray("layers")?.let { a -> (0 until a.length()).mapNotNull { runCatching { readLayer(a.getJSONObject(it)) }.getOrNull() } }.orEmpty(),
                 audio = o.optJSONArray("audio")?.let { a -> (0 until a.length()).mapNotNull { runCatching { readAudio(a.getJSONObject(it)) }.getOrNull() } }.orEmpty(),
                 mix = o.optJSONObject("mix")?.let { readMix(it) } ?: TrackMix(),
-                captionLook = o.optJSONObject("captionLook")?.let { c ->
-                    CaptionLook(CaptionKind.entries.firstOrNull { it.name == c.optString("kind") } ?: CaptionKind.STYLE, c.optDouble("size", 1.0).toFloat(), c.optDoubleOrNull("y")?.toFloat(), c.optBoolean("karaoke", true))
-                } ?: CaptionLook(),
+                captionLook = LookJson.caption(o.optJSONObject("captionLook")),
                 stickers = o.optJSONArray("stickers")?.let { a ->
                     (0 until a.length()).mapNotNull { i ->
                         val st = a.getJSONObject(i)
@@ -200,7 +198,7 @@ object ReelJson {
             .put("rotation", s.rotation).put("flip", s.flip)
             .put("frame", JSONArray().apply { s.frame.forEach { k -> put(JSONObject().put("at", k.atMs).put("z", k.zoom.toDouble()).put("x", k.x.toDouble()).put("y", k.y.toDouble())) } })
             .put("color", JSONObject().put("exp", s.color.exposure.toDouble()).put("con", s.color.contrast.toDouble()).put("sat", s.color.saturation.toDouble()).put("warm", s.color.warmth.toDouble()).put("look", s.color.look))
-            .put("transition", s.transition?.let { JSONObject().put("kind", it.kind.name).put("length", it.length.name) } ?: JSONObject.NULL)
+            .put("transition", s.transition?.let { LookJson.transition(it) } ?: JSONObject.NULL)
         is TitleSegment -> JSONObject().put("type", "title").put("dur", s.durMs)
         is StatsSegment -> JSONObject().put("type", "stats").put("dur", s.durMs)
     }
@@ -217,9 +215,7 @@ object ReelJson {
             flip = o.optBoolean("flip"),
             frame = o.optJSONArray("frame")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { k -> FrameKey(k.getLong("at"), k.getDouble("z").toFloat(), k.getDouble("x").toFloat(), k.getDouble("y").toFloat()) } } }.orEmpty(),
             color = o.optJSONObject("color")?.let { c -> ClipColor(c.optDouble("exp", 0.0).toFloat(), c.optDouble("con", 0.0).toFloat(), c.optDouble("sat", 0.0).toFloat(), c.optDouble("warm", 0.0).toFloat(), c.optBoolean("look", true)) } ?: ClipColor(),
-            transition = o.optJSONObject("transition")?.let { t ->
-                Transition(TransitionKind.entries.firstOrNull { it.name == t.optString("kind") } ?: TransitionKind.STYLE, TransitionLength.entries.firstOrNull { it.name == t.optString("length") } ?: TransitionLength.NORMAL)
-            },
+            transition = o.optJSONObject("transition")?.let { LookJson.transition(it) },
         )
         "title" -> TitleSegment(o.getLong("dur"))
         "stats" -> StatsSegment(o.getLong("dur"))
@@ -247,7 +243,7 @@ object ReelJson {
 
     private fun textItem(t: TextItem) = JSONObject().put("id", t.id).put("s", t.startMs).put("e", t.endMs).put("t", t.text).put("y", t.y.toDouble())
         .put("x", t.x.toDouble()).put("size", t.size.toDouble()).put("rot", t.rotation.toDouble()).put("look", t.look.name).put("color", t.color ?: JSONObject.NULL)
-        .put("align", t.align.name).put("in", t.animIn.name).put("out", t.animOut.name)
+        .put("align", t.align.name).put("in", t.animIn.name).put("out", t.animOut.name).put("font", t.font.name)
 
     private fun readTextItem(t: JSONObject) = TextItem(
         t.getString("id"), t.getLong("s"), t.getLong("e"), t.getString("t"), t.optDouble("y", 0.3).toFloat(),
@@ -257,6 +253,7 @@ object ReelJson {
         align = TextAlignment.entries.firstOrNull { it.name == t.optString("align") } ?: TextAlignment.CENTER,
         animIn = TextAnim.entries.firstOrNull { it.name == t.optString("in") } ?: TextAnim.FADE,
         animOut = TextAnim.entries.firstOrNull { it.name == t.optString("out") } ?: TextAnim.FADE,
+        font = FontChoice.entries.firstOrNull { it.name == t.optString("font") } ?: FontChoice.STYLE,
     )
 
     private fun JSONObject.optDoubleOrNull(k: String): Double? = if (isNull(k) || !has(k)) null else optDouble(k)

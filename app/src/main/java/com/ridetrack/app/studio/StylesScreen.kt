@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -189,7 +191,7 @@ private val BRAND_COLOURS = listOf(0xFFFFFFFF.toInt(), 0xFFFFD60A.toInt(), 0xFFF
 
 /** Making a style: duplicate one, describe it (Gemini), from a video you like (Gemini), or a code. */
 @Composable
-private fun NewStyleSheet(styles: List<StudioStyle>, onClose: () -> Unit, onMade: (StudioStyle) -> Unit) {
+internal fun NewStyleSheet(styles: List<StudioStyle>, onClose: () -> Unit, onMade: (StudioStyle) -> Unit) {
     val c = appContainer()
     val scope = rememberCoroutineScope()
     var words by remember { mutableStateOf("") }
@@ -266,7 +268,7 @@ private fun NewStyleSheet(styles: List<StudioStyle>, onClose: () -> Unit, onMade
  * overlays, sound), with the preview updating as it changes. Reset a part, Shuffle, share it.
  */
 @Composable
-private fun StyleEditor(start: StudioStyle, frame: Bitmap?, onDone: () -> Unit) {
+internal fun StyleEditor(start: StudioStyle, frame: Bitmap?, onSaved: (StudioStyle) -> Unit = {}, onDone: () -> Unit) {
     val c = appContainer()
     val context = LocalContext.current
     var st by remember { mutableStateOf(start) }
@@ -283,7 +285,7 @@ private fun StyleEditor(start: StudioStyle, frame: Bitmap?, onDone: () -> Unit) 
                 val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, "My Keppo Moto style \"${st.name}\": ${StyleJson.code(st)}")
                 context.startActivity(android.content.Intent.createChooser(send, "Share the style"))
             }.padding(6.dp))
-            Text("Save", style = RtType.button, color = RtColors.OnPrimary, modifier = Modifier.clip(RoundedCornerShape(50)).background(RtColors.Primary).clickable(role = Role.Button) { c.styles.save(st); onDone() }.padding(horizontal = 14.dp, vertical = 6.dp))
+            Text("Save", style = RtType.button, color = RtColors.OnPrimary, modifier = Modifier.clip(RoundedCornerShape(50)).background(RtColors.Primary).clickable(role = Role.Button) { c.styles.save(st); onSaved(st); onDone() }.padding(horizontal = 14.dp, vertical = 6.dp))
         }
         StylePreview(st, frame, Modifier.height(300.dp).aspectRatio(9f / 16f).align(Alignment.CenterHorizontally))
         Spacer(Modifier.height(8.dp))
@@ -301,21 +303,32 @@ private fun StyleEditor(start: StudioStyle, frame: Bitmap?, onDone: () -> Unit) 
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             when (part) {
                 StylePart.CAPTIONS -> {
+                    val cap = st.captions
                     Chips("Base look", Vibe.entries.map { it.label to (st.base == it) }) { i -> st = st.copy(base = Vibe.entries[i]) }
-                    Chips("Captions", CaptionKind.entries.map { it.label to (st.captions.kind == it) }) { i -> st = st.copy(captions = st.captions.copy(kind = CaptionKind.entries[i])) }
-                    Chips("Size", listOf(0.8f, 1f, 1.2f, 1.4f).map { "${(it * 100).toInt()}%" to (st.captions.size == it) }) { i -> st = st.copy(captions = st.captions.copy(size = listOf(0.8f, 1f, 1.2f, 1.4f)[i])) }
-                    Chips("Height", listOf<Float?>(null, 0.6f, 0.7f, 0.8f).map { (it?.let { h -> "${(h * 100).toInt()}%" } ?: "Style's") to (st.captions.y == it) }) { i -> st = st.copy(captions = st.captions.copy(y = listOf<Float?>(null, 0.6f, 0.7f, 0.8f)[i])) }
-                    Toggle("Light up each word", st.captions.karaoke) { st = st.copy(captions = st.captions.copy(karaoke = it)) }
+                    Chips("Captions", CaptionKind.entries.map { it.label to (cap.kind == it) }) { i -> st = st.copy(captions = cap.copy(kind = CaptionKind.entries[i])) }
+                    Chips("Font", FontChoice.entries.map { it.label to (cap.font == it) }) { i -> st = st.copy(captions = cap.copy(font = FontChoice.entries[i])) }
+                    Slide("Size", cap.size, 0.5f..2f, { "${(it * 100).toInt()}%" }) { st = st.copy(captions = cap.copy(size = it)) }
+                    Slide("Height", cap.y ?: -1f, 0.1f..0.9f, { if (it < 0) "Style's" else "${(it * 100).toInt()}% down" }, onReset = { st = st.copy(captions = cap.copy(y = null)) }) { st = st.copy(captions = cap.copy(y = it)) }
+                    Colours(if (cap.kind == CaptionKind.LABEL || cap.kind == CaptionKind.CHAT) "Colour (the label or bubble)" else "Colour", cap.color) { st = st.copy(captions = cap.copy(color = it)) }
+                    Colours("The word being said", cap.highlight, own = "Yellow") { st = st.copy(captions = cap.copy(highlight = it)) }
+                    Toggle("Light up each word", cap.karaoke) { st = st.copy(captions = cap.copy(karaoke = it)) }
+                    Toggle("Dark band behind them", cap.box) { st = st.copy(captions = cap.copy(box = it)) }
                 }
                 StylePart.TEXT -> {
                     Chips("Text", TextLook.entries.map { it.label to (st.textLook == it) }) { i -> st = st.copy(textLook = TextLook.entries[i]) }
-                    Chips("Colour", STYLE_COLOURS.map { it.first to (st.textColor == it.second) }) { i -> st = st.copy(textColor = STYLE_COLOURS[i].second) }
+                    Chips("Font", FontChoice.entries.map { it.label to (st.textFont == it) }) { i -> st = st.copy(textFont = FontChoice.entries[i]) }
+                    Colours("Colour", st.textColor) { st = st.copy(textColor = it) }
+                    Slide("Size", st.textSize, 0.5f..2f, { "${(it * 100).toInt()}%" }) { st = st.copy(textSize = it) }
+                    Slide("Height", st.textY ?: -1f, 0.05f..0.95f, { if (it < 0) "Where each text is" else "${(it * 100).toInt()}% down" }, onReset = { st = st.copy(textY = null) }) { st = st.copy(textY = it) }
                     Chips("Comes in", TextAnim.entries.map { it.label to (st.textIn == it) }) { i -> st = st.copy(textIn = TextAnim.entries[i]) }
                     Chips("Goes out", TextAnim.entries.map { it.label to (st.textOut == it) }) { i -> st = st.copy(textOut = TextAnim.entries[i]) }
                 }
                 StylePart.TRANSITIONS -> {
                     Chips("Transition", TransitionKind.entries.map { it.label to (st.transition.kind == it) }) { i -> st = st.copy(transition = st.transition.copy(kind = TransitionKind.entries[i])) }
-                    Chips("Length", TransitionLength.entries.map { it.label to (st.transition.length == it) }) { i -> st = st.copy(transition = st.transition.copy(length = TransitionLength.entries[i])) }
+                    Chips("Length", TransitionLength.entries.map { it.label to (st.transition.customMs == null && st.transition.length == it) }) { i -> st = st.copy(transition = st.transition.copy(length = TransitionLength.entries[i], customMs = null)) }
+                    Slide("Exact length", st.transition.customMs?.toFloat() ?: -1f, 150f..2_000f, { if (it < 0) "Off" else String.format(java.util.Locale.US, "%.2f s", it / 1000) }, onReset = { st = st.copy(transition = st.transition.copy(customMs = null)) }) {
+                        st = st.copy(transition = st.transition.copy(customMs = (kotlin.math.round(it / 50) * 50).toLong()))
+                    }
                     Toggle("On every cut (off: only between the script's sections)", st.everyCut) { st = st.copy(everyCut = it) }
                 }
                 StylePart.PACE -> Chips("Riding shots", listOf(0.6f to "Fast", 0.8f to "Quick", 1f to "Normal", 1.25f to "Easy", 1.5f to "Slow").map { it.second to (st.pace == it.first) }) { i ->
@@ -324,10 +337,11 @@ private fun StyleEditor(start: StudioStyle, frame: Bitmap?, onDone: () -> Unit) 
                 StylePart.CAMERA -> Toggle("Punch in on the words that matter", st.punchIn) { st = st.copy(punchIn = it) }
                 StylePart.COLOUR -> {
                     Toggle("Keep the base look's colour", st.color.look) { st = st.copy(color = st.color.copy(look = it)) }
-                    Steps("Exposure", st.color.exposure) { st = st.copy(color = st.color.copy(exposure = it)) }
-                    Steps("Contrast", st.color.contrast) { st = st.copy(color = st.color.copy(contrast = it)) }
-                    Steps("Saturation", st.color.saturation) { st = st.copy(color = st.color.copy(saturation = it)) }
-                    Steps("Warmth", st.color.warmth) { st = st.copy(color = st.color.copy(warmth = it)) }
+                    val pct = { v: Float -> (if (v > 0) "+" else "") + "${(v * 100).toInt()}" }
+                    Slide("Exposure", st.color.exposure, -1f..1f, pct) { st = st.copy(color = st.color.copy(exposure = it)) }
+                    Slide("Contrast", st.color.contrast, -1f..1f, pct) { st = st.copy(color = st.color.copy(contrast = it)) }
+                    Slide("Saturation", st.color.saturation, -1f..1f, pct) { st = st.copy(color = st.color.copy(saturation = it)) }
+                    Slide("Warmth", st.color.warmth, -1f..1f, pct) { st = st.copy(color = st.color.copy(warmth = it)) }
                 }
                 StylePart.OVERLAYS -> {
                     Toggle("Speed in the corner", st.speedBadge) { st = st.copy(speedBadge = it) }
@@ -353,7 +367,63 @@ private fun StyleEditor(start: StudioStyle, frame: Bitmap?, onDone: () -> Unit) 
     }
 }
 
-private val STYLE_COLOURS: List<Pair<String, Int?>> = listOf("Own" to null, "White" to 0xFFFFFFFF.toInt(), "Yellow" to 0xFFFFD60A.toInt(), "Pink" to 0xFFFF5D8F.toInt(), "Blue" to 0xFF60A5FA.toInt(), "Black" to 0xFF0B0B0D.toInt())
+private val SWATCHES: List<Int> = listOf(0xFFFFFFFF, 0xFF0B0B0D, 0xFFFFD60A, 0xFFFF9F0A, 0xFFFF453A, 0xFFFF5D8F, 0xFFBF5AF2, 0xFF60A5FA, 0xFF32D74B, 0xFFFFF3DF).map { it.toInt() }
+
+/**
+ * A slider with its value; [v] below the range means "not set" (shown by [label]), and [onReset]
+ * puts it back to not set.
+ */
+@Composable
+internal fun Slide(name: String, v: Float, range: ClosedFloatingPointRange<Float>, label: (Float) -> String, onReset: (() -> Unit)? = null, onChange: (Float) -> Unit) {
+    val set = v >= range.start
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(name, style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
+            Text(label(v), style = RtType.caption, color = RtColors.TextPrimary)
+            if (onReset != null && set) Text("Reset", style = RtType.caption, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onReset).padding(start = 10.dp))
+        }
+        androidx.compose.material3.Slider(
+            value = v.coerceIn(range.start, range.endInclusive),
+            onValueChange = onChange,
+            valueRange = range,
+            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = RtColors.Primary, activeTrackColor = if (set) RtColors.Primary else RtColors.Hairline, inactiveTrackColor = RtColors.Hairline),
+        )
+    }
+}
+
+/** Any colour: the look's own, a swatch, or anywhere on the rainbow (and how light). */
+@Composable
+internal fun Colours(name: String, value: Int?, own: String = "Look's own", onChange: (Int?) -> Unit) {
+    var hue by remember(value == null) { mutableStateOf(value?.let { FloatArray(3).also { hsv -> android.graphics.Color.colorToHSV(it, hsv) }[0] } ?: 0f) }
+    var light by remember(value == null) { mutableStateOf(value?.let { FloatArray(3).also { hsv -> android.graphics.Color.colorToHSV(it, hsv) }[2] } ?: 1f) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(name, style = RtType.caption, color = RtColors.TextSecondary)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Choice(own, value == null) { onChange(null) }
+            SWATCHES.forEach { c ->
+                Box(
+                    Modifier.size(28.dp).clip(CircleShape).background(Color(c))
+                        .border(if (value == c) 3.dp else 1.dp, if (value == c) RtColors.Primary else RtColors.Hairline, CircleShape)
+                        .clickable(role = Role.Button, onClickLabel = "Pick this colour") { onChange(c) },
+                )
+            }
+        }
+        // The rainbow, then how light: for colours the swatches don't have.
+        Box(
+            Modifier.fillMaxWidth().height(22.dp).clip(RoundedCornerShape(11.dp))
+                .background(androidx.compose.ui.graphics.Brush.horizontalGradient((0..6).map { Color.hsv(it * 60f % 360f, 0.9f, 1f) }))
+                .pointerInput(Unit) {
+                    detectTapGestures { o -> hue = (o.x / size.width * 360f).coerceIn(0f, 359f); onChange(android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.9f, light))) }
+                },
+        )
+        androidx.compose.material3.Slider(
+            value = light,
+            onValueChange = { light = it; onChange(android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.9f, it))) },
+            valueRange = 0.2f..1f,
+            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = value?.let { Color(it) } ?: RtColors.Primary, activeTrackColor = RtColors.Hairline, inactiveTrackColor = RtColors.Hairline),
+        )
+    }
+}
 
 @Composable
 private fun Chips(label: String, options: List<Pair<String, Boolean>>, onPick: (Int) -> Unit) {
@@ -373,41 +443,86 @@ private fun Toggle(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
     }
 }
 
+
+/** "Save this style": the made video's look (captions, colour, cuts, pace, stickers) as a new style, named. */
 @Composable
-private fun Steps(label: String, v: Float, onChange: (Float) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
-        Text("−", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button) { onChange(((v - 0.1f) * 10).let { kotlin.math.round(it) } / 10f) }.padding(horizontal = 12.dp, vertical = 4.dp))
-        Text("${(v * 100).toInt()}", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.width(36.dp))
-        Text("+", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button) { onChange(((v + 0.1f) * 10).let { kotlin.math.round(it) } / 10f) }.padding(horizontal = 12.dp, vertical = 4.dp))
+internal fun SaveStyleDialog(vm: StudioViewModel, s: StudioState, onClose: () -> Unit) {
+    var name by remember { mutableStateOf(s.title.take(30).ifBlank { "My look" }) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Save this style") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Its captions, text, colour, cuts, pace and stickers, to use on other videos.", style = RtType.caption, color = RtColors.TextSecondary)
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(40) },
+                    singleLine = true,
+                    label = { Text("Name") },
+                    textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { vm.saveLookAsStyle(name); onClose() }) { Text("Save") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onClose) { Text("Cancel") } },
+    )
+}
+
+/** A full-screen sheet over Studio, for the style editor. */
+@Composable
+private fun FullSheet(onClose: () -> Unit, content: @Composable () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(RtColors.Background)) { content() }
     }
 }
 
-/** On a finished Reel: try a style on it, or keep the Reel's look as a new style. */
+/**
+ * Styles inside Studio: try one on this Reel (or, in the editor, on the edit), change one,
+ * make a new one, or keep the Reel's look as a new style.
+ */
 @Composable
-internal fun StylePicker(vm: StudioViewModel, s: StudioState, onAll: () -> Unit, onClose: () -> Unit) {
+internal fun StylePicker(vm: StudioViewModel, s: StudioState, onAll: () -> Unit, timeline: Boolean = false, onClose: () -> Unit) {
     val c = appContainer()
     val styles by c.styles.styles.collectAsStateWithLifecycle()
-    var frame by remember(s.plan) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(s.plan) {
-        frame = withContext(Dispatchers.IO) { s.plan?.clips?.firstOrNull()?.bit?.momentId?.let { s.thumbs[it] }?.let { ClipWriter.load(it, 960) } } ?: bestFrame(c)
+    val plan = if (timeline) s.timeline else s.plan
+    var frame by remember(plan) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(plan) {
+        frame = withContext(Dispatchers.IO) { plan?.clips?.firstOrNull()?.bit?.momentId?.let { s.thumbs[it] }?.let { ClipWriter.load(it, 960) } } ?: bestFrame(c)
     }
     var name by remember { mutableStateOf("") }
+    var editing by remember { mutableStateOf<StudioStyle?>(null) }
+    var creating by remember { mutableStateOf(false) }
+    fun use(st: StudioStyle) = if (timeline) vm.styleOnTimeline(st) else vm.applyStyle(st)
+    editing?.let { st ->
+        // Saved in the editor: on the edit straight away (on a made Reel, tap it to make it again).
+        FullSheet({ editing = null }) { StyleEditor(st, frame, onSaved = { if (timeline) use(it) }, onDone = { editing = null }) }
+        return
+    }
+    if (creating) {
+        NewStyleSheet(styles, onClose = { creating = false }) { made -> creating = false; editing = made }
+        return
+    }
     androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.SurfaceRaised).padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text("Style", style = RtType.bodyStrong, color = RtColors.TextPrimary)
-            Text("Tap one to make this Reel again in it.", style = RtType.caption, color = RtColors.TextTertiary)
+            Text(if (timeline) "Tap one to put it on the edit (Undo takes it off)." else "Tap one to make this Reel again in it.", style = RtType.caption, color = RtColors.TextTertiary)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 styles.sortedByDescending { it.favourite }.forEach { st ->
-                    Column(Modifier.width(110.dp).clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button) { vm.applyStyle(st); onClose() }) {
-                        StylePreview(st, frame, Modifier.fillMaxWidth().aspectRatio(9f / 16f))
-                        Text((if (st.favourite) "★ " else "") + st.name, style = RtType.caption, color = RtColors.TextPrimary, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
+                    Column(Modifier.width(110.dp)) {
+                        Column(Modifier.clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button) { use(st); onClose() }) {
+                            StylePreview(st, frame, Modifier.fillMaxWidth().aspectRatio(9f / 16f))
+                            Text((if (st.favourite) "★ " else "") + st.name, style = RtType.caption, color = RtColors.TextPrimary, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
+                        }
+                        Text("Edit", style = RtType.caption, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Edit ${st.name}") { editing = st }.padding(vertical = 4.dp))
                     }
                 }
             }
+            Text("+ New style", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { creating = true }.padding(vertical = 4.dp))
             LaunchedEffect(Unit) { name = s.title.take(30).ifBlank { "My look" } }
             Text("Keep this Reel's look as a style", style = RtType.caption, color = RtColors.TextSecondary)
             Row(verticalAlignment = Alignment.CenterVertically) {

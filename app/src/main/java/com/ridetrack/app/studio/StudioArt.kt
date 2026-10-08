@@ -79,6 +79,24 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
     /** The brand kit's logo and font, when the style uses it. */
     private val logo: android.graphics.Bitmap? = brand?.logo?.let { runCatching { android.graphics.BitmapFactory.decodeFile(it) }.getOrNull() }
     private val brandFont: Typeface? = brand?.font?.let { runCatching { Typeface.createFromFile(it) }.getOrNull() }
+    /** The typeface the rider picked; null = the look's own. */
+    fun faceOf(f: FontChoice): Typeface? = when (f) {
+        FontChoice.STYLE -> null
+        FontChoice.BOLD -> anton
+        FontChoice.SERIF -> serif
+        FontChoice.CLEAN -> geist
+        FontChoice.HAND -> marker
+        FontChoice.BRAND -> brandFont ?: geist
+    }
+
+    // The caption being drawn: the rider's colour, highlight and typeface (null = each look's own).
+    private var capInk: Int? = null
+    private var capHi: Int = YELLOW
+    private var capFace: Typeface? = null
+
+    /** Dark or white words, whichever reads on [bg]. */
+    private fun inkOn(bg: Int): Int = if (Color.luminance(bg) > 0.5f) INK else Color.WHITE
+
     /** Plain text and captions in the brand's font when there is one. */
     private val plainFace: Typeface get() = brandFont ?: geist
 
@@ -405,6 +423,13 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
         c.save()
         look.y?.let { c.translate(0f, (it - baseY) * H) }
         if (look.size != 1f) c.scale(look.size, look.size, W / 2, baseY * H)
+        capInk = look.color
+        capHi = look.highlight ?: YELLOW
+        capFace = faceOf(look.font)
+        if (look.box && current(lines, t) != null) {
+            p.reset(); p.isAntiAlias = true; p.color = Color.argb(150, 0, 0, 0)
+            c.drawRoundRect(RectF(W * 0.05f, baseY * H - 86 * s, W * 0.95f, baseY * H + 86 * s), 24 * s, 24 * s, p)
+        }
         when (kind) {
             CaptionKind.PUNCH -> punch(c, lines, t)
             CaptionKind.SERIF -> serifRise(c, lines, t)
@@ -418,7 +443,7 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
     /** Plain captions: white words with a dark edge, two rows at most; the word being said lights up yellow. */
     private fun plainCaption(c: Canvas, lines: List<CaptionLine>, t: Float, karaoke: Boolean, y: Float) {
         val cur = current(lines, t) ?: return
-        text(plainFace, 46 * s, Color.WHITE, Paint.Align.LEFT)
+        text(capFace ?: plainFace, 46 * s, Color.WHITE, Paint.Align.LEFT)
         val rows = wrap(cur.words, W * 0.82f).takeLast(2)
         val skipped = cur.words.size - rows.sumOf { it.size }
         val lh = 58 * s
@@ -435,7 +460,8 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
                 p.style = Paint.Style.STROKE; p.strokeWidth = 7 * s; p.color = Color.argb(200, 0, 0, 0)
                 c.drawText(w, x, mid(by), p)
                 p.style = Paint.Style.FILL
-                p.color = when { active -> YELLOW; karaoke && !said -> Color.argb(150, 255, 255, 255); else -> Color.WHITE }
+                val ink = capInk ?: Color.WHITE
+                p.color = when { active -> capHi; karaoke && !said -> Color.argb(150, Color.red(ink), Color.green(ink), Color.blue(ink)); else -> ink }
                 c.drawText(w, x, mid(by), p)
                 x += p.measureText(w) + sp
                 wi++
@@ -455,8 +481,9 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
         val g = groups[gi]
         if (t < cur.times[first]) return
         val words = g.map { it.uppercase() }
-        val size = fit(anton, words.joinToString(" "), 84 * s, W * 0.8f)
-        text(anton, size, Color.WHITE, Paint.Align.CENTER)
+        val face = capFace ?: anton
+        val size = fit(face, words.joinToString(" "), 84 * s, W * 0.8f)
+        text(face, size, Color.WHITE, Paint.Align.CENTER)
         val space = p.measureText(" ")
         val widths = words.map { p.measureText(it) }
         var x = W / 2 - (widths.sum() + space * (words.size - 1)) / 2
@@ -470,14 +497,14 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
                 val emph = EMPH.containsMatchIn(w)
                 val scale = 1.7f - 0.7f * eBack(q)
                 c.save(); c.translate(x + widths[k] / 2, y0); c.scale(scale, scale); if (active) c.rotate(-1.7f)
-                text(anton, size, Color.WHITE, Paint.Align.CENTER)
+                text(face, size, Color.WHITE, Paint.Align.CENTER)
                 if (active) {
                     p.color = INK; c.drawRect(-widths[k] / 2 - 14 * s + 7 * s, -hh / 2 + 7 * s, widths[k] / 2 + 14 * s + 7 * s, hh / 2 + 7 * s, p)
-                    p.color = YELLOW; c.drawRect(-widths[k] / 2 - 14 * s, -hh / 2, widths[k] / 2 + 14 * s, hh / 2, p)
+                    p.color = capHi; c.drawRect(-widths[k] / 2 - 14 * s, -hh / 2, widths[k] / 2 + 14 * s, hh / 2, p)
                 } else {
                     p.color = INK; c.drawText(w, 5 * s, mid(7 * s), p)
                 }
-                p.color = if (active) INK else if (emph) YELLOW else Color.WHITE
+                p.color = if (active) inkOn(capHi) else if (emph) capHi else capInk ?: Color.WHITE
                 c.drawText(w, 0f, mid(3 * s), p)
                 c.restore()
             }
@@ -488,14 +515,14 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
     /** A lower-third serif line: words rise out of a mask under a hairline, then the line fades. */
     private fun serifRise(c: Canvas, lines: List<CaptionLine>, t: Float) {
         val cur = current(lines, t) ?: return
-        text(serif, 48 * s, CREAM_TEXT, Paint.Align.LEFT)
+        text(capFace ?: serif, 48 * s, capInk ?: CREAM_TEXT, Paint.Align.LEFT)
         val rows = wrap(cur.words, W * 0.74f)
         val y0 = H * 0.735f - (rows.size - 1) * 30 * s
         val fade = cl((cur.end + 0.8f - t) / 0.3f)
         val lp = eInOut(cl((t - cur.times[0]) / 0.7f))
         p.reset(); p.isAntiAlias = true; p.strokeWidth = 1.5f * s; p.color = Color.argb((0.7f * fade * 255).toInt(), 255, 236, 210)
         c.drawLine(W / 2 - 70 * s * lp, y0 - 50 * s, W / 2 + 70 * s * lp, y0 - 50 * s, p)
-        text(serif, 48 * s, CREAM_TEXT, Paint.Align.LEFT)
+        text(capFace ?: serif, 48 * s, capInk ?: CREAM_TEXT, Paint.Align.LEFT)
         p.setShadowLayer(16 * s, 0f, 0f, Color.argb(140, 0, 0, 0))
         var wi = 0
         val sp = p.measureText(" ")
@@ -526,15 +553,16 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
         val t0 = cur.times[first]
         if (t < t0) return
         val phrase = g.joinToString(" ")
-        val size = fit(marker, phrase, 46 * s, W * 0.78f)
-        text(marker, size, INK, Paint.Align.LEFT)
+        val paper = capInk ?: CREAM
+        val size = fit(capFace ?: marker, phrase, 46 * s, W * 0.78f)
+        text(capFace ?: marker, size, inkOn(paper), Paint.Align.LEFT)
         val pop = eBack(cl((t - t0) / 0.32f))
         val bw = p.measureText(phrase) + 56 * s
         val bh = 92 * s
         c.save(); c.translate(W / 2, H * 0.68f); c.rotate((if (gi % 2 == 1) 1 else -1) * 2.9f * pop); c.scale(0.6f + 0.4f * pop, 0.6f + 0.4f * pop)
         p.color = Color.argb(90, 0, 0, 0); c.drawRoundRect(RectF(-bw / 2 + 8 * s, -bh / 2 + 10 * s, bw / 2 + 8 * s, bh / 2 + 10 * s), 10 * s, 10 * s, p)
-        p.color = CREAM; c.drawRoundRect(RectF(-bw / 2, -bh / 2, bw / 2, bh / 2), 10 * s, 10 * s, p)
-        text(marker, size, INK, Paint.Align.LEFT)
+        p.color = paper; c.drawRoundRect(RectF(-bw / 2, -bh / 2, bw / 2, bh / 2), 10 * s, 10 * s, p)
+        text(capFace ?: marker, size, inkOn(paper), Paint.Align.LEFT)
         var x = -p.measureText(phrase) / 2
         val sp = p.measureText(" ")
         g.forEachIndexed { k, w ->
@@ -549,7 +577,8 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
     private fun chat(c: Canvas, lines: List<CaptionLine>, t: Float) {
         val shown = lines.filter { t >= it.startMs / 1000f - 0.45f && t < it.endMs / 1000f + 2.4f }.takeLast(3)
         if (shown.isEmpty()) return
-        text(geist, 30 * s, INK, Paint.Align.LEFT)
+        val bubble = capInk ?: Color.WHITE
+        text(capFace ?: geist, 30 * s, inkOn(bubble), Paint.Align.LEFT)
         val lh = 40 * s
         var y = H * 0.71f
         for (k in shown.indices.reversed()) {
@@ -557,7 +586,7 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
             val words = l.text.trim().split(Regex("\\s+"))
             val per = max(0.12f, (l.endMs - l.startMs) / 1000f / words.size)
             val n = ((t - l.startMs / 1000f) / per).toInt() + 1
-            text(geist, 30 * s, INK, Paint.Align.LEFT)
+            text(capFace ?: geist, 30 * s, inkOn(bubble), Paint.Align.LEFT)
             val rows = wrap(words, W * 0.62f)
             val bh = rows.size * lh + 32 * s
             val bw = min(W * 0.7f, rows.maxOf { p.measureText(it.joinToString(" ")) } + 44 * s)
@@ -568,9 +597,9 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
             val by = y - bh
             c.save(); c.scale(0.8f + 0.2f * enter, 0.8f + 0.2f * enter, x, by + bh)
             p.color = Color.argb((alpha * 64).toInt(), 0, 0, 0); c.drawRoundRect(RectF(x + 4 * s, by + 6 * s, x + bw + 4 * s, by + bh + 6 * s), 26 * s, 26 * s, p)
-            p.color = Color.WHITE; p.alpha = (alpha * 255).toInt(); c.drawRoundRect(RectF(x, by, x + bw, by + bh), 26 * s, 26 * s, p)
+            p.color = bubble; p.alpha = (alpha * 255).toInt(); c.drawRoundRect(RectF(x, by, x + bw, by + bh), 26 * s, 26 * s, p)
             c.drawPath(Path().apply { moveTo(x + 18 * s, by + bh - 6 * s); lineTo(x - 6 * s, by + bh + 12 * s); lineTo(x + 40 * s, by + bh - 2 * s); close() }, p)
-            p.color = INK; p.alpha = (alpha * 255).toInt()
+            p.color = inkOn(bubble); p.alpha = (alpha * 255).toInt()
             if (t < l.startMs / 1000f) {
                 for (dot in 0 until 3) {
                     p.alpha = (alpha * (0.35f + 0.65f * max(0f, sin(t * 12 - dot))) * 255).toInt()
@@ -691,13 +720,13 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
         c.scale(k, k, px, py)
         when (t.look) {
             TextLook.STYLE -> { c.translate(px - W / 2, 0f); drawCoverText(c, vibe, shown, cy = py, shade = false) }
-            TextLook.PLAIN -> styledText(c, shown, px, py, t.align, plainFace, 52 * s, t.color ?: brand?.color ?: Color.WHITE, shadow = true)
-            TextLook.OUTLINE -> styledText(c, shown.uppercase(), px, py, t.align, anton, 72 * s, t.color ?: Color.WHITE, outline = true)
-            TextLook.HAND -> styledText(c, shown, px, py, t.align, marker, 58 * s, t.color ?: Color.WHITE, shadow = true)
+            TextLook.PLAIN -> styledText(c, shown, px, py, t.align, faceOf(t.font) ?: plainFace, 52 * s, t.color ?: brand?.color ?: Color.WHITE, shadow = true)
+            TextLook.OUTLINE -> styledText(c, shown.uppercase(), px, py, t.align, faceOf(t.font) ?: anton, 72 * s, t.color ?: Color.WHITE, outline = true)
+            TextLook.HAND -> styledText(c, shown, px, py, t.align, faceOf(t.font) ?: marker, 58 * s, t.color ?: Color.WHITE, shadow = true)
             TextLook.BOX -> {
                 val bg = t.color ?: Color.WHITE
                 val ink = if (Color.luminance(bg) > 0.5f) INK else Color.WHITE
-                text(geist, 44 * s, ink, Paint.Align.CENTER)
+                text(faceOf(t.font) ?: geist, 44 * s, ink, Paint.Align.CENTER)
                 val rows = wrap(shown.split(Regex("\\s+")), W * 0.8f)
                 val lh = 58 * s
                 val bw = rows.maxOf { p.measureText(it.joinToString(" ")) } + 44 * s

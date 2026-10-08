@@ -1353,10 +1353,18 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         remake()
     }
 
+    /** A style on the edit in the timeline (undoable; the video is made on Save). */
+    fun styleOnTimeline(st: StudioStyle) {
+        var n = 0
+        change("Style \u201c${st.name}\u201d") { Styles.apply(it, st) { "st${System.currentTimeMillis() % 100_000}-${n++}" } }
+        c.styles.used(st.id)
+        setOptions { Styles.options(it, st) }
+    }
+
     /** Keeps this Reel's look as a new style (Styles). */
     fun saveLookAsStyle(name: String) {
         val s = _state.value
-        val plan = s.plan ?: return
+        val plan = s.timeline ?: s.plan ?: return
         val st = Styles.fromReel(plan, s.options, c.styles.newId(), name.trim().ifBlank { "My look" })
         c.styles.save(st)
         say("Saved as the style \u201c${st.name}\u201d")

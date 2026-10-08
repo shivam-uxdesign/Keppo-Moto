@@ -44,6 +44,31 @@ class StylesTest {
     )
 
     @Test
+    fun `the new freedoms are saved and read back, and older files still read`() {
+        val st = StudioStyle(
+            "st-x", "Neon", Vibe.HYPE,
+            captions = CaptionLook(CaptionKind.PLAIN, 1.6f, 0.4f, true, color = 0xFF60A5FA.toInt(), highlight = 0xFFFF453A.toInt(), font = com.ridetrack.app.studio.FontChoice.SERIF, box = true),
+            textFont = com.ridetrack.app.studio.FontChoice.HAND, textSize = 1.3f, textY = 0.2f,
+            transition = Transition(TransitionKind.WHIP, customMs = 450),
+        )
+        assertEquals(st, StyleJson.read(StyleJson.write(st)))
+        // A caption look saved before these existed.
+        val old = com.ridetrack.app.studio.LookJson.caption(org.json.JSONObject("""{"kind":"PUNCH","size":1.2,"y":null,"karaoke":false}"""))
+        assertEquals(CaptionLook(CaptionKind.PUNCH, 1.2f, null, false), old)
+        assertEquals(450L, Transition(TransitionKind.FADE, customMs = 450).ms(Vibe.HYPE))
+    }
+
+    @Test
+    fun `a style's text font, size and height go onto the edit's text`() {
+        val withText = TimelineEdits.addText(plan(), 0, "3 hours. No water.", "t1")
+        val st = StudioStyle("st-x", "X", Vibe.HYPE, textFont = com.ridetrack.app.studio.FontChoice.BOLD, textSize = 1.5f, textY = 0.15f)
+        val t = Styles.apply(withText, st) { "n" }.texts.first { it.id == "t1" }
+        assertEquals(com.ridetrack.app.studio.FontChoice.BOLD, t.font)
+        assertEquals(1.5f, t.size)
+        assertEquals(0.15f, t.y)
+    }
+
+    @Test
     fun `a style sets the look, captions, text, colour, camera and stickers`() {
         var n = 0
         val p = Styles.apply(plan(), neon) { "s${n++}" }

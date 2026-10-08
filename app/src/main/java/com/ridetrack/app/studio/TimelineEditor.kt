@@ -138,6 +138,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var captionsOpen by remember { mutableStateOf(false) }
     var compare by remember { mutableStateOf(false) }
     var discard by remember { mutableStateOf(false) }
+    var styleOpen by remember { mutableStateOf(false) }
     // A cut whose transition is playing on a loop (ms into the Reel); null when not.
     var loopAt by remember { mutableStateOf<Long?>(null) }
     // Transitions drawn over the simple preview (the exact one has them in the video).
@@ -682,6 +683,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     null -> {
                         Choice("+ Text", false) { ask = TextAsk.NewText }
                         Choice("+ Caption", false) { ask = TextAsk.NewCaption }
+                        Choice("Style", false) { styleOpen = true }
                         Choice("+ Clip", false) { adding = AddWhat.CLIP }
                         Choice("+ Layer", false) { adding = AddWhat.LAYER }
                         Choice("+ Sticker", false) { addSticker = true }
@@ -800,6 +802,10 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         }
     }
     if (mixer) MixerSheet(vm, s, plan) { mixer = false }
+    if (styleOpen) {
+        val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
+        StylePicker(vm, s, onAll = { nav(com.ridetrack.app.ui.nav.Routes.STYLES) }, timeline = true) { styleOpen = false }
+    }
     colourOpen?.let { i -> ColourSheet(vm, plan, i) { colourOpen = null } }
     if (captionsOpen) CaptionSheet(vm, plan) { captionsOpen = false }
     if (addSticker) StickerSheet(

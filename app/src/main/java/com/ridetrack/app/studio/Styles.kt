@@ -22,6 +22,10 @@ data class StudioStyle(
     val textColor: Int? = null,
     val textIn: TextAnim = TextAnim.FADE,
     val textOut: TextAnim = TextAnim.FADE,
+    val textFont: FontChoice = FontChoice.STYLE,
+    /** Text size (0.5–2× normal) and height (0 top … 1 bottom; null = where each text is). */
+    val textSize: Float = 1f,
+    val textY: Float? = null,
     // Transitions: which, and on every cut or only between sections
     val transition: Transition = Transition(),
     val everyCut: Boolean = false,
@@ -89,7 +93,7 @@ object Styles {
     fun apply(plan: StudioPlan, s: StudioStyle, newId: () -> String): StudioPlan {
         var p = plan.copy(vibe = s.base, captionLook = s.captions, mix = plan.mix.copy(duck = s.duck, cleanVoice = s.cleanVoice))
         // Text presets onto the timeline's text.
-        p = p.copy(texts = p.texts.map { it.copy(look = s.textLook, color = s.textColor, animIn = s.textIn, animOut = s.textOut) })
+        p = p.copy(texts = p.texts.map { it.copy(look = s.textLook, color = s.textColor, animIn = s.textIn, animOut = s.textOut, font = s.textFont, size = s.textSize, y = s.textY ?: it.y) })
         // Pace: riding shots (no words) longer or shorter, within their clip.
         if (s.pace != 1f) {
             p.segments.indices.forEach { i ->
@@ -129,6 +133,7 @@ object Styles {
             id = id, name = name, base = plan.vibe,
             captions = plan.captionLook,
             textLook = text?.look ?: TextLook.STYLE, textColor = text?.color, textIn = text?.animIn ?: TextAnim.FADE, textOut = text?.animOut ?: TextAnim.FADE,
+            textFont = text?.font ?: FontChoice.STYLE, textSize = text?.size ?: 1f, textY = text?.y,
             transition = common, everyCut = clips.size > 2 && transitions.size == clips.size - 1 && transitions.all { it == common },
             punchIn = clips.any { c -> c.frame.size >= 3 && c.frame.any { it.zoom > 1.05f } },
             color = clips.map { it.color }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: ClipColor(),
@@ -153,7 +158,10 @@ object Styles {
     /** One part of [s] back to how [original] had it. */
     fun reset(s: StudioStyle, original: StudioStyle, part: StylePart): StudioStyle = when (part) {
         StylePart.CAPTIONS -> s.copy(captions = original.captions)
-        StylePart.TEXT -> s.copy(textLook = original.textLook, textColor = original.textColor, textIn = original.textIn, textOut = original.textOut)
+        StylePart.TEXT -> s.copy(
+            textLook = original.textLook, textColor = original.textColor, textIn = original.textIn, textOut = original.textOut,
+            textFont = original.textFont, textSize = original.textSize, textY = original.textY,
+        )
         StylePart.TRANSITIONS -> s.copy(transition = original.transition, everyCut = original.everyCut)
         StylePart.PACE -> s.copy(pace = original.pace)
         StylePart.CAMERA -> s.copy(punchIn = original.punchIn)
@@ -172,9 +180,10 @@ object StyleJson {
 
     fun write(s: StudioStyle): JSONObject = JSONObject()
         .put("id", s.id).put("name", s.name).put("base", s.base.name).put("fav", s.favourite).put("about", s.about)
-        .put("captions", JSONObject().put("kind", s.captions.kind.name).put("size", s.captions.size.toDouble()).put("y", s.captions.y?.toDouble() ?: JSONObject.NULL).put("karaoke", s.captions.karaoke))
+        .put("captions", LookJson.caption(s.captions))
         .put("textLook", s.textLook.name).put("textColor", s.textColor ?: JSONObject.NULL).put("textIn", s.textIn.name).put("textOut", s.textOut.name)
-        .put("transition", s.transition.kind.name).put("transitionLength", s.transition.length.name).put("everyCut", s.everyCut)
+        .put("textFont", s.textFont.name).put("textSize", s.textSize.toDouble()).put("textY", s.textY?.toDouble() ?: JSONObject.NULL)
+        .put("transition", s.transition.kind.name).put("transitionLength", s.transition.length.name).put("transitionMs", s.transition.customMs ?: JSONObject.NULL).put("everyCut", s.everyCut)
         .put("pace", s.pace.toDouble()).put("punchIn", s.punchIn)
         .put("color", JSONObject().put("exp", s.color.exposure.toDouble()).put("con", s.color.contrast.toDouble()).put("sat", s.color.saturation.toDouble()).put("warm", s.color.warmth.toDouble()).put("look", s.color.look))
         .put("speedBadge", s.speedBadge).put("speedSticker", s.speedSticker).put("leanSticker", s.leanSticker).put("map", s.map)
@@ -186,16 +195,18 @@ object StyleJson {
         val col = o.optJSONObject("color")
         StudioStyle(
             id = o.getString("id"), name = o.optString("name").ifBlank { "My style" }.take(40), base = base, favourite = o.optBoolean("fav"), about = o.optString("about").take(120),
-            captions = cap?.let {
-                CaptionLook(CaptionKind.entries.firstOrNull { k -> k.name == it.optString("kind") } ?: CaptionKind.STYLE, it.optDouble("size", 1.0).toFloat(), if (it.isNull("y") || !it.has("y")) null else it.getDouble("y").toFloat(), it.optBoolean("karaoke", true))
-            } ?: CaptionLook(),
+            captions = LookJson.caption(cap),
             textLook = TextLook.entries.firstOrNull { it.name == o.optString("textLook") } ?: TextLook.STYLE,
             textColor = if (o.isNull("textColor") || !o.has("textColor")) null else o.getInt("textColor"),
             textIn = TextAnim.entries.firstOrNull { it.name == o.optString("textIn") } ?: TextAnim.FADE,
             textOut = TextAnim.entries.firstOrNull { it.name == o.optString("textOut") } ?: TextAnim.FADE,
+            textFont = FontChoice.entries.firstOrNull { it.name == o.optString("textFont") } ?: FontChoice.STYLE,
+            textSize = o.optDouble("textSize", 1.0).toFloat().coerceIn(0.5f, 2f),
+            textY = if (o.isNull("textY") || !o.has("textY")) null else o.getDouble("textY").toFloat().coerceIn(0f, 1f),
             transition = Transition(
                 TransitionKind.entries.firstOrNull { it.name == o.optString("transition") } ?: TransitionKind.STYLE,
                 TransitionLength.entries.firstOrNull { it.name == o.optString("transitionLength") } ?: TransitionLength.NORMAL,
+                if (o.isNull("transitionMs") || !o.has("transitionMs")) null else o.getLong("transitionMs").coerceIn(150, 2_000),
             ),
             everyCut = o.optBoolean("everyCut"),
             pace = o.optDouble("pace", 1.0).toFloat().coerceIn(0.6f, 1.5f),

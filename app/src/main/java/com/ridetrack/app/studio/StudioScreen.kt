@@ -577,6 +577,8 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
     if (styleOpen) StylePicker(vm, s, onAll = { nav(com.ridetrack.app.ui.nav.Routes.STYLES) }) { styleOpen = false }
     if (exportOpen) ExportSheet(vm, s) { exportOpen = false }
+    var saveStyle by remember { mutableStateOf(false) }
+    if (saveStyle) SaveStyleDialog(vm, s) { saveStyle = false }
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Player(android.net.Uri.fromFile(video), Modifier.align(Alignment.CenterHorizontally), seek = seek)
@@ -601,6 +603,7 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 color = if (s.exporting != null) RtColors.TextSecondary else RtColors.Primary,
                 modifier = Modifier.clickable(enabled = s.exporting == null, role = Role.Button) { exportOpen = true }.padding(vertical = 4.dp),
             )
+            Text("Save this style ›", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { saveStyle = true }.padding(vertical = 4.dp))
             UsedStrip(s) { seek = it to System.nanoTime() }
             ReelMenu(onDuplicate = vm::duplicate, onDelete = vm::delete, onChange = vm::back)
             if (!s.phoneOnly) JournalCard(vm, s)
