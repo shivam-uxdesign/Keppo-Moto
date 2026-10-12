@@ -1606,7 +1606,8 @@ class StudioViewModel(
         dropDraft()
         history = null
         _state.update { it.copy(plan = edited, script = after ?: it.script, timeline = null, pick = null, step = StudioStep.READY) }
-        remake()
+        // A voice-over recorded in the editor gets its captions on the way.
+        if (s.takes.any { it.lines.isEmpty() && it.durMs >= 500 }) finishVoice() else remake()
     }
 
     /** Done editing (or recording): make the video again from the edited plan. */
@@ -1668,7 +1669,7 @@ class StudioViewModel(
             }
             val total = _state.value.plan?.totalMs ?: 0
             val take = VoiceTake(atMs, ms.coerceAtMost((total - atMs).coerceAtLeast(0)), file)
-            _state.update { it.copy(recordingAt = null, takes = it.takes + take) }
+            _state.update { it.copy(recordingAt = null, takes = it.takes + take, timelineVersion = it.timelineVersion + 1) }
         }
     }
 
@@ -1676,7 +1677,7 @@ class StudioViewModel(
 
     fun deleteTake(t: VoiceTake) {
         t.file.delete()
-        _state.update { it.copy(takes = it.takes - t) }
+        _state.update { it.copy(takes = it.takes - t, timelineVersion = it.timelineVersion + 1) }
     }
 
     /** Captions for takes that don't have them yet (Gemini), then the video again. */
