@@ -609,6 +609,30 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                     color = RtColors.TextSecondary,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
+                // The title, tap to change it
+                var naming by remember { mutableStateOf(false) }
+                if (naming) {
+                    var t by remember { mutableStateOf(s.title) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = t,
+                            onValueChange = { t = it.take(60) },
+                            singleLine = true,
+                            textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text("Done", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.rename(t); naming = false }.padding(10.dp))
+                    }
+                } else {
+                    Text(
+                        s.title.ifBlank { "Untitled" } + "  ✎",
+                        style = RtType.headline,
+                        color = RtColors.TextPrimary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Change the title") { naming = true },
+                    )
+                }
                 // Where it's going
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ExportPreset.entries.forEach { p ->

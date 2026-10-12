@@ -460,7 +460,7 @@ private fun SavedClipsGrid() {
 private fun formatMb(b: Long): String = if (b < 1_000_000_000) "${b / 1_000_000} MB" else String.format(java.util.Locale.US, "%.1f GB", b / 1e9)
 
 /** Sends Reels to Keppo Journal; for each ride, the newest one sent becomes the entry's cover. */
-private suspend fun sendToJournal(c: com.ridetrack.app.AppContainer, list: List<ReelProject>) {
+internal suspend fun sendToJournal(c: com.ridetrack.app.AppContainer, list: List<ReelProject>) {
     list.groupBy { it.rideId!! }.forEach { (ride, sent) ->
         val coverId = sent.maxBy { it.createdAt }.id
         c.reels.reels.value.filter { it.rideId == ride && (it.journalCover || it.id in sent.map { s -> s.id }) }.forEach { p ->

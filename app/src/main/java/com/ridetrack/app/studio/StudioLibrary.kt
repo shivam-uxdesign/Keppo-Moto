@@ -67,7 +67,9 @@ internal fun MakingPill(modifier: Modifier, onOpen: () -> Unit) {
     val maker by appContainer().reelMaker.state.collectAsStateWithLifecycle()
     var seen by remember { mutableStateOf(setOf<String>()) }
     val fresh = maker.ready.firstOrNull { it.first !in seen }
-    val show = maker.current != null || maker.queued > 0 || fresh != null
+    // Gemini's free limit used up: said here too, with when it's free again.
+    val gemini = rememberGeminiWait().line
+    val show = maker.current != null || maker.queued > 0 || fresh != null || gemini != null
     AnimatedVisibility(show, modifier = modifier, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
         Row(
             Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF1C1C1F))
@@ -84,6 +86,9 @@ internal fun MakingPill(modifier: Modifier, onOpen: () -> Unit) {
                 }
                 maker.queued > 0 -> {
                     Text("${maker.queued} waiting to be made", style = RtType.body, color = Color.White, modifier = Modifier.weight(1f))
+                }
+                fresh == null && gemini != null -> {
+                    Text(gemini, style = RtType.caption, color = RtColors.Warning, maxLines = 2, modifier = Modifier.weight(1f))
                 }
                 fresh != null -> {
                     Box(Modifier.size(18.dp).clip(CircleShape).background(RtColors.Primary), contentAlignment = Alignment.Center) { Text("✓", style = RtType.caption, color = RtColors.OnPrimary) }
@@ -164,6 +169,7 @@ fun StudioSettingsScreen(onBack: () -> Unit) {
     var auto by remember { mutableStateOf(prefs.autoSuggest) }
     var top by remember { mutableStateOf(prefs.autoMakeTop) }
     var mobile by remember { mutableStateOf(prefs.autoMobileData) }
+    var overnight by remember { mutableStateOf(prefs.makeOvernight) }
     var gallery by remember { mutableStateOf(prefs.alsoSaveToGallery) }
     var series by remember { mutableStateOf(prefs.series) }
     var music by remember { mutableStateOf(prefs.music) }
@@ -187,6 +193,9 @@ fun StudioSettingsScreen(onBack: () -> Unit) {
                 if (auto) {
                     SwitchLine("Make the top idea", "So one is waiting in Your Reels", top) { top = it; prefs.autoMakeTop = it }
                     SwitchLine("Use mobile data on low battery", "Otherwise it waits for Wi-Fi", mobile) { mobile = it; prefs.autoMobileData = it }
+                }
+                SwitchLine("Make every idea overnight", "While the phone charges: they're in Your Reels by morning", overnight) {
+                    overnight = it; prefs.makeOvernight = it; OvernightMakeWorker.set(c.appContext, it)
                 }
             }
             Group("Every new video starts with") {

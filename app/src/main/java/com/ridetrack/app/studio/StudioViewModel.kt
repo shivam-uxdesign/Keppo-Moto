@@ -1244,6 +1244,13 @@ class StudioViewModel(
     // ---- edit ------------------------------------------------------------------------------
 
     fun setTitle(t: String) = _state.update { it.copy(title = t) }
+
+    /** A new title for this Reel, kept with it in Your Reels. */
+    fun rename(t: String) {
+        val title = t.trim().ifEmpty { return }
+        setTitle(title)
+        _state.value.reelId?.let { id -> viewModelScope.launch { c.reels.update(id) { it.copy(title = title) } } }
+    }
     fun setHookLine(t: String) = _state.update { it.copy(hookLine = t) }
 
     // ---- timeline editor --------------------------------------------------------------------
@@ -1272,7 +1279,8 @@ class StudioViewModel(
     private fun publish(reload: Boolean) {
         val h = history ?: return
         _state.update { it.copy(timeline = h.current, canUndo = h.canUndo, canRedo = h.canRedo, steps = h.steps, timelineVersion = it.timelineVersion + if (reload) 1 else 0) }
-        if (reload) writeDraft(h.current)
+        // Only an edit with changes is worth carrying on with later.
+        if (reload && h.canUndo) writeDraft(h.current)
     }
 
     /** One change on the timeline (one undo step, named [label] in History). */

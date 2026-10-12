@@ -94,7 +94,19 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /** One idea for a ride, as the Studio tab shows it. */
-data class IdeaCard(val title: String, val format: String, val why: String?, val lengthSec: Int, val thumb: File?, val made: Boolean, val fromClips: Boolean)
+data class IdeaCard(
+    val title: String,
+    val format: String,
+    val why: String?,
+    val lengthSec: Int,
+    val thumb: File?,
+    val made: Boolean,
+    val fromClips: Boolean,
+    /** When its unsaved edit was last changed; null when there's none. */
+    val draftAt: Long? = null,
+    /** Its opening clip and where in it, for a peek. */
+    val peek: Pair<File, Long>? = null,
+)
 
 /** A ride Studio can make a Reel from. */
 data class StudioRide(
@@ -131,11 +143,16 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
             if (ms.size < 2) return@mapNotNull null
             val madeIdeas = reels.filter { it.rideId == r.id && it.deletedAt == null }
             val thumbOf = ms.associate { it.id to it.thumb?.takeIf(File::isFile) }
+            val fileOf = ms.associate { it.id to it.file }
+            val drafts = File(c.appContext.filesDir, "studio-drafts")
             val ideas = planOf(r.id).map { sc ->
+                val first = sc.sections.firstOrNull { it.shots.isNotEmpty() }?.shots?.first()
                 IdeaCard(
                     title = sc.title, format = sc.format.label, why = sc.why, lengthSec = sc.lengthSec,
-                    thumb = sc.sections.firstOrNull { it.shots.isNotEmpty() }?.shots?.first()?.clip?.let { thumbOf[it] } ?: ms.first().thumb,
+                    thumb = first?.clip?.let { thumbOf[it] } ?: ms.first().thumb,
                     made = madeIdeas.any { it.idea == sc.title }, fromClips = sc.every,
+                    draftAt = File(drafts, "ride-${r.id}-idea-" + Integer.toHexString(sc.title.hashCode()) + ".json").takeIf { it.isFile }?.lastModified(),
+                    peek = first?.let { sh -> fileOf[sh.clip]?.let { it to sh.inMs } },
                 )
             }
             val waiting = if (ideas.isEmpty()) {
@@ -177,6 +194,20 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
         androidx.work.WorkManager.getInstance(c.appContext).getWorkInfosForUniqueWork("studio-after-ride-$rideId").get()
             .any { it.state == androidx.work.WorkInfo.State.ENQUEUED || it.state == androidx.work.WorkInfo.State.RUNNING }
     }.getOrDefault(false)
+
+    /** Every idea of [rideId] not made yet, made in the background; [done] gets how many. */
+    fun makeAll(rideId: String, done: (Int) -> Unit) {
+        viewModelScope.launch { done(StudioBatch.makeAll(c, rideId, service = true)) }
+    }
+
+    /** This ride's Reels into its Keppo Journal entry. */
+    fun sendAllToJournal(rideId: String, done: (Int) -> Unit) {
+        viewModelScope.launch {
+            val list = c.reels.reels.value.filter { it.rideId == rideId && it.deletedAt == null }
+            if (list.isNotEmpty()) sendToJournal(c, list)
+            done(list.size)
+        }
+    }
 
     fun hide(rideId: String, title: String) = setHidden(_hidden.value + "$rideId|$title")
     fun unhide(rideId: String, title: String) = setHidden(_hidden.value - "$rideId|$title")
@@ -234,6 +265,8 @@ fun StudioHomeScreen(
     var newReel by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
     var making by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(note) { if (note != null) { delay(3_000); note = null } }
     var allRides by remember { mutableStateOf(false) }
     var quick by remember { mutableStateOf<IdeaCard?>(null) }
     var undo by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -277,6 +310,23 @@ fun StudioHomeScreen(
             // The ride shown: the one picked, else the newest with ideas.
             val ride = list.firstOrNull { it.id == picked } ?: list.firstOrNull { visible(it).isNotEmpty() } ?: list.first()
             val ideas = visible(ride)
+
+            // ---- the edit left off last, to carry on with
+            list.flatMap { r -> visible(r).filter { it.draftAt != null }.map { r to it } }.maxByOrNull { it.second.draftAt ?: 0 }?.let { (r, idea) ->
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(RoundedCornerShape(14.dp)).background(RtColors.Surface)
+                        .clickable(role = Role.Button, onClickLabel = "Continue editing") { onOpenIdea(r.id, idea.title, false) }.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    com.ridetrack.app.ui.moments.Thumb(idea.thumb, Modifier.size(width = 34.dp, height = 48.dp).clip(RoundedCornerShape(6.dp)))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Continue editing", style = RtType.caption, color = RtColors.Primary)
+                        Text(idea.title, style = RtType.body, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Text("›", style = RtType.headline, color = RtColors.TextTertiary)
+                }
+            }
 
             // ---- the rides, newest first
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 8.dp)) {
@@ -372,6 +422,10 @@ fun StudioHomeScreen(
             }
         }
 
+        AnimatedVisibility(note != null, Modifier.align(Alignment.BottomCenter).padding(bottom = 76.dp, start = 16.dp, end = 16.dp), enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
+            Text(note.orEmpty(), style = RtType.body, color = RtColors.OnInverse, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(RtColors.Inverse).padding(horizontal = 14.dp, vertical = 12.dp))
+        }
+
         StudioSheet(newReel, { newReel = false }, title = "New Reel") {
             SheetRow("From your phone's videos", "Ones filmed on a ride get its speed and route") {
                 newReel = false
@@ -383,6 +437,16 @@ fun StudioHomeScreen(
         StudioSheet(more, { more = false }) {
             SheetRow("Styles", "Your looks, the brand kit") { more = false; onOpenStyles() }
             SheetRow("Your Reels", "Made, drafts, saved clips, deleted") { more = false; onOpenReels() }
+            val shown = list?.firstOrNull { it.id == picked } ?: list?.firstOrNull { visible(it).isNotEmpty() } ?: list?.firstOrNull()
+            shown?.takeIf { visible(it).any { i -> !i.made && !i.fromClips } }?.let { r ->
+                SheetRow("Make all of ${r.name}'s ideas", "In the background; they'll be in Your Reels") {
+                    more = false
+                    vm.makeAll(r.id) { n -> note = if (n == 0) "All its ideas are made already" else "Making $n in the background" }
+                }
+            }
+            shown?.takeIf { it.made > 0 }?.let { r ->
+                SheetRow("Send ${r.name}'s Reels to Keppo Journal") { more = false; vm.sendAllToJournal(r.id) { n -> note = "Sent $n to Keppo Journal" } }
+            }
             SheetRow("In the background", "What's being made, and Gemini's allowance") { more = false; making = true }
             SheetRow("Settings", "After each ride, what new videos start with, saving") { more = false; onOpenSettings() }
         }
@@ -390,6 +454,8 @@ fun StudioHomeScreen(
         StudioSheet(quick != null, { quick = null }, title = quick?.title) {
             val r = list?.firstOrNull { it.id == picked } ?: list?.firstOrNull { it.ideas.any { i -> i.title == quick?.title } }
             quick?.let { idea ->
+                // A peek: its opening clip plays.
+                idea.peek?.let { (file, at) -> Player(android.net.Uri.fromFile(file), Modifier.align(Alignment.CenterHorizontally), seek = at to idea.title.hashCode().toLong(), height = 240.dp) }
                 SheetRow("Open in the editor") { quick = null; r?.let { onOpenIdea(it.id, idea.title, false) } }
                 SheetRow("Make it now, ready to share", "In the background; it'll be in Your Reels") { quick = null; r?.let { onOpenIdea(it.id, idea.title, true) } }
                 SheetRow("Hide this idea", danger = true) { quick = null; r?.let { vm.hide(it.id, idea.title); undo = it.id to idea.title } }
@@ -438,6 +504,7 @@ private fun IdeaCardView(idea: IdeaCard, onOpen: () -> Unit, onHold: () -> Unit,
             Text(idea.format, style = RtType.caption, color = RtColors.OnPrimary, modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(RtColors.Primary).padding(horizontal = 8.dp, vertical = 2.dp))
             Text(Format.clock(idea.lengthSec * 1000L), style = RtType.caption, color = Color.White, modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 8.dp, vertical = 2.dp))
             if (idea.made) Text("Made", style = RtType.caption, color = Color.White, modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 8.dp, vertical = 2.dp))
+            if (idea.draftAt != null) Text("Edited", style = RtType.caption, color = Color.White, modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 8.dp, vertical = 2.dp))
             if (idea.fromClips) Text("From your clips", style = RtType.caption, color = Color.White, modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 8.dp, vertical = 2.dp))
         }
         Box(Modifier.align(Alignment.Center).size(64.dp).clip(RoundedCornerShape(32.dp)).background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {

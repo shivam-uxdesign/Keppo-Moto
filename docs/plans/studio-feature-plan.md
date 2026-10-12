@@ -584,3 +584,12 @@ One commit per build. The APK comes at the end, after asking. Defaults taken whe
 7. **S7 Placing the rest, plus the new ideas:**
    - The nine missing pieces: leave out a clip, safe zones, frame step, copy and paste settings, timeline multi-select, Send all to Journal and Make all, Write for YouTube on Short, Gemini issues in the pill, the title.
    - Hold an idea for a 3-second peek; a "Continue editing" card; snap haptics; Make all overnight.
+
+**Status (12 Oct): S1–S7 built and pushed.** Where the nine missing pieces live now:
+- Leave out a clip: the ride's own Studio page, clip strip (hold a clip).
+- Safe zones, frame step, copy and paste the look, picking several clips: the editor (tools, the ‹ › by the time, Copy look / Paste look, Select more).
+- Make all and Send all to Journal: Studio tab › ⋯ for the ride shown (and the ride's own page).
+- Write for YouTube: Share › Short.
+- Gemini issues: the pill on the Studio tab says when Gemini is free again; its sheet has the error log.
+- The title: Share page, tap it.
+- New: hold an idea to peek at its opening clip; "Continue editing" on the Studio tab when an edit was left with changes; a tick when the playhead snaps to a cut, a style changes or a transition is picked; Settings › Make every idea overnight (while charging).

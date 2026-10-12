@@ -243,6 +243,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     val scroll = rememberScrollState()
     val current by rememberUpdatedState(plan)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    fun tick() = haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
 
     DisposableEffect(Unit) {
         val l = object : Player.Listener { override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying } }
@@ -290,7 +292,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         } else {
             delay(250)
             val snap = (TimelineEdits.snap(current, pos) ?: current.markers.map { it.atMs }.minByOrNull { abs(it - pos) }?.takeIf { abs(it - pos) <= 150 })
-            if (snap != null && snap != pos && !scroll.isScrollInProgress) scroll.animateScrollTo((snap * pxPerMs).roundToInt())
+            if (snap != null && snap != pos && !scroll.isScrollInProgress) { tick(); scroll.animateScrollTo((snap * pxPerMs).roundToInt()) }
         }
     }
     // A transition just picked (or its mark tapped): play across the cut, three times.
@@ -317,7 +319,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         if (s.recordingAt != null && pos >= plan.totalMs - 60) { vm.stopTake(); active.pause(); active.volume = 1f }
     }
     // Two fingers tap: undo; three: redo. A short banner says what went.
-    fun undoBanner(label: String?, redo: Boolean) { label?.let { flash = (if (redo) "Redo · " else "Undo · ") + it } }
+    fun undoBanner(label: String?, redo: Boolean) { label?.let { tick(); flash = (if (redo) "Redo · " else "Undo · ") + it } }
     BackHandler { if (s.canUndo) discard = true else vm.closeEdit() }
     BackHandler(enabled = cutAt != null || s.pick != null) { if (cutAt != null) { cutAt = null; loopAt = null } else vm.pick(null) }
 
@@ -338,6 +340,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         styleAt = Math.floorMod(styleAt + step, list.size)
         val st = list[styleAt]
         vm.styleOnTimeline(st)
+        tick()
         flash = "‹  ${st.name}  ›"
     }
 
@@ -766,7 +769,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     TransitionPicker(
                         tr,
                         looping = loopAt != null,
-                        onPick = { t -> vm.change("Transition") { ClipTools.transition(it, cut, t) }; loopAt = at },
+                        onPick = { t -> tick(); vm.change("Transition") { ClipTools.transition(it, cut, t) }; loopAt = at },
                         onPreview = { if (loopAt != null) { loopAt = null; active.pause() } else loopAt = at },
                         onAll = { vm.change("Transition on all cuts") { ClipTools.transitionAll(it, tr) }; flash = "${tr.kind.label} on every cut" },
                         onDone = { cutAt = null; loopAt = null; active.pause() },

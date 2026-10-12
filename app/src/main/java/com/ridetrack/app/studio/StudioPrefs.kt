@@ -69,6 +69,11 @@ class StudioPrefs(context: Context) {
         get() = prefs.getBoolean(AUTO_MOBILE, false)
         set(v) = prefs.edit().putBoolean(AUTO_MOBILE, v).apply()
 
+    /** Make every idea not made yet overnight, while the phone charges. */
+    var makeOvernight: Boolean
+        get() = prefs.getBoolean(OVERNIGHT, false)
+        set(v) = prefs.edit().putBoolean(OVERNIGHT, v).apply()
+
     /** The "add a trending song in Instagram" guide was dismissed. */
     var musicGuideSeen: Boolean
         get() = prefs.getBoolean(MUSIC_GUIDE, false)
@@ -119,6 +124,7 @@ class StudioPrefs(context: Context) {
         const val ASKS = "recent_asks"
         const val AUTO_MAKE = "auto_make_top"
         const val AUTO_MOBILE = "auto_mobile_data"
+        const val OVERNIGHT = "make_overnight"
         const val OPTIONS = "options"
         const val MUSIC_URI = "music_uri"
         const val MUSIC_NAME = "music_name"
