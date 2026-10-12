@@ -562,3 +562,23 @@ The rider: "Studio got way too complicated; make it very simple and intuitive", 
     - Share: Reel, Short, Story or WhatsApp; cover; caption copied for you; subtitles, hook check and Journal.
     - After posting: views and likes, your Reels by views, "Make one like this".
 - Also seen on the rider's phone (8 Oct): the editor showed "Simple preview" on every clip. One failure turns the exact preview off for the whole session. The cause is in the error log ("Studio preview"); waiting for it.
+
+## Studio redesign: build order (approved 12 Oct: "make all, start building")
+
+One commit per build. The APK comes at the end, after asking. Defaults taken where questions were still open:
+- The video is made at → (Share); the top idea is still made in the background after each ride.
+- Rides are a strip on Studio.
+- The story lives in its own page, reached from Captions › Words and from Ideas.
+
+1. **S1 Flow:** the new Studio (rides strip, idea pager, + New Reel, Ask pill). An idea opens straight in the editor, playing; → goes to Share, which makes the video. The exact preview is retried per video instead of off for the session.
+2. **S2 Editor shell:**
+   - Top bar (close, Ideas, →). Video gestures: tap, swipe for style, hold to compare, swipe down to close.
+   - Context bottom bar; + Add videos and + Sound sheets, with many sound rows.
+   - Transition marks and the picker, with the clips parting.
+3. **S3 Tools:** speed with quick sliders and curves, look and crop dial, text on video, captions (Look/Words, fix a word), layers and stickers, mixer faders, voice-over, history (two-finger undo, three-finger redo).
+4. **S4 Library:** Your Reels (segmented, hold menu, swipe-select), Search, the making pill and queue sheet, grouped Settings.
+5. **S5 Styles:** library with groups, Brush-Studio-like editor, brand kit, what Studio learned (swipe to forget).
+6. **S6 Ideas and sharing:** the Ideas sheet, the story page, Share (places, cover, caption copied, subtitles, hook, Journal), After posting with a next-day reminder.
+7. **S7 Placing the rest, plus the new ideas:**
+   - The nine missing pieces: leave out a clip, safe zones, frame step, copy and paste settings, timeline multi-select, Send all to Journal and Make all, Write for YouTube on Short, Gemini issues in the pill, the title.
+   - Hold an idea for a 3-second peek; a "Continue editing" card; snap haptics; Make all overnight.
