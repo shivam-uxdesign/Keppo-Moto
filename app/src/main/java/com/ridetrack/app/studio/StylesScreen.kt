@@ -26,8 +26,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
@@ -44,7 +47,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -63,7 +65,6 @@ import com.ridetrack.app.AppContainer
 import com.ridetrack.app.moments.MomentKind
 import com.ridetrack.app.moments.ClipWriter
 import com.ridetrack.app.ui.appContainer
-import com.ridetrack.app.ui.components.ScreenHeader
 import com.ridetrack.app.ui.theme.RtColors
 import com.ridetrack.app.ui.theme.RtDimens
 import com.ridetrack.app.ui.theme.RtType
@@ -91,60 +92,134 @@ internal fun StylePreview(style: StudioStyle, frame: Bitmap?, modifier: Modifier
     }
 }
 
+/** The rider's recent clips (starred first) as stills to preview styles on; [k] picks one, round and round. */
+internal suspend fun clipFrame(c: AppContainer, k: Int): Bitmap? = withContext(Dispatchers.IO) {
+    val clips = c.moments.all().filter { it.kind == MomentKind.CLIP && it.thumb?.isFile == true }
+        .sortedWith(compareByDescending<com.ridetrack.app.moments.Moment> { it.starred }.thenByDescending { it.timeMillis }).take(8)
+    clips.getOrNull(Math.floorMod(k, clips.size.coerceAtLeast(1)))?.thumb?.let { ClipWriter.load(it, 960) }
+}
+
+/** Which styles the library shows. */
+private enum class StyleGroup(val label: String) { YOURS("Yours"), FAVOURITES("Favourites"), BUILT_IN("Built in") }
+
 /**
- * Styles: every style previewed on your own clip, your brand kit, and making new ones (duplicate,
- * describe it, from a video you like, or a code from another rider). Tap one to change it in detail.
+ * Styles, like Procreate's brush library: groups down the left (yours, favourites, built in, the
+ * brand kit), the group's styles on the right with a preview on your own clip. Tap to change one,
+ * hold for more; swipe a preview to see it on another clip; + makes a new one.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun StylesScreen(onBack: () -> Unit) {
     val c = appContainer()
     val styles by c.styles.styles.collectAsStateWithLifecycle()
-    val frame by produceState<Bitmap?>(null) { value = bestFrame(c) }
+    val context = LocalContext.current
+    var shot by remember { mutableIntStateOf(0) }
+    var frame by remember { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(shot) { frame = clipFrame(c, shot) }
     var editing by remember { mutableStateOf<StudioStyle?>(null) }
     var creating by remember { mutableStateOf(false) }
+    var brandOpen by remember { mutableStateOf(false) }
+    var group by remember { mutableStateOf(if (styles.any { !it.builtIn }) StyleGroup.YOURS else StyleGroup.BUILT_IN) }
+    var held by remember { mutableStateOf<StudioStyle?>(null) }
     editing?.let { st ->
-        StyleEditor(st, frame, onDone = { editing = null })
+        StyleEditor(st, frame, onOtherClip = { shot++ }, onDone = { editing = null })
         return
     }
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = RtDimens.screenPadding)) {
-        ScreenHeader(
-            "Styles",
-            onBack = onBack,
-            subtitle = "How your pieces look, sound and move",
-            actions = { Text("+ New", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { creating = true }.padding(8.dp)) },
-        )
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            item(span = { GridItemSpan(2) }) { BrandKitCard() }
-            items(styles, key = { it.id }) { st ->
-                Column(Modifier.clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClickLabel = "Change") { editing = st }) {
-                    StylePreview(st, frame, Modifier.fillMaxWidth().aspectRatio(9f / 16f))
-                    Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(st.name, style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 1)
-                            Text(if (st.builtIn) "Built in · ${c.styles.uses(st.id)} used" else "Yours · ${c.styles.uses(st.id)} used", style = RtType.caption, color = RtColors.TextTertiary)
-                        }
+    if (brandOpen) {
+        BrandKitPage(styles, frame, onBack = { brandOpen = false })
+        return
+    }
+    val shown = when (group) {
+        StyleGroup.YOURS -> styles.filter { !it.builtIn }
+        StyleGroup.FAVOURITES -> styles.filter { it.favourite }
+        StyleGroup.BUILT_IN -> styles.filter { it.builtIn }
+    }
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = RtDimens.screenPadding)) {
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("‹ Back", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button, onClick = onBack).padding(vertical = 8.dp, horizontal = 4.dp))
+                Spacer(Modifier.weight(1f))
+                RoundIcon(androidx.compose.material.icons.Icons.Rounded.Add, "New style", primary = true) { creating = true }
+            }
+            Text("Styles", style = RtType.title, color = RtColors.TextPrimary, modifier = Modifier.padding(vertical = 6.dp))
+            Row(Modifier.weight(1f)) {
+                // Groups
+                Column(Modifier.width(118.dp).padding(end = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    StyleGroup.entries.forEach { g ->
+                        val n = when (g) { StyleGroup.YOURS -> styles.count { !it.builtIn }; StyleGroup.FAVOURITES -> styles.count { it.favourite }; StyleGroup.BUILT_IN -> styles.count { it.builtIn } }
                         Text(
-                            if (st.favourite) "★" else "☆",
-                            style = RtType.bodyStrong,
-                            color = if (st.favourite) Color(0xFFFFD60A) else RtColors.TextTertiary,
-                            modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Favourite") { c.styles.favourite(st.id) }.padding(6.dp),
+                            "${g.label} · $n",
+                            style = RtType.body,
+                            color = if (g == group) RtColors.TextPrimary else RtColors.TextSecondary,
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (g == group) RtColors.SurfaceRaised else Color.Transparent)
+                                .clickable(role = Role.Tab) { group = g }.padding(horizontal = 10.dp, vertical = 10.dp),
                         )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text("Brand kit ›", style = RtType.body, color = RtColors.Primary, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button) { brandOpen = true }.padding(horizontal = 10.dp, vertical = 10.dp))
+                }
+                // The group's styles
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(1),
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (shown.isEmpty()) {
+                        item {
+                            Text(
+                                when (group) { StyleGroup.YOURS -> "None of your own yet. Tap + to make one."; StyleGroup.FAVOURITES -> "Tap ☆ on a style to keep it here."; StyleGroup.BUILT_IN -> "" },
+                                style = RtType.body,
+                                color = RtColors.TextSecondary,
+                            )
+                        }
+                    }
+                    items(shown, key = { it.id }) { st ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface)
+                                .combinedClickable(onClickLabel = "Change", onLongClickLabel = "More", onLongClick = { held = st }) { editing = st }
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            StylePreview(
+                                st,
+                                frame,
+                                Modifier.width(64.dp).aspectRatio(9f / 16f).pointerInput(Unit) {
+                                    var dx = 0f
+                                    detectHorizontalDragGestures(onDragStart = { dx = 0f }, onDragEnd = { if (kotlin.math.abs(dx) > 40f) shot += if (dx < 0) 1 else -1 }) { ch, d -> ch.consume(); dx += d }
+                                },
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(st.name + if (st.favourite) " ★" else "", style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 1)
+                                val uses = c.styles.uses(st.id)
+                                Text(listOfNotNull(st.about.takeIf { it.isNotBlank() }, if (uses > 0) "used $uses×" else null).joinToString(" · ").ifBlank { st.base.label }, style = RtType.caption, color = RtColors.TextTertiary, maxLines = 2)
+                            }
+                        }
                     }
                 }
             }
+            Text("Tap to change · hold for more · swipe a preview for another clip", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.padding(vertical = 8.dp))
+        }
+        NewStyleSheet(creating, styles, onClose = { creating = false }) { made -> creating = false; editing = made }
+        StudioSheet(held != null, { held = null }, title = held?.name) {
+            held?.let { st ->
+                SheetRow(if (st.favourite) "Take out of Favourites" else "Add to Favourites") { c.styles.favourite(st.id); held = null }
+                SheetRow("Duplicate") { val copy = st.copy(id = c.styles.newId(), name = "${st.name} (copy)", builtIn = false, favourite = false); c.styles.save(copy); held = null; editing = copy }
+                SheetRow("Share as a code", "Another rider pastes it in + › Paste a style code") {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, "My Keppo Moto style \"${st.name}\": ${StyleJson.code(st)}")
+                    context.startActivity(android.content.Intent.createChooser(send, "Share the style"))
+                    held = null
+                }
+                if (!st.builtIn) SheetRow("Delete", danger = true) { c.styles.delete(st.id); held = null }
+            }
         }
     }
-    if (creating) NewStyleSheet(styles, onClose = { creating = false }) { made -> creating = false; editing = made }
 }
 
-/** Your logo, font, handle and colour, used by styles with the brand turned on. */
+/** The brand kit: where it sits on a video, the logo, handle, font and colour, and which styles turn it on. */
 @Composable
-private fun BrandKitCard() {
+private fun BrandKitPage(styles: List<StudioStyle>, frame: Bitmap?, onBack: () -> Unit) {
     val c = appContainer()
     val brand by c.styles.brand.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -152,52 +227,78 @@ private fun BrandKitCard() {
     val pickLogo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) scope.launch { note = if (c.styles.setLogo(uri)) "Logo added" else "Couldn't use that picture" } }
     val pickFont = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) scope.launch { note = if (c.styles.setFont(uri)) "Font added" else "That isn't a font Android can use (TTF or OTF)" } }
     var handle by remember(brand.handle) { mutableStateOf(brand.handle) }
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text("BRAND KIT", style = RtType.label, color = RtColors.TextSecondary)
-        Text("Your logo, font, handle and colour, on every piece whose style has Brand on.", style = RtType.caption, color = RtColors.TextTertiary)
-        OutlinedTextField(
-            value = handle,
-            onValueChange = { handle = it.take(30) },
-            placeholder = { Text("@yourname", style = RtType.body, color = RtColors.TextTertiary) },
-            singleLine = true,
-            textStyle = RtType.body.copy(color = RtColors.TextPrimary),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        if (handle != brand.handle) Text("Save handle", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { c.styles.setBrand(brand.copy(handle = handle.trim())) }.padding(vertical = 4.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Choice(if (brand.logo != null) "Logo ✓" else "Upload logo", brand.logo != null) { pickLogo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-            if (brand.logo != null) Choice("Remove logo", false) { scope.launch { c.styles.setLogo(null) } }
-            Choice(if (brand.font != null) "Font ✓" else "Upload font", brand.font != null) { pickFont.launch(arrayOf("font/*", "application/octet-stream", "application/x-font-ttf", "application/font-sfnt")) }
-            if (brand.font != null) Choice("Remove font", false) { scope.launch { c.styles.setFont(null) } }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BRAND_COLOURS.forEach { col ->
-                Box(
-                    Modifier.size(28.dp).clip(CircleShape).background(Color(col))
-                        .border(2.dp, if (brand.color == col) RtColors.Primary else Color.Transparent, CircleShape)
-                        .clickable(role = Role.Button) { c.styles.setBrand(brand.copy(color = if (brand.color == col) null else col)) },
+    androidx.activity.compose.BackHandler(onBack = onBack)
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = RtDimens.screenPadding).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("‹ Styles", style = RtType.button, color = RtColors.Primary, modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(50)).clickable(role = Role.Button, onClick = onBack).padding(vertical = 8.dp, horizontal = 4.dp))
+        Text("Brand kit", style = RtType.title, color = RtColors.TextPrimary)
+        Text("Your logo, handle, font and colour, on any style that turns the brand on.", style = RtType.caption, color = RtColors.TextSecondary)
+        val preview = styles.firstOrNull { it.brand } ?: styles.firstOrNull()
+        preview?.let { StylePreview(it.copy(brand = true), frame, Modifier.height(260.dp).aspectRatio(9f / 16f).align(Alignment.CenterHorizontally)) }
+        Text("It sits low on the left, clear of Instagram's buttons.", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface)) {
+            KitRow("Logo", if (brand.logo != null) "Added ›" else "Add ›") { pickLogo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+            if (brand.logo != null) KitRow("Remove the logo", null, danger = true) { scope.launch { c.styles.setLogo(null) } }
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                Text("Handle", style = RtType.body, color = RtColors.TextPrimary)
+                OutlinedTextField(
+                    value = handle,
+                    onValueChange = { handle = it.take(30) },
+                    placeholder = { Text("@yourname", style = RtType.body, color = RtColors.TextTertiary) },
+                    singleLine = true,
+                    textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+                    modifier = Modifier.fillMaxWidth(),
                 )
+                if (handle != brand.handle) Text("Save handle", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { c.styles.setBrand(brand.copy(handle = handle.trim())) }.padding(vertical = 6.dp))
+            }
+            KitRow("Font", if (brand.font != null) "Your font · Aa ›" else "Add a TTF or OTF ›") { pickFont.launch(arrayOf("font/*", "application/octet-stream", "application/x-font-ttf", "application/font-sfnt")) }
+            if (brand.font != null) KitRow("Remove the font", null, danger = true) { scope.launch { c.styles.setFont(null) } }
+            Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Colour", style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
+                BRAND_COLOURS.forEach { col ->
+                    Box(
+                        Modifier.padding(start = 6.dp).size(26.dp).clip(CircleShape).background(Color(col))
+                            .border(2.dp, if (brand.color == col) RtColors.Primary else Color.Transparent, CircleShape)
+                            .clickable(role = Role.Button) { c.styles.setBrand(brand.copy(color = if (brand.color == col) null else col)) },
+                    )
+                }
             }
         }
         note?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
+        Text("ON", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 8.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface)) {
+            styles.forEach { st ->
+                Row(Modifier.fillMaxWidth().clickable(role = Role.Checkbox) { c.styles.save(st.copy(brand = !st.brand)) }.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                    Text(st.name, style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
+                    if (st.brand) Text("✓", style = RtType.bodyStrong, color = RtColors.Primary)
+                }
+            }
+        }
+        Text("Kept in your Google Drive backup.", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.padding(bottom = 16.dp))
+    }
+}
+
+@Composable
+private fun KitRow(label: String, detail: String?, danger: Boolean = false, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = 14.dp, vertical = 14.dp)) {
+        Text(label, style = RtType.body, color = if (danger) RtColors.Error else RtColors.TextPrimary, modifier = Modifier.weight(1f))
+        detail?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
     }
 }
 
 private val BRAND_COLOURS = listOf(0xFFFFFFFF.toInt(), 0xFFFFD60A.toInt(), 0xFFFF5D8F.toInt(), 0xFF60A5FA.toInt(), 0xFF34D399.toInt(), 0xFFF97316.toInt())
 
-/** Making a style: duplicate one, describe it (Gemini), from a video you like (Gemini), or a code. */
+/** + in Styles: describe it in words, like a video you love, from one of your Reels, a code, or a copy of one. */
 @Composable
-internal fun NewStyleSheet(styles: List<StudioStyle>, onClose: () -> Unit, onMade: (StudioStyle) -> Unit) {
+internal fun NewStyleSheet(visible: Boolean, styles: List<StudioStyle>, onClose: () -> Unit, onMade: (StudioStyle) -> Unit) {
     val c = appContainer()
     val scope = rememberCoroutineScope()
-    var words by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
+    var way by remember(visible) { mutableStateOf<String?>(null) }
+    var words by remember(visible) { mutableStateOf("") }
+    var code by remember(visible) { mutableStateOf("") }
     var busy by remember { mutableStateOf<String?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember(visible) { mutableStateOf<String?>(null) }
+    val reels by c.reels.reels.collectAsStateWithLifecycle()
     val gemini = remember { StudioGemini(preferred = { c.transcripts.model }, onWorking = { c.transcripts.model = it }) }
     fun made(st: StudioStyle?) {
         busy = null
@@ -214,49 +315,57 @@ internal fun NewStyleSheet(styles: List<StudioStyle>, onClose: () -> Unit, onMad
             made(runCatching { gemini.styleFromFrames(frames, c.styles.newId()) }.onFailure { c.errors.record("Studio styles", "Gemini couldn't describe the video", it) }.getOrNull())
         }
     }
-    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
-        Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.SurfaceRaised).padding(16.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("New style", style = RtType.bodyStrong, color = RtColors.TextPrimary)
-            Text("Start from", style = RtType.caption, color = RtColors.TextSecondary)
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                styles.forEach { st -> Choice(st.name, false) { made(st.copy(id = c.styles.newId(), name = "${st.name} (mine)", builtIn = false, favourite = false)) } }
-            }
+    StudioSheet(visible, onClose, "New style") {
+        Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (c.transcripts.available) {
-                Text("Describe it", style = RtType.caption, color = RtColors.TextSecondary)
+                SheetRow("Describe it in words", "“night, neon, punchy” · Gemini") { way = "words"; error = null }
+                if (way == "words") {
+                    OutlinedTextField(
+                        value = words,
+                        onValueChange = { words = it.take(200) },
+                        placeholder = { Text("night ride, neon, punchy, big yellow captions", style = RtType.body, color = RtColors.TextTertiary) },
+                        textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (words.isNotBlank() && busy == null) Text("Make it", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) {
+                        busy = "Gemini is drafting the style…"
+                        error = null
+                        scope.launch { made(runCatching { gemini.styleFromWords(words, c.styles.newId()) }.onFailure { c.errors.record("Studio styles", "Gemini couldn't draft the style", it) }.getOrNull()) }
+                    }.padding(vertical = 6.dp))
+                }
+                SheetRow("Like a video I love", "Pick any video · Gemini copies the feel") { error = null; if (busy == null) pickVideo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) }
+            }
+            SheetRow("From one of my Reels", "Its captions, cuts, pace and colour") { way = "reel"; error = null }
+            if (way == "reel") {
+                reels.filter { it.deletedAt == null }.take(10).forEach { p ->
+                    Text(p.title, style = RtType.body, color = RtColors.Primary, modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) {
+                        made(Styles.fromReel(p.plan, p.options, c.styles.newId(), p.title.take(30)).copy(about = "from a Reel"))
+                    }.padding(vertical = 8.dp, horizontal = 8.dp))
+                }
+            }
+            SheetRow("Paste a style code") { way = "code"; error = null }
+            if (way == "code") {
                 OutlinedTextField(
-                    value = words,
-                    onValueChange = { words = it.take(200) },
-                    placeholder = { Text("night ride, neon, punchy, big yellow captions", style = RtType.body, color = RtColors.TextTertiary) },
+                    value = code,
+                    onValueChange = { code = it },
+                    placeholder = { Text("KEPPO-STYLE:…", style = RtType.body, color = RtColors.TextTertiary) },
+                    singleLine = true,
                     textStyle = RtType.body.copy(color = RtColors.TextPrimary),
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (words.isNotBlank() && busy == null) Text("Make it", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) {
-                    busy = "Gemini is drafting the style…"
-                    error = null
-                    scope.launch { made(runCatching { gemini.styleFromWords(words, c.styles.newId()) }.onFailure { c.errors.record("Studio styles", "Gemini couldn't draft the style", it) }.getOrNull()) }
-                }.padding(vertical = 4.dp))
-                Text("From a video you like", style = RtType.caption, color = RtColors.TextSecondary)
-                Text("Gemini looks at a few frames of it and makes a style close to its look and pace.", style = RtType.caption, color = RtColors.TextTertiary)
-                if (busy == null) Choice("Pick a video", false) { error = null; pickVideo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) }
+                if (code.isNotBlank()) Text("Add it", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) {
+                    val st = StyleJson.fromCode(code, c.styles.newId())
+                    if (st == null) error = "That isn't a style code" else made(st)
+                }.padding(vertical = 6.dp))
             }
-            Text("A code from another rider", style = RtType.caption, color = RtColors.TextSecondary)
-            OutlinedTextField(
-                value = code,
-                onValueChange = { code = it },
-                placeholder = { Text("KEPPO-STYLE:…", style = RtType.body, color = RtColors.TextTertiary) },
-                singleLine = true,
-                textStyle = RtType.body.copy(color = RtColors.TextPrimary),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (code.isNotBlank()) Text("Add it", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) {
-                val st = StyleJson.fromCode(code, c.styles.newId())
-                if (st == null) error = "That isn't a style code" else made(st)
-            }.padding(vertical = 4.dp))
+            SheetRow("A copy of one", "Then change it") { way = "copy"; error = null }
+            if (way == "copy") {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    styles.forEach { st -> Choice(st.name, false) { made(st.copy(id = c.styles.newId(), name = "${st.name} (mine)", builtIn = false, favourite = false)) } }
+                }
+            }
             busy?.let { Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text(it, style = RtType.caption, color = RtColors.TextPrimary) } }
             error?.let { Text(it, style = RtType.caption, color = RtColors.Error) }
         }
@@ -264,107 +373,131 @@ internal fun NewStyleSheet(styles: List<StudioStyle>, onClose: () -> Unit, onMad
 }
 
 /**
- * One style in detail: a part at a time (captions, text, transitions, pace, camera, colour,
- * overlays, sound), with the preview updating as it changes. Reset a part, Shuffle, share it.
+ * One style in detail, like Procreate's Brush Studio: the live preview on top (Shuffle, Share
+ * code, Other clip), the parts down the left, that part's settings beside them.
  */
 @Composable
-internal fun StyleEditor(start: StudioStyle, frame: Bitmap?, onSaved: (StudioStyle) -> Unit = {}, onDone: () -> Unit) {
+internal fun StyleEditor(start: StudioStyle, frame: Bitmap?, onSaved: (StudioStyle) -> Unit = {}, onOtherClip: (() -> Unit)? = null, onDone: () -> Unit) {
     val c = appContainer()
     val context = LocalContext.current
     var st by remember { mutableStateOf(start) }
     var part by remember { mutableStateOf(StylePart.CAPTIONS) }
     var shuffles by remember { mutableIntStateOf(1) }
+    var naming by remember { mutableStateOf(false) }
     val original = remember { c.styles.original(start) }
     androidx.activity.compose.BackHandler { onDone() }
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = RtDimens.screenPadding)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Cancel", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button, onClick = onDone).padding(6.dp))
             Spacer(Modifier.weight(1f))
-            Text("Shuffle", style = RtType.button, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button) { st = Styles.shuffle(st, shuffles++) }.padding(6.dp))
-            Text("Share", style = RtType.button, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button) {
+            if (naming) {
+                OutlinedTextField(
+                    value = st.name,
+                    onValueChange = { st = st.copy(name = it.take(40)) },
+                    singleLine = true,
+                    textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+                    modifier = Modifier.width(180.dp),
+                )
+            } else {
+                Text(st.name + " ✎", style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 1, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Rename") { naming = true }.padding(6.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            Text("Done", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { c.styles.save(st); onSaved(st); onDone() }.padding(6.dp))
+        }
+        StylePreview(st, frame, Modifier.height(260.dp).aspectRatio(9f / 16f).align(Alignment.CenterHorizontally))
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.Center) {
+            Small2("Shuffle") { st = Styles.shuffle(st, shuffles++) }
+            Small2("Share code") {
                 val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, "My Keppo Moto style \"${st.name}\": ${StyleJson.code(st)}")
                 context.startActivity(android.content.Intent.createChooser(send, "Share the style"))
-            }.padding(6.dp))
-            Text("Save", style = RtType.button, color = RtColors.OnPrimary, modifier = Modifier.clip(RoundedCornerShape(50)).background(RtColors.Primary).clickable(role = Role.Button) { c.styles.save(st); onSaved(st); onDone() }.padding(horizontal = 14.dp, vertical = 6.dp))
+            }
+            onOtherClip?.let { Small2("Other clip ›", onClick = it) }
         }
-        StylePreview(st, frame, Modifier.height(300.dp).aspectRatio(9f / 16f).align(Alignment.CenterHorizontally))
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = st.name,
-            onValueChange = { st = st.copy(name = it.take(40)) },
-            singleLine = true,
-            textStyle = RtType.body.copy(color = RtColors.TextPrimary),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            StylePart.entries.forEach { p -> Choice(p.label, part == p) { part = p } }
-        }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            when (part) {
-                StylePart.CAPTIONS -> {
-                    val cap = st.captions
-                    Chips("Base look", Vibe.entries.map { it.label to (st.base == it) }) { i -> st = st.copy(base = Vibe.entries[i]) }
-                    Chips("Captions", CaptionKind.entries.map { it.label to (cap.kind == it) }) { i -> st = st.copy(captions = cap.copy(kind = CaptionKind.entries[i])) }
-                    Chips("Font", FontChoice.entries.map { it.label to (cap.font == it) }) { i -> st = st.copy(captions = cap.copy(font = FontChoice.entries[i])) }
-                    Slide("Size", cap.size, 0.5f..2f, { "${(it * 100).toInt()}%" }) { st = st.copy(captions = cap.copy(size = it)) }
-                    Slide("Height", cap.y ?: -1f, 0.1f..0.9f, { if (it < 0) "Style's" else "${(it * 100).toInt()}% down" }, onReset = { st = st.copy(captions = cap.copy(y = null)) }) { st = st.copy(captions = cap.copy(y = it)) }
-                    Colours(if (cap.kind == CaptionKind.LABEL || cap.kind == CaptionKind.CHAT) "Colour (the label or bubble)" else "Colour", cap.color) { st = st.copy(captions = cap.copy(color = it)) }
-                    Colours("The word being said", cap.highlight, own = "Yellow") { st = st.copy(captions = cap.copy(highlight = it)) }
-                    Toggle("Light up each word", cap.karaoke) { st = st.copy(captions = cap.copy(karaoke = it)) }
-                    Toggle("Dark band behind them", cap.box) { st = st.copy(captions = cap.copy(box = it)) }
+        Row(Modifier.weight(1f)) {
+            Column(Modifier.width(96.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                StylePart.entries.forEach { p ->
+                    Text(
+                        p.label,
+                        style = RtType.body,
+                        color = if (p == part) RtColors.TextPrimary else RtColors.TextSecondary,
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (p == part) RtColors.SurfaceRaised else Color.Transparent)
+                            .clickable(role = Role.Tab) { part = p }.padding(horizontal = 10.dp, vertical = 10.dp),
+                    )
                 }
-                StylePart.TEXT -> {
-                    Chips("Text", TextLook.entries.map { it.label to (st.textLook == it) }) { i -> st = st.copy(textLook = TextLook.entries[i]) }
-                    Chips("Font", FontChoice.entries.map { it.label to (st.textFont == it) }) { i -> st = st.copy(textFont = FontChoice.entries[i]) }
-                    Colours("Colour", st.textColor) { st = st.copy(textColor = it) }
-                    Slide("Size", st.textSize, 0.5f..2f, { "${(it * 100).toInt()}%" }) { st = st.copy(textSize = it) }
-                    Slide("Height", st.textY ?: -1f, 0.05f..0.95f, { if (it < 0) "Where each text is" else "${(it * 100).toInt()}% down" }, onReset = { st = st.copy(textY = null) }) { st = st.copy(textY = it) }
-                    Chips("Comes in", TextAnim.entries.map { it.label to (st.textIn == it) }) { i -> st = st.copy(textIn = TextAnim.entries[i]) }
-                    Chips("Goes out", TextAnim.entries.map { it.label to (st.textOut == it) }) { i -> st = st.copy(textOut = TextAnim.entries[i]) }
-                }
-                StylePart.TRANSITIONS -> {
-                    Chips("Transition", TransitionKind.entries.map { it.label to (st.transition.kind == it) }) { i -> st = st.copy(transition = st.transition.copy(kind = TransitionKind.entries[i])) }
-                    Chips("Length", TransitionLength.entries.map { it.label to (st.transition.customMs == null && st.transition.length == it) }) { i -> st = st.copy(transition = st.transition.copy(length = TransitionLength.entries[i], customMs = null)) }
-                    Slide("Exact length", st.transition.customMs?.toFloat() ?: -1f, 150f..2_000f, { if (it < 0) "Off" else String.format(java.util.Locale.US, "%.2f s", it / 1000) }, onReset = { st = st.copy(transition = st.transition.copy(customMs = null)) }) {
-                        st = st.copy(transition = st.transition.copy(customMs = (kotlin.math.round(it / 50) * 50).toLong()))
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                when (part) {
+                    StylePart.CAPTIONS -> {
+                        val cap = st.captions
+                        Chips("Base look", Vibe.entries.map { it.label to (st.base == it) }) { i -> st = st.copy(base = Vibe.entries[i]) }
+                        Chips("Captions", CaptionKind.entries.map { it.label to (cap.kind == it) }) { i -> st = st.copy(captions = cap.copy(kind = CaptionKind.entries[i])) }
+                        Chips("Font", FontChoice.entries.map { it.label to (cap.font == it) }) { i -> st = st.copy(captions = cap.copy(font = FontChoice.entries[i])) }
+                        Slide("Size", cap.size, 0.5f..2f, { "${(it * 100).toInt()}%" }) { st = st.copy(captions = cap.copy(size = it)) }
+                        Slide("Height", cap.y ?: -1f, 0.1f..0.9f, { if (it < 0) "Style's" else "${(it * 100).toInt()}% down" }, onReset = { st = st.copy(captions = cap.copy(y = null)) }) { st = st.copy(captions = cap.copy(y = it)) }
+                        Colours(if (cap.kind == CaptionKind.LABEL || cap.kind == CaptionKind.CHAT) "Colour (the label or bubble)" else "Colour", cap.color) { st = st.copy(captions = cap.copy(color = it)) }
+                        Colours("The word being said", cap.highlight, own = "Yellow") { st = st.copy(captions = cap.copy(highlight = it)) }
+                        Toggle("Light up each word", cap.karaoke) { st = st.copy(captions = cap.copy(karaoke = it)) }
+                        Toggle("Dark band behind them", cap.box) { st = st.copy(captions = cap.copy(box = it)) }
                     }
-                    Toggle("On every cut (off: only between the script's sections)", st.everyCut) { st = st.copy(everyCut = it) }
+                    StylePart.TEXT -> {
+                        Chips("Text", TextLook.entries.map { it.label to (st.textLook == it) }) { i -> st = st.copy(textLook = TextLook.entries[i]) }
+                        Chips("Font", FontChoice.entries.map { it.label to (st.textFont == it) }) { i -> st = st.copy(textFont = FontChoice.entries[i]) }
+                        Colours("Colour", st.textColor) { st = st.copy(textColor = it) }
+                        Slide("Size", st.textSize, 0.5f..2f, { "${(it * 100).toInt()}%" }) { st = st.copy(textSize = it) }
+                        Slide("Height", st.textY ?: -1f, 0.05f..0.95f, { if (it < 0) "Where each text is" else "${(it * 100).toInt()}% down" }, onReset = { st = st.copy(textY = null) }) { st = st.copy(textY = it) }
+                        Chips("Comes in", TextAnim.entries.map { it.label to (st.textIn == it) }) { i -> st = st.copy(textIn = TextAnim.entries[i]) }
+                        Chips("Goes out", TextAnim.entries.map { it.label to (st.textOut == it) }) { i -> st = st.copy(textOut = TextAnim.entries[i]) }
+                    }
+                    StylePart.TRANSITIONS -> {
+                        Chips("Transition", TransitionKind.entries.map { it.label to (st.transition.kind == it) }) { i -> st = st.copy(transition = st.transition.copy(kind = TransitionKind.entries[i])) }
+                        Chips("Length", TransitionLength.entries.map { it.label to (st.transition.customMs == null && st.transition.length == it) }) { i -> st = st.copy(transition = st.transition.copy(length = TransitionLength.entries[i], customMs = null)) }
+                        Slide("Exact length", st.transition.customMs?.toFloat() ?: -1f, 150f..2_000f, { if (it < 0) "Off" else String.format(java.util.Locale.US, "%.2f s", it / 1000) }, onReset = { st = st.copy(transition = st.transition.copy(customMs = null)) }) {
+                            st = st.copy(transition = st.transition.copy(customMs = (kotlin.math.round(it / 50) * 50).toLong()))
+                        }
+                        Toggle("On every cut (off: only between the script's sections)", st.everyCut) { st = st.copy(everyCut = it) }
+                    }
+                    StylePart.PACE -> Chips("Riding shots", listOf(0.6f to "Fast", 0.8f to "Quick", 1f to "Normal", 1.25f to "Easy", 1.5f to "Slow").map { it.second to (st.pace == it.first) }) { i ->
+                        st = st.copy(pace = listOf(0.6f, 0.8f, 1f, 1.25f, 1.5f)[i])
+                    }
+                    StylePart.CAMERA -> Toggle("Punch in on the words that matter", st.punchIn) { st = st.copy(punchIn = it) }
+                    StylePart.COLOUR -> {
+                        Toggle("Keep the base look's colour", st.color.look) { st = st.copy(color = st.color.copy(look = it)) }
+                        val pct = { v: Float -> (if (v > 0) "+" else "") + "${(v * 100).toInt()}" }
+                        Slide("Exposure", st.color.exposure, -1f..1f, pct) { st = st.copy(color = st.color.copy(exposure = it)) }
+                        Slide("Contrast", st.color.contrast, -1f..1f, pct) { st = st.copy(color = st.color.copy(contrast = it)) }
+                        Slide("Saturation", st.color.saturation, -1f..1f, pct) { st = st.copy(color = st.color.copy(saturation = it)) }
+                        Slide("Warmth", st.color.warmth, -1f..1f, pct) { st = st.copy(color = st.color.copy(warmth = it)) }
+                    }
+                    StylePart.OVERLAYS -> {
+                        Toggle("Speed in the corner", st.speedBadge) { st = st.copy(speedBadge = it) }
+                        Toggle("Speed gauge sticker", st.speedSticker) { st = st.copy(speedSticker = it) }
+                        Toggle("Lean sticker", st.leanSticker) { st = st.copy(leanSticker = it) }
+                        Toggle("Route map behind the stats", st.map) { st = st.copy(map = it) }
+                        Toggle("Route opening card", st.intro) { st = st.copy(intro = it) }
+                        Toggle("Stats at the end", st.outro) { st = st.copy(outro = it) }
+                        Toggle("Keppo Moto mark", st.watermark) { st = st.copy(watermark = it) }
+                        Toggle("My brand kit (logo, handle, font)", st.brand) { st = st.copy(brand = it) }
+                    }
+                    StylePart.SOUND -> {
+                        Toggle("Music and engine dip while I talk", st.duck) { st = st.copy(duck = it) }
+                        Toggle("Clean up my voice", st.cleanVoice) { st = st.copy(cleanVoice = it) }
+                    }
                 }
-                StylePart.PACE -> Chips("Riding shots", listOf(0.6f to "Fast", 0.8f to "Quick", 1f to "Normal", 1.25f to "Easy", 1.5f to "Slow").map { it.second to (st.pace == it.first) }) { i ->
-                    st = st.copy(pace = listOf(0.6f, 0.8f, 1f, 1.25f, 1.5f)[i])
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Reset ${part.label.lowercase()}", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { st = Styles.reset(st, original, part) }.padding(vertical = 6.dp))
+                    if (!start.builtIn) Text("Delete style", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { c.styles.delete(start.id); onDone() }.padding(vertical = 6.dp))
                 }
-                StylePart.CAMERA -> Toggle("Punch in on the words that matter", st.punchIn) { st = st.copy(punchIn = it) }
-                StylePart.COLOUR -> {
-                    Toggle("Keep the base look's colour", st.color.look) { st = st.copy(color = st.color.copy(look = it)) }
-                    val pct = { v: Float -> (if (v > 0) "+" else "") + "${(v * 100).toInt()}" }
-                    Slide("Exposure", st.color.exposure, -1f..1f, pct) { st = st.copy(color = st.color.copy(exposure = it)) }
-                    Slide("Contrast", st.color.contrast, -1f..1f, pct) { st = st.copy(color = st.color.copy(contrast = it)) }
-                    Slide("Saturation", st.color.saturation, -1f..1f, pct) { st = st.copy(color = st.color.copy(saturation = it)) }
-                    Slide("Warmth", st.color.warmth, -1f..1f, pct) { st = st.copy(color = st.color.copy(warmth = it)) }
-                }
-                StylePart.OVERLAYS -> {
-                    Toggle("Speed in the corner", st.speedBadge) { st = st.copy(speedBadge = it) }
-                    Toggle("Speed gauge sticker", st.speedSticker) { st = st.copy(speedSticker = it) }
-                    Toggle("Lean sticker", st.leanSticker) { st = st.copy(leanSticker = it) }
-                    Toggle("Route map behind the stats", st.map) { st = st.copy(map = it) }
-                    Toggle("Route opening card", st.intro) { st = st.copy(intro = it) }
-                    Toggle("Stats at the end", st.outro) { st = st.copy(outro = it) }
-                    Toggle("Keppo Moto mark", st.watermark) { st = st.copy(watermark = it) }
-                    Toggle("My brand kit (logo, handle, font)", st.brand) { st = st.copy(brand = it) }
-                }
-                StylePart.SOUND -> {
-                    Toggle("Music and engine dip while I talk", st.duck) { st = st.copy(duck = it) }
-                    Toggle("Clean up my voice", st.cleanVoice) { st = st.copy(cleanVoice = it) }
-                }
+                Spacer(Modifier.height(12.dp))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Reset ${part.label.lowercase()}", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { st = Styles.reset(st, original, part) }.padding(vertical = 6.dp))
-                if (!start.builtIn) Text("Delete style", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { c.styles.delete(start.id); onDone() }.padding(vertical = 6.dp))
-            }
-            Spacer(Modifier.height(12.dp))
         }
     }
+}
+
+@Composable
+private fun Small2(label: String, onClick: () -> Unit) {
+    Text(label, style = RtType.button, color = RtColors.TextPrimary, modifier = Modifier.padding(horizontal = 4.dp).clip(RoundedCornerShape(50)).background(RtColors.SurfaceRaised).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp))
 }
 
 private val SWATCHES: List<Int> = listOf(0xFFFFFFFF, 0xFF0B0B0D, 0xFFFFD60A, 0xFFFF9F0A, 0xFFFF453A, 0xFFFF5D8F, 0xFFBF5AF2, 0xFF60A5FA, 0xFF32D74B, 0xFFFFF3DF).map { it.toInt() }
@@ -501,7 +634,7 @@ internal fun StylePicker(vm: StudioViewModel, s: StudioState, onAll: () -> Unit,
         return
     }
     if (creating) {
-        NewStyleSheet(styles, onClose = { creating = false }) { made -> creating = false; editing = made }
+        FullSheet({ creating = false }) { Box(Modifier.fillMaxSize()) { NewStyleSheet(true, styles, onClose = { creating = false }) { made -> creating = false; editing = made } } }
         return
     }
     androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
