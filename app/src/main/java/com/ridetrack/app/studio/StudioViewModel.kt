@@ -152,6 +152,8 @@ data class StudioState(
     val copied: TrackEdits.ClipSettings? = null,
     /** Exporting: progress 0..100; null when not. */
     val exporting: Int? = null,
+    /** An export to share now (Share for a place other than Instagram); cleared once handed over. */
+    val exported: List<File>? = null,
     /** Clips that have the engine mic's sound (two-mic recording): moment id → its file. */
     val engineFiles: Map<String, String> = emptyMap(),
     /** Bumped when the timeline changes for good (not mid-drag), so the preview reloads. */
@@ -446,6 +448,40 @@ class StudioViewModel(
      * The rider asks for a piece in their words ("a 15 s funny one about the water"): Gemini
      * writes it (one request), it joins the suggestions and is made straight away.
      */
+    /**
+     * The editor's "Change this one": Gemini rewrites this edit's script from [note] (e.g. "start
+     * with the Tooooo, fewer cuts"), and the new edit replaces the timeline as one undo step.
+     */
+    fun reviseInEditor(note: String) {
+        val t = note.trim()
+        if (t.isEmpty() || _state.value.planning != null) return
+        val plan = history?.current ?: return
+        if (!c.transcripts.available) return say("Gemini isn't in this build")
+        val s = _state.value
+        val before = s.script ?: ScriptEdits.fromPlan(plan, s.title)
+        viewModelScope.launch {
+            _state.update { it.copy(planning = "Gemini is changing it: \u201c${t.take(40)}\u201d", geminiIssue = null) }
+            val fs = withContext(Dispatchers.Default) { s.footage.ifEmpty { footage() } }
+            val sc = try {
+                gemini().scripts(ScriptWriter.revisePrompt(card?.title ?: s.title, fs, style(), before, t, ScriptWriter.keys(fs)), fs).firstOrNull()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                c.errors.record("Studio ideas", "Gemini couldn't change the edit", e)
+                _state.update { it.copy(geminiIssue = if (com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e)) com.ridetrack.app.transcribe.GeminiNet.message(e) else "Gemini couldn't change it (${e.message?.take(60)}).") }
+                null
+            } finally {
+                _state.update { it.copy(planning = null) }
+            }
+            val piece = sc?.let { engine.pieces(listOf(it), s.options).firstOrNull() } ?: return@launch say("Gemini couldn't change it. Try saying it another way.")
+            c.style.record(before.describe(fs), sc.describe(fs), t)
+            history?.apply(TimelineEdits.liftTexts(piece.plan) { newTextId() }, "Change: ${t.take(24)}")
+            _state.update { it.copy(script = sc, pick = null) }
+            publish(reload = true)
+            say("Changed · Undo takes it back")
+        }
+    }
+
     /** Whether Gemini can be asked for a new idea here (a ride's Studio, not phone videos only). */
     val canAsk: Boolean get() = card != null
 
@@ -990,8 +1026,11 @@ class StudioViewModel(
     fun posted() {
         val s = _state.value
         if (s.series.isNotBlank()) c.studio.episodeUsed(s.episode)
-        // No longer a draft.
-        s.reelId?.let { id -> viewModelScope.launch { c.reels.update(id) { it.copy(posted = true) } } }
+        // No longer a draft; a day later, "How did it do?".
+        s.reelId?.let { id ->
+            if (c.reels.get(id)?.posted == false) PostedReminderWorker.schedule(c.appContext, id)
+            viewModelScope.launch { c.reels.update(id) { it.copy(posted = true) } }
+        }
     }
 
     // ---- posting ---------------------------------------------------------------------------
@@ -1513,7 +1552,11 @@ class StudioViewModel(
      * Writes the Reel for [preset] with [spec] (in the background: leaving the app doesn't stop
      * it) and saves it to Movies/Keppo Moto; a Story is cut into its parts.
      */
-    fun export(preset: ExportPreset, spec: OutputSpec) {
+    /** The exported files were handed to the share sheet. */
+    fun exportShared() = _state.update { it.copy(exported = null) }
+
+    /** Makes the video for [preset] and saves it to the gallery; with [share], hands it to the share sheet too. */
+    fun export(preset: ExportPreset, spec: OutputSpec, share: Boolean = false) {
         val s = _state.value
         val plan = s.plan ?: return
         val cd = card ?: return
@@ -1525,7 +1568,8 @@ class StudioViewModel(
                     val voice = s.takes.takeIf { it.isNotEmpty() }?.let { takes ->
                         withContext(Dispatchers.IO) { VoiceRecorder.mix(takes, plan.totalMs, File(c.appContext.cacheDir, "studio-export-voice.wav")) }
                     }
-                    val dir = File(c.appContext.cacheDir, "studio-exports").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
+                    // Under shares/, so the share sheet can read them.
+                    val dir = File(c.appContext.cacheDir, "shares/studio-exports").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
                     val out = File(dir, "keppo-${preset.name.lowercase()}-${System.currentTimeMillis()}.mp4")
                     val input = renderInput(plan, s, cd, voice).copy(output = spec)
                     val done = StudioRenderer(c.appContext).render(input, out) { p -> _state.update { it.copy(exporting = p) } }.getOrThrow()
@@ -1535,6 +1579,7 @@ class StudioViewModel(
                             File(dir, "${out.nameWithoutExtension}-part${k + 1}.mp4").also { ClipMedia.cut(c.appContext, done.file, r.first, r.last, it) }
                         }
                     } ?: listOf(done.file)
+                    if (share) _state.update { it.copy(exported = files) }
                     files.mapIndexed { k, f -> ShareImages.saveVideo(c.appContext, f, "Keppo ${preset.label} $title" + if (files.size > 1) " part ${k + 1}" else "") }.count { it }
                 }
                 posted()

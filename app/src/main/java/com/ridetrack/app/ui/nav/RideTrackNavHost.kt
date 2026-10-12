@@ -156,7 +156,12 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
         onOpenRideHandled()
         if (session.state.value.isActive) return@LaunchedEffect
         val studio = asked.startsWith(com.ridetrack.app.MainActivity.STUDIO_PREFIX)
-        val id = asked.removePrefix(com.ridetrack.app.MainActivity.STUDIO_PREFIX)
+        val id = asked.removePrefix(com.ridetrack.app.MainActivity.STUDIO_PREFIX).substringBefore('#')
+        // A Reel (from "How did it do?"): open it.
+        asked.substringAfter('#', "").takeIf { studio && it.isNotEmpty() }?.let { reel ->
+            nav.navigate(if (id.isEmpty()) Routes.studioPhone(reel) else Routes.savedReel(id, reel))
+            return@LaunchedEffect
+        }
         when (container.rides.lookup(id)) {
             RideLookup.LIVE -> nav.navigate(if (studio) Routes.reel(id) else Routes.detail(id))
             RideLookup.DELETED -> nav.navigate(Routes.recentlyDeleted(id))

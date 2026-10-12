@@ -32,18 +32,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.outlined.MusicNote
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -94,6 +90,7 @@ import com.ridetrack.app.ui.theme.RtType
 import com.ridetrack.app.ui.theme.rememberHaptics
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import java.util.Locale
 
@@ -408,33 +405,6 @@ private fun ClipStrip(vm: StudioViewModel, s: StudioState, compact: Boolean) {
     }
 }
 
-/** The clips in the finished Reel, in order, the opening one marked; tap one to jump there. */
-@Composable
-private fun UsedStrip(s: StudioState, onSeek: (Long) -> Unit) {
-    val plan = s.plan ?: return
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("IN THIS REEL · ${plan.clips.size} CLIPS", style = RtType.label, color = RtColors.TextSecondary)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            plan.segments.forEachIndexed { i, seg ->
-                if (seg !is ClipSegment || seg.tail || seg.teaser) return@forEachIndexed
-                val label = when {
-                    seg.hook -> "Opens"
-                    seg.bit.fromRide != null -> seg.bit.fromRide
-                    seg.bit.source != null -> "Phone"
-                    seg.bit.camera == "back" -> "Road"
-                    else -> null
-                }
-                Box(Modifier.size(width = 44.dp, height = 78.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClickLabel = "Jump here") { onSeek(plan.startOf(i)) }) {
-                    Thumb(s.thumbs[seg.bit.momentId], Modifier.fillMaxSize())
-                    label?.let {
-                        Text(it, style = RtType.caption, color = if (seg.hook) RtColors.OnPrimary else Color.White, maxLines = 1, modifier = Modifier.align(Alignment.TopStart).padding(2.dp).clip(RoundedCornerShape(4.dp)).background(if (seg.hook) RtColors.Primary else Color.Black.copy(alpha = 0.55f)).padding(horizontal = 3.dp))
-                    }
-                }
-            }
-        }
-    }
-}
-
 /** Reels made from phone videos only. */
 @Composable
 private fun PhoneReels(onOpen: (String) -> Unit) {
@@ -574,6 +544,15 @@ private fun Working(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
 
 // ---- 3. Ready: watch, change, share -------------------------------------------------------------
 
+/** Where the video is going; it decides its shape. */
+private val PLACE_NAMES = mapOf(ExportPreset.INSTAGRAM to "Reel", ExportPreset.SHORTS to "Short", ExportPreset.STORY to "Story", ExportPreset.WHATSAPP to "WhatsApp")
+
+/**
+ * Share: the video, where it's going (Reel, Short, Story in parts, WhatsApp), the cover, the
+ * caption (copied when you tap Share), subtitles, the hook check and Keppo Journal; Share and Save
+ * at the bottom. ‹ Edit goes back to the editor; everything else is under ⋯. Once posted: how it did.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     val context = LocalContext.current
@@ -585,143 +564,231 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     var seek by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     var exportOpen by remember { mutableStateOf(false) }
     var styleOpen by remember { mutableStateOf(false) }
+    var moreOpen by remember { mutableStateOf(false) }
+    var place by rememberSaveable { mutableStateOf(ExportPreset.INSTAGRAM) }
+    var copied by remember { mutableStateOf(false) }
     val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
+    val c = com.ridetrack.app.ui.appContainer()
+    val all by c.reels.reels.collectAsStateWithLifecycle()
+    val me = all.firstOrNull { it.id == s.reelId }
     if (styleOpen) StylePicker(vm, s, onAll = { nav(com.ridetrack.app.ui.nav.Routes.STYLES) }) { styleOpen = false }
     if (exportOpen) ExportSheet(vm, s) { exportOpen = false }
     var saveStyle by remember { mutableStateOf(false) }
     if (saveStyle) SaveStyleDialog(vm, s) { saveStyle = false }
-    Column(modifier) {
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Player(android.net.Uri.fromFile(video), Modifier.align(Alignment.CenterHorizontally), seek = seek)
-            Text(
-                listOfNotNull(s.script?.let { sc -> "${sc.format.label} · “${sc.title}”" }, s.options.vibe.label, Format.clock(s.plan?.totalMs ?: 0), "${s.plan?.clips?.size ?: 0} clips", s.musicName?.let { "♪ $it" }).joinToString(" · "),
-                style = RtType.caption,
-                color = RtColors.TextSecondary,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Action("Edit", Icons.Outlined.Edit, Modifier.weight(1f)) { vm.edit() }
-                Action("Script", Icons.Outlined.Notes, Modifier.weight(1f)) { vm.scriptView() }
-                Action("Remix", Icons.Outlined.Refresh, Modifier.weight(1f)) { vm.remix() }
-                Action("Voice-over", Icons.Outlined.Mic, Modifier.weight(1f)) { vm.voice() }
-                Action("Cover", Icons.Outlined.Image, Modifier.weight(1f)) { vm.cover() }
-                Action("Style", Icons.Outlined.Palette, Modifier.weight(1f)) { styleOpen = true }
-            }
-            // Export for a place: Instagram, YouTube, a Story in parts, WhatsApp.
-            Text(
-                s.exporting?.let { "Exporting · $it%" } ?: "Export for Instagram, YouTube, a Story or WhatsApp ›",
-                style = RtType.button,
-                color = if (s.exporting != null) RtColors.TextSecondary else RtColors.Primary,
-                modifier = Modifier.clickable(enabled = s.exporting == null, role = Role.Button) { exportOpen = true }.padding(vertical = 4.dp),
-            )
-            Text("Save this style ›", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { saveStyle = true }.padding(vertical = 4.dp))
-            UsedStrip(s) { seek = it to System.nanoTime() }
-            ReelMenu(onDuplicate = vm::duplicate, onDelete = vm::delete, onChange = vm::back)
-            if (!s.phoneOnly) JournalCard(vm, s)
-            s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextPrimary) }
-            s.notes.forEach { Text(it, style = RtType.caption, color = RtColors.Warning) }
-            if (s.notes.isNotEmpty() && s.gemini) com.ridetrack.app.transcribe.rememberGeminiWait().line?.let { Text(it, style = RtType.caption, color = RtColors.Warning) }
-            if (s.notes.isNotEmpty()) ErrorActions(vm)
-            if (s.musicUri == null) MusicGuide()
-            Coach(s.tips) { vm.act(it) }
-            PostingCard(vm, s) { copied ->
-                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-                cm?.setPrimaryClip(android.content.ClipData.newPlainText(copied.first, copied.second))
-                toast = "${copied.first} copied"
-            }
-            toast?.let { Text(it, style = RtType.caption, color = RtColors.TextPrimary, modifier = Modifier.align(Alignment.CenterHorizontally)) }
+    // An export made for a place: hand it to the share sheet.
+    LaunchedEffect(s.exported) {
+        s.exported?.let { files ->
+            ShareImages.shareMany(context, files.map { ShareImages.uriFor(context, it) }, "video/mp4")
+            vm.exportShared()
         }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button("Share", primary = true, icon = Icons.Outlined.IosShare, modifier = Modifier.weight(1f)) {
-                vm.posted()
-                ShareImages.share(context, ShareImages.uriFor(context, video), "video/mp4")
+    }
+    fun copyCaption() {
+        if (s.postCaption.isBlank()) return
+        val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+        cm?.setPrimaryClip(android.content.ClipData.newPlainText("Caption", s.postCaption))
+        copied = true
+    }
+    val total = s.plan?.totalMs ?: 0
+    Box(modifier) {
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("‹ Edit", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button) { vm.edit() }.padding(vertical = 8.dp, horizontal = 4.dp))
+                Text("Share", style = RtType.bodyStrong, color = RtColors.TextPrimary, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                RoundIcon(Icons.Outlined.MoreHoriz, "More") { moreOpen = true }
             }
-            Button("Save", primary = false, icon = Icons.Outlined.Download, modifier = Modifier.weight(1f)) {
-                scope.launch {
-                    val ok = ShareImages.saveVideo(context, video, "Keppo Reel ${System.currentTimeMillis() / 1000}")
-                    if (ok) { haptics.confirm(); vm.posted() }
-                    toast = if (ok) "Saved to Movies/Keppo Moto" else "Couldn't save here. Use Share instead."
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Player(android.net.Uri.fromFile(video), Modifier.align(Alignment.CenterHorizontally), seek = seek, height = 380.dp)
+                Text(
+                    listOfNotNull(
+                        s.exporting?.let { "Making it for ${PLACE_NAMES[place]} · $it%" } ?: "Ready",
+                        Format.clock(total),
+                        "${place.spec.height.coerceAtMost(place.spec.width.coerceAtLeast(place.spec.height)).let { if (place.spec.width >= 1080) "1080p" else "720p" }}",
+                        s.musicName?.let { "♪ $it" },
+                    ).joinToString(" · "),
+                    style = RtType.caption,
+                    color = RtColors.TextSecondary,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+                // Where it's going
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ExportPreset.entries.forEach { p ->
+                        val on = p == place
+                        val parts = p.splitSec?.let { sec -> Exports.parts(total, sec * 1000L).size.takeIf { it > 1 } }
+                        Text(
+                            (PLACE_NAMES[p] ?: p.label) + (parts?.let { " · $it parts" } ?: ""),
+                            style = RtType.button,
+                            color = if (on) RtColors.OnPrimary else RtColors.TextPrimary,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) RtColors.Primary else RtColors.SurfaceRaised)
+                                .clickable(role = Role.RadioButton) { place = p }.padding(horizontal = 16.dp, vertical = 10.dp),
+                        )
+                    }
+                }
+                // Cover
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).clickable(role = Role.Button, onClickLabel = "Change the cover") { vm.cover() }.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    me?.let { p -> androidx.compose.runtime.key(p.updatedAt) { Thumb(c.reels.cover(p.id).takeIf { it.isFile }, Modifier.size(width = 44.dp, height = 78.dp).clip(RoundedCornerShape(8.dp)), maxEdge = 240) } }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("COVER", style = RtType.label, color = RtColors.TextSecondary)
+                        Text("Any frame, with or without the title ›", style = RtType.body, color = RtColors.TextPrimary)
+                    }
+                }
+                // Caption, copied when you share
+                if (s.postCaption.isNotBlank()) {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row {
+                            Text("CAPTION", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
+                            Text(if (copied) "Copied ✓" else "Copy", style = RtType.caption, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { copyCaption() })
+                        }
+                        Text(s.postCaption, style = RtType.body, color = RtColors.TextPrimary)
+                        Text("Copied for you when you tap Share: just paste it in Instagram.", style = RtType.caption, color = RtColors.TextTertiary)
+                    }
+                }
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface)) {
+                    if (s.gemini) {
+                        val busy = s.posting != null
+                        ShareRow("Subtitles", if (busy) s.posting else "As said") {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Choice("English", false) { if (!busy) vm.translateCaptions("English") }
+                                Choice("Hindi", false) { if (!busy) vm.translateCaptions("Hindi") }
+                            }
+                        }
+                        ShareRow("Check the hook", s.hook?.let { if (it.stops) "Stops the scroll ✓" else "Might not stop the scroll" } ?: "Gemini looks at the first 2 s", onClick = { if (!busy) vm.checkHook() }) {
+                            s.hook?.let { h ->
+                                Text(h.why, style = RtType.caption, color = RtColors.TextSecondary)
+                                h.fix?.let { Text("Try: $it", style = RtType.caption, color = RtColors.TextSecondary) }
+                            }
+                        }
+                        if (place == ExportPreset.SHORTS) {
+                            ShareRow("Title and description for YouTube", if (s.youtubeTitle.isBlank()) "Gemini writes them" else "Copy", onClick = {
+                                if (s.youtubeTitle.isBlank()) { if (!busy) vm.writeYouTube() } else {
+                                    val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                                    cm?.setPrimaryClip(android.content.ClipData.newPlainText("YouTube", (s.youtubeTitle + "\n\n" + s.youtubeDescription).trim()))
+                                    toast = "YouTube text copied"
+                                }
+                            }) {
+                                if (s.youtubeTitle.isNotBlank()) Text(s.youtubeTitle, style = RtType.bodyStrong, color = RtColors.TextPrimary)
+                            }
+                        }
+                    }
+                    if (!s.phoneOnly && me != null) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Add to Keppo Journal", style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
+                            androidx.compose.material3.Switch(checked = me.inJournal, onCheckedChange = { on -> if (on) vm.sendToJournal() else vm.removeFromJournal() })
+                        }
+                    }
+                }
+                if (me?.posted == true) HowItDid(vm, s, me, all)
+                s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextPrimary) }
+                s.notes.forEach { Text(it, style = RtType.caption, color = RtColors.Warning) }
+                if (s.notes.isNotEmpty() && s.gemini) com.ridetrack.app.transcribe.rememberGeminiWait().line?.let { Text(it, style = RtType.caption, color = RtColors.Warning) }
+                if (s.notes.isNotEmpty()) ErrorActions(vm)
+                Coach(s.tips) { vm.act(it) }
+                toast?.let { Text(it, style = RtType.caption, color = RtColors.TextPrimary, modifier = Modifier.align(Alignment.CenterHorizontally)) }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(if (s.exporting != null) "Making… ${s.exporting}%" else "Share", primary = s.exporting == null, icon = Icons.Outlined.IosShare, modifier = Modifier.weight(2f)) {
+                    if (s.exporting != null) return@Button
+                    copyCaption()
+                    if (place == ExportPreset.INSTAGRAM) {
+                        vm.posted()
+                        ShareImages.share(context, ShareImages.uriFor(context, video), "video/mp4")
+                    } else {
+                        vm.export(place, place.spec, share = true)
+                    }
+                }
+                Button("Save", primary = false, icon = Icons.Outlined.Download, modifier = Modifier.weight(1f)) {
+                    if (place != ExportPreset.INSTAGRAM) { vm.export(place, place.spec); return@Button }
+                    scope.launch {
+                        val ok = ShareImages.saveVideo(context, video, "Keppo Reel ${System.currentTimeMillis() / 1000}")
+                        if (ok) { haptics.confirm(); vm.posted() }
+                        toast = if (ok) "Saved to Movies/Keppo Moto" else "Couldn't save here. Use Share instead."
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        StudioSheet(moreOpen, { moreOpen = false }) {
+            SheetRow("The story", "Read it and change any line") { moreOpen = false; vm.scriptView() }
+            SheetRow("Make it again, differently", "Remix") { moreOpen = false; vm.remix() }
+            SheetRow("Voice-over") { moreOpen = false; vm.voice() }
+            SheetRow("Another style") { moreOpen = false; styleOpen = true }
+            SheetRow("Save this style") { moreOpen = false; saveStyle = true }
+            SheetRow("Quality, 4K and 60 fps") { moreOpen = false; exportOpen = true }
+            SheetRow("Duplicate") { moreOpen = false; vm.duplicate() }
+            SheetRow("Back to the ideas") { moreOpen = false; vm.back() }
+            SheetRow("Delete", danger = true) { moreOpen = false; vm.delete() }
+        }
+    }
+}
+
+/** A row in the Share page's list: its name and state, tap for its action, details under it. */
+@Composable
+private fun ShareRow(label: String, value: String?, onClick: (() -> Unit)? = null, below: @Composable () -> Unit = {}) {
+    Column(
+        Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier).padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
+            value?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
+        }
+        below()
+    }
+}
+
+/**
+ * After posting: two big numbers to type from Instagram Insights (like Health entries), how your
+ * Reels compare by views, and Make one like this.
+ */
+@Composable
+private fun HowItDid(vm: StudioViewModel, s: StudioState, me: ReelProject, all: List<ReelProject>) {
+    var typing by remember { mutableStateOf<String?>(null) }
+    Text("HOW DID IT DO", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        listOf("views" to s.views, "likes" to s.likes).forEach { (what, n) ->
+            Column(
+                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).clickable(role = Role.Button, onClickLabel = "Type the $what") { typing = what }.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (typing == what) {
+                    var v by remember(what) { mutableStateOf(n?.toString().orEmpty()) }
+                    NumberField(v, what.replaceFirstChar { it.uppercase() }, Modifier.fillMaxWidth()) { v = it }
+                    Text("Done", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) {
+                        if (what == "views") vm.setStats(v.toIntOrNull(), s.likes) else vm.setStats(s.views, v.toIntOrNull())
+                        typing = null
+                    }.padding(vertical = 4.dp))
+                } else {
+                    Text(n?.let { shortCount(it.toLong()) } ?: "—", style = RtType.metricL, color = RtColors.TextPrimary)
+                    Text(what, style = RtType.caption, color = RtColors.TextSecondary)
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
     }
-}
-
-/** Post text for Instagram and YouTube, subtitles in another language, the hook check, and how it did. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun PostingCard(vm: StudioViewModel, s: StudioState, onCopy: (Pair<String, String>) -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (s.postCaption.isNotBlank()) {
-            Text("INSTAGRAM CAPTION", style = RtType.label, color = RtColors.TextSecondary)
-            Text(s.postCaption, style = RtType.body, color = RtColors.TextPrimary)
-            CopyLink("Copy caption") { onCopy("Caption" to s.postCaption) }
-        }
-        if (s.youtubeTitle.isNotBlank()) {
-            Text("YOUTUBE", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 4.dp))
-            Text(s.youtubeTitle, style = RtType.bodyStrong, color = RtColors.TextPrimary)
-            if (s.youtubeDescription.isNotBlank()) Text(s.youtubeDescription, style = RtType.body, color = RtColors.TextSecondary)
-            CopyLink("Copy title and description") { onCopy("YouTube text" to (s.youtubeTitle + "\n\n" + s.youtubeDescription).trim()) }
-        }
-        if (s.gemini) {
-            val busy = s.posting != null
-            s.posting?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                TextLink(if (s.youtubeTitle.isBlank()) "Write for YouTube" else "Write it again", !busy) { vm.writeYouTube() }
-                TextLink("Subtitles in English", !busy) { vm.translateCaptions("English") }
-                TextLink("Subtitles in Hindi", !busy) { vm.translateCaptions("Hindi") }
-                TextLink("Check the hook", !busy) { vm.checkHook() }
-            }
-            s.hook?.let { h ->
-                Text(
-                    (if (h.stops) "✓ Stops the scroll · " else "✗ Might not stop the scroll · ") + h.why,
-                    style = RtType.body,
-                    color = if (h.stops) RtColors.Ok else RtColors.Warning,
-                )
-                h.fix?.let { Text("Try: $it", style = RtType.caption, color = RtColors.TextSecondary) }
+    Text("Tap a number to type it from Instagram Insights. Studio leans towards what does well.", style = RtType.caption, color = RtColors.TextTertiary)
+    val ranked = all.filter { it.deletedAt == null && it.views != null }.sortedByDescending { it.views }.take(5)
+    if (ranked.size > 1) {
+        Text("YOUR REELS, BY VIEWS", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
+        val top = (ranked.first().views ?: 1).coerceAtLeast(1)
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            ranked.forEach { p ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(p.title, style = RtType.caption, color = if (p.id == me.id) RtColors.Primary else RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(110.dp))
+                    Box(Modifier.weight(1f).height(10.dp)) {
+                        Box(Modifier.fillMaxWidth(((p.views ?: 0).toFloat() / top).coerceIn(0.03f, 1f)).fillMaxHeight().clip(RoundedCornerShape(5.dp)).background(if (p.id == me.id) RtColors.Primary else RtColors.Outline))
+                    }
+                    Text(shortCount((p.views ?: 0).toLong()), style = RtType.caption, color = RtColors.TextSecondary, textAlign = TextAlign.End, modifier = Modifier.width(48.dp))
+                }
             }
         }
-        ReelStats(s.views, s.likes, vm::setStats)
     }
-}
-
-@Composable
-private fun CopyLink(label: String, onClick: () -> Unit) {
-    Row(Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button, onClick = onClick).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Outlined.ContentCopy, contentDescription = null, tint = RtColors.Primary, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(label, style = RtType.button, color = RtColors.Primary)
-    }
-}
-
-@Composable
-private fun TextLink(label: String, enabled: Boolean, onClick: () -> Unit) {
-    Text(
-        label,
-        style = RtType.button,
-        color = if (enabled) RtColors.Primary else RtColors.TextTertiary,
-        modifier = Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(vertical = 6.dp),
-    )
-}
-
-/** "How did it do?": views and likes from Instagram, so Studio suggests more of what works. */
-@Composable
-internal fun ReelStats(views: Int?, likes: Int?, onSave: (Int?, Int?) -> Unit) {
-    var v by rememberSaveable(views) { mutableStateOf(views?.toString().orEmpty()) }
-    var l by rememberSaveable(likes) { mutableStateOf(likes?.toString().orEmpty()) }
-    Text("HOW DID IT DO?", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 4.dp))
-    Text("Views and likes from Instagram. Studio suggests more of what did well.", style = RtType.caption, color = RtColors.TextTertiary)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        NumberField(v, "Views", Modifier.weight(1f)) { v = it }
-        NumberField(l, "Likes", Modifier.weight(1f)) { l = it }
-        val changed = v != views?.toString().orEmpty() || l != likes?.toString().orEmpty()
-        TextLink("Save", changed) { onSave(v.toIntOrNull(), l.toIntOrNull()) }
-    }
+    if (vm.canAsk) Text("Make one like this ›", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) {
+        vm.back()
+        vm.ask("Another one like “${me.title}”: the same kind of opening, pace and words")
+    }.padding(vertical = 6.dp))
 }
 
 @Composable
@@ -804,18 +871,21 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
     addTo?.let { sec -> ScriptAddClip(vm, s, onPick = { b -> vm.addScriptClip(sec, b); addTo = null }, onClose = { addTo = null }) }
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                "${draft.format.label} · ${draft.shape.replace('_', ' ')} · ${Format.clock(vm.draftLengthMs())}",
-                style = RtType.bodyStrong,
-                color = RtColors.TextPrimary,
-            )
-            draft.why?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text("THE STORY", style = RtType.label, color = RtColors.TextSecondary)
-                Text(draft.story ?: ScriptWriter.storyOf(draft, s.footage), style = RtType.body, color = RtColors.TextPrimary)
+            // Reads like a note: the title, the story, then each part.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("‹ Video", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button) { vm.back() }.padding(vertical = 6.dp, horizontal = 4.dp))
+                Spacer(Modifier.weight(1f))
+                Text("${draft.format.label} · ${Format.clock(vm.draftLengthMs())} · ${(draft.vibe ?: s.options.vibe).label}", style = RtType.caption, color = RtColors.TextSecondary)
+            }
+            Text(s.title.ifBlank { draft.title }, style = RtType.title, color = RtColors.TextPrimary)
+            Text(draft.story ?: ScriptWriter.storyOf(draft, s.footage), style = RtType.body, color = RtColors.TextPrimary)
+            draft.why?.let { Text(it, style = RtType.caption, color = RtColors.TextTertiary) }
+            if (s.hookLine.isNotBlank()) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(RtColors.Surface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Opens with", style = RtType.caption, color = RtColors.TextSecondary)
+                    Spacer(Modifier.width(8.dp))
+                    Text("\u201c${s.hookLine}\u201d", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
+                }
             }
             if (draft.onScreen.isNotEmpty()) {
                 Column(
@@ -841,10 +911,11 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        "${sec.kind.label} · ${sec.form}" + if (secs > 0) " · " + String.format(Locale.US, "%.1f s", secs) else "",
-                        style = RtType.bodyStrong,
-                        color = RtColors.TextPrimary,
+                        (sec.kind.label + if (secs > 0) " · " + String.format(Locale.US, "%.0f s", secs) else "").uppercase(),
+                        style = RtType.label,
+                        color = RtColors.TextSecondary,
                     )
+                    Text(sec.form, style = RtType.caption, color = RtColors.TextTertiary)
                     sec.why?.let { Text(it, style = RtType.caption, color = RtColors.TextTertiary, maxLines = 2) }
                     sec.text?.let { Text("Text on screen: $it", style = RtType.caption, color = RtColors.TextSecondary) }
                     sec.shots.forEachIndexed { k, sh ->
@@ -930,10 +1001,7 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
             s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
         }
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button("Back", primary = false, modifier = Modifier.weight(1f)) { vm.back() }
-            Button(if (s.scriptPiece != null) "Make this" else "Make it again", primary = true, modifier = Modifier.weight(2f)) { vm.applyDraft() }
-        }
+        Button(if (s.scriptPiece != null) "Make this" else "Make it again", primary = true, modifier = Modifier.fillMaxWidth()) { vm.applyDraft() }
         Spacer(Modifier.height(12.dp))
     }
 }
@@ -1006,26 +1074,6 @@ private fun ScriptAddClip(vm: StudioViewModel, s: StudioState, onPick: (Bit) -> 
     }
 }
 
-/** Duplicate (try another take, keep this one) and Delete (to Recently deleted, 30 days). */
-@Composable
-private fun ReelMenu(onDuplicate: () -> Unit, onDelete: () -> Unit, onChange: () -> Unit) {
-    var confirm by remember { mutableStateOf(false) }
-    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text("Other suggestions", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onChange).padding(vertical = 6.dp))
-        Text("Duplicate", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onDuplicate).padding(vertical = 6.dp))
-        Text("Delete", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { confirm = true }.padding(vertical = 6.dp))
-    }
-    if (confirm) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { confirm = false },
-            title = { Text("Delete this Reel?") },
-            text = { Text("It moves to Recently deleted on the Studio tab, where you can restore it for 30 days.") },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = { confirm = false; onDelete() }) { Text("Delete", color = RtColors.Error) } },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirm = false }) { Text("Cancel") } },
-        )
-    }
-}
-
 /** This ride's saved Reels, newest first; tap one to open it. */
 @Composable
 private fun RideReels(rideId: String, onSendAll: () -> Unit, onOpen: (String) -> Unit) {
@@ -1082,29 +1130,6 @@ internal fun shortCount(v: Long): String = when {
     v >= 1_000_000 -> String.format(Locale.US, "%.1fM", v / 1e6).replace(".0M", "M")
     v >= 1_000 -> String.format(Locale.US, "%.1fK", v / 1e3).replace(".0K", "K")
     else -> v.toString()
-}
-
-/** Send to Keppo Journal, or (once sent) its cover choice and Remove. */
-@Composable
-private fun JournalCard(vm: StudioViewModel, s: StudioState) {
-    val all by com.ridetrack.app.ui.appContainer().reels.reels.collectAsStateWithLifecycle()
-    val p = all.firstOrNull { it.id == s.reelId } ?: return
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text("KEPPO JOURNAL", style = RtType.label, color = RtColors.TextSecondary)
-        if (!p.inJournal) {
-            Text("The Reel and its cover go into this ride's Journal entry, and the cover becomes the entry's cover.", style = RtType.caption, color = RtColors.TextSecondary)
-            Text("Send to Journal", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.sendToJournal() }.padding(vertical = 6.dp))
-        } else {
-            Text(if (p.journalCover) "In the Journal · its cover is the entry's cover" else "In the Journal", style = RtType.body, color = RtColors.TextPrimary)
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                if (!p.journalCover) Text("Use as Journal cover", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.useAsJournalCover() }.padding(vertical = 6.dp))
-                Text("Remove", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button) { vm.removeFromJournal() }.padding(vertical = 6.dp))
-            }
-        }
-    }
 }
 
 // ---- 6. Cover ---------------------------------------------------------------------------------
@@ -1171,29 +1196,6 @@ private fun CoverEditor(vm: StudioViewModel, s: StudioState, modifier: Modifier)
 }
 
 // ---- music ------------------------------------------------------------------------------------
-
-/** Once (until dismissed): how to add a trending song in Instagram without drowning the voice. */
-@Composable
-private fun MusicGuide() {
-    val prefs = com.ridetrack.app.ui.appContainer().studio
-    var seen by remember { mutableStateOf(prefs.musicGuideSeen) }
-    if (seen) return
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text("ADD A TRENDING SONG IN INSTAGRAM", style = RtType.label, color = RtColors.TextSecondary)
-        Text("1.  In Instagram's editor tap Music, then the Trending ↗ list, and pick a song.", style = RtType.body, color = RtColors.TextPrimary)
-        Text("2.  Tap Volume: Original audio high, the song low, so your voice stays clear.", style = RtType.body, color = RtColors.TextPrimary)
-        Text("3.  Trending sounds help the Reel reach more people, and Instagram's songs are licensed, so it won't be muted.", style = RtType.body, color = RtColors.TextPrimary)
-        Text(
-            "Got it",
-            style = RtType.button,
-            color = RtColors.Primary,
-            modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button) { prefs.musicGuideSeen = true; seen = true }.padding(vertical = 6.dp),
-        )
-    }
-}
 
 // ---- coach ------------------------------------------------------------------------------------
 
@@ -1453,18 +1455,6 @@ private fun Toggle(title: String, sub: String, on: Boolean, onChange: (Boolean) 
             onCheckedChange = null,
             colors = SwitchDefaults.colors(checkedTrackColor = RtColors.Primary, checkedThumbColor = RtColors.OnPrimary),
         )
-    }
-}
-
-@Composable
-private fun Action(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier, onClick: () -> Unit) {
-    Column(
-        modifier.clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).clickable(role = Role.Button, onClick = onClick).padding(vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(icon, contentDescription = null, tint = RtColors.TextPrimary, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.height(4.dp))
-        Text(label, style = RtType.caption, color = RtColors.TextPrimary)
     }
 }
 

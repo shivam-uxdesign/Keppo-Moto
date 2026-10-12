@@ -42,6 +42,7 @@ import androidx.compose.material.icons.rounded.VerticalAlignTop
 import androidx.compose.material.icons.rounded.ZoomIn
 import androidx.compose.material.icons.rounded.ZoomOut
 import androidx.compose.material.icons.rounded.AcUnit
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -1047,8 +1048,48 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 }
             }
         }
-        StudioSheet(ideasOpen, { ideasOpen = false }, "Other ideas from this ride") {
-            Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+        StudioSheet(ideasOpen, { ideasOpen = false }, "Ideas") {
+            var changeThis by remember { mutableStateOf(true) }
+            var wish by remember { mutableStateOf("") }
+            if (vm.canAsk) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(RtColors.SurfaceRaised).padding(3.dp)) {
+                    listOf(true to "Change this one", false to "Make a new one").forEach { (k, label) ->
+                        Text(
+                            label,
+                            style = RtType.button,
+                            color = RtColors.TextPrimary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (changeThis == k) RtColors.Surface else Color.Transparent)
+                                .clickable(role = Role.Tab) { changeThis = k }.padding(vertical = 8.dp),
+                        )
+                    }
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = wish,
+                        onValueChange = { wish = it },
+                        placeholder = { Text(if (changeThis) "Start with the Tooooo, fewer cuts" else "A 15 s one about the rain", style = RtType.body, color = RtColors.TextTertiary) },
+                        enabled = s.planning == null,
+                        textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    RoundIcon(Icons.Rounded.ArrowUpward, if (changeThis) "Change it" else "Make it", primary = wish.isNotBlank()) {
+                        if (wish.isNotBlank() && s.planning == null) {
+                            if (changeThis) vm.reviseInEditor(wish) else vm.ask(wish, open = true)
+                            wish = ""
+                        }
+                    }
+                }
+                Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    QUICK_ASKS.forEach { q -> Choice(q, false) { wish = if (q.endsWith("…")) q.dropLast(1) + " " else q } }
+                }
+                (s.planning ?: s.geminiIssue)?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
+                Text("Studio remembers what you like.", style = RtType.caption, color = RtColors.TextTertiary)
+            }
+            Text("OTHER IDEAS FROM THIS RIDE", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 8.dp))
+            Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
                 s.pieces.forEach { pc ->
                     val current = pc.key == s.piece?.key
                     Row(
@@ -1066,27 +1107,9 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 }
                 if (s.pieces.isEmpty()) Text("No other ideas for this one yet.", style = RtType.body, color = RtColors.TextSecondary, modifier = Modifier.padding(vertical = 8.dp))
             }
-            if (vm.canAsk) {
-                var wish by remember { mutableStateOf("") }
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = wish,
-                        onValueChange = { wish = it },
-                        placeholder = { Text("Ask for something else…", style = RtType.body, color = RtColors.TextTertiary) },
-                        singleLine = true,
-                        enabled = s.planning == null,
-                        textStyle = RtType.body.copy(color = RtColors.TextPrimary),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Small("Ask", on = wish.isNotBlank()) { if (wish.isNotBlank() && s.planning == null) { vm.ask(wish, open = true); wish = "" } }
-                }
-                (s.planning ?: s.geminiIssue)?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
-            }
+            if (vm.canAsk && s.planning == null) SheetRow("Every story in this ride", "Gemini lists all of them") { vm.suggestAll() }
         }
     }
-
     ask?.let { a ->
         var value by remember(a) {
             mutableStateOf(
@@ -1395,6 +1418,9 @@ private fun SafeZones() {
 }
 
 private fun clock(ms: Long): String = String.format(Locale.US, "%d:%04.1f", ms / 60_000, (ms % 60_000) / 1000.0)
+
+/** Quick asks in the Ideas sheet; one ending in … is finished by the rider. */
+private val QUICK_ASKS = listOf("Funnier", "15 s", "A caption clip", "Only my voice", "Slow and cinematic", "Fewer cuts", "Open with…")
 
 /** A picture for each layer layout. */
 private val LAYER_ICON = mapOf(
