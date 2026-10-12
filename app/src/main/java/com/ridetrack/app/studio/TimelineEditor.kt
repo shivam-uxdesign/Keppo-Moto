@@ -119,7 +119,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     val density = LocalDensity.current
     val simple = remember { PreviewPlayer(context) }
     // The exact preview (as the made video) when this phone can play it; the simple one otherwise.
-    var exactOn by remember { mutableStateOf(ExactPreview.works) }
+    // Tried again for every video: one that failed doesn't turn it off for the rest.
+    var exactOn by remember { ExactPreview.works = true; mutableStateOf(true) }
     val exact = remember { ExactPreview(context) { e -> exactOn = false; vm.previewFailed(e) } }
     val files = remember { vm.previewFiles() }
     val active: Player = if (exactOn) exact.player else simple.player
@@ -232,7 +233,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             Text("History", style = RtType.button, color = if (s.steps.isNotEmpty()) RtColors.TextSecondary else RtColors.TextTertiary, modifier = Modifier.clickable(enabled = s.steps.isNotEmpty(), role = Role.Button) { historyOpen = true }.padding(6.dp))
             Spacer(Modifier.width(6.dp))
             Text(
-                "Save",
+                "Next ›",
                 style = RtType.button,
                 color = RtColors.OnPrimary,
                 modifier = Modifier.clip(RoundedCornerShape(50)).background(RtColors.Primary).clickable(role = Role.Button) { active.pause(); vm.saveEdit() }.padding(horizontal = 14.dp, vertical = 6.dp),

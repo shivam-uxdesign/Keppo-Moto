@@ -106,9 +106,11 @@ internal val VibeFonts = mapOf(
 
 /** Share ride › Reel: Keppo Studio turns the ride's clips into a 30–60 s Reel. */
 @Composable
-fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? = null) {
-    val vm = appViewModel(key = "studio-$rideId-${reelId.orEmpty()}") { StudioViewModel(it, rideId, reelId) }
+fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? = null, idea: String? = null, makeNow: Boolean = false, onLeave: () -> Unit = {}, onStep: (StudioStep) -> Unit = {}) {
+    val vm = appViewModel(key = "studio-$rideId-${reelId.orEmpty()}-${idea ?: ""}-$makeNow") { StudioViewModel(it, rideId, reelId, idea, makeNow) }
     val s by vm.state.collectAsStateWithLifecycle()
+    LaunchedEffect(s.leave) { if (s.leave) onLeave() }
+    LaunchedEffect(s.step) { onStep(s.step) }
     // Making a video takes a while: keep the screen on so the phone doesn't sleep through it.
     val view = LocalView.current
     DisposableEffect(s.step) {
@@ -135,16 +137,20 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
 /** Studio for gallery videos only (from the Studio tab, when they aren't from a recorded ride). */
 /** A ride's own Studio page (from the Studio tab, the ride, or the after-ride notification). */
 @Composable
-fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit) {
+fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: String? = null, makeNow: Boolean = false) {
     val c = com.ridetrack.app.ui.appContainer()
     var name by remember(rideId) { mutableStateOf("Studio") }
     LaunchedEffect(rideId) { name = c.rides.get(rideId)?.name?.let { "Studio · $it" } ?: "Studio" }
+    // The editor has its own top bar: the page's title goes while it's open.
+    var step by remember { mutableStateOf(if (idea != null && !makeNow) StudioStep.EDIT else StudioStep.SETUP) }
     Column(
         Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = com.ridetrack.app.ui.theme.RtDimens.screenPadding),
     ) {
-        com.ridetrack.app.ui.components.ScreenHeader(name, onBack = onBack)
-        Spacer(Modifier.height(12.dp))
-        StudioPanel(rideId, Modifier.weight(1f), reelId)
+        if (step != StudioStep.EDIT) {
+            com.ridetrack.app.ui.components.ScreenHeader(name, onBack = onBack)
+            Spacer(Modifier.height(12.dp))
+        }
+        StudioPanel(rideId, Modifier.weight(1f), reelId, idea, makeNow, onLeave = onBack, onStep = { step = it })
     }
 }
 

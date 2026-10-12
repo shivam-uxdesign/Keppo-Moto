@@ -1,10 +1,20 @@
 package com.ridetrack.app.studio
 
+import android.content.Context
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import kotlinx.coroutines.launch
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,22 +29,41 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Movie
-import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -45,7 +74,6 @@ import com.ridetrack.app.AppContainer
 import com.ridetrack.app.moments.MomentKind
 import com.ridetrack.app.ui.appViewModel
 import com.ridetrack.app.ui.components.EmptyState
-import com.ridetrack.app.ui.components.ScreenHeader
 import com.ridetrack.app.ui.format.Format
 import com.ridetrack.app.ui.moments.Thumb
 import com.ridetrack.app.ui.theme.RtColors
@@ -53,13 +81,20 @@ import com.ridetrack.app.ui.theme.RtDimens
 import com.ridetrack.app.ui.theme.RtType
 import com.ridetrack.telemetry.model.RideEventType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.io.File
+
+/** One idea for a ride, as the Studio tab shows it. */
+data class IdeaCard(val title: String, val format: String, val why: String?, val lengthSec: Int, val thumb: File?, val made: Boolean, val fromClips: Boolean)
 
 /** A ride Studio can make a Reel from. */
 data class StudioRide(
@@ -71,25 +106,21 @@ data class StudioRide(
     val clips: Int,
     val talking: Int,
     val thumbs: List<File>,
-    /** Suggestions not made yet (titles and formats), from the saved plan. */
-    val ready: List<Pair<String, String>> = emptyList(),
+    /** Its ideas (Gemini's first, then Show all's), from the saved plan. */
+    val ideas: List<IdeaCard> = emptyList(),
     val made: Int = 0,
     /** Clips whose words haven't been read yet. */
     val unread: Int = 0,
-    /** Why suggestions aren't there yet (waiting for Wi-Fi, Gemini's limit); null when not waiting. */
+    /** Why ideas aren't there yet (waiting for Wi-Fi, Gemini's limit); null when not waiting. */
     val waiting: String? = null,
-) {
-    /** The ride's state in one line. */
-    val stateLine: String
-        get() = listOfNotNull(
-            ready.size.takeIf { it > 0 }?.let { "$it suggestion${if (it > 1) "s" else ""} ready" },
-            made.takeIf { it > 0 }?.let { "$it made" },
-            unread.takeIf { it > 0 }?.let { "$it clip${if (it > 1) "s" else ""} not read yet" },
-            waiting,
-        ).joinToString(" · ").ifEmpty { "$clips clips" + if (talking > 0) " · $talking with your voice" else "" }
-}
+)
 
 class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
+    private val prefs = c.appContext.getSharedPreferences("studio-feed", Context.MODE_PRIVATE)
+    private val _hidden = MutableStateFlow(prefs.getStringSet(HIDDEN, emptySet()).orEmpty())
+    /** Ideas the rider swiped away: "rideId|title". */
+    val hidden: StateFlow<Set<String>> = _hidden.asStateFlow()
+
     /** Rides with at least 2 clips, newest first; null while loading. */
     val rides: StateFlow<List<StudioRide>?> = kotlinx.coroutines.flow.combine(c.rides.observeCompleted(), c.reels.reels) { rides, reels -> rides to reels }.map { (rides, reels) ->
         val clips = c.moments.all().filter { it.kind == MomentKind.CLIP && it.file.isFile && (it.durationMillis ?: 0) >= 1_500 }.groupBy { it.rideId }
@@ -99,19 +130,25 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
             val ms = clips[r.id].orEmpty()
             if (ms.size < 2) return@mapNotNull null
             val madeIdeas = reels.filter { it.rideId == r.id && it.deletedAt == null }
-            val planned = planOf(r.id)
-            val ready = planned.filter { (title, _) -> madeIdeas.none { it.idea == title } }
-            val waiting = if (planned.isEmpty()) {
+            val thumbOf = ms.associate { it.id to it.thumb?.takeIf(File::isFile) }
+            val ideas = planOf(r.id).map { sc ->
+                IdeaCard(
+                    title = sc.title, format = sc.format.label, why = sc.why, lengthSec = sc.lengthSec,
+                    thumb = sc.sections.firstOrNull { it.shots.isNotEmpty() }?.shots?.first()?.clip?.let { thumbOf[it] } ?: ms.first().thumb,
+                    made = madeIdeas.any { it.idea == sc.title }, fromClips = sc.every,
+                )
+            }
+            val waiting = if (ideas.isEmpty()) {
                 when {
                     !afterRideWaiting(r.id) -> null
-                    geminiAt != null -> "Gemini free at ${com.ridetrack.app.transcribe.GeminiQuota.clock(geminiAt)}"
-                    else -> "suggestions waiting for a connection"
+                    geminiAt != null -> "Gemini is free again at ${com.ridetrack.app.transcribe.GeminiQuota.clock(geminiAt)}"
+                    else -> "Ideas are waiting for a connection"
                 }
             } else {
                 null
             }
             StudioRide(
-                ready = ready,
+                ideas = ideas,
                 made = madeIdeas.size,
                 unread = ms.count { StudioText.load(it.file) == null },
                 waiting = waiting,
@@ -127,22 +164,29 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
         }.sortedByDescending { it.startMillis }
     }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** The saved suggestions of a ride: (title, format). */
-    private fun planOf(rideId: String): List<Pair<String, String>> = runCatching {
+    /** The saved ideas of a ride. */
+    private fun planOf(rideId: String): List<Script> = runCatching {
         val f = File(File(c.appContext.filesDir, "studio-plans"), "$rideId.json")
         if (!f.isFile) return emptyList()
         val a = org.json.JSONObject(f.readText()).getJSONArray("pieces")
-        (0 until a.length()).mapNotNull { ScriptJson.read(a.optJSONObject(it)) }.map { it.title to it.format.label }
+        (0 until a.length()).mapNotNull { ScriptJson.read(a.optJSONObject(it)) }
     }.getOrDefault(emptyList())
 
-    /** The after-ride suggestions are still waiting to run (for Wi-Fi, a connection, or Gemini). */
+    /** The after-ride ideas are still waiting to run (for Wi-Fi, a connection, or Gemini). */
     private fun afterRideWaiting(rideId: String): Boolean = runCatching {
         androidx.work.WorkManager.getInstance(c.appContext).getWorkInfosForUniqueWork("studio-after-ride-$rideId").get()
             .any { it.state == androidx.work.WorkInfo.State.ENQUEUED || it.state == androidx.work.WorkInfo.State.RUNNING }
     }.getOrDefault(false)
 
+    fun hide(rideId: String, title: String) = setHidden(_hidden.value + "$rideId|$title")
+    fun unhide(rideId: String, title: String) = setHidden(_hidden.value - "$rideId|$title")
+    private fun setHidden(v: Set<String>) {
+        _hidden.value = v
+        prefs.edit().putStringSet(HIDDEN, v).apply()
+    }
+
     /**
-     * Videos picked on the Studio tab: when all were filmed during one recorded ride, that ride's
+     * Videos picked for a new Reel: when all were filmed during one recorded ride, that ride's
      * Studio opens with them (real speed and route); otherwise Studio for phone videos only.
      */
     fun picked(uris: List<android.net.Uri>, openRide: (String) -> Unit, openPhone: () -> Unit) {
@@ -156,149 +200,246 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
             if (ride != null) openRide(ride.id) else openPhone()
         }
     }
+
+    private companion object {
+        const val HIDDEN = "hidden"
+    }
 }
 
-/** The Studio tab: for making. Your Reels are behind the icon at the top right. */
+/**
+ * The Studio tab: a strip of rides, then the chosen ride's ideas one big card at a time
+ * (swipe up for the next, left to hide, hold for options, tap to open it in the editor).
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun StudioHomeScreen(onOpenRide: (String) -> Unit, onOpenPhone: (reelId: String?) -> Unit, onOpenReels: () -> Unit, onOpenStyles: () -> Unit = {}, onOpenSearch: () -> Unit = {}) {
+fun StudioHomeScreen(
+    onOpenRide: (String) -> Unit,
+    onOpenPhone: (reelId: String?) -> Unit,
+    onOpenReels: () -> Unit,
+    onOpenStyles: () -> Unit = {},
+    onOpenSearch: () -> Unit = {},
+    onOpenIdea: (rideId: String, title: String, make: Boolean) -> Unit = { r, _, _ -> onOpenRide(r) },
+) {
     val vm = appViewModel { StudioHomeViewModel(it) }
     val rides by vm.rides.collectAsStateWithLifecycle()
-    val store = com.ridetrack.app.ui.appContainer().reels
-    val reels by store.reels.collectAsStateWithLifecycle()
+    val hidden by vm.hidden.collectAsStateWithLifecycle()
+    val reels by com.ridetrack.app.ui.appContainer().reels.reels.collectAsStateWithLifecycle()
     val made = reels.count { it.deletedAt == null }
+    val haptics = LocalHapticFeedback.current
     val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia(20)) { uris ->
         if (uris.isNotEmpty()) vm.picked(uris, onOpenRide) { onOpenPhone(null) }
     }
-    Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        ScreenHeader(
-            "Studio",
-            Modifier.padding(horizontal = RtDimens.screenPadding),
-            subtitle = "Pick a ride, or your own videos.",
-            actions = {
-                Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClickLabel = "Search", onClick = onOpenSearch).padding(8.dp)) {
-                    androidx.compose.material3.Icon(Icons.Outlined.Search, contentDescription = "Search what you said", tint = RtColors.TextPrimary, modifier = Modifier.size(26.dp))
-                }
-                Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClickLabel = "Styles", onClick = onOpenStyles).padding(8.dp)) {
-                    androidx.compose.material3.Icon(Icons.Outlined.Palette, contentDescription = "Styles", tint = RtColors.TextPrimary, modifier = Modifier.size(26.dp))
-                }
-                // Your Reels, with how many there are.
-                Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClickLabel = "Your Reels", onClick = onOpenReels).padding(8.dp)) {
-                    androidx.compose.material3.Icon(Icons.Outlined.VideoLibrary, contentDescription = "Your Reels", tint = RtColors.TextPrimary, modifier = Modifier.size(26.dp))
+    var picked by rememberSaveable { mutableStateOf<String?>(null) }
+    var newReel by remember { mutableStateOf(false) }
+    var more by remember { mutableStateOf(false) }
+    var allRides by remember { mutableStateOf(false) }
+    var quick by remember { mutableStateOf<IdeaCard?>(null) }
+    var undo by remember { mutableStateOf<Pair<String, String>?>(null) }
+    LaunchedEffect(undo) { if (undo != null) { delay(4_000); undo = null } }
+
+    val list = rides
+    fun visible(r: StudioRide) = r.ideas.filter { "${r.id}|${it.title}" !in hidden }
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = RtDimens.screenPadding)) {
+            // ---- top bar: the title, then + (a new Reel), Search, Your Reels, more
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Studio", style = RtType.title, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
+                RoundIcon(Icons.Outlined.Add, "New Reel from your videos", primary = true) { newReel = true }
+                RoundIcon(Icons.Outlined.Search, "Search your clips", onClick = onOpenSearch)
+                Box {
+                    RoundIcon(Icons.Outlined.VideoLibrary, "Your Reels", onClick = onOpenReels)
                     if (made > 0) {
                         Text(
                             if (made > 99) "99+" else "$made",
                             style = RtType.caption,
                             color = RtColors.OnPrimary,
-                            modifier = Modifier.align(Alignment.TopEnd).offsetBadge().clip(RoundedCornerShape(50)).background(RtColors.Primary).padding(horizontal = 5.dp),
+                            modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-2).dp).clip(RoundedCornerShape(50)).background(RtColors.Primary).padding(horizontal = 5.dp),
                         )
                     }
                 }
-            },
-        )
-        val list = rides
-        if (list == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp) }
-            return@Column
-        }
-        LazyColumn(
-            contentPadding = PaddingValues(horizontal = RtDimens.screenPadding, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.Surface)
-                        .clickable(role = Role.Button) { pick.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.VideoOnly)) }
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    androidx.compose.material3.Icon(Icons.Outlined.VideoLibrary, contentDescription = null, tint = RtColors.Primary, modifier = Modifier.size(24.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Make a Reel from your videos", style = RtType.bodyStrong, color = RtColors.TextPrimary)
-                        Text("Pick videos from your gallery. Ones filmed on a recorded ride get its speed and route.", style = RtType.caption, color = RtColors.TextSecondary)
-                    }
-                }
+                RoundIcon(Icons.Outlined.MoreHoriz, "More") { more = true }
             }
-            // New suggestions from recent rides, ready to make.
-            val fresh = list.filter { it.ready.isNotEmpty() && System.currentTimeMillis() - it.startMillis < READY_DAYS * 86_400_000L }
-            if (fresh.isNotEmpty()) {
-                item { Label("Ready for you") }
-                item {
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        fresh.forEach { r -> r.ready.forEach { (title, format) -> ReadyCard(r, title, format) { onOpenRide(r.id) } } }
-                    }
-                }
+            if (list == null) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp) }
+                return@Column
             }
-            item { Label("Your rides") }
             if (list.isEmpty()) {
-                item {
-                    EmptyState(
-                        title = "No rides with clips yet",
-                        message = "Turn on Moments on Home before a ride. Rides with 2 or more clips show up here, ready to become a Reel.",
-                        icon = Icons.Outlined.Movie,
-                    )
+                EmptyState(
+                    title = "No rides with clips yet",
+                    message = "Turn on Moments on Home before a ride. Rides with 2 or more clips show up here with ideas. Or tap + to make a Reel from your own videos.",
+                    icon = Icons.Outlined.Movie,
+                )
+                return@Column
+            }
+            // The ride shown: the one picked, else the newest with ideas.
+            val ride = list.firstOrNull { it.id == picked } ?: list.firstOrNull { visible(it).isNotEmpty() } ?: list.first()
+            val ideas = visible(ride)
+
+            // ---- the rides, newest first
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 8.dp)) {
+                items(list.take(12), key = { it.id }) { r ->
+                    val on = r.id == ride.id
+                    val bg by animateColorAsState(if (on) RtColors.PrimaryContainer else RtColors.Surface, label = "ride")
+                    val n = visible(r).size
+                    Column(
+                        Modifier.widthIn(max = 170.dp).clip(RoundedCornerShape(14.dp)).background(bg)
+                            .border(1.dp, if (on) RtColors.Primary else RtColors.Outline, RoundedCornerShape(14.dp))
+                            .clickable(role = Role.Tab, onClickLabel = "Show its ideas") { picked = r.id }.padding(horizontal = 14.dp, vertical = 8.dp),
+                    ) {
+                        Text(r.name, style = RtType.body, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${Format.rideDate(r.startMillis)} · " + if (n > 0) "$n idea${if (n > 1) "s" else ""}" else "no ideas yet", style = RtType.caption, color = if (on) RtColors.TextPrimary else RtColors.TextTertiary, maxLines = 1)
+                    }
+                }
+                if (list.size > 1) {
+                    item {
+                        Box(
+                            Modifier.height(54.dp).clip(RoundedCornerShape(14.dp)).border(1.dp, RtColors.Outline, RoundedCornerShape(14.dp))
+                                .clickable(role = Role.Button) { allRides = true }.padding(horizontal = 14.dp),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("All rides ›", style = RtType.caption, color = RtColors.TextSecondary) }
+                    }
                 }
             }
-            items(list, key = { it.id }) { r -> RideRow(r) { onOpenRide(r.id) } }
-        }
-    }
-}
+            Spacer(Modifier.height(8.dp))
 
-private fun Modifier.offsetBadge() = this.offset(x = 6.dp, y = (-4).dp)
-
-/** Suggestions from rides in the last this-many days show under Ready for you. */
-private const val READY_DAYS = 14
-
-/** A suggestion ready to make, as a cover card. */
-@Composable
-private fun ReadyCard(r: StudioRide, title: String, format: String, onClick: () -> Unit) {
-    Column(
-        Modifier.width(128.dp).clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).clickable(role = Role.Button, onClickLabel = "Open", onClick = onClick),
-    ) {
-        Box(Modifier.fillMaxWidth().height(170.dp)) {
-            Thumb(r.thumbs.firstOrNull(), Modifier.fillMaxSize())
+            // ---- its ideas: one big card at a time
+            val pager = rememberPagerState(pageCount = { ideas.size })
+            LaunchedEffect(ride.id) { pager.scrollToPage(0) }
             Text(
-                format,
+                listOfNotNull("${ride.clips} clips", ride.talking.takeIf { it > 0 }?.let { "$it with your voice" }, ideas.size.takeIf { it > 1 }?.let { "idea ${pager.currentPage + 1} of $it" }).joinToString(" · "),
                 style = RtType.caption,
-                color = RtColors.OnPrimary,
-                modifier = Modifier.padding(6.dp).clip(RoundedCornerShape(4.dp)).background(RtColors.Primary).padding(horizontal = 6.dp),
+                color = RtColors.TextSecondary,
             )
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                if (ideas.isEmpty()) {
+                    Column(
+                        Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp)).border(1.dp, RtColors.Outline, RoundedCornerShape(22.dp)).padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text("No ideas for this ride yet", style = RtType.headline, color = RtColors.TextPrimary)
+                        Text(ride.waiting ?: "${ride.clips} clips. Gemini reads them and suggests what to make.", style = RtType.body, color = RtColors.TextSecondary)
+                        Text(
+                            "Find ideas",
+                            style = RtType.button,
+                            color = RtColors.OnPrimary,
+                            modifier = Modifier.clip(RoundedCornerShape(24.dp)).background(RtColors.Primary).clickable(role = Role.Button) { onOpenRide(ride.id) }.padding(horizontal = 22.dp, vertical = 12.dp),
+                        )
+                    }
+                } else {
+                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        VerticalPager(pager, Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(22.dp)), pageSpacing = 12.dp, key = { ideas.getOrNull(it)?.title ?: "$it" }) { page ->
+                            val idea = ideas[page]
+                            IdeaCardView(
+                                idea,
+                                onOpen = { onOpenIdea(ride.id, idea.title, false) },
+                                onHold = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); quick = idea },
+                                onHide = { vm.hide(ride.id, idea.title); undo = ride.id to idea.title },
+                            )
+                        }
+                        // Where you are in the ride's ideas.
+                        Column(Modifier.align(Alignment.CenterVertically), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ideas.indices.take(12).forEach { i ->
+                                val h by animateDpAsState(if (i == pager.currentPage) 22.dp else 6.dp, label = "dot")
+                                Box(Modifier.width(6.dp).height(h).clip(RoundedCornerShape(3.dp)).background(if (i == pager.currentPage) RtColors.Primary else RtColors.Outline))
+                            }
+                        }
+                    }
+                }
+            }
+            if (ideas.isNotEmpty()) Text("Swipe up for the next idea · left to hide · hold for options", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp))
+            // ---- ask for something
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 10.dp).height(48.dp).clip(RoundedCornerShape(24.dp)).background(RtColors.Surface)
+                    .border(1.dp, RtColors.Outline, RoundedCornerShape(24.dp)).clickable(role = Role.Button) { onOpenRide(ride.id) }.padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = RtColors.Primary, modifier = Modifier.size(18.dp))
+                Text("Ask for something, e.g. \"15 s, funny, the water\"", style = RtType.body, color = RtColors.TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
-        Column(Modifier.padding(8.dp)) {
-            Text(title, style = RtType.caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = RtColors.TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(r.name, style = RtType.caption, color = RtColors.TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+
+        // ---- "Idea hidden · Undo"
+        AnimatedVisibility(undo != null, Modifier.align(Alignment.BottomCenter).padding(bottom = 76.dp, start = 16.dp, end = 16.dp), enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(RtColors.Inverse).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Idea hidden", style = RtType.body, color = RtColors.OnInverse, modifier = Modifier.weight(1f))
+                Text("Undo", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { undo?.let { (r, t) -> vm.unhide(r, t) }; undo = null }.padding(6.dp))
+            }
+        }
+
+        StudioSheet(newReel, { newReel = false }, title = "New Reel") {
+            SheetRow("From your phone's videos", "Ones filmed on a ride get its speed and route") {
+                newReel = false
+                pick.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.VideoOnly))
+            }
+            SheetRow("From Saved clips") { newReel = false; onOpenReels() }
+            list?.firstOrNull { it.id == picked }?.let { r -> SheetRow("From ${r.name}'s clips, your own way") { newReel = false; onOpenRide(r.id) } }
+        }
+        StudioSheet(more, { more = false }) {
+            SheetRow("Styles", "Your looks, the brand kit") { more = false; onOpenStyles() }
+            SheetRow("Your Reels", "Made, drafts, saved clips, deleted") { more = false; onOpenReels() }
+        }
+        StudioSheet(quick != null, { quick = null }, title = quick?.title) {
+            val r = list?.firstOrNull { it.id == picked } ?: list?.firstOrNull { it.ideas.any { i -> i.title == quick?.title } }
+            quick?.let { idea ->
+                SheetRow("Open in the editor") { quick = null; r?.let { onOpenIdea(it.id, idea.title, false) } }
+                SheetRow("Make it now, ready to share", "In the background; it'll be in Your Reels") { quick = null; r?.let { onOpenIdea(it.id, idea.title, true) } }
+                SheetRow("Hide this idea", danger = true) { quick = null; r?.let { vm.hide(it.id, idea.title); undo = it.id to idea.title } }
+            }
+        }
+        StudioSheet(allRides, { allRides = false }, title = "All rides") {
+            Column(Modifier.verticalScroll(rememberScrollState()).height(460.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                list?.forEach { r ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(RtColors.SurfaceRaised).clickable(role = Role.Button) { picked = r.id; allRides = false }.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { r.thumbs.take(2).forEach { Thumb(it, Modifier.size(width = 30.dp, height = 46.dp).clip(RoundedCornerShape(5.dp))) } }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(r.name, style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${Format.rideDate(r.startMillis)} · ${Format.distance(r.distanceM)} · ${visible(r).size} ideas", style = RtType.caption, color = RtColors.TextSecondary, maxLines = 1)
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
+/** One idea, big: its first shot, what it is, why it works. Tap, hold, or swipe it left. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Label(text: String) {
-    Text(text.uppercase(java.util.Locale.getDefault()), style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 4.dp))
-}
-
-@Composable
-private fun RideRow(r: StudioRide, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(RtColors.Surface)
-            .clickable(role = Role.Button, onClickLabel = "Make a Reel", onClick = onClick)
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun IdeaCardView(idea: IdeaCard, onOpen: () -> Unit, onHold: () -> Unit, onHide: () -> Unit) {
+    var drag by remember { mutableFloatStateOf(0f) }
+    val dx by animateFloatAsState(drag, label = "swipe")
+    Box(
+        Modifier.fillMaxSize()
+            .graphicsLayer { translationX = dx; alpha = 1f - (kotlin.math.abs(dx) / 900f).coerceIn(0f, 0.6f) }
+            .clip(RoundedCornerShape(22.dp)).background(RtColors.Surface)
+            .pointerInput(idea.title) {
+                detectHorizontalDragGestures(
+                    onDragEnd = { if (drag < -160f) onHide() else drag = 0f },
+                    onDragCancel = { drag = 0f },
+                ) { _, d -> drag = (drag + d).coerceAtMost(0f) }
+            }
+            .combinedClickable(role = Role.Button, onClickLabel = "Open in the editor", onLongClickLabel = "Options", onLongClick = onHold, onClick = onOpen),
     ) {
-        // Up to three clip frames, like a contact sheet.
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            r.thumbs.forEach { Thumb(it, Modifier.size(width = 36.dp, height = 56.dp).clip(RoundedCornerShape(6.dp))) }
+        Thumb(idea.thumb, Modifier.fillMaxSize())
+        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(idea.format, style = RtType.caption, color = RtColors.OnPrimary, modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(RtColors.Primary).padding(horizontal = 8.dp, vertical = 2.dp))
+            Text(Format.clock(idea.lengthSec * 1000L), style = RtType.caption, color = Color.White, modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 8.dp, vertical = 2.dp))
+            if (idea.made) Text("Made", style = RtType.caption, color = Color.White, modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 8.dp, vertical = 2.dp))
+            if (idea.fromClips) Text("From your clips", style = RtType.caption, color = Color.White, modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 8.dp, vertical = 2.dp))
         }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(r.name, style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${Format.rideDate(r.startMillis)} · ${Format.distance(r.distanceM)}", style = RtType.caption, color = RtColors.TextSecondary, maxLines = 1)
-            Spacer(Modifier.height(2.dp))
-            Text(r.stateLine, style = RtType.caption, color = if (r.ready.isNotEmpty()) RtColors.Primary else RtColors.TextTertiary)
+        Box(Modifier.align(Alignment.Center).size(64.dp).clip(RoundedCornerShape(32.dp)).background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Outlined.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
         }
-        Spacer(Modifier.width(8.dp))
-        Text("Open", style = RtType.button, color = RtColors.Primary)
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xB80A0A0B)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(idea.title, style = RtType.headline, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            idea.why?.let { Text(it, style = RtType.body, color = Color(0xFFC9C9CF), maxLines = 3, overflow = TextOverflow.Ellipsis) }
+        }
     }
 }

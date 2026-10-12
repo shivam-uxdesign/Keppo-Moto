@@ -92,8 +92,10 @@ object Routes {
     const val SHARE = "share/{rideId}?mode={mode}&reel={reel}"
     fun share(id: String) = "share/$id"
     /** A ride's Studio page. */
-    const val RIDE_STUDIO = "studio/{rideId}?reel={reel}"
+    const val RIDE_STUDIO = "studio/{rideId}?reel={reel}&idea={idea}&make={make}"
     fun reel(id: String) = "studio/$id"
+    /** One of a ride's ideas, straight in the editor (or made now, in the background). */
+    fun idea(rideId: String, title: String, make: Boolean = false) = "studio/$rideId?idea=${android.net.Uri.encode(title)}" + if (make) "&make=true" else ""
     /** A saved Reel, opened in its ride's Studio. */
     fun savedReel(rideId: String, reelId: String) = "studio/$rideId?reel=$reelId"
     /** Studio › Your Reels. */
@@ -204,6 +206,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                 composable(Routes.STUDIO) {
                     com.ridetrack.app.studio.StudioHomeScreen(
                         onOpenRide = { nav.navigate(Routes.reel(it)) },
+                        onOpenIdea = { ride, title, make -> nav.navigate(Routes.idea(ride, title, make)) },
                         onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
                         onOpenReels = { nav.navigate(Routes.REELS) },
                         onOpenStyles = { nav.navigate(Routes.STYLES) },
@@ -362,12 +365,16 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                     arguments = listOf(
                         navArgument("rideId") { type = NavType.StringType },
                         navArgument("reel") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("idea") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("make") { type = NavType.StringType; nullable = true; defaultValue = null },
                     ),
                 ) { entry ->
                     DarkRoute {
                         com.ridetrack.app.studio.RideStudioScreen(
                             rideId = entry.arguments?.getString("rideId").orEmpty(),
                             reelId = entry.arguments?.getString("reel"),
+                            idea = entry.arguments?.getString("idea"),
+                            makeNow = entry.arguments?.getString("make") == "true",
                             onBack = { nav.popBackStack() },
                         )
                     }

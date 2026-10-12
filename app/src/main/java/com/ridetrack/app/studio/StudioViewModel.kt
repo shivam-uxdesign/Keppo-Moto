@@ -103,6 +103,10 @@ data class StudioState(
     val piece: ContentPiece? = null,
     /** Gemini suggested more than are shown ("Gemini suggested 5 · 2 couldn't be fitted to your clips"); null when all are. */
     val suggestNote: String? = null,
+    /** Opened from an idea on the Studio tab (the editor first, nothing made yet). */
+    val fromIdea: Boolean = false,
+    /** The screen should close (the editor was left before anything was made). */
+    val leave: Boolean = false,
     /** The suggestion open in the Script view before it's made (its key); null otherwise. */
     val scriptPiece: String? = null,
     /** Every clip Studio can pick from (moments and phone videos), in filming order. */
@@ -161,7 +165,15 @@ data class StudioState(
 
 /** Studio: turns a ride's clips into a Reel (captions, stories and tips by Gemini when it can). */
 @OptIn(UnstableApi::class)
-class StudioViewModel(private val c: AppContainer, val rideId: String, private val openReelId: String? = null) : ViewModel() {
+class StudioViewModel(
+    private val c: AppContainer,
+    val rideId: String,
+    private val openReelId: String? = null,
+    /** One of the ride's ideas to open straight in the editor (from the Studio tab); null otherwise. */
+    private val openIdea: String? = null,
+    /** With [openIdea]: make it now, in the background, instead of editing. */
+    private val makeNow: Boolean = false,
+) : ViewModel() {
     private val _state = MutableStateFlow(
         StudioState(
             gemini = c.transcripts.available,
@@ -225,7 +237,31 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
             refreshSources()
             if (openReelId == null) loadPlan()
             openReelId?.let { id -> c.reels.get(id)?.let { open(it) } }
+            openIdea?.let { title ->
+                val piece = _state.value.pieces.firstOrNull { it.script.title == title }
+                if (piece == null) say("That idea isn't here any more") else if (makeNow) makePiece(piece.key) else editIdea(piece.key)
+            }
         }
+    }
+
+    /**
+     * An idea straight in the editor, playing: nothing is made until → (Share). Closing the
+     * editor goes back to where it came from.
+     */
+    fun editIdea(key: String) {
+        val piece = _state.value.pieces.firstOrNull { it.key == key } ?: return
+        val sc = piece.script
+        _state.update {
+            it.copy(
+                piece = piece, reelId = null, takes = emptyList(), tips = null, coverFrames = emptyList(), video = null, notes = emptyList(),
+                plan = piece.plan, script = sc, fromIdea = true,
+                title = sc.title.ifBlank { card?.title ?: it.title },
+                hookLine = if (sc.format == PieceFormat.CAPTION) "" else sc.hookLine ?: sc.sections.firstOrNull { s -> s.kind == SectionKind.HOOK }?.text.orEmpty(),
+                postCaption = sc.postCaption ?: it.postCaption,
+                options = it.options.copy(vibe = sc.vibe ?: it.options.vibe),
+            )
+        }
+        edit()
     }
 
     // ---- clips: moments and phone videos -----------------------------------------------------
@@ -1207,7 +1243,12 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
     // ---- autosave: the edit is kept as it changes, so nothing is lost if the app closes ----
 
     private val draftFile: File
-        get() = File(File(c.appContext.filesDir, "studio-drafts").apply { mkdirs() }, (_state.value.reelId ?: "ride-$rideId") + ".json")
+        get() {
+            // A Reel's own edit, or one idea's (each idea of a ride keeps its own).
+            val s = _state.value
+            val key = s.reelId ?: s.piece?.script?.title?.let { "ride-$rideId-idea-" + Integer.toHexString(it.hashCode()) } ?: "ride-$rideId"
+            return File(File(c.appContext.filesDir, "studio-drafts").apply { mkdirs() }, "$key.json")
+        }
 
     private fun writeDraft(plan: StudioPlan) {
         val s = _state.value
@@ -1510,7 +1551,8 @@ class StudioViewModel(private val c: AppContainer, val rideId: String, private v
         dropDraft()
         history = null
         dragFrom = null
-        _state.update { it.copy(step = StudioStep.READY, timeline = null, pick = null) }
+        // Opened from an idea and nothing made yet: back to the Studio tab.
+        _state.update { it.copy(step = if (it.video == null) StudioStep.SETUP else StudioStep.READY, timeline = null, pick = null, leave = it.fromIdea && it.video == null) }
     }
 
     /** Keeps the edit and makes the video from it (the only render). The change is kept for Your style. */
