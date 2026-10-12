@@ -535,4 +535,30 @@ The rider: "Studio got way too complicated; make it very simple and intuitive", 
   - In the editor:
     - + at the end of the clips adds videos: from the phone, this or another ride, Saved clips, or over the video (picture in picture).
     - "+ Sound" under the sound rows adds music, a voice-over or a sound from another clip, each on its own row from the playhead, as many as you like. The video above shrinks a little to make room.
+- **Every inner page redesigned (12 Oct, prototype only):** Apple-like lists, sheets and context menus; Procreate-like panels, quick sliders and gestures. On the same canvas:
+  - **Library and settings:**
+    - Your Reels: Reels, Saved clips and Deleted as one segmented control; hold a Reel for its menu; swipe across tiles to pick several.
+    - Search: what you said, what's in it, or both; results grouped by ride.
+    - Making in the background: a status pill on top, then a queue sheet with Gemini's state.
+    - Settings: grouped lists.
+  - **Editing a clip:**
+    - Speed: quick sliders for speed and volume on the video's edge; speed curves you can see.
+    - Look and crop: pinch, drag and twist on the video; filter looks; one adjustment dial at a time.
+    - Text: typed straight on the video, with a font and colour bar above the keyboard.
+    - Captions: Look and Words; tap a word on the video to fix it.
+  - **Sound, layers and history:**
+    - Mixer: faders side by side; double-tap to mute.
+    - Voice-over: hold to talk; takes on the timeline.
+    - Layers: layout presets; live speed, lean and map stickers.
+    - History: two fingers to undo, three to redo; Changes, Versions and Marks.
+  - **Styles:**
+    - Library: groups on the left, like Procreate's brushes; + for words, a video you love, a Reel or a code.
+    - Style editor: like Brush Studio, with the live preview on top.
+    - Brand kit.
+    - What Studio learned: habits as cards; swipe left to forget.
+  - **Ideas and sharing:**
+    - Ideas sheet: "Change this one" or "Make a new one", plus quick prompts.
+    - The story: reads like a note.
+    - Share: Reel, Short, Story or WhatsApp; cover; caption copied for you; subtitles, hook check and Journal.
+    - After posting: views and likes, your Reels by views, "Make one like this".
 - Also seen on the rider's phone (8 Oct): the editor showed "Simple preview" on every clip. One failure turns the exact preview off for the whole session. The cause is in the error log ("Studio preview"); waiting for it.
