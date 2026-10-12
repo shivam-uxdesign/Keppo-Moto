@@ -92,23 +92,25 @@ object Routes {
     const val SHARE = "share/{rideId}?mode={mode}&reel={reel}"
     fun share(id: String) = "share/$id"
     /** A ride's Studio page. */
-    const val RIDE_STUDIO = "studio/{rideId}?reel={reel}&idea={idea}&make={make}"
+    const val RIDE_STUDIO = "studio/{rideId}?reel={reel}&idea={idea}&make={make}&edit={edit}"
     fun reel(id: String) = "studio/$id"
     /** One of a ride's ideas, straight in the editor (or made now, in the background). */
     fun idea(rideId: String, title: String, make: Boolean = false) = "studio/$rideId?idea=${android.net.Uri.encode(title)}" + if (make) "&make=true" else ""
     /** A saved Reel, opened in its ride's Studio. */
-    fun savedReel(rideId: String, reelId: String) = "studio/$rideId?reel=$reelId"
+    fun savedReel(rideId: String, reelId: String, edit: Boolean = false) = "studio/$rideId?reel=$reelId" + if (edit) "&edit=true" else ""
     /** Studio › Your Reels. */
     const val REELS = "reels"
     /** Studio › Your style. */
     const val STUDIO_STYLE = "studio-style"
     /** Studio › Styles: every style, the brand kit, the style editor. */
     const val STYLES = "styles"
+    /** Studio › Settings. */
+    const val STUDIO_SETTINGS = "studio-settings"
     /** Studio › Search: what was said or seen in every clip. */
     const val STUDIO_SEARCH = "studio-search"
     /** Studio with videos from the phone only (no ride). */
-    const val STUDIO_PHONE = "studio-phone?reel={reel}"
-    fun studioPhone(reelId: String?) = "studio-phone" + (reelId?.let { "?reel=$it" } ?: "")
+    const val STUDIO_PHONE = "studio-phone?reel={reel}&edit={edit}"
+    fun studioPhone(reelId: String?, edit: Boolean = false) = "studio-phone" + (reelId?.let { "?reel=$it" + if (edit) "&edit=true" else "" } ?: "")
     const val MOMENTS = "moments/{rideId}/{momentId}"
     fun moments(rideId: String, momentId: String) = "moments/$rideId/$momentId"
     const val MOMENT_SHARE = "moment-share/{rideId}/{momentId}"
@@ -211,6 +213,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onOpenReels = { nav.navigate(Routes.REELS) },
                         onOpenStyles = { nav.navigate(Routes.STYLES) },
                         onOpenSearch = { nav.navigate(Routes.STUDIO_SEARCH) },
+                        onOpenSettings = { nav.navigate(Routes.STUDIO_SETTINGS) },
                     )
                 }
                 composable(Routes.RIDES_MAP) {
@@ -321,14 +324,17 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                     DarkRoute {
                         com.ridetrack.app.studio.ReelsScreen(
                             onBack = { nav.popBackStack() },
-                            onOpenReel = { ride, reel -> nav.navigate(Routes.savedReel(ride, reel)) },
-                            onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
+                            onOpenReel = { ride, reel, edit -> nav.navigate(Routes.savedReel(ride, reel, edit)) },
+                            onOpenPhone = { reel, edit -> nav.navigate(Routes.studioPhone(reel, edit)) },
                             onStyle = { nav.navigate(Routes.STUDIO_STYLE) },
                         )
                     }
                 }
                 composable(Routes.STUDIO_SEARCH) {
-                    DarkRoute { com.ridetrack.app.studio.StudioSearchScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) }) }
+                    DarkRoute { com.ridetrack.app.studio.StudioSearchScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) }, onOpenStudio = { nav.navigate(Routes.reel(it)) }) }
+                }
+                composable(Routes.STUDIO_SETTINGS) {
+                    DarkRoute { com.ridetrack.app.studio.StudioSettingsScreen(onBack = { nav.popBackStack() }) }
                 }
                 composable(Routes.STYLES) {
                     DarkRoute { com.ridetrack.app.studio.StylesScreen(onBack = { nav.popBackStack() }) }
@@ -338,10 +344,13 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                 }
                 composable(
                     Routes.STUDIO_PHONE,
-                    arguments = listOf(navArgument("reel") { type = NavType.StringType; nullable = true; defaultValue = null }),
+                    arguments = listOf(
+                        navArgument("reel") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("edit") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    ),
                 ) { entry ->
                     DarkRoute {
-                        com.ridetrack.app.studio.PhoneStudioScreen(reelId = entry.arguments?.getString("reel"), onBack = { nav.popBackStack() })
+                        com.ridetrack.app.studio.PhoneStudioScreen(reelId = entry.arguments?.getString("reel"), onBack = { nav.popBackStack() }, editNow = entry.arguments?.getString("edit") == "true")
                     }
                 }
                 composable(
@@ -367,6 +376,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         navArgument("reel") { type = NavType.StringType; nullable = true; defaultValue = null },
                         navArgument("idea") { type = NavType.StringType; nullable = true; defaultValue = null },
                         navArgument("make") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("edit") { type = NavType.StringType; nullable = true; defaultValue = null },
                     ),
                 ) { entry ->
                     DarkRoute {
@@ -375,6 +385,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                             reelId = entry.arguments?.getString("reel"),
                             idea = entry.arguments?.getString("idea"),
                             makeNow = entry.arguments?.getString("make") == "true",
+                            editNow = entry.arguments?.getString("edit") == "true",
                             onBack = { nav.popBackStack() },
                         )
                     }

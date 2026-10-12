@@ -106,8 +106,8 @@ internal val VibeFonts = mapOf(
 
 /** Share ride › Reel: Keppo Studio turns the ride's clips into a 30–60 s Reel. */
 @Composable
-fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? = null, idea: String? = null, makeNow: Boolean = false, onLeave: () -> Unit = {}, onStep: (StudioStep) -> Unit = {}) {
-    val vm = appViewModel(key = "studio-$rideId-${reelId.orEmpty()}-${idea ?: ""}-$makeNow") { StudioViewModel(it, rideId, reelId, idea, makeNow) }
+fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? = null, idea: String? = null, makeNow: Boolean = false, editNow: Boolean = false, onLeave: () -> Unit = {}, onStep: (StudioStep) -> Unit = {}) {
+    val vm = appViewModel(key = "studio-$rideId-${reelId.orEmpty()}-${idea ?: ""}-$makeNow-$editNow") { StudioViewModel(it, rideId, reelId, idea, makeNow, editNow) }
     val s by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(s.leave) { if (s.leave) onLeave() }
     LaunchedEffect(s.step) { onStep(s.step) }
@@ -137,12 +137,12 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
 /** Studio for gallery videos only (from the Studio tab, when they aren't from a recorded ride). */
 /** A ride's own Studio page (from the Studio tab, the ride, or the after-ride notification). */
 @Composable
-fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: String? = null, makeNow: Boolean = false) {
+fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: String? = null, makeNow: Boolean = false, editNow: Boolean = false) {
     val c = com.ridetrack.app.ui.appContainer()
     var name by remember(rideId) { mutableStateOf("Studio") }
     LaunchedEffect(rideId) { name = c.rides.get(rideId)?.name?.let { "Studio · $it" } ?: "Studio" }
     // The editor has its own top bar: the page's title goes while it's open.
-    var step by remember { mutableStateOf(if (idea != null && !makeNow) StudioStep.EDIT else StudioStep.SETUP) }
+    var step by remember { mutableStateOf(if ((idea != null && !makeNow) || editNow) StudioStep.EDIT else StudioStep.SETUP) }
     Column(
         Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = com.ridetrack.app.ui.theme.RtDimens.screenPadding),
     ) {
@@ -150,18 +150,21 @@ fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: 
             com.ridetrack.app.ui.components.ScreenHeader(name, onBack = onBack)
             Spacer(Modifier.height(12.dp))
         }
-        StudioPanel(rideId, Modifier.weight(1f), reelId, idea, makeNow, onLeave = onBack, onStep = { step = it })
+        StudioPanel(rideId, Modifier.weight(1f), reelId, idea, makeNow, editNow, onLeave = onBack, onStep = { step = it })
     }
 }
 
 @Composable
-fun PhoneStudioScreen(reelId: String?, onBack: () -> Unit) {
+fun PhoneStudioScreen(reelId: String?, onBack: () -> Unit, editNow: Boolean = false) {
+    var step by remember { mutableStateOf(if (editNow) StudioStep.EDIT else StudioStep.SETUP) }
     Column(
         Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = com.ridetrack.app.ui.theme.RtDimens.screenPadding),
     ) {
-        com.ridetrack.app.ui.components.ScreenHeader("Reel from your videos", onBack = onBack)
-        Spacer(Modifier.height(12.dp))
-        StudioPanel(PHONE_STUDIO, Modifier.weight(1f), reelId)
+        if (step != StudioStep.EDIT) {
+            com.ridetrack.app.ui.components.ScreenHeader("Reel from your videos", onBack = onBack)
+            Spacer(Modifier.height(12.dp))
+        }
+        StudioPanel(PHONE_STUDIO, Modifier.weight(1f), reelId, editNow = editNow, onStep = { step = it })
     }
 }
 
@@ -1044,9 +1047,9 @@ private fun RideReels(rideId: String, onSendAll: () -> Unit, onOpen: (String) ->
 
 /** A saved Reel as a cover tile with its length and vibe. */
 @Composable
-internal fun ReelTile(p: ReelProject, modifier: Modifier, onClick: () -> Unit) {
+internal fun ReelTile(p: ReelProject, modifier: Modifier, clickable: Boolean = true, onClick: () -> Unit) {
     val store = com.ridetrack.app.ui.appContainer().reels
-    Column(modifier.clickable(role = Role.Button, onClickLabel = "Open Reel", onClick = onClick)) {
+    Column(modifier.then(if (clickable) Modifier.clickable(role = Role.Button, onClickLabel = "Open Reel", onClick = onClick) else Modifier)) {
         Box(Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(RoundedCornerShape(10.dp)).background(RtColors.Surface)) {
             // The cover is redrawn in place: a new update time loads it again.
             androidx.compose.runtime.key(p.updatedAt) { Thumb(store.cover(p.id).takeIf { it.isFile }, Modifier.fillMaxSize(), maxEdge = 480) }
@@ -1059,6 +1062,9 @@ internal fun ReelTile(p: ReelProject, modifier: Modifier, onClick: () -> Unit) {
             p.script?.format?.takeIf { it != PieceFormat.REEL }?.let { f ->
                 Text(f.label, style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 4.dp))
             }
+            p.views?.let { v ->
+                Text("▶ ${shortCount(v.toLong())}", style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 22.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 4.dp))
+            }
             if (!p.posted) {
                 Text("Draft", style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 4.dp))
             }
@@ -1069,6 +1075,13 @@ internal fun ReelTile(p: ReelProject, modifier: Modifier, onClick: () -> Unit) {
         Text(p.title, style = RtType.caption, color = RtColors.TextPrimary, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
         Text(listOfNotNull(p.vibe.label, p.views?.let { "%,d views".format(it) }).joinToString(" · "), style = RtType.caption, color = RtColors.TextTertiary, maxLines = 1)
     }
+}
+
+/** 12400 → "12.4K", 1200000 → "1.2M". */
+internal fun shortCount(v: Long): String = when {
+    v >= 1_000_000 -> String.format(Locale.US, "%.1fM", v / 1e6).replace(".0M", "M")
+    v >= 1_000 -> String.format(Locale.US, "%.1fK", v / 1e3).replace(".0K", "K")
+    else -> v.toString()
 }
 
 /** Send to Keppo Journal, or (once sent) its cover choice and Remove. */

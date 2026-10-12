@@ -218,6 +218,7 @@ fun StudioHomeScreen(
     onOpenReels: () -> Unit,
     onOpenStyles: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     onOpenIdea: (rideId: String, title: String, make: Boolean) -> Unit = { r, _, _ -> onOpenRide(r) },
 ) {
     val vm = appViewModel { StudioHomeViewModel(it) }
@@ -232,6 +233,7 @@ fun StudioHomeScreen(
     var picked by rememberSaveable { mutableStateOf<String?>(null) }
     var newReel by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
+    var making by remember { mutableStateOf(false) }
     var allRides by remember { mutableStateOf(false) }
     var quick by remember { mutableStateOf<IdeaCard?>(null) }
     var undo by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -259,6 +261,7 @@ fun StudioHomeScreen(
                 }
                 RoundIcon(Icons.Outlined.MoreHoriz, "More") { more = true }
             }
+            MakingPill(Modifier.fillMaxWidth()) { making = true }
             if (list == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp) }
                 return@Column
@@ -380,7 +383,10 @@ fun StudioHomeScreen(
         StudioSheet(more, { more = false }) {
             SheetRow("Styles", "Your looks, the brand kit") { more = false; onOpenStyles() }
             SheetRow("Your Reels", "Made, drafts, saved clips, deleted") { more = false; onOpenReels() }
+            SheetRow("In the background", "What's being made, and Gemini's allowance") { more = false; making = true }
+            SheetRow("Settings", "After each ride, what new videos start with, saving") { more = false; onOpenSettings() }
         }
+        MakingSheet(making) { making = false }
         StudioSheet(quick != null, { quick = null }, title = quick?.title) {
             val r = list?.firstOrNull { it.id == picked } ?: list?.firstOrNull { it.ideas.any { i -> i.title == quick?.title } }
             quick?.let { idea ->

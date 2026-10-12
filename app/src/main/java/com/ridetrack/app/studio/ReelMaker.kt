@@ -52,6 +52,10 @@ data class MakerState(
     val failed: Int = 0,
     /** Reels being made on the Studio screen itself (they keep the app running too). */
     val holding: Int = 0,
+    /** What's waiting, in order: (id, title). */
+    val next: List<Pair<String, String>> = emptyList(),
+    /** Made since the app started, newest first: (id, title). */
+    val ready: List<Pair<String, String>> = emptyList(),
 ) {
     val idle: Boolean get() = current == null && queued == 0 && holding == 0
 }
@@ -99,7 +103,7 @@ class ReelMaker(
         if (jobs.isEmpty()) return
         synchronized(pending) { pending.addAll(jobs) }
         save()
-        _state.update { it.copy(queued = synchronized(pending) { pending.size }) }
+        _state.update { it.copy(queued = synchronized(pending) { pending.size }, next = waiting()) }
         start(service)
     }
 
@@ -124,9 +128,11 @@ class ReelMaker(
             _state.update { it.copy(current = null, currentId = null, progress = null) }
             if (synchronized(pending) { pending.isNotEmpty() }) start()
         }
-        _state.update { it.copy(queued = synchronized(pending) { pending.size }) }
+        _state.update { it.copy(queued = synchronized(pending) { pending.size }, next = waiting()) }
         save()
     }
+
+    private fun waiting(): List<Pair<String, String>> = synchronized(pending) { pending.map { it.project.id to it.project.title } }
 
     /** How many are waiting before [id]; null when it isn't waiting. */
     fun waitingBefore(id: String): Int? = synchronized(pending) { pending.indexOfFirst { it.project.id == id }.takeIf { it >= 0 } }
@@ -174,11 +180,11 @@ class ReelMaker(
         while (true) {
             val job = synchronized(pending) { pending.removeFirstOrNull() } ?: break
             current = job
-            _state.update { it.copy(current = job.project.title, currentId = job.project.id, progress = 0, queued = synchronized(pending) { pending.size }) }
+            _state.update { it.copy(current = job.project.title, currentId = job.project.id, progress = 0, queued = synchronized(pending) { pending.size }, next = waiting()) }
             notify(job.project.title, 0)
             try {
                 val saved = make(job)
-                _state.update { it.copy(made = it.made + 1) }
+                _state.update { it.copy(made = it.made + 1, ready = (listOf(saved.id to saved.title) + it.ready).take(3)) }
                 _events.tryEmit(MakerEvent.Made(saved))
             } catch (e: CancellationException) {
                 throw e
@@ -191,7 +197,7 @@ class ReelMaker(
             save()
         }
         val s = _state.value
-        _state.update { MakerState(made = s.made, failed = s.failed, holding = it.holding) }
+        _state.update { MakerState(made = s.made, failed = s.failed, holding = it.holding, ready = it.ready) }
         done(s.made, s.failed)
     }
 

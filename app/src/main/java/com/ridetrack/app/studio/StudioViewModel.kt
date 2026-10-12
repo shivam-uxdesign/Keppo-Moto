@@ -173,6 +173,8 @@ class StudioViewModel(
     private val openIdea: String? = null,
     /** With [openIdea]: make it now, in the background, instead of editing. */
     private val makeNow: Boolean = false,
+    /** With [openReelId]: open it straight in the editor. */
+    private val editNow: Boolean = false,
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         StudioState(
@@ -214,7 +216,7 @@ class StudioViewModel(
                 }
                 c.studio.takePending().takeIf { it.isNotEmpty() }?.let { addPhoneVideos(it).join() }
                 if (openReelId == null && phone.isNotEmpty()) loadPlan()
-                openReelId?.let { id -> c.reels.get(id)?.let { open(it) } }
+                openReelId?.let { id -> c.reels.get(id)?.let { open(it); if (editNow) edit() } }
                 return@launch
             }
             val talking = clips.count { likelyTalking(it) }
@@ -236,7 +238,7 @@ class StudioViewModel(
             c.studio.takePending().takeIf { it.isNotEmpty() }?.let { addPhoneVideos(it).join() }
             refreshSources()
             if (openReelId == null) loadPlan()
-            openReelId?.let { id -> c.reels.get(id)?.let { open(it) } }
+            openReelId?.let { id -> c.reels.get(id)?.let { open(it); if (editNow) edit() } }
             openIdea?.let { title ->
                 val piece = _state.value.pieces.firstOrNull { it.script.title == title }
                 if (piece == null) say("That idea isn't here any more") else if (makeNow) makePiece(piece.key) else editIdea(piece.key)

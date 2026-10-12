@@ -18,8 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -39,7 +39,6 @@ import com.ridetrack.app.AppContainer
 import com.ridetrack.app.moments.Moment
 import com.ridetrack.app.moments.MomentKind
 import com.ridetrack.app.ui.appViewModel
-import com.ridetrack.app.ui.components.ScreenHeader
 import com.ridetrack.app.ui.format.Format
 import com.ridetrack.app.ui.moments.Thumb
 import com.ridetrack.app.ui.theme.RtColors
@@ -137,70 +136,132 @@ class StudioSearchViewModel(private val c: AppContainer) : ViewModel() {
     }
 }
 
-/** Studio › Search: find what you said, or what was in the shot, in every ride's clips. */
+/** Which hits Search shows. */
+private enum class SearchKind(val label: String) { BOTH("Both"), SAID("What you said"), SEEN("What's in it") }
+
+/**
+ * Studio › Search: find what you said, or what was in the shot, in every ride's clips. Hits come
+ * grouped by ride with the word lit; tap one to play it right there, with what can be done with it.
+ */
 @Composable
-fun StudioSearchScreen(onBack: () -> Unit, onOpenRide: (String) -> Unit) {
+fun StudioSearchScreen(onBack: () -> Unit, onOpenRide: (String) -> Unit, onOpenStudio: (String) -> Unit = onOpenRide) {
     val vm = appViewModel { StudioSearchViewModel(it) }
     val s by vm.state.collectAsStateWithLifecycle()
-    var playing by remember { mutableStateOf<SearchHit?>(null) }
+    var open by remember { mutableStateOf<SearchHit?>(null) }
+    var kind by remember { mutableStateOf(SearchKind.BOTH) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val hits = s.hits.filter { h -> when (kind) { SearchKind.BOTH -> true; SearchKind.SAID -> !h.seen; SearchKind.SEEN -> h.seen } }
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = RtDimens.screenPadding)) {
-        ScreenHeader("Search", onBack = onBack, subtitle = "What you said, or what was in the shot")
-        OutlinedTextField(
-            value = s.query,
-            onValueChange = vm::search,
-            placeholder = { Text("paani, flyover, rain…", style = RtType.body, color = RtColors.TextTertiary) },
-            singleLine = true,
-            textStyle = RtType.body.copy(color = RtColors.TextPrimary),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            listOfNotNull(
-                "${s.clips} clips",
-                s.unread.takeIf { it > 0 }?.let { "$it not read yet (open their ride's Studio to read them)" },
-                s.unseen.takeIf { it > 0 }?.let { "$it Gemini hasn't looked at" },
-            ).joinToString(" · "),
-            style = RtType.caption,
-            color = RtColors.TextTertiary,
-            modifier = Modifier.padding(top = 6.dp),
-        )
-        if (s.unseen > 0) {
-            Text(
-                s.looking ?: "Let Gemini look at them (finds rain, dogs, flyovers…)",
-                style = RtType.button,
-                color = if (s.looking != null) RtColors.TextSecondary else RtColors.Primary,
-                modifier = Modifier.clickable(enabled = s.looking == null, role = Role.Button) { vm.look() }.padding(vertical = 6.dp),
-            )
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(RtColors.SurfaceRaised).padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Search, contentDescription = null, tint = RtColors.TextSecondary, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                androidx.compose.foundation.text.BasicTextField(
+                    value = s.query,
+                    onValueChange = { open = null; vm.search(it) },
+                    singleLine = true,
+                    textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(RtColors.Primary),
+                    modifier = Modifier.weight(1f).focusRequester(focus),
+                    decorationBox = { inner ->
+                        if (s.query.isEmpty()) Text("paani, flyover, rain…", style = RtType.body, color = RtColors.TextTertiary)
+                        inner()
+                    },
+                )
+            }
+            Text("Cancel", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onBack).padding(start = 12.dp, top = 8.dp, bottom = 8.dp))
         }
-        s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
-        LazyColumn(contentPadding = PaddingValues(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (s.query.isNotBlank() && s.hits.isEmpty() && !s.loading) item { Text("Nothing found", style = RtType.body, color = RtColors.TextSecondary) }
-            items(s.hits, key = { "${it.momentId}-${it.line.startMs}-${it.seen}" }) { h ->
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(RtColors.Surface).clickable(role = Role.Button, onClickLabel = "Play") { playing = h }.padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Thumb(vm.thumb(h.momentId), Modifier.size(width = 44.dp, height = 70.dp).clip(RoundedCornerShape(6.dp)))
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(h.line.text, style = RtType.body, color = if (h.seen) RtColors.TextSecondary else RtColors.TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text("${h.rideName} · ${Format.rideDate(h.atMillis)} ${Format.timeOfDay(h.atMillis)}", style = RtType.caption, color = RtColors.TextTertiary, maxLines = 1)
+        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp).clip(RoundedCornerShape(10.dp)).background(RtColors.SurfaceRaised).padding(3.dp)) {
+            SearchKind.entries.forEach { k ->
+                Text(
+                    k.label,
+                    style = RtType.caption,
+                    color = RtColors.TextPrimary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (k == kind) RtColors.Surface else androidx.compose.ui.graphics.Color.Transparent)
+                        .clickable(role = Role.Tab) { kind = k }.padding(vertical = 8.dp),
+                )
+            }
+        }
+        if (s.unseen > 0 && kind != SearchKind.SAID) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(RtColors.Surface).padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    s.looking ?: "Gemini hasn't looked at ${s.unseen} clips yet, so rain, dogs or flyovers in them won't show.",
+                    style = RtType.caption,
+                    color = RtColors.TextSecondary,
+                    modifier = Modifier.weight(1f),
+                )
+                if (s.looking == null) Text("Look now", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.look() }.padding(start = 10.dp))
+            }
+        }
+        if (s.unread > 0 && kind != SearchKind.SEEN) {
+            Text("${s.unread} clips aren't read yet: open their ride's Studio to read them.", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.padding(top = 6.dp))
+        }
+        s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 6.dp)) }
+        LazyColumn(contentPadding = PaddingValues(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (s.query.isNotBlank() && hits.isEmpty() && !s.loading) item { Text("Nothing found", style = RtType.body, color = RtColors.TextSecondary) }
+            if (s.query.isBlank()) item { Text("Search ${s.clips} clips from every ride", style = RtType.body, color = RtColors.TextSecondary) }
+            hits.groupBy { it.rideId }.forEach { (_, group) ->
+                item(key = "ride-${group.first().rideId}") {
+                    Text("${group.first().rideName.uppercase()} · ${group.size}", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 10.dp))
+                }
+                items(group, key = { "${it.momentId}-${it.line.startMs}-${it.seen}" }) { h ->
+                    val isOpen = open == h
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(RtColors.Surface)
+                            .clickable(role = Role.Button, onClickLabel = if (isOpen) "Close" else "Play") { open = if (isOpen) null else h }.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (!isOpen) {
+                                Thumb(vm.thumb(h.momentId), Modifier.size(width = 40.dp, height = 64.dp).clip(RoundedCornerShape(6.dp)))
+                                Spacer(Modifier.width(10.dp))
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    if (h.seen) androidx.compose.ui.text.AnnotatedString("Seen: " + h.line.text) else lit("\u201c${h.line.text}\u201d", s.query, RtColors.Primary),
+                                    style = RtType.body,
+                                    color = if (h.seen) RtColors.TextSecondary else RtColors.TextPrimary,
+                                    maxLines = if (isOpen) 6 else 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    Format.timeOfDay(h.atMillis + if (h.seen) 0 else h.line.startMs) + if (isOpen) "" else if (h.seen) " · what's in it" else " · tap to play",
+                                    style = RtType.caption,
+                                    color = RtColors.TextTertiary,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                        if (isOpen) {
+                            vm.uri(h.momentId)?.let { Player(it, Modifier.align(Alignment.CenterHorizontally), seek = h.line.startMs to System.nanoTime(), height = 300.dp) }
+                            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                                Text(if (h.seen) "Save the clip" else "Save the sentence", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.saveLine(h) }.padding(vertical = 6.dp))
+                                Text("Add to an edit", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { open = null; onOpenStudio(h.rideId) }.padding(vertical = 6.dp))
+                                Text("Open the ride", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { open = null; onOpenRide(h.rideId) }.padding(vertical = 6.dp))
+                            }
+                        }
                     }
                 }
             }
         }
     }
-    playing?.let { h ->
-        androidx.compose.ui.window.Dialog(onDismissRequest = { playing = null }) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                vm.uri(h.momentId)?.let { Player(it, Modifier, seek = h.line.startMs to System.nanoTime(), height = 440.dp) }
-                Text(h.line.text, style = RtType.body, color = androidx.compose.ui.graphics.Color.White, maxLines = 3)
-                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    Text(if (h.seen) "Save clip" else "Save this sentence", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.saveLine(h); playing = null }.padding(8.dp))
-                    Text("Open ride", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { playing = null; onOpenRide(h.rideId) }.padding(8.dp))
-                    Text("Close", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button) { playing = null }.padding(8.dp))
-                }
-            }
+}
+
+/** [text] with every [query] word lit in the brand colour. */
+private fun lit(text: String, query: String, ink: androidx.compose.ui.graphics.Color): androidx.compose.ui.text.AnnotatedString = androidx.compose.ui.text.buildAnnotatedString {
+    append(text)
+    val words = query.trim().split(Regex("\\s+")).filter { it.length >= 2 }
+    words.forEach { w ->
+        Regex(Regex.escape(w), RegexOption.IGNORE_CASE).findAll(text).forEach { m ->
+            addStyle(androidx.compose.ui.text.SpanStyle(color = ink, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), m.range.first, m.range.last + 1)
         }
     }
 }
