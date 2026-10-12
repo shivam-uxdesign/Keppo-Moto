@@ -919,6 +919,9 @@ class StudioViewModel(
         }
     }
 
+    /** A short note at the bottom of the editor. */
+    fun note(text: String) = say(text)
+
     private fun say(text: String) {
         _state.update { it.copy(toast = text) }
         viewModelScope.launch {
@@ -1367,12 +1370,13 @@ class StudioViewModel(
     fun redo(): String? = history?.redo().also { _state.update { it.copy(pick = null) }; publish(reload = true) }
 
     /** New text, in the look of the last text the rider styled (in this Reel). */
-    fun addText(text: String) {
+    /** New text at the playhead, looking like the last text; [style] then sets its look (one undo step). */
+    fun addText(text: String, style: ((TextItem) -> TextItem)? = null) {
         val id = newTextId()
         change("Add text") { p ->
             val added = TimelineEdits.addText(p, playheadMs, text, id)
             val like = p.texts.lastOrNull { it.look != TextLook.STYLE || it.color != null || it.animIn != TextAnim.FADE }
-            added.copy(texts = added.texts.map { if (it.id == id) TextTools.styled(it, like) else it })
+            added.copy(texts = added.texts.map { if (it.id == id) TextTools.styled(it, like).let { t -> style?.invoke(t) ?: t } else it })
         }
         _state.update { it.copy(pick = TimelinePick.Text(id)) }
     }

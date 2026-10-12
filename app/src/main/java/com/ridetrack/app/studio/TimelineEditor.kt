@@ -203,6 +203,11 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var styleAt by remember { mutableIntStateOf(-1) }
     // A crop being pinched on the video: shown straight away, kept on letting go.
     var crop by remember { mutableStateOf(CropLive()) }
+    // Typing on the video: a new text (id null) or the one being changed.
+    var typing by remember { mutableStateOf(false) }
+    var typingId by remember { mutableStateOf<String?>(null) }
+    var captionTab by remember { mutableStateOf(CaptionTab.LOOK) }
+    var captionLine by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     val styles by appContainer().styles.styles.collectAsStateWithLifecycle()
     // A cut whose transition is playing on a loop (ms into the Reel); null when not.
     var loopAt by remember { mutableStateOf<Long?>(null) }
@@ -394,8 +399,14 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 val style = TextStyle(fontFamily = font, fontSize = fontPx.sp, color = Color.White, textAlign = TextAlign.Center, shadow = Shadow(Color.Black, blurRadius = 8f))
                 // The caption being said.
                 val (si, local) = TimelineEdits.at(plan, pos)
-                if (!exactOn) (plan.segments.getOrNull(si) as? ClipSegment)?.lines?.firstOrNull { local in it.startMs until it.endMs }?.let { l ->
-                    Text(l.text, style = style.copy(fontSize = (fontPx * 0.8f).sp), modifier = Modifier.align(Alignment.TopCenter).offset(y = boxH * 0.66f).padding(horizontal = 12.dp))
+                // The caption being said: tap it to fix a word (in the exact preview it's in the video; the spot still listens).
+                (plan.segments.getOrNull(si) as? ClipSegment)?.lines?.withIndex()?.firstOrNull { local in it.value.startMs until it.value.endMs }?.let { (j, l) ->
+                    Text(
+                        l.text,
+                        style = style.copy(fontSize = (fontPx * 0.8f).sp, color = if (exactOn) Color.Transparent else Color.White, shadow = if (exactOn) null else style.shadow),
+                        modifier = Modifier.align(Alignment.TopCenter).offset(y = boxH * ((plan.captionLook.y ?: 0.68f) - 0.02f)).padding(horizontal = 12.dp)
+                            .clickable(role = Role.Button, onClickLabel = "Fix this caption") { active.pause(); captionTab = CaptionTab.WORDS; captionLine = si to j; captionsOpen = true },
+                    )
                 }
                 // Text on the timeline; the selected one can be dragged up or down.
                 // Text and stickers: drag anywhere, pinch to size and turn (the selected one). In the exact
@@ -412,7 +423,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             TextLook.OUTLINE -> style.copy(fontFamily = VibeFonts[Vibe.HYPE])
                             TextLook.PLAIN, TextLook.BOX -> style.copy(fontFamily = VibeFonts[Vibe.VLOG])
                             TextLook.STYLE -> style
-                        }.let { st -> t.color?.let { st.copy(color = Color(it)) } ?: st }
+                        }.let { st -> fontFamilyOf(t.font)?.let { st.copy(fontFamily = it) } ?: st }
+                            .let { st -> if (t.look == TextLook.BOX) st.copy(color = Color.Black, shadow = null) else t.color?.let { st.copy(color = Color(it)) } ?: st }
                         Text(
                             t.text,
                             style = if (exactOn) look.copy(color = Color.Transparent, shadow = null) else look,
@@ -758,8 +770,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete") { TimelineEdits.delete(it, i) }; vm.pick(null) }
                         } else {
                             Tool(Icons.Rounded.Palette, "Style", n++) { styleOpen = true }
-                            Tool(Icons.Rounded.TextFields, "Text", n++) { ask = TextAsk.NewText }
-                            Tool(Icons.Rounded.ClosedCaption, "Captions", n++) { captionsOpen = true }
+                            Tool(Icons.Rounded.TextFields, "Text", n++) { active.pause(); typingId = null; typing = true }
+                            Tool(Icons.Rounded.ClosedCaption, "Captions", n++) { captionTab = CaptionTab.LOOK; captionLine = null; captionsOpen = true }
                             Tool(Icons.Rounded.Subtitles, "Add caption", n++) { ask = TextAsk.NewCaption }
                             Tool(Icons.Rounded.EmojiEmotions, "Stickers", n++) { addSticker = true }
                             Tool(Icons.Rounded.MusicNote, "Sound", n++) { soundOpen = true }
@@ -877,17 +889,17 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             is TimelinePick.Caption -> {
                                 BackTool("All tools") { vm.pick(null) }
                                 val line = (plan.segments.getOrNull(p.index) as? ClipSegment)?.lines?.getOrNull(p.line)
-                                Choice("Edit words", false) { ask = TextAsk.EditCaption(p.index, p.line, line?.text.orEmpty()) }
+                                Choice("Edit words", false) { captionTab = CaptionTab.WORDS; captionLine = p.index to p.line; captionsOpen = true }
                                 Choice("Earlier", false) { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, -200) } }
                                 Choice("Later", false) { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, 200) } }
                                 Choice("Delete", false) { vm.change("Delete caption") { TimelineEdits.caption(it, p.index, p.line, "") }; vm.pick(null) }
                                 (plan.segments.getOrNull(p.index) as? ClipSegment)?.let { seg -> Choice("Read clip again", false) { vm.readAgain(seg.bit.momentId) } }
-                                Choice("Captions look", false) { captionsOpen = true }
+                                Choice("Captions look", false) { captionTab = CaptionTab.LOOK; captionLine = null; captionsOpen = true }
                             }
                             is TimelinePick.Text -> {
                                 BackTool("All tools") { vm.pick(null) }
                                 val t = plan.texts.firstOrNull { it.id == p.id }
-                                Choice("Edit", false) { ask = TextAsk.EditText(p.id, t?.text.orEmpty()) }
+                                Choice("Edit", false) { active.pause(); typingId = p.id; typing = true }
                                 TextLook.entries.forEach { l -> Choice(l.label, t?.look == l) { vm.change("Text look") { TextTools.look(it, p.id, l) } } }
                                 Spacer(Modifier.width(8.dp))
                                 TEXT_COLOURS.forEach { (name, col) -> Choice(name, t?.color == col) { vm.change("Text colour") { TextTools.color(it, p.id, col) } } }
@@ -962,6 +974,19 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             }
             SheetRow("A clip's own sound", "Tap the clip, then Detach sound: it can run past its cut") { soundOpen = false; flash = "Tap a clip, then Detach sound" }
             SheetRow("Volumes and the mix") { soundOpen = false; mixer = true }
+        }
+        CaptionsSheet(vm, plan, captionsOpen, captionTab, captionLine) { captionsOpen = false }
+        if (typing) {
+            val editingText = typingId?.let { id -> plan.texts.firstOrNull { it.id == id } }
+            TextComposer(editingText, plan.vibe, onCancel = { typing = false }) { d ->
+                typing = false
+                fun styled(t: TextItem) = t.copy(look = d.look, font = d.font, color = d.color, size = d.size, align = d.align, animIn = d.anim, animOut = d.anim)
+                when {
+                    editingText == null -> if (d.text.isNotBlank()) vm.addText(d.text) { styled(it) }
+                    d.text.isBlank() -> { vm.change("Delete text") { TimelineEdits.deleteText(it, editingText.id) }; vm.pick(null) }
+                    else -> vm.change("Edit text") { p -> p.copy(texts = p.texts.map { if (it.id == editingText.id) styled(it).copy(text = d.text.trim()) else it }) }
+                }
+            }
         }
         StudioSheet(ideasOpen, { ideasOpen = false }, "Other ideas from this ride") {
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
@@ -1097,7 +1122,6 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         StylePicker(vm, s, onAll = { nav(com.ridetrack.app.ui.nav.Routes.STYLES) }, timeline = true) { styleOpen = false }
     }
     colourOpen?.let { i -> ColourSheet(vm, plan, i) { colourOpen = null } }
-    if (captionsOpen) CaptionSheet(vm, plan) { captionsOpen = false }
     if (addSticker) StickerSheet(
         onPick = { kind, text ->
             val sel = (s.pick as? TimelinePick.Sticker)?.id?.let { id -> plan.stickers.firstOrNull { it.id == id } }
@@ -1396,42 +1420,6 @@ private fun StickerSheet(onPick: (StickerKind, String) -> Unit, onClose: () -> U
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
             )
             if (typed.isNotBlank()) Small("Add", on = true) { onPick(StickerKind.EMOJI, typed.trim()) }
-        }
-    }
-}
-
-/** The captions' look for the whole Reel: style, size, height and the word lighting up. */
-@Composable
-private fun CaptionSheet(vm: StudioViewModel, plan: StudioPlan, onClose: () -> Unit) {
-    val look = plan.captionLook
-    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
-        Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.SurfaceRaised).padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("Captions", style = RtType.bodyStrong, color = RtColors.TextPrimary)
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                CaptionKind.entries.forEach { k -> Choice(k.label, look.kind == k) { vm.change("Captions look") { TextTools.captionLook(it) { l -> l.copy(kind = k) } } } }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Size ${(look.size * 100).roundToInt()}%", style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
-                Small("−") { vm.change("Captions size") { TextTools.captionLook(it) { l -> l.copy(size = l.size - 0.1f) } } }
-                Small("+") { vm.change("Captions size") { TextTools.captionLook(it) { l -> l.copy(size = l.size + 0.1f) } } }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(look.y?.let { "Height ${(it * 100).roundToInt()}%" } ?: "Height: the style's", style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
-                Small("Higher") { vm.change("Captions height") { TextTools.captionLook(it) { l -> l.copy(y = (l.y ?: 0.68f) - 0.05f) } } }
-                Small("Lower") { vm.change("Captions height") { TextTools.captionLook(it) { l -> l.copy(y = (l.y ?: 0.68f) + 0.05f) } } }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Light up each word", style = RtType.body, color = RtColors.TextPrimary)
-                    Text("As it's said (karaoke). Plain captions show the whole line when off.", style = RtType.caption, color = RtColors.TextSecondary)
-                }
-                Switch(checked = look.karaoke, onCheckedChange = { on -> vm.change("Captions words") { TextTools.captionLook(it) { l -> l.copy(karaoke = on) } } })
-            }
-            Text("Tap a caption on the timeline to fix a word or read its clip again.", style = RtType.caption, color = RtColors.TextTertiary)
-            Small("Done", on = true, onClick = onClose)
         }
     }
 }

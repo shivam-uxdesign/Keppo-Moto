@@ -95,4 +95,14 @@ class TextToolsTest {
         )
         assertEquals(p, ReelJson.read(ReelJson.write(p)))
     }
+
+    @Test
+    fun `fixing a word changes it in every caption, whole words only`() {
+        val a = ClipSegment(bit("a"), 0, 4_000, listOf(CaptionLine(0, 1_000, "Paani nahi pia"), CaptionLine(1_000, 2_000, "Pia? pianist")), hook = true)
+        val b = ClipSegment(bit("b"), 0, 3_000, listOf(CaptionLine(0, 900, "Kuch nahi PIA")), hook = false)
+        val (p, n) = TextTools.replaceWord(StudioPlan(listOf(a, b), Vibe.HYPE), "pia", "piya")
+        assertEquals(3, n)
+        val lines = p.segments.flatMap { (it as ClipSegment).lines.map { l -> l.text } }
+        assertEquals(listOf("Paani nahi piya", "piya? pianist", "Kuch nahi piya"), lines)
+    }
 }

@@ -59,6 +59,22 @@ object TextTools {
 
     // ---- captions ----------------------------------------------------------------------------
 
+    /**
+     * Fixes a word everywhere in the captions: each whole [from] (any case) becomes [to]. Returns
+     * the plan and how many were changed.
+     */
+    fun replaceWord(plan: StudioPlan, from: String, to: String): Pair<StudioPlan, Int> {
+        val f = from.trim()
+        if (f.isEmpty()) return plan to 0
+        val re = Regex("(?<![\\p{L}\\p{N}])" + Regex.escape(f) + "(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE)
+        var n = 0
+        val segs = plan.segments.map { seg ->
+            if (seg !is ClipSegment) return@map seg
+            seg.copy(lines = seg.lines.map { l -> l.copy(text = re.replace(l.text) { n++; to.trim() }.replace(Regex(" {2,}"), " ").trim()) }.filter { it.text.isNotEmpty() })
+        }
+        return plan.copy(segments = segs) to n
+    }
+
     fun captionLook(plan: StudioPlan, f: (CaptionLook) -> CaptionLook) = plan.copy(captionLook = f(plan.captionLook).let { it.copy(size = it.size.coerceIn(0.5f, 2f), y = it.y?.coerceIn(0.1f, 0.9f)) })
 
     /** Lines read again for a clip: the segments of that clip ([momentId]) get the new words for their part. */
