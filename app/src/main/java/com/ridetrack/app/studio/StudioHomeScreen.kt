@@ -127,7 +127,16 @@ data class StudioRide(
     val waiting: String? = null,
 )
 
-class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
+/** What the Studio tab asks of its view model (a stand-in draws it in screenshots). */
+internal interface StudioHomeActions {
+    fun hide(rideId: String, title: String)
+    fun unhide(rideId: String, title: String)
+    fun makeAll(rideId: String, done: (Int) -> Unit)
+    fun sendAllToJournal(rideId: String, done: (Int) -> Unit)
+    fun picked(uris: List<android.net.Uri>, openRide: (String) -> Unit, openPhone: () -> Unit)
+}
+
+class StudioHomeViewModel(private val c: AppContainer) : ViewModel(), StudioHomeActions {
     private val prefs = c.appContext.getSharedPreferences("studio-feed", Context.MODE_PRIVATE)
     private val _hidden = MutableStateFlow(prefs.getStringSet(HIDDEN, emptySet()).orEmpty())
     /** Ideas the rider swiped away: "rideId|title". */
@@ -196,12 +205,12 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
     }.getOrDefault(false)
 
     /** Every idea of [rideId] not made yet, made in the background; [done] gets how many. */
-    fun makeAll(rideId: String, done: (Int) -> Unit) {
+    override fun makeAll(rideId: String, done: (Int) -> Unit) {
         viewModelScope.launch { done(StudioBatch.makeAll(c, rideId, service = true)) }
     }
 
     /** This ride's Reels into its Keppo Journal entry. */
-    fun sendAllToJournal(rideId: String, done: (Int) -> Unit) {
+    override fun sendAllToJournal(rideId: String, done: (Int) -> Unit) {
         viewModelScope.launch {
             val list = c.reels.reels.value.filter { it.rideId == rideId && it.deletedAt == null }
             if (list.isNotEmpty()) sendToJournal(c, list)
@@ -209,8 +218,8 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
         }
     }
 
-    fun hide(rideId: String, title: String) = setHidden(_hidden.value + "$rideId|$title")
-    fun unhide(rideId: String, title: String) = setHidden(_hidden.value - "$rideId|$title")
+    override fun hide(rideId: String, title: String) = setHidden(_hidden.value + "$rideId|$title")
+    override fun unhide(rideId: String, title: String) = setHidden(_hidden.value - "$rideId|$title")
     private fun setHidden(v: Set<String>) {
         _hidden.value = v
         prefs.edit().putStringSet(HIDDEN, v).apply()
@@ -220,7 +229,7 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel() {
      * Videos picked for a new Reel: when all were filmed during one recorded ride, that ride's
      * Studio opens with them (real speed and route); otherwise Studio for phone videos only.
      */
-    fun picked(uris: List<android.net.Uri>, openRide: (String) -> Unit, openPhone: () -> Unit) {
+    override fun picked(uris: List<android.net.Uri>, openRide: (String) -> Unit, openPhone: () -> Unit) {
         viewModelScope.launch {
             val times = kotlinx.coroutines.withContext(Dispatchers.IO) { uris.mapNotNull { PhoneVideos.read(c.appContext, it)?.startMillis } }
             val ride = c.rides.observeCompleted().first().firstOrNull { r ->
@@ -256,7 +265,32 @@ fun StudioHomeScreen(
     val rides by vm.rides.collectAsStateWithLifecycle()
     val hidden by vm.hidden.collectAsStateWithLifecycle()
     val reels by com.ridetrack.app.ui.appContainer().reels.reels.collectAsStateWithLifecycle()
-    val made = reels.count { it.deletedAt == null }
+    StudioHomeContent(
+        vm, rides, hidden, reels.count { it.deletedAt == null },
+        onOpenRide, onOpenPhone, onOpenReels, onOpenStyles, onOpenSearch, onOpenSettings, onOpenIdea,
+        pill = { open -> MakingPill(Modifier.fillMaxWidth(), open) },
+        makingSheet = { visible, close -> MakingSheet(visible, close) },
+    )
+}
+
+/** The Studio tab itself, drawn from [rides]; [pill] and [makingSheet] are the background-making parts. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun StudioHomeContent(
+    vm: StudioHomeActions,
+    rides: List<StudioRide>?,
+    hidden: Set<String>,
+    made: Int,
+    onOpenRide: (String) -> Unit,
+    onOpenPhone: (reelId: String?) -> Unit,
+    onOpenReels: () -> Unit,
+    onOpenStyles: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenIdea: (rideId: String, title: String, make: Boolean) -> Unit,
+    pill: @Composable (open: () -> Unit) -> Unit = {},
+    makingSheet: @Composable (visible: Boolean, close: () -> Unit) -> Unit = { _, _ -> },
+) {
     val haptics = LocalHapticFeedback.current
     val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia(20)) { uris ->
         if (uris.isNotEmpty()) vm.picked(uris, onOpenRide) { onOpenPhone(null) }
@@ -294,7 +328,7 @@ fun StudioHomeScreen(
                 }
                 RoundIcon(Icons.Outlined.MoreHoriz, "More") { more = true }
             }
-            MakingPill(Modifier.fillMaxWidth()) { making = true }
+            pill { making = true }
             if (list == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp) }
                 return@Column
@@ -450,7 +484,7 @@ fun StudioHomeScreen(
             SheetRow("In the background", "What's being made, and Gemini's allowance") { more = false; making = true }
             SheetRow("Settings", "After each ride, what new videos start with, saving") { more = false; onOpenSettings() }
         }
-        MakingSheet(making) { making = false }
+        makingSheet(making) { making = false }
         StudioSheet(quick != null, { quick = null }, title = quick?.title) {
             val r = list?.firstOrNull { it.id == picked } ?: list?.firstOrNull { it.ideas.any { i -> i.title == quick?.title } }
             quick?.let { idea ->

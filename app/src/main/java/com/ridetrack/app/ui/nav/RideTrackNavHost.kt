@@ -211,7 +211,8 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                     )
                 }
                 composable(Routes.STUDIO) {
-                    com.ridetrack.app.studio.StudioHomeScreen(
+                    // Dark like the rest of Studio (and the prototype), whatever the phone's theme.
+                    DarkRoute { com.ridetrack.app.studio.StudioHomeScreen(
                         onOpenRide = { nav.navigate(Routes.reel(it)) },
                         onOpenIdea = { ride, title, make -> nav.navigate(Routes.idea(ride, title, make)) },
                         onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
@@ -219,7 +220,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onOpenStyles = { nav.navigate(Routes.STYLES) },
                         onOpenSearch = { nav.navigate(Routes.STUDIO_SEARCH) },
                         onOpenSettings = { nav.navigate(Routes.STUDIO_SETTINGS) },
-                    )
+                    ) }
                 }
                 composable(Routes.RIDES_MAP) {
                     RidesMapScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) })

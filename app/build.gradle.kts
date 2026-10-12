@@ -32,6 +32,10 @@ val gitSha: String = providers.exec {
 val buildTag: String = "$gitSha · " + LocalDate.now().format(DateTimeFormatter.ofPattern("d MMM", Locale.US))
 
 android {
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all { it.systemProperty("roborazzi.test.record", "true") }
+    }
     // Native libraries (ONNX Runtime for the voice detector is 33 MB raw) are stored compressed:
     // a much smaller download, unpacked once at install.
     packaging {
@@ -161,4 +165,11 @@ dependencies {
     testImplementation(kotlin("test-junit"))
     // org.json ships with Android; unit tests on the JVM need the real implementation.
     testImplementation(libs.org.json)
+    // Screenshots of screens on the JVM (Robolectric + Roborazzi), to compare with the prototype.
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.39.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.39.0")
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
