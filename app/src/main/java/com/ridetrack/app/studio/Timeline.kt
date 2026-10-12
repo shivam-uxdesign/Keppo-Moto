@@ -246,12 +246,18 @@ class EditHistory(start: StudioPlan) {
         redoLabels.clear()
     }
 
-    fun undo() {
-        undo.removeLastOrNull()?.let { redo.addLast(current); redoLabels.addLast(undoLabels.removeLastOrNull() ?: "Change"); current = it }
+    /** Takes back the last change; returns its name (null when there was none). */
+    fun undo(): String? = undo.removeLastOrNull()?.let {
+        val label = undoLabels.removeLastOrNull() ?: "Change"
+        redo.addLast(current); redoLabels.addLast(label); current = it
+        label
     }
 
-    fun redo() {
-        redo.removeLastOrNull()?.let { undo.addLast(current); undoLabels.addLast(redoLabels.removeLastOrNull() ?: "Change"); current = it }
+    /** Puts back the last change taken back; returns its name (null when there was none). */
+    fun redo(): String? = redo.removeLastOrNull()?.let {
+        val label = redoLabels.removeLastOrNull() ?: "Change"
+        undo.addLast(current); undoLabels.addLast(label); current = it
+        label
     }
 
     /** Goes back to just before step [index] of [steps] (undoing it and everything after). */

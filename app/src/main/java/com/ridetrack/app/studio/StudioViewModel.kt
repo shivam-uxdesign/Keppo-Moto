@@ -1354,16 +1354,17 @@ class StudioViewModel(
         publish(reload = false)
     }
 
-    fun endDrag() {
+    fun endDrag(label: String = "Trim") {
         val h = history ?: return
-        dragFrom?.let { h.settle(it) }
+        dragFrom?.let { h.settle(it, label) }
         dragFrom = null
         publish(reload = true)
     }
 
     fun pick(p: TimelinePick?) = _state.update { it.copy(pick = p) }
-    fun undo() { history?.undo(); _state.update { it.copy(pick = null) }; publish(reload = true) }
-    fun redo() { history?.redo(); _state.update { it.copy(pick = null) }; publish(reload = true) }
+    /** Takes back the last change; returns its name for the editor's banner. */
+    fun undo(): String? = history?.undo().also { _state.update { it.copy(pick = null) }; publish(reload = true) }
+    fun redo(): String? = history?.redo().also { _state.update { it.copy(pick = null) }; publish(reload = true) }
 
     /** New text, in the look of the last text the rider styled (in this Reel). */
     fun addText(text: String) {

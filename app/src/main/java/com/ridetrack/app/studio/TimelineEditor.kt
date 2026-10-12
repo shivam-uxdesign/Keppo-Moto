@@ -201,6 +201,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var flash by remember { mutableStateOf<String?>(null) }
     var holding by remember { mutableStateOf(false) }
     var styleAt by remember { mutableIntStateOf(-1) }
+    // A crop being pinched on the video: shown straight away, kept on letting go.
+    var crop by remember { mutableStateOf(CropLive()) }
     val styles by appContainer().styles.styles.collectAsStateWithLifecycle()
     // A cut whose transition is playing on a loop (ms into the Reel); null when not.
     var loopAt by remember { mutableStateOf<Long?>(null) }
@@ -363,11 +365,11 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     },
                     update = { v -> if (v.player !== active) runCatching { v.player = active } },
                     modifier = Modifier.fillMaxSize().graphicsLayer {
-                        val k = cam?.k?.div(1.03f)?.coerceAtLeast(1f) ?: 1f
+                        val k = (cam?.k?.div(1.03f)?.coerceAtLeast(1f) ?: 1f) * crop.z
                         scaleX = k; scaleY = k
-                        translationX = (cam?.x ?: 0f) * unit
-                        translationY = (cam?.y ?: 0f) * unit
-                        rotationZ = cam?.deg ?: 0f
+                        translationX = (cam?.x ?: 0f) * unit + crop.x
+                        translationY = (cam?.y ?: 0f) * unit + crop.y
+                        rotationZ = (cam?.deg ?: 0f) + crop.r
                     },
                 )
                 }
@@ -432,6 +434,59 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     }
                 }
                 if (safe) SafeZones()
+                val clipSel = (s.pick as? TimelinePick.Clip)?.let { p -> (plan.segments.getOrNull(p.index) as? ClipSegment)?.takeIf { !it.tail }?.let { p.index to it } }
+                // The selected clip's speed and volume, on the video's left edge.
+                if (clipSel != null && clipTab == ClipTab.EDIT && cutAt == null) {
+                    val (ci, cs) = clipSel
+                    Row(Modifier.align(Alignment.CenterStart).padding(start = 8.dp).fillMaxHeight(0.45f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (cs.still == null) {
+                            EdgeSlider(speedToSlider(cs.speed), speedLabel(cs.speed), Modifier.fillMaxHeight(), onChange = { f -> vm.drag { ClipTools.speed(it, ci, sliderToSpeed(f)) } }, onEnd = { vm.endDrag("Speed") })
+                        }
+                        EdgeSlider(
+                            cs.volume / 1.5f,
+                            "Vol ${(cs.volume * 100).roundToInt()}%",
+                            Modifier.fillMaxHeight(),
+                            onChange = { f -> vm.drag { TimelineEdits.volume(it, ci, (f * 1.5f * 20).roundToInt() / 20f) } },
+                            onEnd = { vm.endDrag("Sound") },
+                        )
+                    }
+                }
+                // Cropping: pinch, drag and twist the video itself.
+                if (clipSel != null && clipTab == ClipTab.FRAME) {
+                    val (ci, cs) = clipSel
+                    val wPx = with(density) { boxW.toPx() }
+                    val hPx = with(density) { boxH.toPx() }
+                    Box(
+                        Modifier.fillMaxSize().border(2.dp, RtColors.Primary, RoundedCornerShape(16.dp))
+                            .pointerInput(ci) {
+                                detectTransformGestures { _, pan, zoom, turn ->
+                                    crop = crop.copy(z = (crop.z * zoom).coerceIn(0.5f, 4f), x = crop.x + pan.x, y = crop.y + pan.y, r = crop.r + turn)
+                                }
+                            }
+                            .pointerInput(ci, cs) {
+                                awaitEachGesture {
+                                    awaitFirstDown(requireUnconsumed = false)
+                                    do {
+                                        val e = awaitPointerEvent()
+                                    } while (e.changes.any { it.pressed })
+                                    val c = crop
+                                    crop = CropLive()
+                                    if (c == CropLive()) return@awaitEachGesture
+                                    val here = ClipTools.frameAt(cs, 0)
+                                    val z = (here.zoom * c.z).coerceIn(1f, 3f)
+                                    val room = (z - 1f) / 2f
+                                    val dx = if (room > 0f) -c.x / (wPx * room) else 0f
+                                    val dy = if (room > 0f) -c.y / (hPx * room) else 0f
+                                    val turns = Math.floorMod((c.r / 90f).roundToInt(), 4)
+                                    vm.change("Crop") { p ->
+                                        var q = ClipTools.reframe(p, ci, 0, dZoom = z - here.zoom, dx = dx, dy = dy, fixed = true)
+                                        repeat(turns) { q = ClipTools.rotate(q, ci) }
+                                        q
+                                    }
+                                }
+                            },
+                    )
+                }
                 if (!playing) {
                     Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.align(Alignment.Center).size(48.dp))
                 }
@@ -716,44 +771,41 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             Tool(Icons.Rounded.CropFree, "Safe zones", n++, on = safe) { safe = !safe }
                         }
                     }
+                } else if (picked is TimelinePick.Clip && seg != null) {
+                    val i = picked.index
+                    val back = { clipTab = ClipTab.EDIT }
+                    when (clipTab) {
+                        ClipTab.SPEED -> SpeedPanel(
+                            seg,
+                            onSpeed = { v -> vm.drag { ClipTools.speed(it, i, v) } },
+                            onSpeedEnd = { vm.endDrag("Speed") },
+                            onRamp = { r -> vm.change("Speed curve") { ClipTools.ramp(it, i, r) } },
+                            onReverse = { vm.reverse(i) },
+                            onFreeze = { vm.freeze() },
+                            onMute = { vm.change(if (seg.volume == 0f) "Unmute" else "Mute") { TimelineEdits.volume(it, i, if (seg.volume == 0f) 1f else 0f) } },
+                            onBack = back,
+                        )
+                        ClipTab.LOOK -> LookPanel(
+                            seg.color,
+                            onColor = { c -> vm.drag { ClipTools.color(it, i) { c } } },
+                            onColorEnd = { label -> vm.endDrag(label) },
+                            onPreset = { name, c -> vm.change("Look: $name") { ClipTools.color(it, i) { c } } },
+                            onBack = back,
+                        )
+                        ClipTab.FRAME -> CropPanel(
+                            seg,
+                            onRotate = { vm.change("Rotate") { ClipTools.rotate(it, i) } },
+                            onMirror = { vm.change("Mirror") { ClipTools.flip(it, i) } },
+                            onPushIn = { vm.change("Slow push-in") { p -> ClipTools.reframe(ClipTools.reframe(ClipTools.clearFrame(p, i), i, 0), i, seg.durMs, dZoom = 0.25f) } },
+                            onPunch = { vm.change("Punch-in") { ClipTools.punchIn(it, i) } },
+                            onReset = { vm.change("Reset crop") { p -> ClipTools.clearFrame(p, i).let { q -> if (seg.flip) ClipTools.flip(q, i) else q }.let { q -> var r = q; repeat(((360 - seg.rotation) % 360) / 90) { r = ClipTools.rotate(r, i) }; r } } },
+                            onBack = back,
+                        )
+                        ClipTab.EDIT -> Unit
+                    }
                 } else {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         when (val p = picked) {
-                            is TimelinePick.Clip -> {
-                                BackTool("All clip tools") { clipTab = ClipTab.EDIT }
-                                when (clipTab) {
-                                    ClipTab.EDIT -> Unit
-                                    ClipTab.SPEED -> if (seg?.still != null) {
-                                        Text("A freeze frame: drag its edges to hold it longer or shorter.", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
-                                    } else {
-                                        Speed.CHOICES.forEach { v -> Choice(speedLabel(v), seg?.speed == v) { vm.change("Speed") { ClipTools.speed(it, p.index, v) } } }
-                                        Spacer(Modifier.width(10.dp))
-                                        SpeedRamp.entries.forEach { r -> Choice(r.label, seg?.ramp == r) { vm.change("Speed ramp") { ClipTools.ramp(it, p.index, r) } } }
-                                        Spacer(Modifier.width(10.dp))
-                                        Choice(if (seg?.reverse != null) "Forwards" else "Reverse", seg?.reverse != null) { vm.reverse(p.index) }
-                                    }
-                                    ClipTab.LOOK -> {
-                                        Choice("Colour", seg?.color?.plain == false) { colourOpen = p.index }
-                                        Choice(if (seg?.color?.look != false) "Style look on" else "Style look off", seg?.color?.look != false) {
-                                            vm.change("Style look") { ClipTools.color(it, p.index) { c -> c.copy(look = !c.look) } }
-                                        }
-                                        Choice("Rotate", (seg?.rotation ?: 0) != 0) { vm.change("Rotate") { ClipTools.rotate(it, p.index) } }
-                                        Choice("Mirror", seg?.flip == true) { vm.change("Mirror") { ClipTools.flip(it, p.index) } }
-                                    }
-                                    ClipTab.FRAME -> {
-                                        val local = (pos - TimelineEdits.starts(plan)[p.index]).coerceAtLeast(0)
-                                        Choice("Crop in", false) { vm.change("Crop") { ClipTools.reframe(it, p.index, 0, dZoom = 0.15f, fixed = true) } }
-                                        Choice("Crop out", false) { vm.change("Crop") { ClipTools.reframe(it, p.index, 0, dZoom = -0.15f, fixed = true) } }
-                                        Choice("Zoom here", false) { vm.change("Zoom move") { ClipTools.reframe(it, p.index, local, dZoom = 0.2f) } }
-                                        Choice("Pan ←", false) { vm.change("Pan") { ClipTools.reframe(it, p.index, local, dx = -0.4f) } }
-                                        Choice("Pan →", false) { vm.change("Pan") { ClipTools.reframe(it, p.index, local, dx = 0.4f) } }
-                                        Choice("Pan ↑", false) { vm.change("Pan") { ClipTools.reframe(it, p.index, local, dy = -0.4f) } }
-                                        Choice("Pan ↓", false) { vm.change("Pan") { ClipTools.reframe(it, p.index, local, dy = 0.4f) } }
-                                        if (seg?.lines?.isNotEmpty() == true) Choice("Punch in on words", false) { vm.change("Punch-in") { ClipTools.punchIn(it, p.index) } }
-                                        if (seg?.frame?.isNotEmpty() == true) Choice("Clear", false) { vm.change("Clear framing") { ClipTools.clearFrame(it, p.index) } }
-                                    }
-                                }
-                            }
                             is TimelinePick.Clips -> {
                                 BackTool("All tools") { vm.pick(null) }
                                 Text("${p.indices.size} selected", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
@@ -1298,8 +1350,6 @@ private fun ColourSheet(vm: StudioViewModel, plan: StudioPlan, i: Int, onClose: 
     }
 }
 
-private fun speedLabel(v: Float): String = if (v == v.toInt().toFloat()) "${v.toInt()}×" else "${v}×"
-
 /** Colours for text: the look's own, then a few. */
 private val TEXT_COLOURS: List<Pair<String, Int?>> = listOf(
     "Own colour" to null,
@@ -1464,6 +1514,9 @@ private fun SafeZones() {
 }
 
 private fun clock(ms: Long): String = String.format(Locale.US, "%d:%04.1f", ms / 60_000, (ms % 60_000) / 1000.0)
+
+/** A crop being pinched: zoom, move (px) and turn (degrees) on top of what's kept. */
+private data class CropLive(val z: Float = 1f, val x: Float = 0f, val y: Float = 0f, val r: Float = 0f)
 
 /** Which way a finger swiped. */
 private enum class Swipe { LEFT, RIGHT, UP, DOWN }
