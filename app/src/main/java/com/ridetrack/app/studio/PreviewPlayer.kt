@@ -88,14 +88,16 @@ class ExactPreview(private val context: Context, private val onFailed: (Throwabl
         })
     }
 
-    /** Loads [input]'s edit and goes to [atMs]. */
-    fun load(input: RenderInput, atMs: Long) {
+    /** Loads [input]'s edit and goes to [atMs] (put together off the main thread: it reads each file's length). */
+    suspend fun load(input: RenderInput, atMs: Long) {
         try {
-            val composition = StudioRenderer(context).previewComposition(input)
+            val composition = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { StudioRenderer(context).previewComposition(input) }
             total = input.plan.totalMs
             player.setComposition(composition)
             player.prepare()
             player.seekTo(atMs.coerceIn(0, total))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             works = false
             onFailed(e)

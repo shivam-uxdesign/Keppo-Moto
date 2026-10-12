@@ -211,7 +211,7 @@ class StudioRenderer(private val context: Context) {
         val stacked = plan.layers.asReversed()
         if (a.layers == LayerMode.COMPOSITE) stacked.forEach { sequences += layerSequence(input, art, it) }
         sequences += EditedMediaItemSequence(items)
-        fun build(): Composition = Composition.Builder(sequences)
+        fun build(): Composition = Composition.Builder(if (preview) sequences.map(::withDurations) else sequences)
             .apply { if (a.layers == LayerMode.COMPOSITE) setVideoCompositorSettings(LayerCompositor(stacked, art.w, art.h)) }
             .apply { input.output?.let { o -> setEffects(Effects(emptyList(), outputEffects(o))) } }
             .apply { if (a.sound) experimentalSetForceAudioTrack(true) }
@@ -278,6 +278,36 @@ class StudioRenderer(private val context: Context) {
             .setFrameRate(30)
             .setEffects(Effects(emptyList(), fx))
             .build()
+
+    private val lengths = HashMap<String, Long>()
+
+    /**
+     * The preview player needs every piece's full length up front (making the video doesn't):
+     * read from each file, or an image's own time.
+     */
+    private fun withDurations(seq: EditedMediaItemSequence): EditedMediaItemSequence {
+        val items = seq.editedMediaItems.map { e ->
+            if (e.durationUs != androidx.media3.common.C.TIME_UNSET) return@map e
+            val m = e.mediaItem
+            val us = m.localConfiguration?.imageDurationMs?.takeIf { it != androidx.media3.common.C.TIME_UNSET }?.let { it * 1000 }
+                ?: m.localConfiguration?.uri?.let { u -> lengthMs(u) * 1000 }?.takeIf { it > 0 }
+                ?: return@map e
+            e.buildUpon().setDurationUs(us).build()
+        }
+        return EditedMediaItemSequence(items, seq.isLooping)
+    }
+
+    private fun lengthMs(u: Uri): Long = lengths.getOrPut(u.toString()) {
+        runCatching {
+            val r = android.media.MediaMetadataRetriever()
+            try {
+                if (u.scheme == "file") r.setDataSource(u.path) else r.setDataSource(context, u)
+                r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            } finally {
+                r.release()
+            }
+        }.getOrDefault(0L)
+    }
 
     private fun clipped(uri: Uri, fromMs: Long, toMs: Long): MediaItem = MediaItem.Builder().setUri(uri)
         .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setStartPositionMs(fromMs).setEndPositionMs(toMs).build())
