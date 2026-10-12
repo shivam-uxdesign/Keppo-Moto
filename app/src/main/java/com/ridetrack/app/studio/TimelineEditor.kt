@@ -4,6 +4,59 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.CallSplit
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.rounded.Redo
+import androidx.compose.material.icons.automirrored.rounded.Undo
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.AcUnit
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Animation
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.BookmarkAdd
+import androidx.compose.material.icons.rounded.ClosedCaption
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.ContentCut
+import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.Contrast
+import androidx.compose.material.icons.rounded.Crop
+import androidx.compose.material.icons.rounded.CropFree
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.EmojiEmotions
+import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.FormatPaint
+import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.FullscreenExit
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardDoubleArrowLeft
+import androidx.compose.material.icons.rounded.KeyboardDoubleArrowRight
+import androidx.compose.material.icons.rounded.LibraryAddCheck
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PictureInPicture
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Subtitles
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ridetrack.app.ui.appContainer
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -100,7 +153,7 @@ private sealed interface TextAsk {
 private enum class AddWhat { CLIP, LAYER, REPLACE }
 
 /** The selected clip's tool groups. */
-private enum class ClipTab(val label: String) { EDIT("Edit"), SPEED("Speed"), LOOK("Look"), FRAME("Frame"), CUT("Transition") }
+private enum class ClipTab { EDIT, SPEED, LOOK, FRAME }
 
 /** One frame at 30 fps. */
 private const val FRAME_MS = 33L
@@ -137,9 +190,18 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var colourOpen by remember { mutableStateOf<Int?>(null) }
     var addSticker by remember { mutableStateOf(false) }
     var captionsOpen by remember { mutableStateOf(false) }
-    var compare by remember { mutableStateOf(false) }
     var discard by remember { mutableStateOf(false) }
     var styleOpen by remember { mutableStateOf(false) }
+    var addOpen by remember { mutableStateOf(false) }
+    var soundOpen by remember { mutableStateOf(false) }
+    var ideasOpen by remember { mutableStateOf(false) }
+    // The cut whose transition is being picked (the clip after it); the clips part around it.
+    var cutAt by remember { mutableStateOf<Int?>(null) }
+    // A word popping up on the video (the style's name after a swipe), and holding to see the made one.
+    var flash by remember { mutableStateOf<String?>(null) }
+    var holding by remember { mutableStateOf(false) }
+    var styleAt by remember { mutableIntStateOf(-1) }
+    val styles by appContainer().styles.styles.collectAsStateWithLifecycle()
     // A cut whose transition is playing on a loop (ms into the Reel); null when not.
     var loopAt by remember { mutableStateOf<Long?>(null) }
     // Transitions drawn over the simple preview (the exact one has them in the video).
@@ -213,7 +275,11 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         loopAt = null
     }
     LaunchedEffect(dragged) { if (dragged) loopAt = null }
+    LaunchedEffect(flash) { if (flash != null) { delay(1_300); flash = null } }
+    // A different selection closes the transition picker.
+    LaunchedEffect(s.pick) { if (s.pick != null) cutAt = null; clipTab = ClipTab.EDIT }
     BackHandler { if (s.canUndo) discard = true else vm.closeEdit() }
+    BackHandler(enabled = cutAt != null || s.pick != null) { if (cutAt != null) { cutAt = null; loopAt = null } else vm.pick(null) }
 
     fun seekTo(ms: Long) {
         active.pause()
@@ -223,28 +289,56 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         if (exactOn) exact.seek(t) else simple.seek(t)
     }
 
-    Column(modifier) {
-        // ---- top bar
-        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Cancel", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button) { if (s.canUndo) discard = true else vm.closeEdit() }.padding(6.dp))
+    fun close() { if (s.canUndo) discard = true else vm.closeEdit() }
+
+    // Swipe across the video: the next or previous style goes on the edit, its name pops up.
+    fun nextStyle(step: Int) {
+        val list = styles.sortedByDescending { it.favourite }
+        if (list.isEmpty()) { flash = "No styles yet"; return }
+        styleAt = Math.floorMod(styleAt + step, list.size)
+        val st = list[styleAt]
+        vm.styleOnTimeline(st)
+        flash = "‹  ${st.name}  ›"
+    }
+
+    Box(modifier) {
+    Column(Modifier.fillMaxSize()) {
+        // ---- top bar: close, Ideas, Next
+        Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            RoundIcon(Icons.Rounded.KeyboardArrowDown, "Close the editor") { close() }
             Spacer(Modifier.weight(1f))
-            Text("Undo", style = RtType.button, color = if (s.canUndo) RtColors.TextPrimary else RtColors.TextTertiary, modifier = Modifier.clickable(enabled = s.canUndo, role = Role.Button) { vm.undo() }.padding(6.dp))
-            Text("Redo", style = RtType.button, color = if (s.canRedo) RtColors.TextPrimary else RtColors.TextTertiary, modifier = Modifier.clickable(enabled = s.canRedo, role = Role.Button) { vm.redo() }.padding(6.dp))
-            Text("History", style = RtType.button, color = if (s.steps.isNotEmpty()) RtColors.TextSecondary else RtColors.TextTertiary, modifier = Modifier.clickable(enabled = s.steps.isNotEmpty(), role = Role.Button) { historyOpen = true }.padding(6.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(
-                "Next ›",
-                style = RtType.button,
-                color = RtColors.OnPrimary,
-                modifier = Modifier.clip(RoundedCornerShape(50)).background(RtColors.Primary).clickable(role = Role.Button) { active.pause(); vm.saveEdit() }.padding(horizontal = 14.dp, vertical = 6.dp),
-            )
+            Row(
+                Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(RtColors.SurfaceRaised)
+                    .clickable(role = Role.Button, onClickLabel = "Other ideas") { ideasOpen = true }.padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = RtColors.Primary, modifier = Modifier.size(16.dp))
+                Text("Ideas", style = RtType.button, color = RtColors.TextPrimary)
+            }
+            Spacer(Modifier.weight(1f))
+            RoundIcon(Icons.AutoMirrored.Rounded.ArrowForward, "Next: make and share", primary = true) { active.pause(); vm.saveEdit() }
         }
 
-        // ---- preview
+        // ---- preview: tap plays, swipe sideways for another style, hold to see it before, swipe down to close
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             BoxWithConstraints(
-                Modifier.fillMaxHeight().aspectRatio(9f / 16f).clip(RoundedCornerShape(14.dp)).background(Color.Black)
-                    .clickable(role = Role.Button, onClickLabel = "Play or pause") { if (active.isPlaying) active.pause() else active.play() },
+                Modifier.fillMaxHeight().aspectRatio(9f / 16f).clip(RoundedCornerShape(16.dp)).background(Color.Black)
+                    .previewGestures(
+                        keys = arrayOf(active, s.video, s.canUndo),
+                        onTap = { if (active.isPlaying) active.pause() else active.play() },
+                        onHold = { on ->
+                            if (s.video == null) { if (on) flash = "Nothing made yet to compare" } else { if (on) active.pause(); holding = on }
+                        },
+                        onSwipe = { dir ->
+                            when (dir) {
+                                Swipe.LEFT -> nextStyle(1)
+                                Swipe.RIGHT -> nextStyle(-1)
+                                Swipe.DOWN -> close()
+                                Swipe.UP -> Unit
+                            }
+                        },
+                    ),
             ) {
                 val boxW = maxWidth
                 val boxH = maxHeight
@@ -347,22 +441,39 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     color = Color.White.copy(alpha = 0.8f),
                     modifier = Modifier.align(Alignment.TopStart).padding(6.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.45f)).padding(horizontal = 4.dp),
                 )
+                if (holding) s.video?.let { before ->
+                    Box(Modifier.fillMaxSize().background(Color.Black)) {
+                        Player(android.net.Uri.fromFile(before), Modifier.align(Alignment.Center), height = boxH)
+                        Pill("Before your changes", Modifier.align(Alignment.TopCenter).padding(top = 10.dp))
+                    }
+                }
+                // The style's name (or a note) pops up after a swipe.
+                var said by remember { mutableStateOf("") }
+                LaunchedEffect(flash) { flash?.let { said = it } }
+                androidx.compose.animation.AnimatedVisibility(
+                    flash != null,
+                    modifier = Modifier.align(Alignment.Center),
+                    enter = androidx.compose.animation.scaleIn(initialScale = 0.8f) + androidx.compose.animation.fadeIn(),
+                    exit = androidx.compose.animation.fadeOut(),
+                ) {
+                    Text(said, style = RtType.bodyStrong, color = Color.White, modifier = Modifier.clip(RoundedCornerShape(18.dp)).background(Color.Black.copy(alpha = 0.7f)).padding(horizontal = 14.dp, vertical = 8.dp))
+                }
+                if (cutAt != null && loopAt != null) {
+                    val kind = (plan.segments.getOrNull(cutAt ?: 0) as? ClipSegment)?.transition?.kind ?: TransitionKind.STYLE
+                    Pill("Looping the cut · ${kind.label}", Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp))
+                }
             }
         }
-        // ---- transport
+        // ---- transport: play, a frame either way, the time, undo and redo
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                contentDescription = if (playing) "Pause" else "Play",
-                tint = RtColors.TextPrimary,
-                modifier = Modifier.size(28.dp).clickable(role = Role.Button) { if (playing) active.pause() else active.play() },
-            )
-            Text("‹", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "One frame back") { seekTo(pos - FRAME_MS) }.padding(horizontal = 10.dp))
-            Text("›", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "One frame on") { seekTo(pos + FRAME_MS) }.padding(horizontal = 10.dp))
-            Text("${clock(pos)} / ${clock(plan.totalMs)}", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
-            Small("Mark") { vm.addMarker() }
-            if (s.video != null) Small("Before") { active.pause(); compare = true }
-            Small(if (full) "Tracks" else "Full") { full = !full }
+            SmallIcon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "Pause" else "Play") { if (playing) active.pause() else active.play() }
+            Text("‹", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "One frame back") { seekTo(pos - FRAME_MS) }.padding(horizontal = 8.dp))
+            Text("›", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "One frame on") { seekTo(pos + FRAME_MS) }.padding(horizontal = 8.dp))
+            Text("${clock(pos)} / ${clock(plan.totalMs)}", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+            SmallIcon(Icons.AutoMirrored.Rounded.Undo, "Undo", enabled = s.canUndo) { vm.undo() }
+            SmallIcon(Icons.AutoMirrored.Rounded.Redo, "Redo", enabled = s.canRedo) { vm.redo() }
+            SmallIcon(Icons.Rounded.History, "History", enabled = s.steps.isNotEmpty()) { historyOpen = true }
+            SmallIcon(if (full) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen, if (full) "Show the timeline" else "Bigger video") { full = !full }
         }
 
         if (!full) {
@@ -375,7 +486,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     val many = (s.pick as? TimelinePick.Clips)?.indices
                     Row(Modifier.horizontalScroll(scroll)) {
                         Spacer(Modifier.width(half))
-                        Column(Modifier.width(w(plan.totalMs)), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Column(Modifier.width(w(plan.totalMs) + 52.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             // Markers
                             Box(Modifier.fillMaxWidth().height(10.dp)) {
                                 plan.markers.forEach { m ->
@@ -388,13 +499,18 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 }
                             }
                             // Clips, with a mark on each cut that plays a transition
-                            Box(Modifier.height(52.dp)) {
+                            Box(Modifier.fillMaxWidth().height(52.dp)) {
                             Row(Modifier.height(52.dp)) {
                                 plan.segments.forEachIndexed { i, seg ->
                                     val selected = (s.pick as? TimelinePick.Clip)?.index == i || many?.contains(i) == true
                                     val isClip = seg is ClipSegment && !seg.tail
+                                    val cut = cutAt
+                                    val part by animateFloatAsState(if (cut == null) 0f else if (i < cut) -1f else 1f, tween(260), label = "part")
+                                    val near = cut == null || i == cut || i == cut - 1
                                     Box(
-                                        Modifier.width(w(seg.durMs)).fillMaxHeight().padding(horizontal = 1.dp).clip(RoundedCornerShape(6.dp))
+                                        Modifier.width(w(seg.durMs)).fillMaxHeight()
+                                            .graphicsLayer { translationX = part * 14.dp.toPx(); alpha = if (near) 1f else 0.45f }
+                                            .padding(horizontal = 1.dp).clip(RoundedCornerShape(6.dp))
                                             .background(RtColors.SurfaceRaised)
                                             .then(if (selected) Modifier.border(2.dp, RtColors.Primary, RoundedCornerShape(6.dp)) else Modifier)
                                             .clickable(enabled = isClip, role = Role.Button) {
@@ -422,17 +538,28 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             }
                             Cuts.marks(plan).forEach { m ->
                                 val half = with(density) { 11.dp.toPx() }.roundToInt()
+                                val on = cutAt == m.segment
+                                val k by animateFloatAsState(if (on) 1.5f else 1f, tween(220), label = "mark")
+                                val a by animateFloatAsState(if (cutAt == null || on) 1f else 0f, tween(220), label = "markAlpha")
                                 Box(
                                     Modifier.offset { IntOffset((m.atMs * pxPerMs).roundToInt() - half, with(density) { 15.dp.toPx() }.roundToInt()) }
+                                        .graphicsLayer { scaleX = k; scaleY = k; alpha = a }
                                         .size(22.dp).clip(RoundedCornerShape(6.dp))
-                                        .background(if (m.chosen) RtColors.Primary else Color.Black.copy(alpha = 0.65f))
-                                        .border(1.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
+                                        .background(if (on) RtColors.Primary else if (m.chosen) Color(0xFF0B7377) else Color.Black.copy(alpha = 0.65f))
+                                        .border(1.5.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape(6.dp))
                                         .clickable(role = Role.Button, onClickLabel = "Transition: ${m.kind.label}") {
-                                            vm.pick(TimelinePick.Clip(m.segment)); clipTab = ClipTab.CUT; loopAt = m.atMs
+                                            vm.pick(null); cutAt = m.segment; loopAt = m.atMs
                                         },
                                     contentAlignment = Alignment.Center,
-                                ) { Text("⧓", style = RtType.caption, color = Color.White) }
+                                ) { Text(TRANSITION_GLYPH[m.kind] ?: "⧓", style = RtType.caption, color = Color.White) }
                             }
+                            // + after the last clip: add videos.
+                            Box(
+                                Modifier.offset { IntOffset((plan.totalMs * pxPerMs).roundToInt() + 8.dp.roundToPx(), 8.dp.roundToPx()) }
+                                    .size(36.dp).clip(RoundedCornerShape(10.dp)).background(RtColors.TextPrimary)
+                                    .clickable(role = Role.Button, onClickLabel = "Add videos") { addOpen = true },
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Rounded.Add, contentDescription = null, tint = RtColors.Background, modifier = Modifier.size(22.dp)) }
                             }
                             // Layers
                             if (plan.layers.isNotEmpty()) {
@@ -501,6 +628,21 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                     Block("♫ ${s.musicName ?: "Music"}", 0, plan.totalMs, pxPerMs, Color(0x5534D399), false) { mixer = true }
                                 }
                             }
+                            plan.audio.filter { it.kind == TrackKind.MUSIC }.forEach { a ->
+                                val selected = (s.pick as? TimelinePick.Audio)?.id == a.id
+                                Box(Modifier.fillMaxWidth().height(20.dp)) {
+                                    Block("♫ ${a.name ?: "Sound"}" + if (plan.mix.gain(TrackKind.MUSIC) == 0f) " · muted" else "", a.startMs, a.durMs, pxPerMs, Color(0x5534D399), selected) {
+                                        vm.pick(if (selected) null else TimelinePick.Audio(a.id))
+                                    }
+                                }
+                            }
+                            Text(
+                                "+ Sound",
+                                style = RtType.caption,
+                                color = RtColors.TextPrimary,
+                                modifier = Modifier.padding(top = 2.dp).clip(RoundedCornerShape(12.dp)).border(1.dp, RtColors.Outline, RoundedCornerShape(12.dp))
+                                    .clickable(role = Role.Button, onClickLabel = "Add sound") { soundOpen = true }.padding(horizontal = 10.dp, vertical = 3.dp),
+                            )
                         }
                         Spacer(Modifier.width(half))
                     }
@@ -511,216 +653,301 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 }
             }
 
-            // ---- tools
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                when (val p = s.pick) {
-                    is TimelinePick.Clip -> {
-                        val seg = plan.segments.getOrNull(p.index) as? ClipSegment
-                        // The tool groups first, then the tools of the group.
-                        ClipTab.entries.forEach { t -> Choice(t.label, clipTab == t) { clipTab = t } }
-                        Spacer(Modifier.width(10.dp))
-                        when (clipTab) {
-                            ClipTab.EDIT -> {
-                                Choice("Split", false) { vm.change("Split") { TimelineEdits.split(it, pos) } }
-                                Choice("← Move", false) { vm.change("Move") { TimelineEdits.move(it, p.index, -1) }; vm.pick(TimelinePick.Clip(p.index - 1)) }
-                                Choice("Move →", false) { vm.change("Move") { TimelineEdits.move(it, p.index, 1) }; vm.pick(TimelinePick.Clip(p.index + 1)) }
-                                Choice("Duplicate", false) { vm.change("Duplicate") { ClipTools.duplicate(it, p.index) } }
-                                Choice("Replace", false) { adding = AddWhat.REPLACE }
-                                if (seg?.still == null) {
-                                    Choice("Other part ←", false) { vm.change("Other part") { ClipTools.slip(it, p.index, -500) } }
-                                    Choice("Other part →", false) { vm.change("Other part") { ClipTools.slip(it, p.index, 500) } }
+            // ---- tools: they change with what's selected (a back arrow returns to all of them)
+            val seg = (s.pick as? TimelinePick.Clip)?.let { plan.segments.getOrNull(it.index) as? ClipSegment }
+            val barKey = if (cutAt != null) "cut" else "${s.pick?.javaClass?.simpleName}:${(s.pick as? TimelinePick.Clip)?.index}:$clipTab"
+            androidx.compose.runtime.key(barKey) {
+                val cut = cutAt
+                val picked = s.pick
+                if (cut != null) {
+                    val tr = (plan.segments.getOrNull(cut) as? ClipSegment)?.transition ?: Transition()
+                    val at = plan.startOf(cut)
+                    TransitionPicker(
+                        tr,
+                        looping = loopAt != null,
+                        onPick = { t -> vm.change("Transition") { ClipTools.transition(it, cut, t) }; loopAt = at },
+                        onPreview = { if (loopAt != null) { loopAt = null; active.pause() } else loopAt = at },
+                        onAll = { vm.change("Transition on all cuts") { ClipTools.transitionAll(it, tr) }; flash = "${tr.kind.label} on every cut" },
+                        onDone = { cutAt = null; loopAt = null; active.pause() },
+                    )
+                } else if (picked == null || (picked is TimelinePick.Clip && clipTab == ClipTab.EDIT)) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        var n = 0
+                        if (picked is TimelinePick.Clip) {
+                            val i = picked.index
+                            BackTool("All tools") { vm.pick(null) }
+                            Tool(Icons.Rounded.ContentCut, "Split", n++) { vm.change("Split") { TimelineEdits.split(it, pos) } }
+                            if (seg?.still == null) Tool(Icons.Rounded.Speed, "Speed", n++) { clipTab = ClipTab.SPEED }
+                            Tool(Icons.Rounded.Contrast, "Look", n++) { clipTab = ClipTab.LOOK }
+                            Tool(Icons.Rounded.Crop, "Crop", n++) { clipTab = ClipTab.FRAME }
+                            Tool(Icons.Rounded.Animation, "Transition", n++) {
+                                if (i == 0) flash = "The first clip has no cut before it" else { cutAt = i; vm.pick(null); loopAt = plan.startOf(i) }
+                            }
+                            Tool(Icons.Rounded.SwapHoriz, "Replace", n++) { adding = AddWhat.REPLACE }
+                            Tool(Icons.Rounded.ContentCopy, "Duplicate", n++) { vm.change("Duplicate") { ClipTools.duplicate(it, i) } }
+                            if (seg?.still == null) Tool(Icons.Rounded.FastRewind, "Reverse", n++, on = seg?.reverse != null) { vm.reverse(i) }
+                            val v = seg?.volume ?: 1f
+                            val next = when { v >= 1.5f -> 0f; v == 0f -> 0.5f; v < 1f -> 1f; else -> 1.5f }
+                            Tool(if (v == 0f) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, "Sound ${(v * 100).roundToInt()}%", n++) { vm.change("Sound") { TimelineEdits.volume(it, i, next) } }
+                            Tool(Icons.AutoMirrored.Rounded.CallSplit, "Detach sound", n++) { vm.detach(i) }
+                            if (seg?.still == null) {
+                                Tool(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier part", n++) { vm.change("Other part") { ClipTools.slip(it, i, -500) } }
+                                Tool(Icons.Rounded.KeyboardDoubleArrowRight, "Later part", n++) { vm.change("Other part") { ClipTools.slip(it, i, 500) } }
+                            }
+                            Tool(Icons.AutoMirrored.Rounded.ArrowBack, "Move left", n++) { vm.change("Move") { TimelineEdits.move(it, i, -1) }; vm.pick(TimelinePick.Clip(i - 1)) }
+                            Tool(Icons.AutoMirrored.Rounded.ArrowForward, "Move right", n++) { vm.change("Move") { TimelineEdits.move(it, i, 1) }; vm.pick(TimelinePick.Clip(i + 1)) }
+                            Tool(Icons.Rounded.FormatPaint, "Copy look", n++) { vm.copySettings(i) }
+                            if (s.copied != null) Tool(Icons.Rounded.ContentPaste, "Paste look", n++) { vm.pasteSettings(setOf(i)) }
+                            Tool(Icons.Rounded.LibraryAddCheck, "Select more", n++) { vm.pick(TimelinePick.Clips(setOf(i))) }
+                            Tool(Icons.Rounded.BookmarkAdd, "Save clip", n++) { vm.saveSegment(i) }
+                            Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete") { TimelineEdits.delete(it, i) }; vm.pick(null) }
+                        } else {
+                            Tool(Icons.Rounded.Palette, "Style", n++) { styleOpen = true }
+                            Tool(Icons.Rounded.TextFields, "Text", n++) { ask = TextAsk.NewText }
+                            Tool(Icons.Rounded.ClosedCaption, "Captions", n++) { captionsOpen = true }
+                            Tool(Icons.Rounded.Subtitles, "Add caption", n++) { ask = TextAsk.NewCaption }
+                            Tool(Icons.Rounded.EmojiEmotions, "Stickers", n++) { addSticker = true }
+                            Tool(Icons.Rounded.MusicNote, "Sound", n++) { soundOpen = true }
+                            Tool(Icons.Rounded.Tune, "Mix", n++) { mixer = true }
+                            Tool(Icons.Rounded.PictureInPicture, "Over video", n++) { adding = AddWhat.LAYER }
+                            Tool(Icons.Rounded.AcUnit, "Freeze", n++) { vm.freeze() }
+                            Tool(Icons.Rounded.ContentCut, "Split", n++) { vm.change("Split") { TimelineEdits.split(it, pos) } }
+                            Tool(Icons.Rounded.Flag, "Marker", n++) { vm.addMarker() }
+                            Tool(Icons.Rounded.CropFree, "Safe zones", n++, on = safe) { safe = !safe }
+                        }
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        when (val p = picked) {
+                            is TimelinePick.Clip -> {
+                                BackTool("All clip tools") { clipTab = ClipTab.EDIT }
+                                when (clipTab) {
+                                    ClipTab.EDIT -> Unit
+                                    ClipTab.SPEED -> if (seg?.still != null) {
+                                        Text("A freeze frame: drag its edges to hold it longer or shorter.", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
+                                    } else {
+                                        Speed.CHOICES.forEach { v -> Choice(speedLabel(v), seg?.speed == v) { vm.change("Speed") { ClipTools.speed(it, p.index, v) } } }
+                                        Spacer(Modifier.width(10.dp))
+                                        SpeedRamp.entries.forEach { r -> Choice(r.label, seg?.ramp == r) { vm.change("Speed ramp") { ClipTools.ramp(it, p.index, r) } } }
+                                        Spacer(Modifier.width(10.dp))
+                                        Choice(if (seg?.reverse != null) "Forwards" else "Reverse", seg?.reverse != null) { vm.reverse(p.index) }
+                                    }
+                                    ClipTab.LOOK -> {
+                                        Choice("Colour", seg?.color?.plain == false) { colourOpen = p.index }
+                                        Choice(if (seg?.color?.look != false) "Style look on" else "Style look off", seg?.color?.look != false) {
+                                            vm.change("Style look") { ClipTools.color(it, p.index) { c -> c.copy(look = !c.look) } }
+                                        }
+                                        Choice("Rotate", (seg?.rotation ?: 0) != 0) { vm.change("Rotate") { ClipTools.rotate(it, p.index) } }
+                                        Choice("Mirror", seg?.flip == true) { vm.change("Mirror") { ClipTools.flip(it, p.index) } }
+                                    }
+                                    ClipTab.FRAME -> {
+                                        val local = (pos - TimelineEdits.starts(plan)[p.index]).coerceAtLeast(0)
+                                        Choice("Crop in", false) { vm.change("Crop") { ClipTools.reframe(it, p.index, 0, dZoom = 0.15f, fixed = true) } }
+                                        Choice("Crop out", false) { vm.change("Crop") { ClipTools.reframe(it, p.index, 0, dZoom = -0.15f, fixed = true) } }
+                                        Choice("Zoom here", false) { vm.change("Zoom move") { ClipTools.reframe(it, p.index, local, dZoom = 0.2f) } }
+                                        Choice("Pan ←", false) { vm.change("Pan") { ClipTools.reframe(it, p.index, local, dx = -0.4f) } }
+                                        Choice("Pan →", false) { vm.change("Pan") { ClipTools.reframe(it, p.index, local, dx = 0.4f) } }
+                                        Choice("Pan ↑", false) { vm.change("Pan") { ClipTools.reframe(it, p.index, local, dy = -0.4f) } }
+                                        Choice("Pan ↓", false) { vm.change("Pan") { ClipTools.reframe(it, p.index, local, dy = 0.4f) } }
+                                        if (seg?.lines?.isNotEmpty() == true) Choice("Punch in on words", false) { vm.change("Punch-in") { ClipTools.punchIn(it, p.index) } }
+                                        if (seg?.frame?.isNotEmpty() == true) Choice("Clear", false) { vm.change("Clear framing") { ClipTools.clearFrame(it, p.index) } }
+                                    }
                                 }
-                                val v = seg?.volume ?: 1f
-                                val next = when { v >= 1.5f -> 0f; v == 0f -> 0.5f; v < 1f -> 1f; else -> 1.5f }
-                                Choice("Sound ${(v * 100).roundToInt()}%", false) { vm.change("Sound") { TimelineEdits.volume(it, p.index, next) } }
-                                Choice("Detach sound", false) { vm.detach(p.index) }
-                                Choice("Copy settings", false) { vm.copySettings(p.index) }
-                                if (s.copied != null) Choice("Paste", false) { vm.pasteSettings(setOf(p.index)) }
-                                Choice("Select more", false) { vm.pick(TimelinePick.Clips(setOf(p.index))) }
-                                Choice("Save clip", false) { vm.saveSegment(p.index) }
-                                Choice("Delete", false) { vm.change("Delete") { TimelineEdits.delete(it, p.index) }; vm.pick(null) }
                             }
-                            ClipTab.SPEED -> if (seg?.still != null) {
-                                Text("A freeze frame: drag its edges to hold it longer or shorter.", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
-                            } else {
-                                Speed.CHOICES.forEach { v -> Choice(speedLabel(v), seg?.speed == v) { vm.change("Speed") { ClipTools.speed(it, p.index, v) } } }
-                                Spacer(Modifier.width(10.dp))
-                                SpeedRamp.entries.forEach { r -> Choice(r.label, seg?.ramp == r) { vm.change("Speed ramp") { ClipTools.ramp(it, p.index, r) } } }
-                                Spacer(Modifier.width(10.dp))
-                                Choice(if (seg?.reverse != null) "Forwards" else "Reverse", seg?.reverse != null) { vm.reverse(p.index) }
-                            }
-                            ClipTab.LOOK -> {
-                                Choice("Colour", seg?.color?.plain == false) { colourOpen = p.index }
-                                Choice(if (seg?.color?.look != false) "Style look on" else "Style look off", seg?.color?.look != false) {
-                                    vm.change("Style look") { ClipTools.color(it, p.index) { c -> c.copy(look = !c.look) } }
+                            is TimelinePick.Clips -> {
+                                BackTool("All tools") { vm.pick(null) }
+                                Text("${p.indices.size} selected", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
+                                Choice("← Move", false) {
+                                    var moved = p.indices
+                                    vm.change("Move clips") { pl -> TrackEdits.moveClips(pl, p.indices, -1).also { moved = it.second }.first }
+                                    vm.pick(TimelinePick.Clips(moved))
                                 }
-                                Choice("Rotate", (seg?.rotation ?: 0) != 0) { vm.change("Rotate") { ClipTools.rotate(it, p.index) } }
-                                Choice("Mirror", seg?.flip == true) { vm.change("Mirror") { ClipTools.flip(it, p.index) } }
+                                Choice("Move →", false) {
+                                    var moved = p.indices
+                                    vm.change("Move clips") { pl -> TrackEdits.moveClips(pl, p.indices, 1).also { moved = it.second }.first }
+                                    vm.pick(TimelinePick.Clips(moved))
+                                }
+                                if (s.copied != null) Choice("Paste settings", false) { vm.pasteSettings(p.indices) }
+                                Choice("Delete", false) { vm.change("Delete clips") { TrackEdits.deleteClips(it, p.indices) }; vm.pick(null) }
+                                Choice("Done", false) { vm.pick(null) }
                             }
-                            ClipTab.FRAME -> {
-                                val local = (pos - TimelineEdits.starts(plan)[p.index]).coerceAtLeast(0)
-                                Choice("Crop in", false) { vm.change("Crop") { ClipTools.reframe(it, p.index, 0, dZoom = 0.15f, fixed = true) } }
-                                Choice("Crop out", false) { vm.change("Crop") { ClipTools.reframe(it, p.index, 0, dZoom = -0.15f, fixed = true) } }
-                                Choice("Zoom here", false) { vm.change("Zoom move") { ClipTools.reframe(it, p.index, local, dZoom = 0.2f) } }
-                                Choice("Pan ←", false) { vm.change("Pan") { ClipTools.reframe(it, p.index, local, dx = -0.4f) } }
-                                Choice("Pan →", false) { vm.change("Pan") { ClipTools.reframe(it, p.index, local, dx = 0.4f) } }
-                                Choice("Pan ↑", false) { vm.change("Pan") { ClipTools.reframe(it, p.index, local, dy = -0.4f) } }
-                                Choice("Pan ↓", false) { vm.change("Pan") { ClipTools.reframe(it, p.index, local, dy = 0.4f) } }
-                                if (seg?.lines?.isNotEmpty() == true) Choice("Punch in on words", false) { vm.change("Punch-in") { ClipTools.punchIn(it, p.index) } }
-                                if (seg?.frame?.isNotEmpty() == true) Choice("Clear", false) { vm.change("Clear framing") { ClipTools.clearFrame(it, p.index) } }
+                            is TimelinePick.Layer -> {
+                                BackTool("All tools") { vm.pick(null) }
+                                val l = plan.layers.firstOrNull { it.id == p.id }
+                                LayerPreset.entries.forEach { pr -> Choice(pr.label, false) { vm.change("Layer place") { TrackEdits.preset(it, p.id, pr) } } }
+                                Choice("Smaller", false) { vm.change("Layer size") { TrackEdits.resizeLayer(it, p.id, 0.85f, pos) } }
+                                Choice("Bigger", false) { vm.change("Layer size") { TrackEdits.resizeLayer(it, p.id, 1.18f, pos) } }
+                                val shape = l?.shape ?: LayerShape.ROUNDED
+                                val nextShape = LayerShape.entries[(shape.ordinal + 1) % LayerShape.entries.size]
+                                Choice(shape.label, false) { vm.change("Layer shape") { TrackEdits.shape(it, p.id, nextShape) } }
+                                Choice(if (l?.border == true) "Frame on" else "Frame off", false) { vm.change("Layer frame") { TrackEdits.border(it, p.id, l?.border != true) } }
+                                val o = l?.opacity ?: 1f
+                                Choice("Opacity ${(o * 100).roundToInt()}%", false) { vm.change("Layer opacity") { TrackEdits.opacity(it, p.id, if (o <= 0.4f) 1f else o - 0.25f) } }
+                                Choice("Rotate", false) { vm.change("Rotate layer") { TrackEdits.rotateLayer(it, p.id, 90f) } }
+                                Choice("Move here", false) { vm.change("Layer move point") { TrackEdits.addKey(it, p.id, pos) } }
+                                if (l?.keys?.isNotEmpty() == true) Choice("Clear moves", false) { vm.change("Clear moves") { TrackEdits.clearKeys(it, p.id) } }
+                                Choice("Earlier", false) { vm.change("Layer time") { TrackEdits.shiftLayer(it, p.id, -500) } }
+                                Choice("Later", false) { vm.change("Layer time") { TrackEdits.shiftLayer(it, p.id, 500) } }
+                                Choice("Shorter", false) { vm.change("Layer length") { TrackEdits.resizeLayerTime(it, p.id, -500) } }
+                                Choice("Longer", false) { vm.change("Layer length") { TrackEdits.resizeLayerTime(it, p.id, 500) } }
+                                Choice(if ((l?.volume ?: 0f) > 0f) "Its sound on" else "Its sound off", false) { vm.change("Layer sound") { TrackEdits.layerVolume(it, p.id, if ((l?.volume ?: 0f) > 0f) 0f else 1f) } }
+                                Choice("Delete", false) { vm.change("Delete layer") { TrackEdits.deleteLayer(it, p.id) }; vm.pick(null) }
                             }
-                            ClipTab.CUT -> if (p.index == 0) {
-                                Text("The first clip has no cut before it.", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
-                            } else {
-                                val tr = seg?.transition ?: Transition()
-                                val at = plan.startOf(p.index)
-                                Choice(if (loopAt != null) "■ Stop" else "▶ Preview", loopAt != null) { if (loopAt != null) { loopAt = null; active.pause() } else loopAt = at }
-                                Spacer(Modifier.width(10.dp))
-                                TransitionKind.entries.forEach { k -> Choice(k.label, tr.kind == k) { vm.change("Transition") { ClipTools.transition(it, p.index, tr.copy(kind = k)) }; loopAt = at } }
-                                Spacer(Modifier.width(10.dp))
-                                TransitionLength.entries.forEach { l -> Choice(l.label, tr.length == l) { vm.change("Transition length") { ClipTools.transition(it, p.index, tr.copy(length = l)) }; loopAt = at } }
-                                Spacer(Modifier.width(10.dp))
-                                Choice("Use on all cuts", false) { vm.change("Transition on all cuts") { ClipTools.transitionAll(it, tr) } }
+                            is TimelinePick.Audio -> {
+                                BackTool("All tools") { vm.pick(null) }
+                                val a = plan.audio.firstOrNull { it.id == p.id }
+                                val v = a?.volume ?: 1f
+                                val nextV = when { v >= 1.5f -> 0.25f; v < 0.5f -> 0.5f; v < 1f -> 1f; else -> 1.5f }
+                                Choice("Volume ${(v * 100).roundToInt()}%", false) { vm.change("Volume") { TrackEdits.audioVolume(it, p.id, nextV) } }
+                                val faded = (a?.fadeInMs ?: 0) > 0
+                                Choice(if (faded) "Fades on" else "Fades off", false) { vm.change("Fades") { TrackEdits.fade(it, p.id, if (faded) 0 else 400, if (faded) 0 else 600) } }
+                                Choice("Dip here", false) {
+                                    val local = pos - (a?.startMs ?: 0)
+                                    vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, local, 0.3f) }
+                                }
+                                Choice("Full here", false) {
+                                    val local = pos - (a?.startMs ?: 0)
+                                    vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, local, 1f) }
+                                }
+                                if (a?.curve?.isNotEmpty() == true) Choice("Clear points", false) { vm.change("Clear points") { TrackEdits.clearCurve(it, p.id) } }
+                                Choice("Earlier", false) { vm.change("Sound time") { TrackEdits.shiftAudio(it, p.id, -250) } }
+                                Choice("Later", false) { vm.change("Sound time") { TrackEdits.shiftAudio(it, p.id, 250) } }
+                                Choice("Start sooner", false) { vm.change("Sound start") { TrackEdits.trimAudioStart(it, p.id, -250) } }
+                                Choice("Start later", false) { vm.change("Sound start") { TrackEdits.trimAudioStart(it, p.id, 250) } }
+                                Choice("Shorter", false) { vm.change("Sound length") { TrackEdits.resizeAudio(it, p.id, -250) } }
+                                Choice("Longer", false) { vm.change("Sound length") { TrackEdits.resizeAudio(it, p.id, 250) } }
+                                Choice("Delete", false) { vm.change("Delete sound") { TrackEdits.deleteAudio(it, p.id) }; vm.pick(null) }
                             }
+                            is TimelinePick.Marker -> {
+                                BackTool("All tools") { vm.pick(null) }
+                                Choice("Delete marker", false) { vm.change("Delete marker") { TrackEdits.deleteMarker(it, p.id) }; vm.pick(null) }
+                            }
+                            is TimelinePick.Caption -> {
+                                BackTool("All tools") { vm.pick(null) }
+                                val line = (plan.segments.getOrNull(p.index) as? ClipSegment)?.lines?.getOrNull(p.line)
+                                Choice("Edit words", false) { ask = TextAsk.EditCaption(p.index, p.line, line?.text.orEmpty()) }
+                                Choice("Earlier", false) { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, -200) } }
+                                Choice("Later", false) { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, 200) } }
+                                Choice("Delete", false) { vm.change("Delete caption") { TimelineEdits.caption(it, p.index, p.line, "") }; vm.pick(null) }
+                                (plan.segments.getOrNull(p.index) as? ClipSegment)?.let { seg -> Choice("Read clip again", false) { vm.readAgain(seg.bit.momentId) } }
+                                Choice("Captions look", false) { captionsOpen = true }
+                            }
+                            is TimelinePick.Text -> {
+                                BackTool("All tools") { vm.pick(null) }
+                                val t = plan.texts.firstOrNull { it.id == p.id }
+                                Choice("Edit", false) { ask = TextAsk.EditText(p.id, t?.text.orEmpty()) }
+                                TextLook.entries.forEach { l -> Choice(l.label, t?.look == l) { vm.change("Text look") { TextTools.look(it, p.id, l) } } }
+                                Spacer(Modifier.width(8.dp))
+                                TEXT_COLOURS.forEach { (name, col) -> Choice(name, t?.color == col) { vm.change("Text colour") { TextTools.color(it, p.id, col) } } }
+                                Spacer(Modifier.width(8.dp))
+                                Choice("Smaller", false) { vm.change("Text size") { TextTools.scale(it, p.id, 0.85f) } }
+                                Choice("Bigger", false) { vm.change("Text size") { TextTools.scale(it, p.id, 1.18f) } }
+                                Choice("Turn", false) { vm.change("Turn text") { TextTools.rotate(it, p.id, 10f) } }
+                                val al = t?.align ?: TextAlignment.CENTER
+                                Choice(al.label, false) { vm.change("Align") { TextTools.align(it, p.id, TextAlignment.entries[(al.ordinal + 1) % TextAlignment.entries.size]) } }
+                                val ai = t?.animIn ?: TextAnim.FADE
+                                Choice("In: ${ai.label}", false) { vm.change("Text in") { TextTools.anim(it, p.id, animIn = TextAnim.entries[(ai.ordinal + 1) % TextAnim.entries.size]) } }
+                                val ao = t?.animOut ?: TextAnim.FADE
+                                Choice("Out: ${ao.label}", false) { vm.change("Text out") { TextTools.anim(it, p.id, animOut = TextAnim.entries[(ao.ordinal + 1) % TextAnim.entries.size]) } }
+                                Choice("Earlier", false) { vm.change("Text time") { TimelineEdits.moveText(it, p.id, -500) } }
+                                Choice("Later", false) { vm.change("Text time") { TimelineEdits.moveText(it, p.id, 500) } }
+                                Choice("Shorter", false) { vm.change("Text length") { TimelineEdits.resizeText(it, p.id, -500) } }
+                                Choice("Longer", false) { vm.change("Text length") { TimelineEdits.resizeText(it, p.id, 500) } }
+                                Choice("Delete", false) { vm.change("Delete text") { TimelineEdits.deleteText(it, p.id) }; vm.pick(null) }
+                            }
+                            is TimelinePick.Sticker -> {
+                                BackTool("All tools") { vm.pick(null) }
+                                val st = plan.stickers.firstOrNull { it.id == p.id }
+                                if (st?.kind == StickerKind.EMOJI) Choice("Change emoji", false) { addSticker = true }
+                                Choice("Smaller", false) { vm.change("Sticker size") { TextTools.scaleSticker(it, p.id, 0.85f) } }
+                                Choice("Bigger", false) { vm.change("Sticker size") { TextTools.scaleSticker(it, p.id, 1.18f) } }
+                                Choice("Turn", false) { vm.change("Turn sticker") { TextTools.rotateSticker(it, p.id, 15f) } }
+                                Choice("Earlier", false) { vm.change("Sticker time") { TextTools.shiftSticker(it, p.id, -500) } }
+                                Choice("Later", false) { vm.change("Sticker time") { TextTools.shiftSticker(it, p.id, 500) } }
+                                Choice("Shorter", false) { vm.change("Sticker length") { TextTools.resizeStickerTime(it, p.id, -500) } }
+                                Choice("Longer", false) { vm.change("Sticker length") { TextTools.resizeStickerTime(it, p.id, 500) } }
+                                Choice("Delete", false) { vm.change("Delete sticker") { TextTools.deleteSticker(it, p.id) }; vm.pick(null) }
+                            }
+                            else -> Unit
                         }
-                    }
-                    is TimelinePick.Clips -> {
-                        Text("${p.indices.size} selected", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
-                        Choice("← Move", false) {
-                            var moved = p.indices
-                            vm.change("Move clips") { pl -> TrackEdits.moveClips(pl, p.indices, -1).also { moved = it.second }.first }
-                            vm.pick(TimelinePick.Clips(moved))
-                        }
-                        Choice("Move →", false) {
-                            var moved = p.indices
-                            vm.change("Move clips") { pl -> TrackEdits.moveClips(pl, p.indices, 1).also { moved = it.second }.first }
-                            vm.pick(TimelinePick.Clips(moved))
-                        }
-                        if (s.copied != null) Choice("Paste settings", false) { vm.pasteSettings(p.indices) }
-                        Choice("Delete", false) { vm.change("Delete clips") { TrackEdits.deleteClips(it, p.indices) }; vm.pick(null) }
-                        Choice("Done", false) { vm.pick(null) }
-                    }
-                    is TimelinePick.Layer -> {
-                        val l = plan.layers.firstOrNull { it.id == p.id }
-                        LayerPreset.entries.forEach { pr -> Choice(pr.label, false) { vm.change("Layer place") { TrackEdits.preset(it, p.id, pr) } } }
-                        Choice("Smaller", false) { vm.change("Layer size") { TrackEdits.resizeLayer(it, p.id, 0.85f, pos) } }
-                        Choice("Bigger", false) { vm.change("Layer size") { TrackEdits.resizeLayer(it, p.id, 1.18f, pos) } }
-                        val shape = l?.shape ?: LayerShape.ROUNDED
-                        val nextShape = LayerShape.entries[(shape.ordinal + 1) % LayerShape.entries.size]
-                        Choice(shape.label, false) { vm.change("Layer shape") { TrackEdits.shape(it, p.id, nextShape) } }
-                        Choice(if (l?.border == true) "Frame on" else "Frame off", false) { vm.change("Layer frame") { TrackEdits.border(it, p.id, l?.border != true) } }
-                        val o = l?.opacity ?: 1f
-                        Choice("Opacity ${(o * 100).roundToInt()}%", false) { vm.change("Layer opacity") { TrackEdits.opacity(it, p.id, if (o <= 0.4f) 1f else o - 0.25f) } }
-                        Choice("Rotate", false) { vm.change("Rotate layer") { TrackEdits.rotateLayer(it, p.id, 90f) } }
-                        Choice("Move here", false) { vm.change("Layer move point") { TrackEdits.addKey(it, p.id, pos) } }
-                        if (l?.keys?.isNotEmpty() == true) Choice("Clear moves", false) { vm.change("Clear moves") { TrackEdits.clearKeys(it, p.id) } }
-                        Choice("Earlier", false) { vm.change("Layer time") { TrackEdits.shiftLayer(it, p.id, -500) } }
-                        Choice("Later", false) { vm.change("Layer time") { TrackEdits.shiftLayer(it, p.id, 500) } }
-                        Choice("Shorter", false) { vm.change("Layer length") { TrackEdits.resizeLayerTime(it, p.id, -500) } }
-                        Choice("Longer", false) { vm.change("Layer length") { TrackEdits.resizeLayerTime(it, p.id, 500) } }
-                        Choice(if ((l?.volume ?: 0f) > 0f) "Its sound on" else "Its sound off", false) { vm.change("Layer sound") { TrackEdits.layerVolume(it, p.id, if ((l?.volume ?: 0f) > 0f) 0f else 1f) } }
-                        Choice("Delete", false) { vm.change("Delete layer") { TrackEdits.deleteLayer(it, p.id) }; vm.pick(null) }
-                    }
-                    is TimelinePick.Audio -> {
-                        val a = plan.audio.firstOrNull { it.id == p.id }
-                        val v = a?.volume ?: 1f
-                        val nextV = when { v >= 1.5f -> 0.25f; v < 0.5f -> 0.5f; v < 1f -> 1f; else -> 1.5f }
-                        Choice("Volume ${(v * 100).roundToInt()}%", false) { vm.change("Volume") { TrackEdits.audioVolume(it, p.id, nextV) } }
-                        val faded = (a?.fadeInMs ?: 0) > 0
-                        Choice(if (faded) "Fades on" else "Fades off", false) { vm.change("Fades") { TrackEdits.fade(it, p.id, if (faded) 0 else 400, if (faded) 0 else 600) } }
-                        Choice("Dip here", false) {
-                            val local = pos - (a?.startMs ?: 0)
-                            vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, local, 0.3f) }
-                        }
-                        Choice("Full here", false) {
-                            val local = pos - (a?.startMs ?: 0)
-                            vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, local, 1f) }
-                        }
-                        if (a?.curve?.isNotEmpty() == true) Choice("Clear points", false) { vm.change("Clear points") { TrackEdits.clearCurve(it, p.id) } }
-                        Choice("Earlier", false) { vm.change("Sound time") { TrackEdits.shiftAudio(it, p.id, -250) } }
-                        Choice("Later", false) { vm.change("Sound time") { TrackEdits.shiftAudio(it, p.id, 250) } }
-                        Choice("Start sooner", false) { vm.change("Sound start") { TrackEdits.trimAudioStart(it, p.id, -250) } }
-                        Choice("Start later", false) { vm.change("Sound start") { TrackEdits.trimAudioStart(it, p.id, 250) } }
-                        Choice("Shorter", false) { vm.change("Sound length") { TrackEdits.resizeAudio(it, p.id, -250) } }
-                        Choice("Longer", false) { vm.change("Sound length") { TrackEdits.resizeAudio(it, p.id, 250) } }
-                        Choice("Delete", false) { vm.change("Delete sound") { TrackEdits.deleteAudio(it, p.id) }; vm.pick(null) }
-                    }
-                    is TimelinePick.Marker -> {
-                        Choice("Delete marker", false) { vm.change("Delete marker") { TrackEdits.deleteMarker(it, p.id) }; vm.pick(null) }
-                    }
-                    is TimelinePick.Caption -> {
-                        val line = (plan.segments.getOrNull(p.index) as? ClipSegment)?.lines?.getOrNull(p.line)
-                        Choice("Edit words", false) { ask = TextAsk.EditCaption(p.index, p.line, line?.text.orEmpty()) }
-                        Choice("Earlier", false) { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, -200) } }
-                        Choice("Later", false) { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, 200) } }
-                        Choice("Delete", false) { vm.change("Delete caption") { TimelineEdits.caption(it, p.index, p.line, "") }; vm.pick(null) }
-                        (plan.segments.getOrNull(p.index) as? ClipSegment)?.let { seg -> Choice("Read clip again", false) { vm.readAgain(seg.bit.momentId) } }
-                        Choice("Captions look", false) { captionsOpen = true }
-                    }
-                    is TimelinePick.Text -> {
-                        val t = plan.texts.firstOrNull { it.id == p.id }
-                        Choice("Edit", false) { ask = TextAsk.EditText(p.id, t?.text.orEmpty()) }
-                        TextLook.entries.forEach { l -> Choice(l.label, t?.look == l) { vm.change("Text look") { TextTools.look(it, p.id, l) } } }
-                        Spacer(Modifier.width(8.dp))
-                        TEXT_COLOURS.forEach { (name, col) -> Choice(name, t?.color == col) { vm.change("Text colour") { TextTools.color(it, p.id, col) } } }
-                        Spacer(Modifier.width(8.dp))
-                        Choice("Smaller", false) { vm.change("Text size") { TextTools.scale(it, p.id, 0.85f) } }
-                        Choice("Bigger", false) { vm.change("Text size") { TextTools.scale(it, p.id, 1.18f) } }
-                        Choice("Turn", false) { vm.change("Turn text") { TextTools.rotate(it, p.id, 10f) } }
-                        val al = t?.align ?: TextAlignment.CENTER
-                        Choice(al.label, false) { vm.change("Align") { TextTools.align(it, p.id, TextAlignment.entries[(al.ordinal + 1) % TextAlignment.entries.size]) } }
-                        val ai = t?.animIn ?: TextAnim.FADE
-                        Choice("In: ${ai.label}", false) { vm.change("Text in") { TextTools.anim(it, p.id, animIn = TextAnim.entries[(ai.ordinal + 1) % TextAnim.entries.size]) } }
-                        val ao = t?.animOut ?: TextAnim.FADE
-                        Choice("Out: ${ao.label}", false) { vm.change("Text out") { TextTools.anim(it, p.id, animOut = TextAnim.entries[(ao.ordinal + 1) % TextAnim.entries.size]) } }
-                        Choice("Earlier", false) { vm.change("Text time") { TimelineEdits.moveText(it, p.id, -500) } }
-                        Choice("Later", false) { vm.change("Text time") { TimelineEdits.moveText(it, p.id, 500) } }
-                        Choice("Shorter", false) { vm.change("Text length") { TimelineEdits.resizeText(it, p.id, -500) } }
-                        Choice("Longer", false) { vm.change("Text length") { TimelineEdits.resizeText(it, p.id, 500) } }
-                        Choice("Delete", false) { vm.change("Delete text") { TimelineEdits.deleteText(it, p.id) }; vm.pick(null) }
-                    }
-                    is TimelinePick.Sticker -> {
-                        val st = plan.stickers.firstOrNull { it.id == p.id }
-                        if (st?.kind == StickerKind.EMOJI) Choice("Change emoji", false) { addSticker = true }
-                        Choice("Smaller", false) { vm.change("Sticker size") { TextTools.scaleSticker(it, p.id, 0.85f) } }
-                        Choice("Bigger", false) { vm.change("Sticker size") { TextTools.scaleSticker(it, p.id, 1.18f) } }
-                        Choice("Turn", false) { vm.change("Turn sticker") { TextTools.rotateSticker(it, p.id, 15f) } }
-                        Choice("Earlier", false) { vm.change("Sticker time") { TextTools.shiftSticker(it, p.id, -500) } }
-                        Choice("Later", false) { vm.change("Sticker time") { TextTools.shiftSticker(it, p.id, 500) } }
-                        Choice("Shorter", false) { vm.change("Sticker length") { TextTools.resizeStickerTime(it, p.id, -500) } }
-                        Choice("Longer", false) { vm.change("Sticker length") { TextTools.resizeStickerTime(it, p.id, 500) } }
-                        Choice("Delete", false) { vm.change("Delete sticker") { TextTools.deleteSticker(it, p.id) }; vm.pick(null) }
-                    }
-                    null -> {
-                        Choice("+ Text", false) { ask = TextAsk.NewText }
-                        Choice("+ Caption", false) { ask = TextAsk.NewCaption }
-                        Choice("Style", false) { styleOpen = true }
-                        Choice("+ Clip", false) { adding = AddWhat.CLIP }
-                        Choice("+ Layer", false) { adding = AddWhat.LAYER }
-                        Choice("+ Sticker", false) { addSticker = true }
-                        Choice("Captions", false) { captionsOpen = true }
-                        Choice("Freeze", false) { vm.freeze() }
-                        if (s.engineFiles.isNotEmpty() && plan.audio.none { it.kind == TrackKind.ENGINE }) Choice("+ Engine sound", false) { vm.addEngine() }
-                        Choice("Sound", false) { mixer = true }
-                        Choice("Split", false) { vm.change("Split") { TimelineEdits.split(it, pos) } }
-                        Choice(if (safe) "Safe zones on" else "Safe zones", false) { safe = !safe }
                     }
                 }
             }
             Text(
-                when (s.pick) {
-                    is TimelinePick.Clip -> "Drag the white edges to trim. Split cuts at the playhead. Select more to move or delete several."
-                    is TimelinePick.Clips -> "Tap clips to add or take them out of the selection."
-                    is TimelinePick.Layer -> "Drag the layer on the video to move it, pinch to resize. Move here marks where it is now, so it glides there."
-                    is TimelinePick.Audio -> "A detached sound can run past its cut. Dip here and Full here shape its volume."
-                    is TimelinePick.Text -> "Drag the text up or down on the video to place it."
-                    else -> if (exactOn) "Scroll the timeline to scrub; pinch it to zoom. Mark drops a marker. Layers show as stills here; they play in the saved video."
-                    else "Scroll the timeline to scrub; pinch it to zoom. Mark drops a marker. Simple preview: colours, camera moves and layers show in the saved video."
+                when {
+                    cutAt != null -> "Tap a transition: the cut plays on a loop. Done when you like it."
+                    s.pick == null -> "Tap the video to play, swipe it for another style, hold it to see the made one, swipe down to close. Pinch the timeline to zoom."
+                    else -> when (s.pick) {
+                        is TimelinePick.Clip -> "Drag the white edges to trim. Split cuts at the playhead."
+                        is TimelinePick.Clips -> "Tap clips to add or take them out of the selection."
+                        is TimelinePick.Layer -> "Drag the layer on the video to move it, pinch to resize. Move here marks where it is now, so it glides there."
+                        is TimelinePick.Audio -> "A sound can run past its cut. Dip here and Full here shape its volume."
+                        is TimelinePick.Text -> "Drag the text on the video to place it; pinch to size and turn."
+                        else -> if (exactOn) "Layers show as stills here; they play in the saved video." else "Simple preview: colours, camera moves and layers show in the saved video."
+                    }
                 },
                 style = RtType.caption,
                 color = RtColors.TextTertiary,
             )
             s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextPrimary) }
+        }
+    }
+
+        // ---- sheets over the editor
+        val pickVideos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> if (uris.isNotEmpty()) vm.addPhoneVideos(uris) }
+        val pickSound = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.addSound(uri) }
+        StudioSheet(addOpen, { addOpen = false }, "Add videos") {
+            Text("They go in at the playhead.", style = RtType.caption, color = RtColors.TextSecondary)
+            SheetRow("From your phone") { addOpen = false; pickVideos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) }
+            SheetRow("From your rides and saved clips", "Find one by what you said") { addOpen = false; adding = AddWhat.CLIP }
+            SheetRow("Over the video", "Picture in picture, at the playhead") { addOpen = false; adding = AddWhat.LAYER }
+        }
+        StudioSheet(soundOpen, { soundOpen = false }, "Add sound") {
+            Text("Starts at the playhead, on its own row. Add as many as you like.", style = RtType.caption, color = RtColors.TextSecondary)
+            SheetRow("Music or a sound from your phone") { soundOpen = false; pickSound.launch(arrayOf("audio/*")) }
+            if (s.engineFiles.isNotEmpty() && plan.audio.none { it.kind == TrackKind.ENGINE }) {
+                SheetRow("Engine sound from the second mic", "Lined up under every clip that has it") { soundOpen = false; vm.addEngine() }
+            }
+            SheetRow("A clip's own sound", "Tap the clip, then Detach sound: it can run past its cut") { soundOpen = false; flash = "Tap a clip, then Detach sound" }
+            SheetRow("Volumes and the mix") { soundOpen = false; mixer = true }
+        }
+        StudioSheet(ideasOpen, { ideasOpen = false }, "Other ideas from this ride") {
+            Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                s.pieces.forEach { pc ->
+                    val current = pc.key == s.piece?.key
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button) { ideasOpen = false; if (!current) vm.editIdea(pc.key) }.padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Thumb(pc.opening?.bit?.momentId?.let { s.thumbs[it] }, Modifier.size(width = 36.dp, height = 48.dp).clip(RoundedCornerShape(6.dp)))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(pc.script.title.ifBlank { "Idea" }, style = RtType.body, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${pc.script.format.label} · ${(pc.plan.totalMs + 500) / 1000} s", style = RtType.caption, color = RtColors.TextSecondary)
+                        }
+                        if (current) Text("Editing", style = RtType.caption, color = RtColors.Primary)
+                    }
+                }
+                if (s.pieces.isEmpty()) Text("No other ideas for this one yet.", style = RtType.body, color = RtColors.TextSecondary, modifier = Modifier.padding(vertical = 8.dp))
+            }
+            if (vm.canAsk) {
+                var wish by remember { mutableStateOf("") }
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = wish,
+                        onValueChange = { wish = it },
+                        placeholder = { Text("Ask for something else…", style = RtType.body, color = RtColors.TextTertiary) },
+                        singleLine = true,
+                        enabled = s.planning == null,
+                        textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Small("Ask", on = wish.isNotBlank()) { if (wish.isNotBlank() && s.planning == null) { vm.ask(wish, open = true); wish = "" } }
+                }
+                (s.planning ?: s.geminiIssue)?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
+            }
         }
     }
 
@@ -843,16 +1070,6 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 s.steps.forEachIndexed { i, label ->
                     Text("${i + 1}. $label", style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { vm.undoTo(i); historyOpen = false }.padding(vertical = 8.dp))
                 }
-            }
-        }
-    }
-    if (compare) {
-        val before = s.video
-        androidx.compose.ui.window.Dialog(onDismissRequest = { compare = false }) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Before your changes", style = RtType.bodyStrong, color = Color.White)
-                if (before != null) Player(android.net.Uri.fromFile(before), Modifier, height = 480.dp)
-                Text("Close", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { compare = false }.padding(8.dp))
             }
         }
     }
@@ -1003,7 +1220,7 @@ private fun MixerSheet(vm: StudioViewModel, s: StudioState, plan: StudioPlan, on
         if (plan.audio.any { it.kind == TrackKind.ENGINE }) add(TrackKind.ENGINE)
         if (plan.layers.any { it.volume > 0f }) add(TrackKind.LAYERS)
         if (s.takes.isNotEmpty()) add(TrackKind.VOICE_OVER)
-        if (s.musicUri != null) add(TrackKind.MUSIC)
+        if (s.musicUri != null || plan.audio.any { it.kind == TrackKind.MUSIC }) add(TrackKind.MUSIC)
     }
     androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
         Column(
@@ -1247,3 +1464,154 @@ private fun SafeZones() {
 }
 
 private fun clock(ms: Long): String = String.format(Locale.US, "%d:%04.1f", ms / 60_000, (ms % 60_000) / 1000.0)
+
+/** Which way a finger swiped. */
+private enum class Swipe { LEFT, RIGHT, UP, DOWN }
+
+/**
+ * The video's gestures: a tap, a hold ([onHold] true, then false on letting go) and a swipe.
+ * A touch something on the video took (text, a sticker, a layer) is left to it. Restarts when
+ * [keys] change.
+ */
+private fun Modifier.previewGestures(keys: Array<Any?>, onTap: () -> Unit, onHold: (Boolean) -> Unit, onSwipe: (Swipe) -> Unit): Modifier = pointerInput(*keys) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        val slop = viewConfiguration.touchSlop
+        var up: androidx.compose.ui.input.pointer.PointerInputChange? = null
+        var moved = false
+        var other = false
+        val beforeHold = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            while (true) {
+                val e = awaitPointerEvent()
+                val c = e.changes.firstOrNull { it.id == down.id }
+                if (c == null || e.changes.count { it.pressed } > 1 || (c.pressed && c.isConsumed)) { other = true; break }
+                if (!c.pressed) { up = c; break }
+                if ((c.position - down.position).getDistance() > slop) { moved = true; break }
+            }
+        }
+        if (other) return@awaitEachGesture
+        if (beforeHold == null) {
+            // Held: until every finger is up.
+            onHold(true)
+            do { val e = awaitPointerEvent() } while (e.changes.any { it.pressed })
+            onHold(false)
+            return@awaitEachGesture
+        }
+        up?.let { if (!it.isConsumed) onTap(); return@awaitEachGesture }
+        if (!moved) return@awaitEachGesture
+        var last = down.position
+        while (true) {
+            val e = awaitPointerEvent()
+            val c = e.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+            if (c.isConsumed) return@awaitEachGesture
+            last = c.position
+            if (!c.pressed) break
+        }
+        val d = last - down.position
+        val far = 48.dp.toPx()
+        when {
+            abs(d.x) > abs(d.y) && abs(d.x) > far -> onSwipe(if (d.x < 0) Swipe.LEFT else Swipe.RIGHT)
+            abs(d.y) > far -> onSwipe(if (d.y < 0) Swipe.UP else Swipe.DOWN)
+        }
+    }
+}
+
+/** A short note in a dark pill, on the video. */
+@Composable
+private fun Pill(text: String, modifier: Modifier) {
+    Text(text, style = RtType.caption, color = Color.White, modifier = modifier.clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.7f)).padding(horizontal = 10.dp, vertical = 4.dp))
+}
+
+/** A small round icon button (the transport row). */
+@Composable
+private fun SmallIcon(icon: ImageVector, label: String, enabled: Boolean = true, onClick: () -> Unit) {
+    Box(
+        Modifier.size(40.dp).clip(CircleShape).clickable(enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = label, tint = if (enabled) RtColors.TextPrimary else RtColors.TextTertiary, modifier = Modifier.size(22.dp))
+    }
+}
+
+/** One tool in the bar under the timeline: an icon on a tile and its name. It rises in, the [n]th a little after the one before. */
+@Composable
+private fun Tool(icon: ImageVector, label: String, n: Int = 0, danger: Boolean = false, on: Boolean = false, onClick: () -> Unit) {
+    val rise = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { delay(n * 30L); rise.animateTo(1f, tween(220)) }
+    Column(
+        Modifier.width(64.dp)
+            .graphicsLayer { alpha = rise.value; translationY = (1f - rise.value) * 12.dp.toPx() }
+            .clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            Modifier.size(width = 56.dp, height = 44.dp).clip(RoundedCornerShape(12.dp)).background(if (on) RtColors.Primary.copy(alpha = 0.25f) else RtColors.SurfaceRaised),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = if (danger) RtColors.Error else if (on) RtColors.Primary else RtColors.TextPrimary, modifier = Modifier.size(22.dp))
+        }
+        Text(label, style = RtType.caption, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+    }
+}
+
+/** Back to the full set of tools. */
+@Composable
+private fun BackTool(label: String, onClick: () -> Unit) {
+    Box(
+        Modifier.size(width = 36.dp, height = 44.dp).clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = label, tint = RtColors.TextPrimary, modifier = Modifier.size(26.dp))
+    }
+}
+
+/** A mark for each transition, on the timeline and in the picker. */
+private val TRANSITION_GLYPH = mapOf(
+    TransitionKind.STYLE to "✦", TransitionKind.CUT to "│", TransitionKind.FADE to "◐", TransitionKind.FLASH to "✺", TransitionKind.ZOOM to "⊕",
+    TransitionKind.WHIP to "≫", TransitionKind.GLITCH to "▚", TransitionKind.SLASH to "⟋", TransitionKind.SHUTTER to "◫", TransitionKind.SUN to "☀", TransitionKind.CARD to "▭",
+)
+
+/**
+ * The transition picker, where the tools were: the transitions in a row to swipe through (the
+ * chosen one bigger), its length, Apply to all and Done. The cut plays on a loop meanwhile.
+ */
+@Composable
+private fun TransitionPicker(tr: Transition, looping: Boolean, onPick: (Transition) -> Unit, onPreview: () -> Unit, onAll: () -> Unit, onDone: () -> Unit) {
+    val list = rememberLazyListState()
+    LaunchedEffect(tr.kind) { list.animateScrollToItem((tr.kind.ordinal - 2).coerceAtLeast(0)) }
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyRow(
+            state = list,
+            modifier = Modifier.fillMaxWidth().height(80.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            items(TransitionKind.entries) { k ->
+                val on = k == tr.kind
+                val z by animateFloatAsState(if (on) 1.2f else 0.9f, tween(200), label = "pick")
+                Box(
+                    Modifier.graphicsLayer { scaleX = z; scaleY = z }.size(56.dp).clip(CircleShape)
+                        .background(if (on) Color(0xFF0B7377) else RtColors.SurfaceRaised)
+                        .then(if (on) Modifier.border(2.dp, Color.White, CircleShape) else Modifier)
+                        .clickable(role = Role.Button, onClickLabel = k.label) { onPick(tr.copy(kind = k)) },
+                    contentAlignment = Alignment.Center,
+                ) { Text(TRANSITION_GLYPH[k] ?: "", fontSize = 20.sp, color = Color.White) }
+            }
+        }
+        Text(tr.kind.label, style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TransitionLength.entries.forEach { l -> Small(l.label, on = tr.length == l) { onPick(tr.copy(length = l)) } }
+            Spacer(Modifier.weight(1f))
+            Small(if (looping) "■ Stop" else "▶ Play", on = looping, onClick = onPreview)
+            Small("Apply to all", onClick = onAll)
+            Text(
+                "Done",
+                style = RtType.button,
+                color = RtColors.Background,
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(RtColors.TextPrimary).clickable(role = Role.Button, onClick = onDone).padding(horizontal = 18.dp, vertical = 8.dp),
+            )
+        }
+    }
+}

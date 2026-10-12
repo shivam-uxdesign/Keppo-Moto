@@ -126,7 +126,7 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
             StudioStep.SETUP -> Setup(vm, s, modifier)
             StudioStep.WORKING -> Working(vm, s, modifier)
             StudioStep.READY -> Ready(vm, s, modifier)
-            StudioStep.EDIT -> TimelineEditor(vm, s, modifier)
+            StudioStep.EDIT -> androidx.compose.runtime.key(s.piece?.key, s.reelId) { TimelineEditor(vm, s, modifier) }
             StudioStep.VOICE -> Voice(vm, s, modifier)
             StudioStep.COVER -> CoverEditor(vm, s, modifier)
             StudioStep.SCRIPT -> ScriptView(vm, s, modifier)

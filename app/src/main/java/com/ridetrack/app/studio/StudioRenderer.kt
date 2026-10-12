@@ -239,7 +239,7 @@ class StudioRenderer(private val context: Context) {
             val g = mix.gain(au.kind)
             if (g == 0f) return@forEach
             val uri = au.file?.let(Uri::parse) ?: uriOf(input, au.bit) ?: return@forEach
-            val ducked = au.kind == TrackKind.ENGINE
+            val ducked = au.kind == TrackKind.ENGINE || au.kind == TrackKind.MUSIC
             sequences += audioSequence(au.startMs, uri, au.inMs, au.durMs, clean = mix.cleanVoice && au.kind == TrackKind.DETACHED) { local ->
                 TrackEdits.levelAt(au, local) * g * if (ducked) engineDuck((au.startMs + local) * 1000) else 1f
             }

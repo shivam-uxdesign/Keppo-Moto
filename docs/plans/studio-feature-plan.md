@@ -575,6 +575,7 @@ One commit per build. The APK comes at the end, after asking. Defaults taken whe
    - Top bar (close, Ideas, →). Video gestures: tap, swipe for style, hold to compare, swipe down to close.
    - Context bottom bar; + Add videos and + Sound sheets, with many sound rows.
    - Transition marks and the picker, with the clips parting.
+   - Built: songs and sounds from the phone each get their own row (they dip while you talk); the Ideas pill switches ideas in place (an unsaved edit stays as a draft) or asks Gemini for a new one, which opens in the editor. The clip's speed, look and crop still use the old chips until S3.
 3. **S3 Tools:** speed with quick sliders and curves, look and crop dial, text on video, captions (Look/Words, fix a word), layers and stickers, mixer faders, voice-over, history (two-finger undo, three-finger redo).
 4. **S4 Library:** Your Reels (segmented, hold menu, swipe-select), Search, the making pill and queue sheet, grouped Settings.
 5. **S5 Styles:** library with groups, Brush-Studio-like editor, brand kit, what Studio learned (swipe to forget).

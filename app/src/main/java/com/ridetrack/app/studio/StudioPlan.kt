@@ -329,6 +329,8 @@ data class AudioItem(
     /** The engine mic's file for the clip (two-mic recording); null = the clip's own sound. */
     val file: String? = null,
     val curve: List<VolumePoint> = emptyList(),
+    /** A song or sound from the phone: its name, shown on its row; null for the clips' own sounds. */
+    val name: String? = null,
 ) {
     val endMs: Long get() = startMs + durMs
 }

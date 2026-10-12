@@ -145,6 +145,20 @@ object TrackEdits {
         return plan.copy(audio = plan.audio.filter { it.kind != TrackKind.ENGINE } + items)
     }
 
+    /**
+     * A song or sound from the phone ([uri], [lengthMs] long) on its own row, from [atMs] to its
+     * end or the Reel's. Add as many as you like; each fades in and out a little.
+     */
+    fun addSound(plan: StudioPlan, id: String, name: String, uri: String, lengthMs: Long, atMs: Long): StudioPlan {
+        if (atMs > plan.totalMs - MIN_MS) return plan
+        val start = atMs.coerceAtLeast(0)
+        val dur = minOf(lengthMs, plan.totalMs - start)
+        if (dur < MIN_MS) return plan
+        val bit = Bit("sound:$id", "sound:$id", lengthMs, 0, lengthMs, 0, emptyList(), 0.0, 0f)
+        val item = AudioItem(id, TrackKind.MUSIC, bit, 0, start, dur, volume = 0.8f, fadeInMs = minOf(300, dur / 2), fadeOutMs = minOf(800, dur / 2), file = uri, name = name)
+        return plan.copy(audio = plan.audio + item)
+    }
+
     private fun audio(plan: StudioPlan, id: String, f: (AudioItem) -> AudioItem?): StudioPlan =
         plan.copy(audio = plan.audio.mapNotNull { if (it.id == id) f(it) else it })
 

@@ -173,10 +173,27 @@ class TracksTest {
         plan = TrackEdits.mute(TrackEdits.trackVolume(plan, TrackKind.MUSIC, 0.3f), TrackKind.ENGINE)
         plan = TrackEdits.cleanVoice(plan, true)
         plan = TrackEdits.addMarker(plan, 2_500, "m1")
+        plan = TrackEdits.addSound(plan, "s1", "Song", "content://song", 60_000, 500)
         val p = ReelProject(
             id = "r", rideId = null, createdAt = 1, updatedAt = 1, title = "t", series = "", episode = 1, hookLine = "", postCaption = "", story = null,
             options = StudioOptions(), musicUri = null, musicName = null, plan = plan, takes = emptyList(), tips = emptyList(), durationMs = plan.totalMs,
         )
         assertEquals(p, ReelJson.read(ReelJson.write(p)))
+    }
+
+    @Test
+    fun `sounds from the phone each get their own row, inside the Reel`() {
+        val p0 = plan()
+        var p = TrackEdits.addSound(p0, "s1", "Song", "content://song", 60_000, 1_000)
+        p = TrackEdits.addSound(p, "s2", "Horn", "content://horn", 800, 3_000)
+        assertEquals(listOf("s1", "s2"), p.audio.map { it.id })
+        val song = p.audio.first()
+        assertEquals(TrackKind.MUSIC, song.kind)
+        assertEquals("Song", song.name)
+        // A long song stops with the Reel; a short sound plays whole.
+        assertEquals(p0.totalMs - 1_000, song.durMs)
+        assertEquals(800, p.audio[1].durMs)
+        // Past the end: nothing added.
+        assertEquals(p0, TrackEdits.addSound(p0, "s3", "Late", "content://x", 5_000, p0.totalMs))
     }
 }

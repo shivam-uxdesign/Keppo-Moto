@@ -444,7 +444,11 @@ class StudioViewModel(
      * The rider asks for a piece in their words ("a 15 s funny one about the water"): Gemini
      * writes it (one request), it joins the suggestions and is made straight away.
      */
-    fun ask(text: String) {
+    /** Whether Gemini can be asked for a new idea here (a ride's Studio, not phone videos only). */
+    val canAsk: Boolean get() = card != null
+
+    /** Asks Gemini for [text]; the new idea is made, or with [open] opened in the editor instead. */
+    fun ask(text: String, open: Boolean = false) {
         val t = text.trim()
         if (t.isEmpty() || job?.isActive == true) return
         val cd = card ?: return
@@ -475,7 +479,8 @@ class StudioViewModel(
             val scripts = listOf(sc) + _state.value.pieces.map { it.script }
             savePlan(scripts)
             showPieces(scripts)
-            _state.value.pieces.firstOrNull()?.let { makePiece(it.key) }
+            val pieces = _state.value.pieces
+            (pieces.firstOrNull { it.script.title == sc.title } ?: pieces.firstOrNull())?.let { if (open) editIdea(it.key) else makePiece(it.key) }
         }
     }
 
@@ -1291,6 +1296,35 @@ class StudioViewModel(
         val engine = _state.value.engineFiles
         if (engine.isEmpty()) return say("No engine sound in these clips (record with two mics)")
         change("Engine sound") { TrackEdits.addEngine(it, engine, { newId("e") }) }
+    }
+
+    /** A song or sound from the phone on its own row, from the playhead (as many as you like). */
+    fun addSound(uri: Uri) {
+        viewModelScope.launch {
+            runCatching { c.appContext.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            val (name, ms) = withContext(Dispatchers.IO) {
+                val name = runCatching {
+                    c.appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cur -> if (cur.moveToFirst()) cur.getString(0) else null }
+                }.getOrNull()?.substringBeforeLast('.') ?: "Sound"
+                val ms = runCatching {
+                    val r = android.media.MediaMetadataRetriever()
+                    try {
+                        r.setDataSource(c.appContext, uri)
+                        r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                    } finally {
+                        r.release()
+                    }
+                }.getOrNull() ?: 0L
+                name to ms
+            }
+            if (ms < TrackEdits.MIN_MS) return@launch say("Couldn't read that sound")
+            val id = newId("s")
+            // The playhead at the very end: the sound starts at the beginning instead.
+            val at = playheadMs.takeIf { it < (_state.value.timeline?.totalMs ?: 0) - 1_000 } ?: 0L
+            change("Add \u201c${name.take(24)}\u201d") { TrackEdits.addSound(it, id, name, uri.toString(), ms, at) }
+            pick(TimelinePick.Audio(id))
+            say("\u201c${name.take(24)}\u201d added on its own row")
+        }
     }
 
     fun detach(i: Int) {
