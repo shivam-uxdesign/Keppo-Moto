@@ -814,3 +814,28 @@ Done in one pass on the drawing code, because the token rewrite, the restyled vi
   - The English line under the captions is capped at body size (36).
   - The "Punch" caption style is renamed "Poster".
 - **Mockup frames:** `shots/BoldMocks`.
+
+### Agreed next (to build together, step by step)
+
+- **Speedtrap (new style):** red, white and black, bike-themed.
+  - **Redline effect:** a red pulse while the engine is at the redline. Two variants:
+    - **Full screen:** up to 30%.
+    - **Red edge glow:** the middle of the frame stays clear.
+  - **Pulse rhythm:** speeds up as the revs climb, about 2 per second at the line and 8 at the limiter.
+  - **Redline detection:**
+    - From the engine sound (the DJI engine track): the engine's pitch, learnt per bike.
+    - Plus "Tag redline" in the editor.
+  - **Effect timing:** ramps in over 150 ms and drops off at the gear shift.
+  - Mockup: `shots/StyleIdeas` (speedtrap/base) plus a scratch script that animates it.
+- **Filters:** their own setting. The filter sits on the video, under every graphic.
+  - The rider chooses; there's no auto-suggest.
+  - Candidates:
+
+    | Group | Filters |
+    |---|---|
+    | Time | Golden hour, Blue hour, Night ride, Midday punch |
+    | Weather | Monsoon, Haze cut, Dust |
+    | Terrain | Asphalt, Ghat green, High desert |
+    | Signature | Red only, Grit, Teal & orange, Chrome |
+
+- **Colour picker on every style:** curated swatches, with the style's own colour as the default.

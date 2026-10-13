@@ -98,6 +98,8 @@ class StyleIdeas {
     fun ideas() {
         Assume.assumeTrue("mockup fonts not downloaded", have)
         redline(); visor(); livery(); filters(); boldColours()
+        // A plain frame, for the redline effect mockup (drawn over it frame by frame).
+        shot("speedtrap/base")
     }
 
     // ---- 1. Redline: the bike's own dashboard -------------------------------------------------
