@@ -732,3 +732,17 @@ Rider's answers: yes to 1, 2, 3, 5, 6, 7, 8, 9 and 11; maybe to 10; no to 4 (rou
      2. The preview keeps the same effect chain for the whole edit, so nothing is rebuilt at cuts.
      3. The overlay is drawn at half size in the preview only (540×960); the made video stays full size.
      4. The next clip is decoded ahead, before the cut.
+2. **After an edit the editor drops to the simple preview, and in full screen the simple preview lags too. It should never use the simple preview.**
+   - **Why it drops:** after every change, the exact preview is rebuilt. A single error then turns it off for the rest of that edit: a playback error from the player, a failure while putting the edit together (a missing frozen-frame or reversed file), or no ride card. The error log has it as "Studio preview: The exact preview didn't play on this phone".
+   - **Planned fix:**
+     1. **Never switch on an error.**
+        - Rebuild the exact preview from scratch (a fresh player) and try again, up to 3 times.
+        - Meanwhile, keep the last frame on screen with "Updating preview…".
+        - If it still fails, say so on the video ("Preview couldn't update: tap to try again") instead of quietly switching.
+     2. **Make the rebuild itself safer:**
+        - wait until edits stop for 0.3 s
+        - pause before swapping in the new edit
+        - check every file the edit needs before handing it over
+        - log the exact reason when it fails
+     3. **Remove the simple preview from the editor** once that holds on the rider's phone.
+     4. **Lag:** the fix in item 1 (one effect chain, half-size overlay, next clip decoded ahead) applies here too.
