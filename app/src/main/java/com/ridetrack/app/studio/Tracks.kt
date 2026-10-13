@@ -111,6 +111,22 @@ object TrackEdits {
 
     fun clearKeys(plan: StudioPlan, id: String) = layer(plan, id) { it.copy(keys = emptyList()) }
 
+    // ---- rows on the timeline, hiding -----------------------------------------------------------
+
+    /** The layer [rows] rows down the timeline (negative: up, so it's over more of the others). */
+    fun stackLayer(plan: StudioPlan, id: String, rows: Int) =
+        plan.copy(layers = Lanes.restack(plan.layers, id, rows, { it.id }) { Lanes.Span(it.startMs, it.endMs) })
+
+    fun stackText(plan: StudioPlan, id: String, rows: Int) =
+        plan.copy(texts = Lanes.restack(plan.texts, id, rows, { it.id }) { Lanes.Span(it.startMs, it.endMs) })
+
+    fun stackSticker(plan: StudioPlan, id: String, rows: Int) =
+        plan.copy(stickers = Lanes.restack(plan.stickers, id, rows, { it.id }) { Lanes.Span(it.startMs, it.endMs) })
+
+    fun hideLayer(plan: StudioPlan, id: String, hidden: Boolean) = layer(plan, id) { it.copy(hidden = hidden) }
+    fun hideText(plan: StudioPlan, id: String, hidden: Boolean) = plan.copy(texts = plan.texts.map { if (it.id == id) it.copy(hidden = hidden) else it })
+    fun hideSticker(plan: StudioPlan, id: String, hidden: Boolean) = plan.copy(stickers = plan.stickers.map { if (it.id == id) it.copy(hidden = hidden) else it })
+
     // ---- sound -------------------------------------------------------------------------------
 
     private fun clip(plan: StudioPlan, i: Int): ClipSegment? = (plan.segments.getOrNull(i) as? ClipSegment)?.takeIf { !it.tail }

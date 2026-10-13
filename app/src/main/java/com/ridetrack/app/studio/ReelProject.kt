@@ -83,7 +83,7 @@ object ReelJson {
         put("segments", JSONArray().apply { p.plan.segments.forEach { put(segment(it)) } })
         put("texts", JSONArray().apply { p.plan.texts.forEach { t -> put(textItem(t)) } })
         put("captionLook", LookJson.caption(p.plan.captionLook))
-        put("stickers", JSONArray().apply { p.plan.stickers.forEach { st -> put(JSONObject().put("id", st.id).put("kind", st.kind.name).put("s", st.startMs).put("e", st.endMs).put("x", st.x.toDouble()).put("y", st.y.toDouble()).put("size", st.size.toDouble()).put("rot", st.rotation.toDouble()).put("t", st.text)) } })
+        put("stickers", JSONArray().apply { p.plan.stickers.forEach { st -> put(JSONObject().put("id", st.id).put("kind", st.kind.name).put("s", st.startMs).put("e", st.endMs).put("x", st.x.toDouble()).put("y", st.y.toDouble()).put("size", st.size.toDouble()).put("rot", st.rotation.toDouble()).put("t", st.text).put("hidden", st.hidden)) } })
         put("layers", JSONArray().apply { p.plan.layers.forEach { put(layer(it)) } })
         put("audio", JSONArray().apply { p.plan.audio.forEach { put(audio(it)) } })
         put("mix", mix(p.plan.mix))
@@ -142,7 +142,7 @@ object ReelJson {
                     (0 until a.length()).mapNotNull { i ->
                         val st = a.getJSONObject(i)
                         val kind = StickerKind.entries.firstOrNull { it.name == st.optString("kind") } ?: return@mapNotNull null
-                        StickerItem(st.getString("id"), kind, st.getLong("s"), st.getLong("e"), st.optDouble("x", 0.5).toFloat(), st.optDouble("y", 0.5).toFloat(), st.optDouble("size", 1.0).toFloat(), st.optDouble("rot", 0.0).toFloat(), st.optString("t"))
+                        StickerItem(st.getString("id"), kind, st.getLong("s"), st.getLong("e"), st.optDouble("x", 0.5).toFloat(), st.optDouble("y", 0.5).toFloat(), st.optDouble("size", 1.0).toFloat(), st.optDouble("rot", 0.0).toFloat(), st.optString("t"), st.optBoolean("hidden"))
                     }
                 }.orEmpty(),
                 markers = o.optJSONArray("markers")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { m -> Marker(m.getString("id"), m.getLong("at"), m.optString("label")) } } }.orEmpty(),
@@ -260,7 +260,7 @@ object ReelJson {
 
     private fun textItem(t: TextItem) = JSONObject().put("id", t.id).put("s", t.startMs).put("e", t.endMs).put("t", t.text).put("y", t.y.toDouble())
         .put("x", t.x.toDouble()).put("size", t.size.toDouble()).put("rot", t.rotation.toDouble()).put("look", t.look.name).put("color", t.color ?: JSONObject.NULL)
-        .put("align", t.align.name).put("in", t.animIn.name).put("out", t.animOut.name).put("font", t.font.name)
+        .put("align", t.align.name).put("in", t.animIn.name).put("out", t.animOut.name).put("font", t.font.name).put("hidden", t.hidden)
 
     private fun readTextItem(t: JSONObject) = TextItem(
         t.getString("id"), t.getLong("s"), t.getLong("e"), t.getString("t"), t.optDouble("y", 0.3).toFloat(),
@@ -271,13 +271,14 @@ object ReelJson {
         animIn = TextAnim.entries.firstOrNull { it.name == t.optString("in") } ?: TextAnim.FADE,
         animOut = TextAnim.entries.firstOrNull { it.name == t.optString("out") } ?: TextAnim.FADE,
         font = FontChoice.entries.firstOrNull { it.name == t.optString("font") } ?: FontChoice.STYLE,
+        hidden = t.optBoolean("hidden"),
     )
 
     private fun JSONObject.optDoubleOrNull(k: String): Double? = if (isNull(k) || !has(k)) null else optDouble(k)
 
     private fun layer(l: LayerItem) = JSONObject().put("id", l.id).put("bit", bit(l.bit)).put("in", l.inMs).put("start", l.startMs).put("dur", l.durMs)
         .put("cx", l.cx.toDouble()).put("cy", l.cy.toDouble()).put("w", l.w.toDouble()).put("aspect", l.aspect.toDouble()).put("rotation", l.rotation.toDouble())
-        .put("shape", l.shape.name).put("opacity", l.opacity.toDouble()).put("border", l.border).put("volume", l.volume.toDouble())
+        .put("shape", l.shape.name).put("opacity", l.opacity.toDouble()).put("border", l.border).put("volume", l.volume.toDouble()).put("hidden", l.hidden)
         .put("keys", JSONArray().apply { l.keys.forEach { k -> put(JSONObject().put("at", k.atMs).put("cx", k.cx.toDouble()).put("cy", k.cy.toDouble()).put("w", k.w.toDouble())) } })
 
     private fun readLayer(o: JSONObject) = LayerItem(
@@ -286,6 +287,7 @@ object ReelJson {
         rotation = o.optDouble("rotation", 0.0).toFloat(), shape = LayerShape.entries.firstOrNull { it.name == o.optString("shape") } ?: LayerShape.ROUNDED,
         opacity = o.optDouble("opacity", 1.0).toFloat(), border = o.optBoolean("border", true), volume = o.optDouble("volume", 0.0).toFloat(),
         keys = o.optJSONArray("keys")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { k -> LayerKey(k.getLong("at"), k.getDouble("cx").toFloat(), k.getDouble("cy").toFloat(), k.getDouble("w").toFloat()) } } }.orEmpty(),
+        hidden = o.optBoolean("hidden"),
     )
 
     private fun audio(a: AudioItem) = JSONObject().put("id", a.id).put("kind", a.kind.name).put("bit", bit(a.bit)).put("in", a.inMs).put("start", a.startMs).put("dur", a.durMs)

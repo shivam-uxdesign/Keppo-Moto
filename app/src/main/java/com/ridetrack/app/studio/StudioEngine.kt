@@ -438,7 +438,8 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
     fun renderInput(plan: StudioPlan, s: StudioState, baseCard: RideCard, voice: File?, waitForRevs: Boolean = true): RenderInput {
         val ride = samples.toList()
         return RenderInput(
-            plan = plan,
+            // Hidden layers, text and stickers stay out of the video.
+            plan = plan.shown(),
             files = files(),
             card = baseCard.copy(title = s.title.ifBlank { baseCard.title }),
             options = s.options,

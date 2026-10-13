@@ -234,6 +234,8 @@ data class TextItem(
     val font: FontChoice = FontChoice.STYLE,
     val animIn: TextAnim = TextAnim.FADE,
     val animOut: TextAnim = TextAnim.FADE,
+    /** Hidden by the rider: kept on the timeline, left out of the preview and the made video. */
+    val hidden: Boolean = false,
 )
 
 /** How timeline text looks: the style's own, or plain, outlined, on a box, or handwritten. */
@@ -314,6 +316,8 @@ data class StickerItem(
     val size: Float = 1f,
     val rotation: Float = 0f,
     val text: String = "",
+    /** Hidden by the rider: kept on the timeline, left out of the preview and the made video. */
+    val hidden: Boolean = false,
 )
 
 /** How a layer's corners are cut. */
@@ -344,6 +348,8 @@ data class LayerItem(
     /** Its own sound, 0 = muted (the default: the main clip's sound plays). */
     val volume: Float = 0f,
     val keys: List<LayerKey> = emptyList(),
+    /** Hidden by the rider: kept on the timeline, left out of the preview and the made video (and its sound). */
+    val hidden: Boolean = false,
 ) {
     val endMs: Long get() = startMs + durMs
 }
@@ -422,6 +428,11 @@ data class StudioPlan(
     val clips: List<ClipSegment> get() = segments.filterIsInstance<ClipSegment>().filter { !it.tail && !it.teaser }
 
     fun startOf(i: Int): Long = segments.take(i).sumOf { it.durMs }
+
+    /** The plan as it plays: hidden layers, text and stickers left out. */
+    fun shown(): StudioPlan =
+        if (layers.none { it.hidden } && texts.none { it.hidden } && stickers.none { it.hidden }) this
+        else copy(layers = layers.filter { !it.hidden }, texts = texts.filter { !it.hidden }, stickers = stickers.filter { !it.hidden })
 
     /** Composition-time ranges where the rider is talking (the music dips there). */
     fun talkingRanges(): List<LongRange> {

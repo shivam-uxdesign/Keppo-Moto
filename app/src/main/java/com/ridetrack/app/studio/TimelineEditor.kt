@@ -163,6 +163,18 @@ import kotlinx.coroutines.flow.collectLatest
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.structuralEqualityPolicy
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.zIndex
 
 /** What a text dialog is for. */
 private sealed interface TextAsk {
@@ -180,6 +192,15 @@ private enum class ClipTab { EDIT, SPEED, LOOK, FRAME }
 
 /** One frame at 30 fps. */
 private const val FRAME_MS = 33L
+/** How many layers play their video in the preview at once (the top ones); more show a still. */
+private const val MAX_LAYER_VIDEOS = 3
+/** A playing layer drifting this far from the edit jumps back in step. */
+private const val LAYER_DRIFT_MS = 250L
+/** A timeline row's height. */
+private val ROW = 34.dp
+/** The timeline's height to start with, and its least; the rider drags the handle above it. */
+private const val TIMELINE_DP = 230f
+private const val TIMELINE_MIN_DP = 120f
 
 /**
  * The timeline editor: the edit plays live at the top (no rendering), the timeline below scrolls
@@ -242,6 +263,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     }
     val pxPerMs = with(density) { 64.dp.toPx() } * zoom / 1000f
     val scroll = rememberScrollState()
+    val rowScroll = rememberScrollState()
+    var timelineDp by androidx.compose.runtime.saveable.rememberSaveable { mutableFloatStateOf(TIMELINE_DP) }
     val current by rememberUpdatedState(plan)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -316,7 +339,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     LaunchedEffect(dragged) { if (dragged) loopAt = null }
     LaunchedEffect(flash) { if (flash != null) { delay(1_300); flash = null } }
     // A different selection closes the transition picker.
-    LaunchedEffect(s.pick) { if (s.pick != null) { cutAt = null; voiceOn = false }; clipTab = ClipTab.EDIT }
+    LaunchedEffect(s.pick) { if (s.pick != null) { cutAt = null; voiceOn = false; filterOpen = false }; clipTab = ClipTab.EDIT }
     // A take stops at the end of the Reel.
     // (Watched without reading the playhead here, so the whole editor isn't redrawn 30 times a second.)
     LaunchedEffect(s.recordingAt) {
@@ -390,33 +413,40 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             ) {
                 val boxW = maxWidth
                 val boxH = maxHeight
-                // The picture: the style's camera (with the transitions' moves) and the clip's own crop,
-                // turn and flip, never zoomed less than the made video's fill; the look as one colour
-                // matrix (Red only as a shader where the phone can).
-                val (ti, tl) = TimelineEdits.at(plan, pos)
-                val tseg = plan.segments.getOrNull(ti)
-                val cs = (tseg as? ClipSegment)?.takeIf { !it.tail }
-                val cam = (tseg as? ClipSegment)?.let { seg ->
-                    val c0 = art.camera(Cuts.frameAt(plan, ti, tl, seg.durMs))
-                    if (cs == null || cs.frame.isEmpty()) c0 else ClipTools.frameAt(cs, tl).let { f ->
-                        val room = (f.zoom - 1f) / 2f
-                        c0.copy(k = c0.k * f.zoom, x = c0.x - f.x * art.w * room, y = c0.y - f.y * art.h * room)
-                    }
-                }
+                // The clip under the playhead changes only at cuts, so the editor redraws then and not on
+                // every frame; what moves within a clip (camera, graphics, layers) reads the playhead
+                // where it's drawn.
+                val ti by remember(plan) { derivedStateOf { TimelineEdits.at(plan, pos).first } }
+                val cs = (plan.segments.getOrNull(ti) as? ClipSegment)?.takeIf { !it.tail }
                 val unit = with(density) { boxW.toPx() } / art.w
-                val turned = cs != null && (cs.rotation == 90 || cs.rotation == 270)
                 val lookPaint = remember(plan.vibe, cs?.color, s.options.filter, s.options.filterAmount) {
                     android.graphics.Paint().apply { colorFilter = android.graphics.ColorMatrixColorFilter(Looks.matrix(plan.vibe, cs?.color, s.options.filter, s.options.filterAmount)) }
                 }
+                // The picture: the style's camera (with the transitions' moves) and the clip's own crop,
+                // turn and flip, never zoomed less than the made video's fill; the look as one colour
+                // matrix (Red only as a shader where the phone can).
                 Box(
                     Modifier.fillMaxSize().graphicsLayer {
+                        val (fi, fl) = TimelineEdits.at(plan, pos)
+                        val fseg = plan.segments.getOrNull(fi) as? ClipSegment
+                        val fcs = fseg?.takeIf { !it.tail }
+                        val cam = fseg?.let { seg ->
+                            val c0 = art.camera(Cuts.frameAt(plan, fi, fl, seg.durMs))
+                            if (fcs == null || fcs.frame.isEmpty()) c0 else ClipTools.frameAt(fcs, fl).let { f ->
+                                val room = (f.zoom - 1f) / 2f
+                                c0.copy(k = c0.k * f.zoom, x = c0.x - f.x * art.w * room, y = c0.y - f.y * art.h * room)
+                            }
+                        }
+                        val turned = fcs != null && (fcs.rotation == 90 || fcs.rotation == 270)
                         val k = (cam?.let { maxOf(it.k, art.fill(it)) } ?: 1f) * crop.z * (if (turned) maxOf(size.height / size.width, size.width / size.height) else 1f)
-                        scaleX = k * (if (cs?.flip == true) -1f else 1f); scaleY = k
+                        scaleX = k * (if (fcs?.flip == true) -1f else 1f); scaleY = k
                         translationX = (cam?.x ?: 0f) * unit + crop.x
                         translationY = (cam?.y ?: 0f) * unit + crop.y
-                        rotationZ = (cam?.deg ?: 0f) + crop.r + (cs?.rotation ?: 0)
+                        rotationZ = (cam?.deg ?: 0f) + crop.r + (fcs?.rotation ?: 0)
                     },
                 ) {
+                    val redOnly = if (RideFilters.keepsRed(s.options.filter)) s.options.filterAmount else 0f
+                    val redSet = remember { floatArrayOf(-1f) }
                     AndroidView(
                         factory = { ctx ->
                             (android.view.LayoutInflater.from(ctx).inflate(com.ridetrack.app.R.layout.moment_popup_player, null) as PlayerView).also { v -> v.player = active }
@@ -425,7 +455,11 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             if (v.player !== active) v.player = active
                             (v.videoSurfaceView as? android.view.TextureView)?.let { tv ->
                                 tv.setLayerPaint(lookPaint)
-                                PreviewEffects.redOnly(tv, if (RideFilters.keepsRed(s.options.filter)) s.options.filterAmount else 0f)
+                                // Only when it changes: a new shader every update is slow.
+                                if (redSet[0] != redOnly) {
+                                    redSet[0] = redOnly
+                                    PreviewEffects.redOnly(tv, redOnly)
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxSize(),
@@ -438,50 +472,85 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         )
                     }
                 }
-                // The graphics: drawn by the same code as the made video.
-                val overlayIn = remember(plan, s.options, s.title, s.hookLine, s.label, s.takes) { vm.overlayInput(plan) }
+                // The graphics: drawn by the same code as the made video (hidden text and stickers left out).
+                val shown = remember(plan) { plan.shown() }
+                val overlayIn = remember(shown, s.options, s.title, s.hookLine, s.label, s.takes) { vm.overlayInput(shown) }
                 if (overlayIn != null) {
                     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-                        val (oi, ol) = TimelineEdits.at(plan, pos)
-                        val seg = plan.segments.getOrNull(oi) ?: return@Canvas
+                        val (oi, ol) = TimelineEdits.at(shown, pos)
+                        val seg = shown.segments.getOrNull(oi) ?: return@Canvas
                         val live = (seg as? ClipSegment)?.let { ReelOverlay.liveAt(overlayIn, it, ol, seg.durMs) } ?: ReelOverlay.Live(-1, "", null)
                         drawIntoCanvas { c ->
                             val nc = c.nativeCanvas
                             nc.save()
                             nc.scale(size.width / art.w, size.height / art.h)
-                            ReelOverlay.draw(nc, art, plan, oi, ol, seg.durMs, overlayIn, live, ReelOverlay.voiceLines(overlayIn, plan, oi, seg.durMs))
+                            ReelOverlay.draw(nc, art, shown, oi, ol, seg.durMs, overlayIn, live, ReelOverlay.voiceLines(overlayIn, shown, oi, seg.durMs))
                             nc.restore()
                         }
                     }
                 }
-                // Layers, as still frames where they'll be (they move in the saved video).
-                plan.layers.filter { pos in it.startMs until it.endMs }.forEach { l ->
-                    LayerPreview(vm, s, l, pos, boxW.value, boxH.value, selected = (s.pick as? TimelinePick.Layer)?.id == l.id)
+                // Layers where they'll be, the newest on top. The top few play their video; more
+                // than that show a still, so the preview stays smooth.
+                val showing by remember(plan) { derivedStateOf(structuralEqualityPolicy()) { plan.layers.filter { !it.hidden && pos in it.startMs until it.endMs } } }
+                showing.forEachIndexed { n, l ->
+                    androidx.compose.runtime.key(l.id) {
+                        LayerPreview(
+                            vm, s, l, { pos }, active, files[l.bit.momentId] ?: l.bit.source?.let(android.net.Uri::parse), boxW.value, boxH.value,
+                            selected = (s.pick as? TimelinePick.Layer)?.id == l.id,
+                            play = n >= showing.size - MAX_LAYER_VIDEOS,
+                        )
+                    }
                 }
                 val fontPx = maxWidth.value * 0.075f
                 val font = VibeFonts[plan.vibe]
                 val style = TextStyle(fontFamily = font, fontSize = fontPx.sp, color = Color.White, textAlign = TextAlign.Center)
-                // The caption being said: tap it to fix a word. Its spot is where it's really drawn
-                // (measured by drawing it off-screen).
-                val (si, local) = TimelineEdits.at(plan, pos)
-                (plan.segments.getOrNull(si) as? ClipSegment)?.takeIf { s.options.captions && !it.tail }?.let { cseg ->
-                    val j = cseg.lines.indexOfLast { local >= it.startMs - Tok.LEAD }
-                    val pic = android.graphics.Picture()
-                    val bounds = art.caption(pic.beginRecording(art.w, art.h), plan.vibe, cseg.lines, local.toFloat(), plan.captionLook)
-                    pic.endRecording()
-                    if (j >= 0 && bounds != null) {
+                // The caption being said: tap it to fix a word, drag it up or down to move every
+                // caption. Its spot is where it's really drawn (measured by drawing it off-screen).
+                val captionNow by remember(plan, s.options.captions) {
+                    derivedStateOf(structuralEqualityPolicy()) {
+                        if (!s.options.captions) return@derivedStateOf null
+                        val (si, local) = TimelineEdits.at(plan, pos)
+                        val cseg = (plan.segments.getOrNull(si) as? ClipSegment)?.takeIf { !it.tail } ?: return@derivedStateOf null
+                        val j = cseg.lines.indexOfLast { local >= it.startMs - Tok.LEAD }
+                        if (j >= 0 && local <= cseg.lines[j].endMs + 300) si to j else null
+                    }
+                }
+                captionNow?.let { (si, j) ->
+                    val cseg = plan.segments[si] as ClipSegment
+                    var moving by remember { mutableStateOf(false) }
+                    // Kept still while it's dragged, so the finger's moves read true.
+                    val bounds = remember(si, j, cseg.lines, plan.vibe, if (moving) null else plan.captionLook) {
+                        val pic = android.graphics.Picture()
+                        val line = cseg.lines[j]
+                        art.caption(pic.beginRecording(art.w, art.h), plan.vibe, cseg.lines, ((line.startMs + line.endMs) / 2).toFloat(), plan.captionLook).also { pic.endRecording() }
+                    }
+                    if (bounds != null) {
+                        val hPx = with(density) { boxH.toPx() }
                         Box(
                             Modifier.offset(x = boxW * (bounds.left / art.w), y = boxH * (bounds.top / art.h))
                                 .size(width = boxW * (bounds.width() / art.w), height = boxH * (bounds.height() / art.h))
-                                .clickable(role = Role.Button, onClickLabel = "Fix this caption") { active.pause(); captionTab = CaptionTab.WORDS; captionLine = si to j; captionsOpen = true },
+                                .then(if (moving) Modifier.border(1.5.dp, RtColors.Primary, RoundedCornerShape(6.dp)) else Modifier)
+                                .clickable(role = Role.Button, onClickLabel = "Fix this caption") { active.pause(); captionTab = CaptionTab.WORDS; captionLine = si to j; captionsOpen = true }
+                                .pointerInput(si, j) {
+                                    var total = 0f
+                                    detectVerticalDragGestures(
+                                        onDragStart = { total = 0f; moving = true; active.pause() },
+                                        onDragEnd = { moving = false; vm.endDrag("Captions height") },
+                                        onDragCancel = { moving = false; vm.endDrag("Captions height") },
+                                    ) { ch, dy ->
+                                        ch.consume()
+                                        total += dy
+                                        vm.drag { p -> TextTools.captionLook(p) { l -> l.copy(y = ((l.y ?: Tok.CAPTION_Y) + total / hPx).coerceIn(0.1f, 0.9f)) } }
+                                    }
+                                },
                         )
                     }
                 }
-                // Text on the timeline; the selected one can be dragged up or down.
-                // Text and stickers: drag anywhere, pinch to size and turn (the selected one). They're drawn
-                // with the video's graphics (above, or in the exact preview's video): here only their
-                // spot listens, and the selected one's frame shows, to move it.
-                plan.texts.filter { pos in it.startMs until it.endMs && true }.forEach { t ->
+                // Text and stickers: drag anywhere, pinch to size and turn (the selected one). They're
+                // drawn with the video's graphics (above): here only their spot listens, and the
+                // selected one's frame shows, to move it.
+                val textsHere by remember(plan) { derivedStateOf(structuralEqualityPolicy()) { plan.texts.filter { !it.hidden && pos in it.startMs until it.endMs } } }
+                textsHere.forEach { t ->
                     val selected = (s.pick as? TimelinePick.Text)?.id == t.id
                     Placed(
                         t.x, t.y, t.size, t.rotation, selected,
@@ -504,7 +573,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         )
                     }
                 }
-                plan.stickers.filter { pos in it.startMs until it.endMs && true }.forEach { st ->
+                val stickersHere by remember(plan) { derivedStateOf(structuralEqualityPolicy()) { plan.stickers.filter { !it.hidden && pos in it.startMs until it.endMs } } }
+                stickersHere.forEach { st ->
                     val selected = (s.pick as? TimelinePick.Sticker)?.id == st.id
                     Placed(
                         st.x, st.y, st.size, st.rotation, selected,
@@ -598,7 +668,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 ) {
                     Text(said, style = RtType.bodyStrong, color = Color.White, modifier = Modifier.clip(RoundedCornerShape(18.dp)).background(Color.Black.copy(alpha = 0.7f)).padding(horizontal = 14.dp, vertical = 8.dp))
                 }
-                s.recordingAt?.let { Pill("● Recording · ${clock((pos - it).coerceAtLeast(0))}", Modifier.align(Alignment.TopCenter).padding(top = 10.dp)) }
+                s.recordingAt?.let { RecordingPill({ pos }, it, Modifier.align(Alignment.TopCenter).padding(top = 10.dp)) }
                 if (cutAt != null && loopAt != null) {
                     val kind = (plan.segments.getOrNull(cutAt ?: 0) as? ClipSegment)?.transition?.kind ?: TransitionKind.STYLE
                     Pill("Looping the cut · ${kind.label}", Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp))
@@ -618,9 +688,19 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         }
 
         if (!full) {
-            // ---- timeline (pinch to zoom)
-            Box(Modifier.fillMaxWidth().pinchToZoom { z -> zoom = (zoom * z).coerceIn(0.25f, 8f) }) {
-                BoxWithConstraints(Modifier.fillMaxWidth()) {
+            // ---- the handle: drag it up for a taller timeline, down for a bigger video
+            val maxTimeline = LocalConfiguration.current.screenHeightDp * 0.6f
+            Box(
+                Modifier.fillMaxWidth().height(18.dp)
+                    .pointerInput(maxTimeline) {
+                        detectVerticalDragGestures { ch, dy -> ch.consume(); timelineDp = (timelineDp - dy.toDp().value).coerceIn(TIMELINE_MIN_DP, maxTimeline) }
+                    }
+                    .semantics { contentDescription = "Drag to make the timeline taller or shorter" },
+                contentAlignment = Alignment.Center,
+            ) { Box(Modifier.width(36.dp).height(4.dp).clip(CircleShape).background(RtColors.TextTertiary)) }
+            // ---- timeline (pinch to zoom; scrolls up and down when its rows don't fit)
+            Box(Modifier.fillMaxWidth().height(timelineDp.coerceAtMost(maxTimeline).dp).pinchToZoom { z -> zoom = (zoom * z).coerceIn(0.25f, 8f) }) {
+                BoxWithConstraints(Modifier.fillMaxWidth().verticalScroll(rowScroll)) {
                     val half = maxWidth / 2
                     val starts = TimelineEdits.starts(plan)
                     fun w(ms: Long) = with(density) { (ms * pxPerMs).toDp() }
@@ -710,79 +790,106 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 contentAlignment = Alignment.Center,
                             ) { Icon(Icons.Rounded.Add, contentDescription = null, tint = RtColors.Background, modifier = Modifier.size(22.dp)) }
                             }
-                            // Layers
+                            // Layers: things that overlap go on rows of their own, the top row drawn over
+                            // the ones below. Hold one and drag: sideways in time, up or down a row.
                             if (plan.layers.isNotEmpty()) {
-                                Box(Modifier.fillMaxWidth().height(24.dp)) {
-                                    plan.layers.forEach { l ->
+                                val top = plan.layers.asReversed()
+                                val rows = Lanes.pack(top.map { Lanes.Span(it.startMs, it.endMs) })
+                                Rows(Lanes.count(rows)) {
+                                    top.forEachIndexed { n, l ->
                                         val selected = (s.pick as? TimelinePick.Layer)?.id == l.id
-                                        Block("▣ Layer" + if (l.keys.isNotEmpty()) " · moves" else "", l.startMs, l.durMs, pxPerMs, Color(0x5594E2B8), selected) {
-                                            vm.pick(if (selected) null else TimelinePick.Layer(l.id))
+                                        androidx.compose.runtime.key(l.id) {
+                                            TrackBlock(
+                                                "▣ Layer" + if (l.keys.isNotEmpty()) " · moves" else "", l.startMs, l.durMs, rows[n], pxPerMs, Color(0x5594E2B8), selected, l.hidden,
+                                                onClick = { vm.pick(if (selected) null else TimelinePick.Layer(l.id)) },
+                                            ) { ms, r -> vm.change("Move layer") { p -> TrackEdits.stackLayer(TrackEdits.shiftLayer(p, l.id, ms), l.id, r) } }
                                         }
                                     }
                                 }
                             }
-                            // Captions
-                            Box(Modifier.fillMaxWidth().height(22.dp)) {
-                                plan.segments.forEachIndexed { i, seg ->
-                                    if (seg !is ClipSegment || seg.tail) return@forEachIndexed
-                                    seg.lines.forEachIndexed { j, l ->
-                                        val selected = s.pick == TimelinePick.Caption(i, j)
-                                        Block(l.text, starts[i] + l.startMs, (l.endMs - l.startMs).coerceAtMost(seg.durMs - l.startMs), pxPerMs, RtColors.Primary.copy(alpha = 0.25f), selected) {
-                                            vm.pick(if (selected) null else TimelinePick.Caption(i, j))
-                                        }
-                                    }
+                            // Captions: ones said at the same time go on rows of their own. Hold one and drag to move it in time.
+                            val caps = remember(plan.segments) {
+                                plan.segments.flatMapIndexed { i, seg ->
+                                    if (seg !is ClipSegment || seg.tail) emptyList()
+                                    else seg.lines.mapIndexed { j, l -> Triple(i, j, Lanes.Span(starts[i] + l.startMs, starts[i] + minOf(l.endMs, seg.durMs).coerceAtLeast(l.startMs + 1))) }
+                                }
+                            }
+                            val capRows = remember(caps) { Lanes.pack(caps.map { it.third }) }
+                            Rows(Lanes.count(capRows)) {
+                                caps.forEachIndexed { n, (i, j, sp) ->
+                                    val line = (plan.segments[i] as ClipSegment).lines[j]
+                                    val selected = s.pick == TimelinePick.Caption(i, j)
+                                    TrackBlock(
+                                        line.text, sp.startMs, sp.endMs - sp.startMs, capRows[n], pxPerMs, RtColors.Primary.copy(alpha = 0.25f), selected, hidden = !s.options.captions,
+                                        onClick = { vm.pick(if (selected) null else TimelinePick.Caption(i, j)) },
+                                    ) { ms, _ -> vm.change("Caption time") { TimelineEdits.nudgeCaption(it, i, j, ms) }; vm.pick(null) }
                                 }
                             }
                             // Text
-                            Box(Modifier.fillMaxWidth().height(22.dp)) {
-                                plan.texts.forEach { t ->
-                                    val selected = (s.pick as? TimelinePick.Text)?.id == t.id
-                                    Block("T  ${t.text}", t.startMs, t.endMs - t.startMs, pxPerMs, Color(0x55FFC83D), selected) {
-                                        vm.pick(if (selected) null else TimelinePick.Text(t.id))
+                            run {
+                                val top = plan.texts.asReversed()
+                                val rows = Lanes.pack(top.map { Lanes.Span(it.startMs, it.endMs) })
+                                Rows(Lanes.count(rows)) {
+                                    top.forEachIndexed { n, t ->
+                                        val selected = (s.pick as? TimelinePick.Text)?.id == t.id
+                                        androidx.compose.runtime.key(t.id) {
+                                            TrackBlock(
+                                                "T  ${t.text}", t.startMs, t.endMs - t.startMs, rows[n], pxPerMs, Color(0x55FFC83D), selected, t.hidden,
+                                                onClick = { vm.pick(if (selected) null else TimelinePick.Text(t.id)) },
+                                            ) { ms, r -> vm.change("Move text") { p -> TrackEdits.stackText(TimelineEdits.moveText(p, t.id, ms), t.id, r) } }
+                                        }
                                     }
                                 }
                             }
                             // Stickers
                             if (plan.stickers.isNotEmpty()) {
-                                Box(Modifier.fillMaxWidth().height(20.dp)) {
-                                    plan.stickers.forEach { st ->
+                                val top = plan.stickers.asReversed()
+                                val rows = Lanes.pack(top.map { Lanes.Span(it.startMs, it.endMs) })
+                                Rows(Lanes.count(rows)) {
+                                    top.forEachIndexed { n, st ->
                                         val selected = (s.pick as? TimelinePick.Sticker)?.id == st.id
-                                        Block(if (st.kind == StickerKind.EMOJI) st.text else st.kind.label, st.startMs, st.endMs - st.startMs, pxPerMs, Color(0x55F472B6), selected) {
-                                            vm.pick(if (selected) null else TimelinePick.Sticker(st.id))
+                                        androidx.compose.runtime.key(st.id) {
+                                            TrackBlock(
+                                                if (st.kind == StickerKind.EMOJI) st.text else st.kind.label, st.startMs, st.endMs - st.startMs, rows[n], pxPerMs, Color(0x55F472B6), selected, st.hidden,
+                                                onClick = { vm.pick(if (selected) null else TimelinePick.Sticker(st.id)) },
+                                            ) { ms, r -> vm.change("Move sticker") { p -> TrackEdits.stackSticker(TextTools.shiftSticker(p, st.id, ms), st.id, r) } }
                                         }
                                     }
                                 }
                             }
-                            // Sound tracks
+                            // Sound tracks (hold one and drag to move it in time)
                             listOf(TrackKind.DETACHED, TrackKind.ENGINE).forEach { kind ->
                                 val items = plan.audio.filter { it.kind == kind }
                                 if (items.isEmpty()) return@forEach
-                                Box(Modifier.fillMaxWidth().height(20.dp)) {
+                                Rows(1) {
                                     items.forEach { a ->
                                         val selected = (s.pick as? TimelinePick.Audio)?.id == a.id
                                         val muted = plan.mix.gain(kind) == 0f
-                                        Block((if (kind == TrackKind.ENGINE) "Engine" else "♪ Sound") + if (muted) " · muted" else "", a.startMs, a.durMs, pxPerMs, if (kind == TrackKind.ENGINE) Color(0x55F97316) else Color(0x55A78BFA), selected) {
-                                            vm.pick(if (selected) null else TimelinePick.Audio(a.id))
-                                        }
+                                        TrackBlock(
+                                            (if (kind == TrackKind.ENGINE) "Engine" else "♪ Sound") + if (muted) " · muted" else "", a.startMs, a.durMs, 0, pxPerMs,
+                                            if (kind == TrackKind.ENGINE) Color(0x55F97316) else Color(0x55A78BFA), selected,
+                                            onClick = { vm.pick(if (selected) null else TimelinePick.Audio(a.id)) },
+                                        ) { ms, _ -> vm.change("Sound time") { TrackEdits.shiftAudio(it, a.id, ms) } }
                                     }
                                 }
                             }
                             if (s.takes.isNotEmpty()) {
-                                Box(Modifier.fillMaxWidth().height(18.dp)) {
-                                    s.takes.forEach { t -> Block("Voice-over", t.startMs, t.durMs, pxPerMs, Color(0x5560A5FA), false) { mixer = true } }
+                                Rows(1) {
+                                    s.takes.forEach { t -> TrackBlock("Voice-over", t.startMs, t.durMs, 0, pxPerMs, Color(0x5560A5FA), false, onClick = { mixer = true }) }
                                 }
                             }
                             if (s.musicUri != null) {
-                                Box(Modifier.fillMaxWidth().height(18.dp)) {
-                                    Block("♫ ${s.musicName ?: "Music"}", 0, plan.totalMs, pxPerMs, Color(0x5534D399), false) { mixer = true }
+                                Rows(1) {
+                                    TrackBlock("♫ ${s.musicName ?: "Music"}", 0, plan.totalMs, 0, pxPerMs, Color(0x5534D399), false, onClick = { mixer = true })
                                 }
                             }
                             plan.audio.filter { it.kind == TrackKind.MUSIC }.forEach { a ->
                                 val selected = (s.pick as? TimelinePick.Audio)?.id == a.id
-                                Box(Modifier.fillMaxWidth().height(20.dp)) {
-                                    Block("♫ ${a.name ?: "Sound"}" + if (plan.mix.gain(TrackKind.MUSIC) == 0f) " · muted" else "", a.startMs, a.durMs, pxPerMs, Color(0x5534D399), selected) {
-                                        vm.pick(if (selected) null else TimelinePick.Audio(a.id))
-                                    }
+                                Rows(1) {
+                                    TrackBlock(
+                                        "♫ ${a.name ?: "Sound"}" + if (plan.mix.gain(TrackKind.MUSIC) == 0f) " · muted" else "", a.startMs, a.durMs, 0, pxPerMs, Color(0x5534D399), selected,
+                                        onClick = { vm.pick(if (selected) null else TimelinePick.Audio(a.id)) },
+                                    ) { ms, _ -> vm.change("Sound time") { TrackEdits.shiftAudio(it, a.id, ms) } }
                                 }
                             }
                             Text(
@@ -804,7 +911,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
 
             // ---- tools: they change with what's selected (a back arrow returns to all of them)
             val seg = (s.pick as? TimelinePick.Clip)?.let { plan.segments.getOrNull(it.index) as? ClipSegment }
-            val barKey = if (cutAt != null) "cut" else if (voiceOn) "voice" else "${s.pick?.javaClass?.simpleName}:${(s.pick as? TimelinePick.Clip)?.index}:$clipTab"
+            val barKey = if (cutAt != null) "cut" else if (voiceOn) "voice" else if (filterOpen) "filter" else "${s.pick?.javaClass?.simpleName}:${(s.pick as? TimelinePick.Clip)?.index}:$clipTab"
             androidx.compose.runtime.key(barKey) {
                 val cut = cutAt
                 val picked = s.pick
@@ -820,6 +927,9 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         onAll = { vm.change("Transition on all cuts") { ClipTools.transitionAll(it, tr) }; flash = "${tr.kind.label} on every cut" },
                         onDone = { cutAt = null; loopAt = null; active.pause() },
                     )
+                } else if (filterOpen) {
+                    // Filters right under the video, so each one shows on it as it's tapped.
+                    FilterPanel(vm, s.options, onPicked = { f -> tick(); flash = f.label }) { filterOpen = false }
                 } else if (!voiceOn && (picked == null || (picked is TimelinePick.Clip && clipTab == ClipTab.EDIT))) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         var n = 0
@@ -853,7 +963,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete") { TimelineEdits.delete(it, i) }; vm.pick(null) }
                         } else {
                             Tool(Icons.Rounded.Palette, "Style", n++) { styleOpen = true }
-                            Tool(Icons.Rounded.Gradient, "Filter", n++) { filterOpen = true }
+                            Tool(Icons.Rounded.Gradient, if (s.options.filter == RideFilter.NONE) "Filter" else "Filter: ${s.options.filter.label}", n++, on = s.options.filter != RideFilter.NONE) { filterOpen = true }
                             Tool(Icons.Rounded.TextFields, "Text", n++) { active.pause(); typingId = null; typing = true }
                             Tool(Icons.Rounded.ClosedCaption, "Captions", n++) { captionTab = CaptionTab.LOOK; captionLine = null; captionsOpen = true }
                             Tool(Icons.Rounded.Subtitles, "Add caption", n++) { ask = TextAsk.NewCaption }
@@ -959,6 +1069,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 Tool(if (loud) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff, if (loud) "Its sound on" else "Its sound off", n++, on = loud) {
                                     vm.change("Layer sound") { TrackEdits.layerVolume(it, p.id, if (loud) 0f else 1f) }
                                 }
+                                val hid = l?.hidden == true
+                                Tool(if (hid) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, if (hid) "Show" else "Hide", n++, on = hid) { vm.change(if (hid) "Show layer" else "Hide layer") { TrackEdits.hideLayer(it, p.id, !hid) } }
                                 Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete layer") { TrackEdits.deleteLayer(it, p.id) }; vm.pick(null) }
                             }
                             is TimelinePick.Audio -> {
@@ -988,6 +1100,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 Tool(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier", n++) { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, -200) } }
                                 Tool(Icons.Rounded.KeyboardDoubleArrowRight, "Later", n++) { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, 200) } }
                                 (plan.segments.getOrNull(p.index) as? ClipSegment)?.let { seg -> Tool(Icons.Rounded.Hearing, "Read again", n++) { vm.readAgain(seg.bit.momentId) } }
+                                val off = !s.options.captions
+                                Tool(if (off) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, if (off) "Show captions" else "Hide captions", n++, on = off) { vm.setOptions { o -> o.copy(captions = off) } }
                                 Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete caption") { TimelineEdits.caption(it, p.index, p.line, "") }; vm.pick(null) }
                             }
                             is TimelinePick.Text -> {
@@ -1005,6 +1119,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 Tool(Icons.Rounded.KeyboardDoubleArrowRight, "Later", n++) { vm.change("Text time") { TimelineEdits.moveText(it, p.id, 500) } }
                                 Tool(Icons.Rounded.UnfoldLess, "Shorter", n++) { vm.change("Text length") { TimelineEdits.resizeText(it, p.id, -500) } }
                                 Tool(Icons.Rounded.UnfoldMore, "Longer", n++) { vm.change("Text length") { TimelineEdits.resizeText(it, p.id, 500) } }
+                                val hid = t?.hidden == true
+                                Tool(if (hid) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, if (hid) "Show" else "Hide", n++, on = hid) { vm.change(if (hid) "Show text" else "Hide text") { TrackEdits.hideText(it, p.id, !hid) } }
                                 Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete text") { TimelineEdits.deleteText(it, p.id) }; vm.pick(null) }
                             }
                             is TimelinePick.Sticker -> {
@@ -1018,6 +1134,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 Tool(Icons.Rounded.KeyboardDoubleArrowRight, "Later", n++) { vm.change("Sticker time") { TextTools.shiftSticker(it, p.id, 500) } }
                                 Tool(Icons.Rounded.UnfoldLess, "Shorter", n++) { vm.change("Sticker length") { TextTools.resizeStickerTime(it, p.id, -500) } }
                                 Tool(Icons.Rounded.UnfoldMore, "Longer", n++) { vm.change("Sticker length") { TextTools.resizeStickerTime(it, p.id, 500) } }
+                                val hid = st?.hidden == true
+                                Tool(if (hid) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, if (hid) "Show" else "Hide", n++, on = hid) { vm.change(if (hid) "Show sticker" else "Hide sticker") { TrackEdits.hideSticker(it, p.id, !hid) } }
                                 Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete sticker") { TextTools.deleteSticker(it, p.id) }; vm.pick(null) }
                             }
                             else -> Unit
@@ -1028,11 +1146,12 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             Text(
                 when {
                     cutAt != null -> "Tap a transition: the cut plays on a loop. Done when you like it."
-                    s.pick == null -> "Tap the video to play, swipe it for another style, hold it to see the made one, swipe down to close. Pinch the timeline to zoom."
+                    filterOpen -> "Tap a filter: it shows on the video. It goes under every graphic."
+                    s.pick == null -> "Tap the video to play, swipe it for another style. Drag a caption up or down to move the captions. Hold a block on the timeline to drag it. Pinch the timeline to zoom."
                     else -> when (s.pick) {
                         is TimelinePick.Clip -> "Drag the white edges to trim. Split cuts at the playhead."
                         is TimelinePick.Clips -> "Tap clips to add or take them out of the selection."
-                        is TimelinePick.Layer -> "Drag the layer on the video to move it, pinch to resize. Move here marks where it is now, so it glides there."
+                        is TimelinePick.Layer -> "Drag the layer on the video to move it, pinch to resize. On the timeline, hold it and drag up to put it over the others."
                         is TimelinePick.Audio -> "A sound can run past its cut. Dip here and Full here shape its volume."
                         is TimelinePick.Text -> "Drag the text on the video to place it; pinch to size and turn."
                         else -> "Layers show as stills here; they play in the saved video."
@@ -1248,7 +1367,6 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 }
             }
         }
-        FilterSheet(vm, s.options, filterOpen) { filterOpen = false }
     }
     if (styleOpen) {
         val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
@@ -1333,15 +1451,27 @@ private fun StickerPreview(st: StickerItem, hidden: Boolean, selected: Boolean, 
     }
 }
 
-/** A layer on the preview, as a still of its clip; the selected one drags to move and pinches to resize. */
+/**
+ * A layer on the preview, where it is at the playhead (read as it's laid out, not every frame in
+ * the composition). With [play] its video plays in step with the edit; otherwise a still shows.
+ * The selected one drags to move and pinches to resize.
+ */
 @Composable
-private fun LayerPreview(vm: StudioViewModel, s: StudioState, l: LayerItem, pos: Long, boxW: Float, boxH: Float, selected: Boolean) {
-    val k = TrackEdits.keyAt(l, pos - l.startMs)
-    val w = boxW * k.w
-    val h = w / l.aspect
-    var dx by remember(l.id, k.cx) { mutableFloatStateOf(0f) }
-    var dy by remember(l.id, k.cy) { mutableFloatStateOf(0f) }
-    var scale by remember(l.id, k.w) { mutableFloatStateOf(1f) }
+private fun LayerPreview(
+    vm: StudioViewModel,
+    s: StudioState,
+    l: LayerItem,
+    pos: () -> Long,
+    main: Player,
+    uri: android.net.Uri?,
+    boxW: Float,
+    boxH: Float,
+    selected: Boolean,
+    play: Boolean,
+) {
+    var dx by remember(l) { mutableFloatStateOf(0f) }
+    var dy by remember(l) { mutableFloatStateOf(0f) }
+    var scale by remember(l) { mutableFloatStateOf(1f) }
     val shape: Shape = when (l.shape) {
         LayerShape.RECT -> RoundedCornerShape(0.dp)
         LayerShape.ROUNDED -> RoundedCornerShape((Tok.R_MD * boxW / 540f).dp)
@@ -1350,8 +1480,15 @@ private fun LayerPreview(vm: StudioViewModel, s: StudioState, l: LayerItem, pos:
     val density = LocalDensity.current
     Box(
         Modifier
-            .offset { IntOffset(((boxW * k.cx - w / 2).dp.toPx() + dx).roundToInt(), ((boxH * k.cy - h / 2).dp.toPx() + dy).roundToInt()) }
-            .size(w.dp, h.dp)
+            .layout { m, c ->
+                val k = TrackEdits.keyAt(l, pos() - l.startMs)
+                val w = (boxW * k.w).dp.roundToPx().coerceAtLeast(1)
+                val h = (boxW * k.w / l.aspect).dp.roundToPx().coerceAtLeast(1)
+                val p = m.measure(Constraints.fixed(w, h))
+                layout(c.maxWidth, c.maxHeight) {
+                    p.place(((boxW * k.cx).dp.toPx() - w / 2f + dx).roundToInt(), ((boxH * k.cy).dp.toPx() - h / 2f + dy).roundToInt())
+                }
+            }
             .graphicsLayer { scaleX = scale; scaleY = scale; alpha = l.opacity }
             .rotate(l.rotation)
             .clip(shape)
@@ -1379,16 +1516,128 @@ private fun LayerPreview(vm: StudioViewModel, s: StudioState, l: LayerItem, pos:
                     val mx = with(density) { dx / (boxW.dp.toPx()) }
                     val my = with(density) { dy / (boxH.dp.toPx()) }
                     val f = scale
+                    val at = pos()
                     if (mx != 0f || my != 0f || f != 1f) {
                         vm.change("Move layer") { p ->
-                            val moved = TrackEdits.moveLayer(p, l.id, mx, my, pos)
-                            if (f != 1f) TrackEdits.resizeLayer(moved, l.id, f, pos) else moved
+                            val moved = TrackEdits.moveLayer(p, l.id, mx, my, at)
+                            if (f != 1f) TrackEdits.resizeLayer(moved, l.id, f, at) else moved
                         }
                     }
                 }
             },
     ) {
         Thumb(s.thumbs[l.bit.momentId], Modifier.fillMaxSize())
+        if (play && uri != null) LayerVideo(l, uri, main, pos)
+    }
+}
+
+/**
+ * A layer's own video, kept in step with the edit: it plays while the edit plays and shows the
+ * right frame while scrubbing. Silent (its sound, when on, is in the preview's sound mix).
+ */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@Composable
+private fun LayerVideo(l: LayerItem, uri: android.net.Uri, main: Player, pos: () -> Long) {
+    val context = LocalContext.current
+    val player = remember(uri) {
+        androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
+            volume = 0f
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(uri))
+            prepare()
+        }
+    }
+    DisposableEffect(player) { onDispose { player.release() } }
+    val layer by rememberUpdatedState(l)
+    LaunchedEffect(player) {
+        while (true) {
+            val at = layer
+            val want = (at.inMs + pos() - at.startMs).coerceAtLeast(0)
+            if (main.isPlaying) {
+                if (!player.playWhenReady) player.playWhenReady = true
+                if (abs(player.currentPosition - want) > LAYER_DRIFT_MS) player.seekTo(want)
+            } else {
+                if (player.playWhenReady) player.playWhenReady = false
+                if (abs(player.currentPosition - want) > FRAME_MS) player.seekTo(want)
+            }
+            delay(60)
+        }
+    }
+    AndroidView(
+        factory = { ctx -> (android.view.LayoutInflater.from(ctx).inflate(com.ridetrack.app.R.layout.layer_player, null) as PlayerView).also { it.player = player } },
+        modifier = Modifier.fillMaxSize(),
+    )
+}
+
+/** "Recording" and how long, over the video (reads the playhead on its own). */
+@Composable
+private fun RecordingPill(pos: () -> Long, from: Long, modifier: Modifier) {
+    Pill("● Recording · ${clock((pos() - from).coerceAtLeast(0))}", modifier)
+}
+
+/** A group of timeline rows, [count] high. */
+@Composable
+private fun Rows(count: Int, content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit) {
+    Box(Modifier.fillMaxWidth().height(ROW * count.coerceAtLeast(1)), content = content)
+}
+
+/**
+ * A block on a timeline row, from [startMs] for [durMs]. Tap selects it. With [onDrop], hold it
+ * and drag: sideways moves it in time, up or down to another row; [onDrop] gets how far (ms) and
+ * how many rows (negative: up).
+ */
+@Composable
+private fun TrackBlock(
+    label: String,
+    startMs: Long,
+    durMs: Long,
+    row: Int,
+    pxPerMs: Float,
+    color: Color,
+    selected: Boolean,
+    hidden: Boolean = false,
+    onClick: () -> Unit,
+    onDrop: ((deltaMs: Long, rows: Int) -> Unit)? = null,
+) {
+    val density = LocalDensity.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    var dx by remember { mutableFloatStateOf(0f) }
+    var dy by remember { mutableFloatStateOf(0f) }
+    var held by remember { mutableStateOf(false) }
+    val rowPx = with(density) { ROW.toPx() }
+    val drop by rememberUpdatedState(onDrop)
+    val perMs by rememberUpdatedState(pxPerMs)
+    Box(
+        Modifier.offset { IntOffset((startMs * pxPerMs + dx).roundToInt(), (row * rowPx + dy).roundToInt()) }
+            .zIndex(if (held) 1f else 0f)
+            .width(with(density) { (durMs.coerceAtLeast(200) * pxPerMs).toDp() }).height(ROW - 4.dp)
+            .graphicsLayer {
+                alpha = if (hidden && !held) 0.45f else 1f
+                if (held) { scaleY = 1.08f; shadowElevation = 8.dp.toPx() }
+            }
+            .clip(RoundedCornerShape(6.dp)).background(color)
+            .then(if (selected || held) Modifier.border(2.dp, RtColors.Primary, RoundedCornerShape(6.dp)) else Modifier)
+            .clickable(role = Role.Button, onClick = onClick)
+            .then(
+                if (onDrop == null) Modifier else Modifier.pointerInput(Unit) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { held = true; dx = 0f; dy = 0f; haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) },
+                        onDragEnd = {
+                            val ms = (dx / perMs).toLong()
+                            val rows = (dy / rowPx).roundToInt()
+                            held = false; dx = 0f; dy = 0f
+                            if (ms != 0L || rows != 0) drop?.invoke(ms, rows)
+                        },
+                        onDragCancel = { held = false; dx = 0f; dy = 0f },
+                    ) { ch, amount -> ch.consume(); dx += amount.x; dy += amount.y }
+                },
+            )
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (hidden) Icon(Icons.Rounded.VisibilityOff, contentDescription = "Hidden", tint = RtColors.TextPrimary, modifier = Modifier.size(12.dp))
+            Text(label, style = RtType.caption, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -1437,23 +1686,6 @@ private fun TrimHandle(modifier: Modifier, pxPerMs: Float, onEnd: () -> Unit, on
             },
     ) {
         Box(Modifier.align(Alignment.Center).width(2.dp).height(18.dp).background(Color.Black.copy(alpha = 0.6f)))
-    }
-}
-
-/** A block on a track, from [startMs] for [durMs]. */
-@Composable
-private fun Block(label: String, startMs: Long, durMs: Long, pxPerMs: Float, color: Color, selected: Boolean, onClick: () -> Unit) {
-    val density = LocalDensity.current
-    Box(
-        Modifier.offset { IntOffset((startMs * pxPerMs).roundToInt(), 0) }
-            .width(with(density) { (durMs.coerceAtLeast(200) * pxPerMs).toDp() }).fillMaxHeight()
-            .clip(RoundedCornerShape(4.dp)).background(color)
-            .then(if (selected) Modifier.border(2.dp, RtColors.Primary, RoundedCornerShape(4.dp)) else Modifier)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 4.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Text(label, style = RtType.caption, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

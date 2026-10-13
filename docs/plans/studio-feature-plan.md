@@ -936,7 +936,7 @@ There's one preview in the editor; it never switches. It replaces both the exact
   - Until a new mix is ready, the previous one plays.
 - **Errors:** a playback error reloads the player at the same spot (up to 3 tries), then says so on the video ("Preview couldn't update: tap to try again"). It never switches to another preview.
 
-## Bugs from the rider, APK keppo-moto-6e2d564 (13 Oct, listing; not fixed yet)
+## Bugs from the rider, APKs keppo-moto-6e2d564 and 85c0fee (13 Oct)
 
 1. **Edit page broken.**
    - **What the rider sees (screenshot):** only the video, in the top ~40% of the screen, running up under the status bar. Below it the screen is black.
@@ -944,3 +944,28 @@ There's one preview in the editor; it never switches. It replaces both the exact
    - **Captions:** they draw ("tight ho raha"), so the preview plays.
    - **Cause (found):** not the preview. The new Filter sheet (`FilterSheet`) was called outside the editor's full-size box. A sheet's root fills the whole screen, so even while hidden it took a screen of height in the page's column. That pushed the whole editor up: the top bar went off screen, the preview's top sat above the screen, and the timeline and tools fell below it.
    - **Fixed:** the call moved inside the editor's box, next to the other sheets, so it lies on top and takes no space.
+
+### From APK keppo-moto-85c0fee
+
+2. **Timeline rows: move things, more room.**
+   - **Asked:** hold and drag layers left/right and up/down; taller rows; the bottom half adjustable.
+   - **Fixed:**
+     - Rows are 34 dp (were 18–24 dp).
+     - Hold any block (layer, caption, text, sticker, sound) and drag: sideways moves it in time. Layers, text and stickers also move up or down a row; a higher row is drawn over the rows below (the newest layer starts on top).
+     - A handle between the video and the timeline: drag it up for a taller timeline, down for a bigger video. The timeline scrolls up and down when its rows don't fit.
+   - **Code:** `Lanes` (pure: rows, moving to a row), `TrackEdits.stackLayer/stackText/stackSticker`, `TrackBlock` and `Rows` in the editor.
+   - **Also fixed:** the slower "drawn" layer method stacked layers upside down compared with the main method; both now put the last layer on top.
+3. **Lag with many layers.**
+   - **Cause:** the whole preview area was rebuilt about 30 times a second while playing, because it read the playhead directly. Each rebuild also made a new Red only shader.
+   - **Fixed:** the preview rebuilds only at cuts. The camera, the graphics and the layers read the playhead where they're drawn. The shader is set only when the filter changes.
+4. **Over video showed a still.**
+   - **Fixed:** each layer plays its own video in the preview, kept in step with the edit; scrubbing shows the right frame. The top 3 layers on screen play; more show a still, so the phone keeps up.
+5. **Filter: tapping did nothing visible.**
+   - **Cause:** the sheet covered the video, and the tiles' selected mark was a thin white line.
+   - **Fixed:** the filters sit in the tools' place, under the video, so each shows on the video as it's tapped. The one on has a thick frame, a tick and its name lit; its name pops up on the video. A Strength slider shows under them. The Filter tool says which filter is on. A stand-in picture is used for the tiles if the playhead's frame can't be read.
+6. **Move captions on the video.**
+   - **Fixed:** drag the caption on the video up or down: all captions move together (the same setting as Captions › Height). Tap still opens Fix words.
+7. **Captions said at the same time take their own rows; hide things.**
+   - **Fixed:** captions that overlap go on rows of their own.
+   - Layers, text and stickers have Hide/Show (kept on the timeline, dimmed with a crossed-out eye; left out of the preview and the made video, a hidden layer's sound too). A selected caption has Hide captions/Show captions.
+

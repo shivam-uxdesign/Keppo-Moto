@@ -167,7 +167,8 @@ internal class LayerDrawer(private val context: Context, private val layers: Lis
 
     /** Draws the layers showing at [reelMs] onto [c] (the full frame). */
     fun draw(c: Canvas, reelMs: Long) {
-        for (l in layers.asReversed()) {
+        // In order, so the last layer is drawn on top (as when Media3 combines them).
+        for (l in layers) {
             if (reelMs < l.startMs || reelMs >= l.endMs) continue
             val local = reelMs - l.startMs
             val bmp = frameAt(l, l.inMs + local) ?: continue
