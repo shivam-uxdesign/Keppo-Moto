@@ -1009,7 +1009,7 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
   - **Locked:** Studio (Reels).
   - **Free:** everything else (rides, moments, pop-up, safety, fuel, journal, ride cards).
   - **Restore:** the purchase belongs to the Google account; checked on every launch, plus a Restore purchase button in Settings.
-  - **Prices:** global $4.99 a month / $34.99 a year; India ₹299 a month / ₹1,999 a year.
+  - **Prices:** global $6.99 a month / $44.99 a year (46% off; Play converts it per country); India ₹299 a month / ₹1,999 a year (set by hand). The Gemini cap ($2 a month) is about 29% of the global price.
   - **Launch price:** sold as a launch price, raised later for new subscribers only; existing subscribers keep theirs (Play's legacy price).
   - **No fake struck-out prices:** these are dark patterns under India's 2023 rules and EU price rules.
   - **Still open:** what free riders see of Studio (one free Reel, a watermark, or locked screens).
