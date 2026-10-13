@@ -40,6 +40,13 @@ object ReelOverlay {
         return Revs.pulse(level, localMs)
     }
 
+    /** How hard the engine revs (0..1) over clip [seg] at [localMs], from a tag or the engine sound; null where unknown. */
+    fun revLevel(input: RenderInput, plan: StudioPlan, i: Int, seg: ClipSegment, localMs: Long, durMs: Long): Float? {
+        val start = plan.startOf(i)
+        return plan.redlines.firstNotNullOfOrNull { Revs.tagLevel(it, start + localMs) }
+            ?: if (seg.still != null) null else input.revAt(seg.bit.momentId, seg.inMs + localMs * seg.sourceMs / durMs.coerceAtLeast(1))
+    }
+
     /** The voice-over's captions over segment [i] (shown for [durMs]), timed from its start. */
     fun voiceLines(input: RenderInput, plan: StudioPlan, i: Int, durMs: Long): List<CaptionLine> {
         val start = plan.startOf(i)
@@ -73,7 +80,7 @@ object ReelOverlay {
                 // The speed shows once: not in the corner while a speed sticker shows it.
                 val sticker = plan.stickers.any { it.kind == StickerKind.SPEED && global in it.startMs until it.endMs }
                 val opener = input.opener.takeIf { seg.hook && !seg.tail }
-                art.drawClip(c, f, lines, if (o.speedBadge && !sticker) live.kmh else -1, live.clock, o.captions, opener, plan.captionLook, redline(input, plan, i, seg, localMs, durMs))
+                art.drawClip(c, f, lines, if (o.speedBadge && !sticker) live.kmh else -1, live.clock, o.captions, opener, plan.captionLook, redline(input, plan, i, seg, localMs, durMs), revLevel(input, plan, i, seg, localMs, durMs))
                 seg.text?.let { t -> art.drawSectionText(c, plan.vibe, t, localMs) }
             }
             is TitleSegment -> art.drawTitle(c, f, input.card, o.map)

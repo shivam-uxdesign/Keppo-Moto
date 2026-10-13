@@ -218,12 +218,13 @@ private fun CaptionGlyph(k: CaptionKind) {
         CaptionKind.CLEAN -> Triple(FontFamily(Font(R.font.geist_semibold)), "Aa", null)
         CaptionKind.TYPE -> Triple(FontFamily(Font(R.font.ibm_plex_mono_medium)), "aa", null)
         CaptionKind.STRIP -> Triple(FontFamily(Font(R.font.geist_semibold)), "Aa", paper)
+        CaptionKind.DASH -> Triple(FontFamily(Font(R.font.orbitron_black)), "AA", ink)
     }
     val shape = when (k) { CaptionKind.LABEL -> RoundedCornerShape(50); CaptionKind.STRIP -> RoundedCornerShape(0.dp); else -> RoundedCornerShape(6.dp) }
     Text(
         text,
         style = TextStyle(fontFamily = family, fontSize = 18.sp),
-        color = if (ground != null) ink else Color.White,
+        color = if (ground != null && k != CaptionKind.DASH) ink else Color.White,
         modifier = if (ground != null) Modifier.clip(shape).background(ground).padding(horizontal = 6.dp, vertical = 1.dp) else Modifier,
     )
 }

@@ -134,6 +134,11 @@ class StudioFrames {
             val paint = if (rf == com.ridetrack.app.studio.RideFilter.NONE) null else com.ridetrack.app.studio.filterPaint(rf, 1f)
             shot("filters/${rf.ordinal}-${rf.name.lowercase()}", clean, frame(Vibe.VLOG, 900, 4_000), paint) { c -> clean.drawClip(c, frame(Vibe.VLOG, 900, 4_000), lines, 62, "6:21 PM", true) }
         }
+        // Speedtrap at the redline: the light at a pulse's peak, the rev bar near the top.
+        val trap = StudioArt(context)
+        shot("speedtrap/redline-full", trap, frame(Vibe.SPEEDTRAP, 900, 4_000)) { c -> trap.drawClip(c, frame(Vibe.SPEEDTRAP, 900, 4_000), lines, 92, "6:21 PM", true, redline = 1f, rev = 0.96f) }
+        val edge = StudioArt(context).also { it.redlineStroke = true }
+        shot("speedtrap/redline-edge", edge, frame(Vibe.SPEEDTRAP, 900, 4_000)) { c -> edge.drawClip(c, frame(Vibe.SPEEDTRAP, 900, 4_000), lines, 92, "6:21 PM", true, redline = 1f, rev = 0.96f) }
         // The redline light at the peak of a pulse: over the whole frame, and as the edge frame.
         val light = StudioArt(context)
         shot("redline/full-peak", light, frame(Vibe.HYPE, 900, 4_000)) { c -> light.redline(c, 1f, false, com.ridetrack.app.studio.Tok.RED) }

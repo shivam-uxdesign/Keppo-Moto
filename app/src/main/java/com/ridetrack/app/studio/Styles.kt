@@ -86,6 +86,7 @@ object Styles {
         StudioStyle("film", "Film", Vibe.FILM, builtIn = true, about = "analog, warm, shot on film", pace = 1.15f),
         StudioStyle("editorial", "Editorial", Vibe.EDITORIAL, builtIn = true, about = "printed, crafted, magazine"),
         StudioStyle("native", "Native", Vibe.NATIVE, builtIn = true, about = "like Instagram's own editor", speedBadge = false, map = false, outro = false, watermark = false),
+        StudioStyle("speedtrap", "Speedtrap", Vibe.SPEEDTRAP, builtIn = true, about = "the bike's dash, the redline lights up", pace = 0.9f),
     )
 
     /** The options a style sets (look, cards, overlays, marks). */
@@ -257,7 +258,7 @@ object StyleJson {
     }.getOrNull()
 
     /** What Gemini is asked to fill in for a style. */
-    const val SCHEMA = """{"name":"short name","about":"a few words","base":"HYPE|CINE|CHILL|VLOG|FILM|EDITORIAL|NATIVE","captions":{"kind":"STYLE|PUNCH|SERIF|LABEL|CHAT|PLAIN|CLEAN|TYPE|STRIP","size":1.0,"karaoke":true},"textLook":"STYLE|PLAIN|OUTLINE|BOX|HAND","textColor":-10496,"textIn":"FADE|POP|TYPE|SLIDE|BOUNCE|NONE","textOut":"FADE|POP|TYPE|SLIDE|BOUNCE|NONE","transition":"STYLE|CUT|FADE|FLASH|ZOOM|WHIP|SLASH|SHUTTER|SUN|CARD|DIP|ZOOM_THROUGH|LIGHT_LEAK","transitionLength":"SHORT|NORMAL|LONG","everyCut":false,"pace":1.0,"punchIn":false,"color":{"exp":0.0,"con":0.0,"sat":0.0,"warm":0.0,"look":true},"speedBadge":true,"speedSticker":false,"leanSticker":false,"map":true,"intro":false,"outro":true,"duck":true}"""
+    const val SCHEMA = """{"name":"short name","about":"a few words","base":"HYPE|CINE|CHILL|VLOG|FILM|EDITORIAL|NATIVE|SPEEDTRAP","captions":{"kind":"STYLE|PUNCH|SERIF|LABEL|CHAT|PLAIN|CLEAN|TYPE|STRIP|DASH","size":1.0,"karaoke":true},"textLook":"STYLE|PLAIN|OUTLINE|BOX|HAND","textColor":-10496,"textIn":"FADE|POP|TYPE|SLIDE|BOUNCE|NONE","textOut":"FADE|POP|TYPE|SLIDE|BOUNCE|NONE","transition":"STYLE|CUT|FADE|FLASH|ZOOM|WHIP|SLASH|SHUTTER|SUN|CARD|DIP|ZOOM_THROUGH|LIGHT_LEAK|TACH","transitionLength":"SHORT|NORMAL|LONG","everyCut":false,"pace":1.0,"punchIn":false,"color":{"exp":0.0,"con":0.0,"sat":0.0,"warm":0.0,"look":true},"speedBadge":true,"speedSticker":false,"leanSticker":false,"map":true,"intro":false,"outro":true,"duck":true}"""
 
     /** Asks Gemini for a style from the rider's words. */
     fun wordsPrompt(words: String): String =

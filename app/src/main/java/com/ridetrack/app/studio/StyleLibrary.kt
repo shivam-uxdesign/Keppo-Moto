@@ -132,7 +132,7 @@ class StyleLibrary(private val context: Context) {
     /** The style's colour as a picture filter (close to the made video's grade). */
     private fun grade(s: StudioStyle): ColorMatrix {
         val m = ColorMatrix()
-        val base = when (s.base) { Vibe.HYPE -> 0.16f; Vibe.CINE -> -0.2f; Vibe.CHILL -> -0.12f; Vibe.VLOG -> 0.08f; Vibe.FILM -> -0.1f; Vibe.EDITORIAL -> -0.08f; Vibe.NATIVE -> 0f }
+        val base = when (s.base) { Vibe.HYPE -> 0.16f; Vibe.CINE -> -0.2f; Vibe.CHILL -> -0.12f; Vibe.VLOG -> 0.08f; Vibe.FILM -> -0.1f; Vibe.EDITORIAL -> -0.08f; Vibe.NATIVE -> 0f; Vibe.SPEEDTRAP -> -0.06f }
         m.setSaturation(1f + (if (s.color.look) base else 0f) + s.color.saturation * 0.4f)
         val warm = s.color.warmth * 0.12f + if (s.color.look && s.base == Vibe.CHILL) 0.06f else 0f
         val bright = s.color.exposure * 60f

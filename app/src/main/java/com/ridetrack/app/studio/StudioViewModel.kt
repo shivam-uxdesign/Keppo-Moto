@@ -1094,7 +1094,7 @@ class StudioViewModel(
         }
         if (!phoneOnly) c.studio.options = _state.value.options
         val now = _state.value.options
-        if (reload && _state.value.timeline != null && (before.accent != now.accent || before.filter != now.filter || before.filterAmount != now.filterAmount || before.grain != now.grain)) refreshPreview()
+        if (reload && _state.value.timeline != null && (before.accent != now.accent || before.filter != now.filter || before.filterAmount != now.filterAmount || before.grain != now.grain || before.redlineStroke != now.redlineStroke)) refreshPreview()
         // Jump cuts and subtitles change how the ideas are made: plan them again.
         if ((before.jumpCuts != _state.value.options.jumpCuts || before.english != _state.value.options.english) && _state.value.pieces.isNotEmpty()) {
             viewModelScope.launch { showPieces(_state.value.pieces.map { it.script }) }

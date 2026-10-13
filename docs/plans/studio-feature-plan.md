@@ -870,3 +870,13 @@ Done in one pass on the drawing code, because the token rewrite, the restyled vi
      - **Stroke:** 7s wide (14 px at 1080) with 4s of soft edge.
    - It's only drawn when `VibeSpec.redline` is set: Speedtrap, in step 4.
    - The revs are only worked out when the style uses the light.
+4. **Speedtrap:** done, built from the Redline dashboard mockup (rider's pick).
+   - **Font:** Orbitron (OFL, licence in assets). **Accent:** red.
+   - **Captions:** a new "Dash" style: capitals on a chamfered dash panel with a red top edge; the word being said is red.
+   - **Titles:** flush left, with a red chamfered tag above; each row boots on.
+   - **Speed badge:** the number, plus a rev bar (from the engine sound, else the speed). There's no gear indicator, because we don't know the gear.
+   - **Section change:** a new "Rev sweep": the frame darkens and the rev counter sweeps to the redline.
+   - **Stats:** TRIP A, top speed in a rev counter, and three panels.
+   - **Redline light:** Full by default; "Redline light round the edge" in the ride settings switches it to Stroke.
+   - **Editor:** "Tag redline" is in its tools.
+   - **Grade:** contrast +0.1, saturation −6, slightly cool.

@@ -203,7 +203,7 @@ class StudioRenderer(private val context: Context) {
         val segs = plan.segments
         val clips = plan.clips
         require(clips.isNotEmpty()) { "No clips to use" }
-        val art = StudioArt(context, brand = input.brand?.takeIf { input.options.brand }, grainOn = input.options.grain, accentOverride = input.options.accent)
+        val art = StudioArt(context, brand = input.brand?.takeIf { input.options.brand }, grainOn = input.options.grain, accentOverride = input.options.accent).also { it.redlineStroke = input.options.redlineStroke }
         val mix = plan.mix
         drawer?.release()
         drawer = if (a.layers == LayerMode.DRAWN) LayerDrawer(context, plan.layers) { l -> uriOf(input, l.bit) } else null
@@ -465,6 +465,8 @@ class StudioRenderer(private val context: Context) {
         Vibe.FILM -> listOf(Contrast(-0.06f), HslAdjustment.Builder().adjustSaturation(-10f).build(), RgbAdjustment.Builder().setRedScale(1.05f).setBlueScale(0.92f).build(), LiftBlacks)
         Vibe.EDITORIAL -> listOf(Contrast(0.08f), HslAdjustment.Builder().adjustSaturation(-8f).build())
         Vibe.NATIVE -> emptyList()
+        // Speedtrap: crisp and a touch cool, so the red reads.
+        Vibe.SPEEDTRAP -> listOf(Contrast(0.1f), HslAdjustment.Builder().adjustSaturation(-6f).build(), RgbAdjustment.Builder().setRedScale(0.98f).setBlueScale(1.03f).build())
     }
 
     /** The rider's filter as effects (none when off). */

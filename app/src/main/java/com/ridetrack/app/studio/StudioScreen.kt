@@ -102,6 +102,7 @@ internal val VibeFonts = mapOf(
     Vibe.FILM to FontFamily(Font(R.font.ibm_plex_mono_medium)),
     Vibe.EDITORIAL to FontFamily(Font(R.font.dm_serif_display)),
     Vibe.NATIVE to FontFamily.Default,
+    Vibe.SPEEDTRAP to FontFamily(Font(R.font.orbitron_black)),
 )
 
 /** Share ride › Reel: Keppo Studio turns the ride's clips into a 30–60 s Reel. */
@@ -325,6 +326,7 @@ private fun StudioSettings(vm: StudioViewModel, s: StudioState, onClose: () -> U
                 if (o.vibe != Vibe.NATIVE) Toggle("Route opening", "A 2 s route sketch before the first clip (off is better for reach)", o.intro) { v -> vm.setOptions { it.copy(intro = v) } }
                 Toggle("Map", "The route behind the stats. Off: no map at all", o.map) { v -> vm.setOptions { it.copy(map = v) } }
                 Toggle("Film grain", "Grain and a little flicker (Film has it on)", o.grain ?: o.vibe.spec.grain) { v -> vm.setOptions { it.copy(grain = v) } }
+                if (o.vibe.spec.redline) Toggle("Redline light round the edge", "Off: the whole screen flashes red at the redline", o.redlineStroke) { v -> vm.setOptions { it.copy(redlineStroke = v) } }
                 // The rider's filter, on the video under every graphic (the editor's Filter tool shows thumbnails).
                 Text("Filter", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.padding(top = 8.dp))
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

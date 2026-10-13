@@ -195,7 +195,7 @@ object ScriptWriter {
             "relatable lines about riding (falling, loving the bike, fuel prices, mom asking where you are; Hinglish is fine), shown one after another. " +
             "The text is the joke: don't just describe the shot."
 
-    private const val SCHEMA = "{\"pieces\":[{\"format\":\"reel|short|story|long|caption\",\"vibe\":\"hype|cine|chill|vlog|film|editorial|native\",\"style\":\"a style id from the list, or empty\",\"title\":\"max 5 words\",\"why\":\"one line: why this piece works\",\"story\":\"2–4 sentences: the story it tells, start to end\",\"onScreen\":[\"caption clips only: 1–3 short lines shown in turn, else empty\"]," +
+    private const val SCHEMA = "{\"pieces\":[{\"format\":\"reel|short|story|long|caption\",\"vibe\":\"hype|cine|chill|vlog|film|editorial|native|speedtrap\",\"style\":\"a style id from the list, or empty\",\"title\":\"max 5 words\",\"why\":\"one line: why this piece works\",\"story\":\"2–4 sentences: the story it tells, start to end\",\"onScreen\":[\"caption clips only: 1–3 short lines shown in turn, else empty\"]," +
         "\"lengthSec\":30,\"shape\":\"story\",\"hookLine\":\"max 6 words for the first frame or empty\",\"caption\":\"post caption, 1–2 lines + 3–5 hashtags\"," +
         "\"sections\":[{\"kind\":\"hook\",\"form\":\"sound\",\"text\":\"on-screen text or empty\",\"why\":\"short\",\"shots\":[{\"clip\":\"c3\",\"in\":12.4,\"out\":13.2}]}]}]}"
 
@@ -228,7 +228,7 @@ object ScriptWriter {
             appendLine("Include exactly one long reel (format long, 60–120 s): the whole ride in filming order, from its riding shots, talking and reactions. It counts as one of the pieces. Talking isn't needed for it.")
         }
         appendLine("When the footage is thin, suggest fewer, shorter pieces.")
-        appendLine("Pick a vibe for each piece: hype (bold: big words, punchy cuts), cine (cinematic: slow, wide, film title), chill (playful: friendly, a little pop), vlog (clean: calm, the voice leads), film (analog, warm, nostalgic), editorial (printed, magazine, crafted), native (plain, like an Instagram edit).")
+        appendLine("Pick a vibe for each piece: hype (bold: big words, punchy cuts), cine (cinematic: slow, wide, film title), chill (playful: friendly, a little pop), vlog (clean: calm, the voice leads), film (analog, warm, nostalgic), editorial (printed, magazine, crafted), native (plain, like an Instagram edit), speedtrap (the bike\u2019s dash, a red light at the redline: hard riding, revs, speed).")
         append(stylesText(styles))
         append(performance)
         appendLine(CRAFT)
@@ -254,7 +254,7 @@ object ScriptWriter {
         appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
         appendLine(footageText(footage))
         appendLine("The rider asks for: \"${ask.replace("\"", "'")}\". Write ONE piece that does that, from this footage (format, length and vibe as they asked, or what suits it).")
-        appendLine("Vibes: hype (bold: big words, punchy cuts), cine (cinematic: slow, wide, film title), chill (playful: friendly, a little pop), vlog (clean: calm, the voice leads), film (analog, warm, nostalgic), editorial (printed, magazine, crafted), native (plain, like an Instagram edit).")
+        appendLine("Vibes: hype (bold: big words, punchy cuts), cine (cinematic: slow, wide, film title), chill (playful: friendly, a little pop), vlog (clean: calm, the voice leads), film (analog, warm, nostalgic), editorial (printed, magazine, crafted), native (plain, like an Instagram edit), speedtrap (the bike\u2019s dash, a red light at the redline: hard riding, revs, speed).")
         appendLine("If they ask for a caption clip: $CAPTION_RULE")
         append(stylesText(styles))
         appendLine(CRAFT)
@@ -279,7 +279,7 @@ object ScriptWriter {
             else "Write one episode for every moment of THIS ride that fits the series, at most 4, best first; each on its own moment.",
         )
         appendLine("Only what truly fits the series' idea: if nothing in this ride fits, reply {\"pieces\":[]}. Don't number episodes or name the series in the title (the app adds \"Ep N\").")
-        appendLine("Vibes: hype (bold: big words, punchy cuts), cine (cinematic: slow, wide, film title), chill (playful: friendly, a little pop), vlog (clean: calm, the voice leads), film (analog, warm, nostalgic), editorial (printed, magazine, crafted), native (plain, like an Instagram edit).")
+        appendLine("Vibes: hype (bold: big words, punchy cuts), cine (cinematic: slow, wide, film title), chill (playful: friendly, a little pop), vlog (clean: calm, the voice leads), film (analog, warm, nostalgic), editorial (printed, magazine, crafted), native (plain, like an Instagram edit), speedtrap (the bike\u2019s dash, a red light at the redline: hard riding, revs, speed).")
         if (s.format == PieceFormat.CAPTION) appendLine(CAPTION_RULE)
         if (s.styleId == null) append(stylesText(styles))
         appendLine(CRAFT)
@@ -295,7 +295,7 @@ object ScriptWriter {
         appendLine("This piece was suggested from the ride: ${ScriptJson.toPromptJson(script, keys)}")
         appendLine("Write ONE different take on the same moment, from the same clips (a clip right before or after may be added).")
         appendLine("Make it clearly different from these takes: ${takes.joinToString("; ") { "\"${it.replace("\"", "'")}\"" }}: another format, hook, shape or vibe, and a new title.")
-        appendLine("Vibes: hype (bold: big words, punchy cuts), cine (cinematic: slow, wide, film title), chill (playful: friendly, a little pop), vlog (clean: calm, the voice leads), film (analog, warm, nostalgic), editorial (printed, magazine, crafted), native (plain, like an Instagram edit).")
+        appendLine("Vibes: hype (bold: big words, punchy cuts), cine (cinematic: slow, wide, film title), chill (playful: friendly, a little pop), vlog (clean: calm, the voice leads), film (analog, warm, nostalgic), editorial (printed, magazine, crafted), native (plain, like an Instagram edit), speedtrap (the bike\u2019s dash, a red light at the redline: hard riding, revs, speed).")
         appendLine("If it's a caption clip: $CAPTION_RULE")
         append(stylesText(styles))
         appendLine(CRAFT)

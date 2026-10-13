@@ -239,7 +239,9 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     // A cut whose transition is playing on a loop (ms into the Reel); null when not.
     var loopAt by remember { mutableStateOf<Long?>(null) }
     // Transitions drawn over the simple preview (the exact one has them in the video).
-    val art = remember(s.options.accent, s.options.grain) { StudioArt(context, w = 540, h = 960, grainOn = s.options.grain, accentOverride = s.options.accent) }
+    val art = remember(s.options.accent, s.options.grain, s.options.redlineStroke) {
+        StudioArt(context, w = 540, h = 960, grainOn = s.options.grain, accentOverride = s.options.accent).also { it.redlineStroke = s.options.redlineStroke }
+    }
     val pxPerMs = with(density) { 64.dp.toPx() } * zoom / 1000f
     val scroll = rememberScrollState()
     val current by rememberUpdatedState(plan)
@@ -1623,7 +1625,7 @@ private fun pickerOrder(vibe: Vibe, current: TransitionKind): List<TransitionKin
 private val TRANSITION_GLYPH = mapOf(
     TransitionKind.STYLE to "✦", TransitionKind.CUT to "│", TransitionKind.FADE to "◐", TransitionKind.FLASH to "✺", TransitionKind.ZOOM to "⊕",
     TransitionKind.WHIP to "≫", TransitionKind.GLITCH to "▚", TransitionKind.SLASH to "▮", TransitionKind.SHUTTER to "◫", TransitionKind.SUN to "●", TransitionKind.CARD to "▭",
-    TransitionKind.DIP to "◼", TransitionKind.ZOOM_THROUGH to "⊙", TransitionKind.LIGHT_LEAK to "☀",
+    TransitionKind.DIP to "◼", TransitionKind.ZOOM_THROUGH to "⊙", TransitionKind.LIGHT_LEAK to "☀", TransitionKind.TACH to "◔",
 )
 
 /**

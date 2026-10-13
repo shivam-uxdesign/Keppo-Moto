@@ -209,6 +209,7 @@ val Vibe.spec: VibeSpec
         Vibe.FILM -> VibeSpec(Tok.AMBER, CaptionKind.TYPE, TransitionKind.LIGHT_LEAK, listOf(TransitionKind.CUT, TransitionKind.FADE, TransitionKind.ZOOM, TransitionKind.LIGHT_LEAK, TransitionKind.FLASH), null, true, Tok.VIGNETTE_FILM)
         Vibe.EDITORIAL -> VibeSpec(Tok.RED, CaptionKind.STRIP, TransitionKind.CARD, listOf(TransitionKind.CUT, TransitionKind.FADE, TransitionKind.ZOOM, TransitionKind.CARD), 1.02f to 1.04f, false, Tok.VIGNETTE)
         Vibe.NATIVE -> VibeSpec(null, CaptionKind.PLAIN, TransitionKind.CUT, listOf(TransitionKind.CUT, TransitionKind.FADE), null, false, 0f)
+        Vibe.SPEEDTRAP -> VibeSpec(Tok.RED, CaptionKind.DASH, TransitionKind.TACH, listOf(TransitionKind.CUT, TransitionKind.FADE, TransitionKind.ZOOM, TransitionKind.TACH, TransitionKind.FLASH), 1.02f to 1.05f, false, Tok.VIGNETTE, redline = true)
     }
 
 /** What a transition the rider set (or the automatic "Style") actually is on [vibe]. */

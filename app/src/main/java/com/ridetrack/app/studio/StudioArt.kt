@@ -74,6 +74,7 @@ class StudioArt(
 
     private val anton = font(context, R.font.anton)
     private val archivo = font(context, R.font.archivo_black)
+    private val orbitron = font(context, R.font.orbitron_black)
     private val serifItalic = font(context, R.font.instrument_serif_italic)
     private val serif = font(context, R.font.instrument_serif)
     private val fredoka = font(context, R.font.fredoka_semibold)
@@ -119,6 +120,7 @@ class StudioArt(
         Vibe.FILM -> monoMed
         Vibe.EDITORIAL -> dmSerif
         Vibe.NATIVE -> sys
+        Vibe.SPEEDTRAP -> orbitron
     }
 
     /** Numbers: the stats and the speed sticker (Cinematic's upright serif; italic is for titles). */
@@ -129,6 +131,7 @@ class StudioArt(
         Vibe.CHILL -> fredoka
         Vibe.FILM -> mono
         Vibe.NATIVE -> sysReg
+        Vibe.SPEEDTRAP -> orbitron
         else -> geistMed
     }
 
@@ -195,6 +198,7 @@ class StudioArt(
                 TransitionKind.SHUTTER, TransitionKind.DIP, TransitionKind.SUN -> k += SOFT_K * Tok.inOut(max(o, i))
                 TransitionKind.CARD -> x += W * PAPER_X * (Tok.inOut(i) - Tok.inOut(o))
                 TransitionKind.ZOOM_THROUGH -> k += THROUGH_K * (leave + land)
+                TransitionKind.TACH -> k += SOFT_K * Tok.inOut(max(o, i))
                 else -> {}
             }
         }
@@ -224,7 +228,7 @@ class StudioArt(
      * A clip's graphics. [lines] are the captions in ms from the segment start (the clip's words and
      * any voice-over); [opener] shows on the Reel's first clip: the title label and the hook line.
      */
-    fun drawClip(c: Canvas, f: FrameAt, lines: List<CaptionLine>, kmh: Int, clock: String, captions: Boolean, opener: Opener? = null, look: CaptionLook = CaptionLook(), redline: Float = 0f) {
+    fun drawClip(c: Canvas, f: FrameAt, lines: List<CaptionLine>, kmh: Int, clock: String, captions: Boolean, opener: Opener? = null, look: CaptionLook = CaptionLook(), redline: Float = 0f, rev: Float? = null) {
         val t = tq(f.vibe, f.localMs.toFloat())
         vignette(c, f.vibe)
         grain(c, f.vibe, f.localMs.toFloat())
@@ -234,7 +238,7 @@ class StudioArt(
         }
         // The redline light sits on the video, under the text.
         if (f.vibe.spec.redline && redline > 0f) redline(c, redline, redlineStroke, accent(f.vibe))
-        speedBadge(c, f.vibe, kmh, clock)
+        speedBadge(c, f.vibe, kmh, clock, rev)
         opener?.let { opening(c, f, it, t) }
         if (captions) caption(c, f.vibe, lines, t, look)
         edge(f)?.let { transition(c, f, it) }
@@ -339,6 +343,12 @@ class StudioArt(
             // A 120 ms dip to black at the cut; the camera does the rest.
             TransitionKind.ZOOM_THROUGH -> veil(c, Tok.INK, 1 - Tok.inn(cl(abs(t - 0.5f) * ms / (Tok.T_MICRO / 2f))))
             TransitionKind.LIGHT_LEAK -> lightLeak(c, cov, (if (landing) f.cut else f.cut + 1) % 2 == 0, accent(f.vibe))
+            // Speedtrap: the frame darkens, the rev counter sweeps up to the redline and flushes red at the cut.
+            TransitionKind.TACH -> {
+                veil(c, Tok.INK, Tok.A_HIGH * Tok.inOut(cov))
+                tach(c, Tok.inOut(cov), H * TACH_Y, W * TACH_R, accent(f.vibe), Tok.inOut(cov))
+                veil(c, accent(f.vibe), Tok.A_LOW * Tok.inn(cov))
+            }
             else -> {}
         }
     }
@@ -488,6 +498,7 @@ class StudioArt(
             CaptionKind.CHAT -> chatCaption(dc, lines, sp, t, ay, k, paper ?: Tok.WHITE, lineOut)
             CaptionKind.TYPE -> typeCaption(dc, sp, t, ay, k)
             CaptionKind.STRIP -> stripCaption(dc, sp, t, ay, k, paper ?: Tok.PAPER)
+            CaptionKind.DASH -> dashCaption(dc, sp, t, ay, k)
             else -> plainCaption(dc, sp, t, ay, k, look.box, paper ?: Tok.WHITE)
         }
         pic?.endRecording()
@@ -856,6 +867,7 @@ class StudioArt(
      */
     private fun headline(c: Canvas, vibe: Vibe, text: String, cx: Float, cy: Float, size: Float, ms: Float?, alpha: Float, above: String? = null, below: String? = null, maxW: Float = W * Tok.TITLE_W, color: Int? = null, left: Boolean = true) {
         if (vibe == Vibe.HYPE) return posterHeadline(c, text, cx, cy, size, ms, alpha, above, below, maxW, color, left)
+        if (vibe == Vibe.SPEEDTRAP) return dashHeadline(c, text, cx, cy, size, ms, alpha, above, below, maxW, color, left)
         val t = ms ?: STILL
         val raw = text.trim().split(WS).filter { it.isNotEmpty() }
         if (raw.isEmpty() || alpha <= 0f) return
@@ -942,6 +954,7 @@ class StudioArt(
                 soft()
                 rows.forEachIndexed { ri, r -> ink(color ?: Tok.WHITE, 1f); c.drawText(line(r), cx, mid(rowY(ri)), p) }
             }
+            Vibe.SPEEDTRAP -> {}
         }
         fade = 1f
         val ext = padY + (if (vibe == Vibe.EDITORIAL) (Tok.SP_S + Tok.RULE_L) * s else 0f)
@@ -1129,7 +1142,7 @@ class StudioArt(
     // ---- speed badge -------------------------------------------------------------------------
 
     /** The speed in the info slot (top-left), in the vibe's own way; [kmh] < 0 = none. */
-    private fun speedBadge(c: Canvas, vibe: Vibe, kmh: Int, clock: String) {
+    private fun speedBadge(c: Canvas, vibe: Vibe, kmh: Int, clock: String, rev: Float? = null) {
         if (kmh < 0) return
         fade = 1f
         val x = W * Tok.INFO_X
@@ -1185,6 +1198,22 @@ class StudioArt(
                 soft(); ink(Tok.WHITE, 1f)
                 c.drawText("$kmh km/h", x, mid(y), p)
             }
+            Vibe.SPEEDTRAP -> {
+                // The bike's dash: the number, and beside it a rev bar (from the engine sound; else the speed) over "KM/H".
+                val bh = DASH_BADGE_H * s
+                type(orbitron, Tok.CAP, Tok.WHITE)
+                val nw = p.measureText("$kmh")
+                val barW = DASH_SEGMENTS * (DASH_SEG_W + DASH_SEG_GAP) * s
+                val bw = nw + barW + (2 * Tok.SP_M + Tok.SP_S) * s
+                panel(c, x, y - bh / 2, x + bw, y + bh / 2, accent(vibe))
+                val bx = x + Tok.SP_M * s + nw + Tok.SP_S * s
+                revBar(c, bx, y - bh / 2 + Tok.SP_S * s, rev ?: (kmh / ARC_TOP_KMH).coerceIn(0f, 1f), accent(vibe))
+                type(orbitron, Tok.CAP, Tok.WHITE); ink(Tok.WHITE, 1f)
+                val base = y + bh / 2 - Tok.SP_S * s
+                c.drawText("$kmh", x + Tok.SP_M * s, base, p)
+                type(orbitron, Tok.LABEL, Tok.WHITE, track = Tok.TRACK_CAPS); ink(Tok.WHITE, Tok.DIM)
+                c.drawText("KM/H", bx, base, p)
+            }
         }
         p.clearShadowLayer()
     }
@@ -1237,7 +1266,11 @@ class StudioArt(
             drawRoute(c, card.route, card.route.size, 1f, Tok.SP_XS * s, ROUTE_PAD)
             c.restore()
         }
-        if (v == Vibe.HYPE) posterStats(c, card, t) else gridStats(c, v, card, t, fg, paperGround)
+        when (v) {
+            Vibe.HYPE -> posterStats(c, card, t)
+            Vibe.SPEEDTRAP -> dashStats(c, card, t, accent(v))
+            else -> gridStats(c, v, card, t, fg, paperGround)
+        }
         fade = Tok.out(Tok.prog(t - Tok.T_SLOW, Tok.T_EMPH))
         val l = logo
         if (l != null) {
@@ -1292,6 +1325,7 @@ class StudioArt(
                 Vibe.FILM -> Quad(mono, Tok.LABEL, accent(v), 1f)
                 Vibe.EDITORIAL -> Quad(geistMed, Tok.LABEL, Tok.INK, 1f)
                 Vibe.VLOG, Vibe.NATIVE -> Quad(labelFace(v), Tok.LABEL_L, Tok.WHITE, Tok.DIM)
+                Vibe.SPEEDTRAP -> Quad(orbitron, Tok.LABEL, accent(v), 1f)
             }
             val caps = v == Vibe.HYPE || v == Vibe.CINE || v == Vibe.FILM || v == Vibe.EDITORIAL
             type(uFace, uSize, uInk, Paint.Align.CENTER, if (caps) (if (v == Vibe.EDITORIAL) Tok.TRACK_CAPS_EDITORIAL else Tok.TRACK_CAPS) else 0f)
@@ -1327,6 +1361,144 @@ class StudioArt(
             c.drawText(countUp(v, Tok.out(Tok.prog(t - (i + 1) * Tok.STAGGER * 2, Tok.T_SLOW))), cx, mid(H * POSTER_ROW_Y), p)
             type(geistMed, Tok.LABEL, Tok.WHITE, track = Tok.TRACK_CAPS); ink(Tok.WHITE, Tok.DIM)
             c.drawText(u.uppercase(), cx, mid(H * POSTER_ROW_Y + Tok.CAP * s * Tok.LEADING_TIGHT), p)
+        }
+        fade = 1f
+    }
+
+    // ---- Speedtrap: the bike's dash ------------------------------------------------------------
+
+    /** A dash panel: dark, chamfered corners, a line of [edge] along its top. */
+    private fun panel(c: Canvas, l: Float, t: Float, r: Float, b: Float, edge: Int) {
+        val k = DASH_CHAMFER * s
+        val path = android.graphics.Path().apply { moveTo(l + k, t); lineTo(r - k, t); lineTo(r, t + k); lineTo(r, b - k); lineTo(r - k, b); lineTo(l + k, b); lineTo(l, b - k); lineTo(l, t + k); close() }
+        p.reset(); p.isAntiAlias = true; ink(Tok.INK, DASH_PANEL)
+        c.drawPath(path, p)
+        ink(edge, 1f)
+        c.drawRect(l + k, t, r - k, t + Tok.RULE_S * s, p)
+        mark(l, t, r, b)
+    }
+
+    /** A rev bar: segments growing taller, lit up to [level] (0..1), the last ones in [red]. */
+    private fun revBar(c: Canvas, l: Float, t: Float, level: Float, red: Int) {
+        val segW = DASH_SEG_W * s
+        val gap = DASH_SEG_GAP * s
+        val n = DASH_SEGMENTS
+        val lit = (level.coerceIn(0f, 1f) * n).toInt()
+        p.reset()
+        for (i in 0 until n) {
+            val hgt = (Tok.SP_S + i * DASH_SEG_GROW) * s
+            val bottom = t + (Tok.SP_S + n * DASH_SEG_GROW) * s
+            ink(if (i >= lit) Tok.WHITE else if (i >= n - DASH_RED_SEGMENTS) red else Tok.WHITE, if (i >= lit) Tok.A_LOW else 1f)
+            c.drawRect(l + i * (segW + gap), bottom - hgt, l + i * (segW + gap) + segW, bottom, p)
+        }
+    }
+
+    /** A rev counter's arc, lit to [q] of the way (the last fifth in [red]), its needle at [needle]. */
+    private fun tach(c: Canvas, q: Float, cy: Float, r: Float, red: Int, needle: Float, cx: Float = W / 2) {
+        p.reset(); p.isAntiAlias = true
+        for (i in 0 until TACH_TICKS) {
+            val f = i / (TACH_TICKS - 1f)
+            val ang = Math.toRadians((TACH_FROM + TACH_SWEEP * f).toDouble())
+            val long = i % TACH_MAJOR == 0
+            val r0 = r - (if (long) Tok.SP_XL + Tok.SP_S else Tok.SP_M + Tok.SP_XS / 2) * s
+            p.strokeWidth = (if (long) Tok.RULE_L - 1 else Tok.RULE_S) * s
+            ink(if (f > q) Tok.WHITE else if (f > TACH_RED_FROM) red else Tok.WHITE, if (f > q) Tok.A_LOW else 1f)
+            c.drawLine(cx + r0 * kotlin.math.cos(ang).toFloat(), cy + r0 * sin(ang).toFloat(), cx + r * kotlin.math.cos(ang).toFloat(), cy + r * sin(ang).toFloat(), p)
+        }
+        val na = Math.toRadians((TACH_FROM + TACH_SWEEP * needle).toDouble())
+        ink(red, 1f); p.strokeWidth = Tok.RULE_M * s; p.strokeCap = Paint.Cap.ROUND
+        val len = r - (Tok.SP_XL + Tok.SP_S + Tok.SP_XS) * s
+        c.drawLine(cx, cy, cx + len * kotlin.math.cos(na).toFloat(), cy + len * sin(na).toFloat(), p)
+        p.style = Paint.Style.FILL
+        c.drawCircle(cx, cy, Tok.SP_S * s, p)
+        p.strokeCap = Paint.Cap.BUTT
+    }
+
+    /** Speedtrap's captions: capitals on a dash panel, the word being said in red. They snap on like a readout. */
+    private fun dashCaption(c: Canvas, sp: Spoken, t: Float, ay: Float, k: Cap) {
+        val a = sp.active(t)
+        val words = sp.words.map { it.uppercase() }
+        val padX = Tok.SP_L * s
+        val padY = Tok.SP_M * s
+        type(k.face ?: orbitron, Tok.BODY, Tok.WHITE, track = DASH_TRACK)
+        val rows = window(wrapIdx(words, words.indices, W * Tok.CAPTION_W - 2 * padX), a)
+        val lh = Tok.BODY * s * Tok.LEADING
+        capSize = Tok.BODY; capLh = lh
+        val widest = rows.maxOf { p.measureText(words.slice(it).joinToString(" ")) }
+        val top = ay + lh / 2 - rows.size * lh - padY
+        val left = W / 2 - widest / 2 - padX
+        fade *= Tok.out(Tok.prog(t - sp.start, Tok.T_MICRO))
+        panel(c, left, top, left + widest + 2 * padX, ay + lh / 2 + padY, accent(k.vibe))
+        type(k.face ?: orbitron, Tok.BODY, Tok.WHITE, track = DASH_TRACK)
+        rows.forEachIndexed { ri, r ->
+            row(c, words, r, left + padX, top + padY + lh / 2 + ri * lh, lh, Paint.Align.LEFT, mark = false) { i -> wordInk(k, i, a, k.ink ?: Tok.WHITE, Tok.DIM) }
+        }
+    }
+
+    /** Speedtrap's titles: flush left in Orbitron, a red tag above; each row boots on after the last. */
+    private fun dashHeadline(c: Canvas, text: String, cx: Float, cy: Float, size: Float, ms: Float?, alpha: Float, above: String?, below: String?, maxW: Float, color: Int?, left: Boolean) {
+        val t = ms ?: STILL
+        val words = text.trim().split(WS).filter { it.isNotEmpty() }.map { it.uppercase() }
+        if (words.isEmpty() || alpha <= 0f) return
+        val (z, rows) = rowsAt(orbitron, words, size, maxW, DASH_TRACK)
+        val lh = z * s * Tok.LEADING
+        val blockH = rows.size * lh
+        val tagH = (Tok.LABEL + Tok.SP_S) * s
+        val labelTop = cy - blockH / 2 - Tok.SP_M * s - tagH
+        val cyy = cy + if (above != null) max(0f, H * Tok.INFO_BOTTOM + Tok.SP_S * s - labelTop) else 0f
+        val top = cyy - blockH / 2
+        val x = if (left) W * Tok.INFO_X else cx
+        val align = if (left) Paint.Align.LEFT else Paint.Align.CENTER
+        rows.forEachIndexed { ri, r ->
+            val q = Tok.out(Tok.prog(t - ri * Tok.STAGGER, Tok.T_BASE))
+            if (q <= 0f) return@forEachIndexed
+            type(orbitron, z, Tok.WHITE, align, DASH_TRACK)
+            fade = alpha * q
+            soft()
+            ink(color ?: Tok.WHITE, 1f)
+            c.drawText(words.slice(r).joinToString(" "), x - (1 - q) * Tok.SP_M * s, mid(top + lh / 2 + ri * lh), p)
+        }
+        fade = alpha * Tok.out(Tok.prog(t, Tok.T_BASE))
+        above?.let { label ->
+            type(orbitron, Tok.LABEL, Tok.WHITE, Paint.Align.LEFT, Tok.TRACK_CAPS)
+            val tw = p.measureText(label.uppercase())
+            val l = if (left) x else x - tw / 2 - Tok.SP_M * s
+            val tt = top - Tok.SP_M * s - tagH
+            panel(c, l, tt, l + tw + 2 * Tok.SP_M * s, tt + tagH, accent(Vibe.SPEEDTRAP))
+            p.reset(); type(orbitron, Tok.LABEL, Tok.WHITE, Paint.Align.LEFT, Tok.TRACK_CAPS); ink(Tok.WHITE, 1f)
+            c.drawText(label.uppercase(), l + Tok.SP_M * s, mid(tt + tagH / 2 + Tok.RULE_S * s / 2), p)
+        }
+        below?.let { smallLabel(c, Vibe.SPEEDTRAP, it, if (left) x else cx, top + blockH + Tok.SP_L * s, fade, align) }
+        fade = 1f
+    }
+
+    /** Speedtrap's stats: a trip computer — "TRIP A", the title, top speed in a rev counter, the rest in panels. */
+    private fun dashStats(c: Canvas, card: RideCard, t: Float, red: Int) {
+        val x = W * Tok.INFO_X
+        fade = Tok.out(Tok.prog(t, Tok.T_BASE))
+        type(orbitron, Tok.SUB, Tok.WHITE, track = Tok.TRACK_CAPS); ink(Tok.WHITE, Tok.DIM)
+        c.drawText("TRIP A", x, mid(H * DASH_TRIP_Y), p)
+        dashHeadline(c, card.title, x, H * DASH_TITLE_Y, Tok.SUB, t, 1f, null, null, W * Tok.TITLE_W, null, left = true)
+        val hero = card.stats.indexOfFirst { "top" in it.second.lowercase() }.takeIf { it >= 0 } ?: 0
+        val (value, unit) = card.stats.getOrNull(hero) ?: return
+        val q = Tok.out(Tok.prog(t, Tok.T_SLOW))
+        tach(c, DASH_STATS_TACH * q, H * DASH_STATS_Y, W * DASH_STATS_R, red, DASH_STATS_TACH * q)
+        fade = 1f
+        type(orbitron, Tok.HERO, Tok.WHITE, Paint.Align.CENTER); ink(Tok.WHITE, 1f)
+        c.drawText(countUp(value, q), W / 2, mid(H * DASH_STATS_Y), p)
+        type(orbitron, Tok.LABEL_L, red, Paint.Align.CENTER, Tok.TRACK_CAPS); ink(red, 1f)
+        c.drawText(unit.uppercase(), W / 2, mid(H * DASH_STATS_Y + Tok.TITLE * s), p)
+        val rest = card.stats.take(4).filterIndexed { i, _ -> i != hero }
+        val colW = W * Tok.TITLE_W / rest.size.coerceAtLeast(1)
+        rest.forEachIndexed { i, (v, u) ->
+            val l = x + i * colW
+            val top = H * DASH_PANELS_Y
+            fade = Tok.out(Tok.prog(t - (i + 1) * Tok.STAGGER * 2, Tok.T_BASE))
+            panel(c, l + Tok.SP_XS * s, top, l + colW - Tok.SP_XS * s, top + DASH_PANEL_H * s, red)
+            type(orbitron, Tok.CAP, Tok.WHITE); ink(Tok.WHITE, 1f)
+            c.drawText(countUp(v, Tok.out(Tok.prog(t - (i + 1) * Tok.STAGGER * 2, Tok.T_SLOW))), l + Tok.SP_L * s, top + (Tok.SP_M + Tok.CAP) * s, p)
+            type(orbitron, Tok.LABEL, Tok.WHITE, track = Tok.TRACK_CAPS); ink(Tok.WHITE, Tok.DIM)
+            c.drawText(u.uppercase(), l + Tok.SP_L * s, top + DASH_PANEL_H * s - Tok.SP_M * s, p)
         }
         fade = 1f
     }
@@ -1563,6 +1735,31 @@ class StudioArt(
         const val POSTER_LEADING = 0.98f
         /** Bold's one big number on the stats (beyond the type scale on purpose: it's the whole card). */
         const val POSTER_NUMBER = 230f
+
+        // Speedtrap's dash (s units, fractions of the frame for places).
+        const val DASH_CHAMFER = 10f
+        const val DASH_PANEL = 0.82f
+        const val DASH_TRACK = 0.04f
+        const val DASH_BADGE_H = 60f
+        const val DASH_SEGMENTS = 10
+        const val DASH_RED_SEGMENTS = 3
+        const val DASH_SEG_W = 7f
+        const val DASH_SEG_GAP = 2f
+        const val DASH_SEG_GROW = 1.2f
+        const val TACH_TICKS = 40
+        const val TACH_MAJOR = 5
+        const val TACH_FROM = 150f
+        const val TACH_SWEEP = 240f
+        const val TACH_RED_FROM = 0.8f
+        const val TACH_Y = 0.45f
+        const val TACH_R = 0.38f
+        const val DASH_TRIP_Y = 0.14f
+        const val DASH_TITLE_Y = 0.175f
+        const val DASH_STATS_Y = 0.46f
+        const val DASH_STATS_R = 0.32f
+        const val DASH_STATS_TACH = 0.92f
+        const val DASH_PANELS_Y = 0.63f
+        const val DASH_PANEL_H = 80f
         const val POSTER_OUTLINE = 2.5f
         const val POSTER_NUM_Y = 0.42f
         const val POSTER_UNIT_Y = 0.53f
