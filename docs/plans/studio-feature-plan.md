@@ -935,3 +935,11 @@ There's one preview in the editor; it never switches. It replaces both the exact
   - A second player plays that file, kept in step with the picture.
   - Until a new mix is ready, the previous one plays.
 - **Errors:** a playback error reloads the player at the same spot (up to 3 tries), then says so on the video ("Preview couldn't update: tap to try again"). It never switches to another preview.
+
+## Bugs from the rider, APK keppo-moto-6e2d564 (13 Oct, listing; not fixed yet)
+
+1. **Edit page broken.**
+   - **What the rider sees (screenshot):** only the video, in the top ~40% of the screen, running up under the status bar. Below it the screen is black.
+   - **Missing:** the top bar (close, Ideas, Next), the timeline and the tools.
+   - **Captions:** they draw ("tight ho raha"), so the preview plays.
+   - **Likely area:** the rebuilt preview (6e2d564). Its picture is a `PlayerView` inflated from `moment_popup_player`, inside a box that moves with the camera. The old code inflated the same layout only for the simple preview, and it showed the exact preview's view first. The view, or its black shutter, may be drawn outside the preview's rounded box and cover the editor.
