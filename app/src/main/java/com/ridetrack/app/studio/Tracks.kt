@@ -29,7 +29,7 @@ object TrackEdits {
 
     /** The preset's place, size, shape and frame. */
     fun place(l: LayerItem, preset: LayerPreset): LayerItem = when (preset) {
-        LayerPreset.CORNER -> l.copy(cx = 0.72f, cy = 0.22f, w = 0.42f, aspect = 9f / 16f, shape = LayerShape.ROUNDED, border = true, keys = emptyList())
+        LayerPreset.CORNER -> l.copy(cx = 0.30f, cy = 0.22f, w = 0.42f, aspect = 9f / 16f, shape = LayerShape.ROUNDED, border = true, keys = emptyList())
         LayerPreset.TOP -> l.copy(cx = 0.5f, cy = 0.25f, w = 1f, aspect = 9f / 8f, shape = LayerShape.RECT, border = false, rotation = 0f, keys = emptyList())
         LayerPreset.BOTTOM -> l.copy(cx = 0.5f, cy = 0.75f, w = 1f, aspect = 9f / 8f, shape = LayerShape.RECT, border = false, rotation = 0f, keys = emptyList())
         LayerPreset.BOTTOM_LEFT -> l.copy(cx = 0.25f, cy = 0.75f, w = 0.5f, aspect = 9f / 16f, shape = LayerShape.RECT, border = false, rotation = 0f, keys = emptyList())

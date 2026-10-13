@@ -29,7 +29,7 @@ class ClipToolsTest {
 
     /** Clip a 4 s (talking), clip b 3 s, stats, the loop end. */
     private fun plan(): StudioPlan {
-        val a = ClipSegment(bit("a"), 2_000, 4_000, listOf(CaptionLine(1_000, 2_000, "Arre yaar")), hook = true)
+        val a = ClipSegment(bit("a"), 2_000, 4_000, listOf(CaptionLine(1_000, 2_000, "Arre yaar", key = "yaar")), hook = true)
         val b = ClipSegment(bit("b"), 1_000, 3_000, emptyList(), hook = false)
         val tail = ClipSegment(a.bit, a.inMs, 600, emptyList(), hook = false, tail = true)
         return StudioPlan(listOf(a, b, StatsSegment(1_500), tail), Vibe.HYPE)
@@ -108,9 +108,9 @@ class ClipToolsTest {
         assertEquals(listOf(0L, 2_000L), a.frame.map { it.atMs })
         val mid = ClipTools.frameAt(a, 1_000)
         assertTrue(abs(mid.zoom - 1.25f) < 0.001f && abs(mid.x - 0.2f) < 0.001f, "$mid")
-        // Punch-in on each line.
+        // Punch-in on each line with a key word.
         val punch = seg(ClipTools.punchIn(plan(), 0), 0)
-        assertTrue(punch.frame.any { it.zoom > 1.1f })
+        assertTrue(punch.frame.any { it.zoom > 1.05f })
     }
 
     @Test

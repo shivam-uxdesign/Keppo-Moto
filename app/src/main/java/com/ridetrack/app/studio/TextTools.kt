@@ -28,19 +28,22 @@ object TextTools {
      * fraction of the frame, characters shown out of [length]).
      */
     fun animate(t: TextItem, localMs: Long, durMs: Long, length: Int): AnimFrame {
-        val inT = (localMs / 300f).coerceIn(0f, 1f)
-        val outT = ((durMs - localMs) / 300f).coerceIn(0f, 1f)
+        val inT = Tok.prog(localMs.toFloat(), Tok.T_BASE)
+        val outT = Tok.prog((durMs - localMs).toFloat(), Tok.exit(Tok.T_BASE))
         var alpha = 1f
         var scale = 1f
         var dy = 0f
         var chars = length
+        // Type on: a letter every TYPE_CHAR_MS, all in by TYPE_MAX_MS at most.
+        val typeMs = (length * TYPE_CHAR_MS).coerceIn(1L, TYPE_MAX_MS)
         fun apply(a: TextAnim, q: Float, entering: Boolean) {
             when (a) {
-                TextAnim.FADE -> alpha *= q
-                TextAnim.POP -> { scale *= 0.6f + 0.4f * backOut(q); alpha *= minOf(1f, q * 2) }
-                TextAnim.TYPE -> if (entering) chars = (length * (localMs / 600f).coerceIn(0f, 1f)).toInt().coerceAtLeast(if (localMs > 0) 1 else 0) else alpha *= q
-                TextAnim.SLIDE -> { dy += (1 - q) * (if (entering) 0.04f else -0.04f); alpha *= q }
-                TextAnim.BOUNCE -> { dy -= (if (q < 1f) kotlin.math.abs(kotlin.math.sin(q * Math.PI * 2)).toFloat() * 0.03f * (1 - q) else 0f); alpha *= minOf(1f, q * 3) }
+                TextAnim.FADE -> alpha *= if (entering) Tok.out(q) else 1 - Tok.inn(1 - q)
+                TextAnim.POP -> { scale *= POP_FROM + (1 - POP_FROM) * Tok.spring(q); alpha *= Tok.out(q) }
+                TextAnim.TYPE -> if (entering) chars = (length * Tok.prog(localMs.toFloat(), typeMs)).toInt().coerceAtLeast(if (localMs > 0) 1 else 0) else alpha *= q
+                TextAnim.SLIDE -> { dy += (1 - Tok.out(q)) * (if (entering) SLIDE_H else -SLIDE_H); alpha *= Tok.out(q) }
+                // One bounce, then still.
+                TextAnim.BOUNCE -> { dy -= kotlin.math.sin(q * Math.PI).toFloat() * BOUNCE_H; alpha *= Tok.out(q) }
                 TextAnim.NONE -> {}
             }
         }
@@ -51,11 +54,12 @@ object TextTools {
 
     data class AnimFrame(val alpha: Float, val scale: Float, val dy: Float, val chars: Int)
 
-    private fun backOut(q: Float): Float {
-        val c = 1.70158f
-        val x = q - 1
-        return 1 + (c + 1) * x * x * x + c * x * x
-    }
+    private const val TYPE_CHAR_MS = 40L
+    private const val TYPE_MAX_MS = 800L
+    private const val POP_FROM = 0.85f
+    /** Slide and bounce travel, as a fraction of the frame's height. */
+    private const val SLIDE_H = 0.02f
+    private const val BOUNCE_H = 0.015f
 
     // ---- captions ----------------------------------------------------------------------------
 
@@ -95,10 +99,10 @@ object TextTools {
 
     fun addSticker(plan: StudioPlan, kind: StickerKind, atMs: Long, id: String, text: String = ""): StudioPlan {
         val start = atMs.coerceIn(0, (plan.totalMs - 500).coerceAtLeast(0))
-        // Live numbers sit high and left by default; emoji and callouts in the middle.
+        // Live numbers sit low, left of the app's buttons; emoji and callouts in the middle.
         val (x, y) = when (kind) {
-            StickerKind.SPEED -> 0.22f to 0.82f
-            StickerKind.LEAN -> 0.78f to 0.82f
+            StickerKind.SPEED -> 0.22f to 0.74f
+            StickerKind.LEAN -> 0.64f to 0.74f
             else -> 0.5f to 0.45f
         }
         val len = if (kind == StickerKind.SPEED || kind == StickerKind.LEAN) plan.totalMs - start else 2_500

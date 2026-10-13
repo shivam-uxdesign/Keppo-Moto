@@ -201,7 +201,7 @@ class StudioRenderer(private val context: Context) {
         val segs = plan.segments
         val clips = plan.clips
         require(clips.isNotEmpty()) { "No clips to use" }
-        val art = StudioArt(context, brand = input.brand?.takeIf { input.options.brand })
+        val art = StudioArt(context, brand = input.brand?.takeIf { input.options.brand }, grainOn = input.options.grain)
         val mix = plan.mix
         drawer?.release()
         drawer = if (a.layers == LayerMode.DRAWN) LayerDrawer(context, plan.layers) { l -> uriOf(input, l.bit) } else null
@@ -263,7 +263,7 @@ class StudioRenderer(private val context: Context) {
     /** A layer's own video track: clear until it starts, the clip, then clear to the end. */
     private fun layerSequence(input: RenderInput, art: StudioArt, l: LayerItem): EditedMediaItemSequence {
         val (w, h) = layerSize(l, art.w)
-        val fx: List<Effect> = listOf(Presentation.createForWidthAndHeight(w, h, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP)) + grade(input.plan.vibe) + MaskEffect(l.shape, l.border)
+        val fx: List<Effect> = listOf(Presentation.createForWidthAndHeight(w, h, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP)) + grade(input.plan.vibe) + MaskEffect(l.shape, l.border, art.w / 540f)
         val uri = uriOf(input, l.bit) ?: error("Layer clip missing")
         val items = ArrayList<EditedMediaItem>()
         if (l.startMs > 0) items += filler(l.startMs, fx)
@@ -359,39 +359,16 @@ class StudioRenderer(private val context: Context) {
         val segStart = plan.startOf(i)
         val clock = ItemClock(segStart, from, dur, preview)
         // Voice-over captions that fall in this segment, timed from its start.
-        val voLines = input.voiceLines.filter { it.endMs > segStart && it.startMs < segStart + dur }.map { it.copy(startMs = it.startMs - segStart, endMs = it.endMs - segStart) }
-        val lines = if (seg is ClipSegment) (seg.lines + voLines).sortedBy { it.startMs } else voLines
-        val opener = input.opener.takeIf { seg is ClipSegment && seg.hook && !seg.tail }
-        val frameAt = { localMs: Long -> Cuts.frameAt(plan, i, localMs, dur) { k -> describe(input, segs.getOrNull(k)) } }
+        val voLines = ReelOverlay.voiceLines(input, plan, i, dur)
+        val beatMs = o.bpm?.takeIf { it in 50..200 }?.let { 60_000L / it }
+        val frameAt = { localMs: Long -> Cuts.frameAt(plan, i, localMs, dur, beatMs) }
         val clipStart = clip.bit.atMillis - clip.bit.inMs
         val overlay = SegmentOverlay(overlayBitmap(art.w, art.h), clock) { c, localMs ->
-            val f = frameAt(localMs)
-            var wallNow: Long? = null
-            var kmhNow = -1
-            when (seg) {
-                is ClipSegment -> {
-                    // The clip's own time runs at its speed; a freeze holds its moment.
-                    val wall = clipStart + from + if (cs?.still != null) 0 else localMs * srcLen / dur.coerceAtLeast(1)
-                    // Clips from other rides have no samples here: their own speed.
-                    // No speed for that moment (a GPS gap, another ride, a phone video): the bit's own
-                    // speed if it has one, else no badge (-1) rather than a wrong "0".
-                    val kmh = input.speedAt(wall).takeIf { it >= 0 && seg.bit.fromRide == null }
-                        ?: seg.bit.speedKmh.toInt().takeIf { it > 0 } ?: -1
-                    wallNow = wall
-                    kmhNow = kmh
-                    // The corner speed is off in some styles (a speed sticker may show it instead).
-                    art.drawClip(c, f, if (seg.tail) emptyList() else lines, if (o.speedBadge) kmh else -1, input.clockAt(wall), o.captions, opener, plan.captionLook)
-                    seg.text?.let { t -> art.drawSectionText(c, plan.vibe, t, localMs) }
-                }
-                is TitleSegment -> art.drawTitle(c, f, input.card, o.map)
-                is StatsSegment -> art.drawStats(c, f, input.card, o.map, o.watermark)
-            }
-            val global = segStart + localMs
-            // Layers drawn frame by frame (the slower way), under the text.
-            drawer?.draw(c, global)
-            // Text and stickers the rider placed on the timeline, in Reel time.
-            plan.texts.forEach { t -> if (global in t.startMs until t.endMs) art.drawTextItem(c, plan.vibe, t, global - t.startMs, t.endMs - t.startMs) }
-            plan.stickers.forEach { st -> if (global in st.startMs until st.endMs) art.drawSticker(c, st, global - st.startMs, kmhNow, wallNow?.let(input.leanAt)) }
+            // The clip's own time runs at its speed; a freeze holds its moment.
+            val live = (seg as? ClipSegment)?.let { cseg -> ReelOverlay.liveAt(input, cseg, clipStart + from + if (cs?.still != null) 0 else localMs * srcLen / dur.coerceAtLeast(1)) }
+                ?: ReelOverlay.Live(-1, "", null)
+            // Layers drawn frame by frame (the slower way) go under the text.
+            ReelOverlay.draw(c, art, plan, i, localMs, dur, input, live, voLines) { lc, global -> drawer?.draw(lc, global) }
         }
         val video = ArrayList<Effect>()
         // Speed first, so everything after sees the Reel's own time.
@@ -475,24 +452,22 @@ class StudioRenderer(private val context: Context) {
     /** Where the voice-over talks, in Reel ms. */
     private fun voiceRanges(input: RenderInput): List<LongRange> = input.voiceLines.map { (it.startMs - 150)..(it.endMs + 250) }
 
-    /** What a transition says about segment [s]: speed and time for a clip, "That's a wrap" for the stats. */
-
-    private fun describe(input: RenderInput, s: Segment?): Pair<String, String> = when (s) {
-        is ClipSegment -> {
-            val kmh = input.speedAt(s.bit.atMillis).takeIf { it >= 0 && s.bit.fromRide == null } ?: s.bit.speedKmh.toInt().takeIf { it > 0 } ?: -1
-            // No speed known: just its time.
-            if (kmh < 0) input.clockAt(s.bit.atMillis) to "" else "$kmh km/h" to (s.bit.fromRide ?: input.clockAt(s.bit.atMillis))
-        }
-        is StatsSegment -> "That's a wrap" to input.card.title
-        else -> "" to ""
-    }
-
     /** Each vibe's colour look. */
     private fun grade(v: Vibe): List<Effect> = when (v) {
         Vibe.HYPE -> listOf(Contrast(0.1f), HslAdjustment.Builder().adjustSaturation(16f).build(), RgbAdjustment.Builder().setRedScale(1.04f).setBlueScale(0.96f).build())
         Vibe.CINE -> listOf(Contrast(0.12f), HslAdjustment.Builder().adjustSaturation(-20f).adjustLightness(-3f).build(), RgbAdjustment.Builder().setRedScale(0.96f).setBlueScale(1.05f).build())
         Vibe.CHILL -> listOf(HslAdjustment.Builder().adjustSaturation(-12f).adjustLightness(4f).build(), RgbAdjustment.Builder().setRedScale(1.06f).setBlueScale(0.92f).build())
         Vibe.VLOG -> listOf(Contrast(0.05f), HslAdjustment.Builder().adjustSaturation(8f).build())
+        Vibe.FILM -> listOf(Contrast(-0.06f), HslAdjustment.Builder().adjustSaturation(-10f).build(), RgbAdjustment.Builder().setRedScale(1.05f).setBlueScale(0.92f).build(), LiftBlacks)
+        Vibe.EDITORIAL -> listOf(Contrast(0.08f), HslAdjustment.Builder().adjustSaturation(-8f).build())
+        Vibe.NATIVE -> emptyList()
+    }
+
+    /** Film's faded blacks: every channel lifted by [LIFT] (the matrix's last column is an offset). */
+    private object LiftBlacks : androidx.media3.effect.RgbMatrix {
+        private const val LIFT = 0.04f
+        private val m = floatArrayOf(1 - LIFT, 0f, 0f, 0f, 0f, 1 - LIFT, 0f, 0f, 0f, 0f, 1 - LIFT, 0f, LIFT, LIFT, LIFT, 1f)
+        override fun getMatrix(presentationTimeUs: Long, useHdr: Boolean): FloatArray = m
     }
 
     /** Ms since the item's first frame (frames may be stamped from the clip start or the composition). */

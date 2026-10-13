@@ -134,7 +134,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
@@ -250,8 +249,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     DisposableEffect(Unit) {
         val l = object : Player.Listener { override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying } }
         simple.player.addListener(l)
-        exact.player.addListener(l)
-        onDispose { simple.player.removeListener(l); exact.player.removeListener(l); simple.release(); exact.release() }
+        exact.addListener(l)
+        onDispose { simple.player.removeListener(l); exact.removeListener(l); simple.release(); exact.release() }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { active.pause() }
     // A change (not mid-drag): play the new edit from where the playhead is.
@@ -394,12 +393,10 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             ) {
                 val boxW = maxWidth
                 val boxH = maxHeight
-                // In the simple preview the transition's camera move and graphic are drawn here.
+                // In the simple preview the style's camera (with the transitions' moves) is applied here,
+                // never zoomed less than the made video's fill.
                 val (ti, tl) = TimelineEdits.at(plan, pos)
-                val cut = if (exactOn) null else plan.segments.getOrNull(ti)?.let { seg ->
-                    Cuts.frameAt(plan, ti, tl, seg.durMs) { k -> ((plan.segments.getOrNull(k) as? ClipSegment)?.bit?.speedKmh?.toInt()?.takeIf { it > 0 }?.let { "$it km/h" } ?: "") to "" }
-                }?.takeIf { art.edge(it) != null }
-                val cam = cut?.let { art.camera(it) }
+                val cam = if (exactOn) null else (plan.segments.getOrNull(ti) as? ClipSegment)?.let { seg -> art.camera(Cuts.frameAt(plan, ti, tl, seg.durMs)) }
                 val unit = with(density) { boxW.toPx() } / art.w
                 // The exact preview only plays into a SurfaceView (Media3's composition player refuses a
                 // TextureView). The simple preview uses a TextureView, so the transition's camera move
@@ -415,7 +412,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     },
                     update = { v -> if (v.player !== active) runCatching { v.player = active } },
                     modifier = Modifier.fillMaxSize().graphicsLayer {
-                        val k = (cam?.k?.div(1.03f)?.coerceAtLeast(1f) ?: 1f) * crop.z
+                        val k = (cam?.let { maxOf(it.k, art.fill(it)) } ?: 1f) * crop.z
                         scaleX = k; scaleY = k
                         translationX = (cam?.x ?: 0f) * unit + crop.x
                         translationY = (cam?.y ?: 0f) * unit + crop.y
@@ -423,14 +420,19 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     },
                 )
                 }
-                cut?.let { f ->
+                // The simple preview's graphics: drawn by the same code as the made video (the exact
+                // preview has them in the video).
+                val overlayIn = remember(plan, s.options, s.title, s.hookLine, s.label, s.takes) { vm.overlayInput(plan) }
+                if (!exactOn && overlayIn != null) {
                     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-                        val t = art.edge(f) ?: return@Canvas
+                        val (oi, ol) = TimelineEdits.at(plan, pos)
+                        val seg = plan.segments.getOrNull(oi) ?: return@Canvas
+                        val live = (seg as? ClipSegment)?.let { ReelOverlay.liveAt(overlayIn, it, ol, seg.durMs) } ?: ReelOverlay.Live(-1, "", null)
                         drawIntoCanvas { c ->
                             val nc = c.nativeCanvas
                             nc.save()
                             nc.scale(size.width / art.w, size.height / art.h)
-                            art.transition(nc, f, t)
+                            ReelOverlay.draw(nc, art, plan, oi, ol, seg.durMs, overlayIn, live, ReelOverlay.voiceLines(overlayIn, plan, oi, seg.durMs))
                             nc.restore()
                         }
                     }
@@ -441,21 +443,27 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 }
                 val fontPx = maxWidth.value * 0.075f
                 val font = VibeFonts[plan.vibe]
-                val style = TextStyle(fontFamily = font, fontSize = fontPx.sp, color = Color.White, textAlign = TextAlign.Center, shadow = Shadow(Color.Black, blurRadius = 8f))
-                // The caption being said.
+                val style = TextStyle(fontFamily = font, fontSize = fontPx.sp, color = Color.White, textAlign = TextAlign.Center)
+                // The caption being said: tap it to fix a word. Its spot is where it's really drawn
+                // (measured by drawing it off-screen).
                 val (si, local) = TimelineEdits.at(plan, pos)
-                // The caption being said: tap it to fix a word (in the exact preview it's in the video; the spot still listens).
-                (plan.segments.getOrNull(si) as? ClipSegment)?.lines?.withIndex()?.firstOrNull { local in it.value.startMs until it.value.endMs }?.let { (j, l) ->
-                    Text(
-                        l.text,
-                        style = style.copy(fontSize = (fontPx * 0.8f).sp, color = if (exactOn) Color.Transparent else Color.White, shadow = if (exactOn) null else style.shadow),
-                        modifier = Modifier.align(Alignment.TopCenter).offset(y = boxH * ((plan.captionLook.y ?: 0.68f) - 0.02f)).padding(horizontal = 12.dp)
-                            .clickable(role = Role.Button, onClickLabel = "Fix this caption") { active.pause(); captionTab = CaptionTab.WORDS; captionLine = si to j; captionsOpen = true },
-                    )
+                (plan.segments.getOrNull(si) as? ClipSegment)?.takeIf { s.options.captions && !it.tail }?.let { cseg ->
+                    val j = cseg.lines.indexOfLast { local >= it.startMs - Tok.LEAD }
+                    val pic = android.graphics.Picture()
+                    val bounds = art.caption(pic.beginRecording(art.w, art.h), plan.vibe, cseg.lines, local.toFloat(), plan.captionLook)
+                    pic.endRecording()
+                    if (j >= 0 && bounds != null) {
+                        Box(
+                            Modifier.offset(x = boxW * (bounds.left / art.w), y = boxH * (bounds.top / art.h))
+                                .size(width = boxW * (bounds.width() / art.w), height = boxH * (bounds.height() / art.h))
+                                .clickable(role = Role.Button, onClickLabel = "Fix this caption") { active.pause(); captionTab = CaptionTab.WORDS; captionLine = si to j; captionsOpen = true },
+                        )
+                    }
                 }
                 // Text on the timeline; the selected one can be dragged up or down.
-                // Text and stickers: drag anywhere, pinch to size and turn (the selected one). In the exact
-                // preview they're in the video already: only the selected one's frame shows, to move it.
+                // Text and stickers: drag anywhere, pinch to size and turn (the selected one). They're drawn
+                // with the video's graphics (above, or in the exact preview's video): here only their
+                // spot listens, and the selected one's frame shows, to move it.
                 plan.texts.filter { pos in it.startMs until it.endMs && (!exactOn || (s.pick as? TimelinePick.Text)?.id == it.id) }.forEach { t ->
                     val selected = (s.pick as? TimelinePick.Text)?.id == t.id
                     Placed(
@@ -472,9 +480,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             .let { st -> if (t.look == TextLook.BOX) st.copy(color = Color.Black, shadow = null) else t.color?.let { st.copy(color = Color(it)) } ?: st }
                         Text(
                             t.text,
-                            style = if (exactOn) look.copy(color = Color.Transparent, shadow = null) else look,
+                            style = look.copy(color = Color.Transparent, shadow = null),
                             modifier = Modifier
-                                .then(if (t.look == TextLook.BOX && !exactOn) Modifier.background(Color(t.color ?: android.graphics.Color.WHITE), RoundedCornerShape(10.dp)) else Modifier)
                                 .then(if (selected) Modifier.border(1.dp, RtColors.Primary, RoundedCornerShape(4.dp)) else Modifier)
                                 .padding(horizontal = 10.dp, vertical = 2.dp),
                         )
@@ -487,7 +494,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         onSelect = { vm.pick(TimelinePick.Sticker(st.id)) },
                         onDone = { dx, dy, z, r -> vm.change("Move sticker") { p -> TextTools.rotateSticker(TextTools.scaleSticker(TextTools.placeSticker(p, st.id, st.x + dx, st.y + dy), st.id, z), st.id, r) } },
                     ) {
-                        StickerPreview(st, hidden = exactOn, selected = selected, unit = boxW.value / 540f)
+                        StickerPreview(st, hidden = true, selected = selected, unit = boxW.value / 540f)
                     }
                 }
                 if (safe) SafeZones()
@@ -659,7 +666,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                         .graphicsLayer { scaleX = k; scaleY = k; alpha = a }
                                         .size(22.dp).clip(RoundedCornerShape(6.dp))
                                         // A plain cut: a faint mark, still tappable to give it a transition.
-                                        .background(if (on) RtColors.Primary else if (!m.plays) Color.Black.copy(alpha = 0.35f) else if (m.chosen) Color(0xFF0B7377) else Color.Black.copy(alpha = 0.65f))
+                                        .background(if (on) RtColors.Primary else if (!m.plays) Color.Black.copy(alpha = 0.35f) else if (m.chosen) RtColors.Primary else Color.Black.copy(alpha = 0.65f))
                                         .border(1.5.dp, Color.White.copy(alpha = if (m.plays || on) 0.9f else 0.4f), RoundedCornerShape(6.dp))
                                         .clickable(role = Role.Button, onClickLabel = if (m.plays) "Transition: ${m.kind.label}" else "No transition: add one") {
                                             vm.pick(null); cutAt = m.segment; loopAt = m.atMs
@@ -777,6 +784,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     val tr = (plan.segments.getOrNull(cut) as? ClipSegment)?.transition ?: if (Cuts.plays(plan, cut)) Transition() else Transition(TransitionKind.CUT)
                     val at = plan.startOf(cut)
                     TransitionPicker(
+                        plan.vibe,
                         tr,
                         looping = loopAt != null,
                         onPick = { t -> tick(); vm.change("Transition") { ClipTools.transition(it, cut, t) }; loopAt = at },
@@ -1290,7 +1298,7 @@ private fun StickerPreview(st: StickerItem, hidden: Boolean, selected: Boolean, 
         }
         StickerKind.EMOJI -> Text(st.text.ifEmpty { "🔥" }, style = TextStyle(fontSize = (110 * unit).sp, color = if (hidden) Color.Transparent else Color.Unspecified), modifier = frame)
         StickerKind.ARROW -> Text("➜", style = TextStyle(fontSize = (140 * unit).sp, color = ink), modifier = frame)
-        StickerKind.CIRCLE -> Box(frame.size((240 * unit).dp).border((5 * unit).dp, if (hidden) Color.Transparent else Color(0xFFFFD60A), CircleShape))
+        StickerKind.CIRCLE -> Box(frame.size((240 * unit).dp).border((5 * unit).dp, if (hidden) Color.Transparent else Color(Tok.YELLOW), CircleShape))
     }
 }
 
@@ -1305,7 +1313,7 @@ private fun LayerPreview(vm: StudioViewModel, s: StudioState, l: LayerItem, pos:
     var scale by remember(l.id, k.w) { mutableFloatStateOf(1f) }
     val shape: Shape = when (l.shape) {
         LayerShape.RECT -> RoundedCornerShape(0.dp)
-        LayerShape.ROUNDED -> RoundedCornerShape((minOf(w, h) * 0.08f).dp)
+        LayerShape.ROUNDED -> RoundedCornerShape((Tok.R_MD * boxW / 540f).dp)
         LayerShape.CIRCLE -> CircleShape
     }
     val density = LocalDensity.current
@@ -1316,7 +1324,7 @@ private fun LayerPreview(vm: StudioViewModel, s: StudioState, l: LayerItem, pos:
             .graphicsLayer { scaleX = scale; scaleY = scale; alpha = l.opacity }
             .rotate(l.rotation)
             .clip(shape)
-            .then(if (l.border) Modifier.border(2.dp, Color.White, shape) else Modifier)
+            .then(if (l.border) Modifier.border((Tok.BORDER * boxW / 540f).dp, Color.White.copy(alpha = Tok.BORDER_A), shape) else Modifier)
             .then(if (selected) Modifier.border(2.dp, RtColors.Primary, shape) else Modifier)
             .clickable(role = Role.Button, onClickLabel = "Select layer") { vm.pick(TimelinePick.Layer(l.id)) }
             .pointerInput(l.id, selected) {
@@ -1422,10 +1430,11 @@ private fun Block(label: String, startMs: Long, durMs: Long, pxPerMs: Float, col
 @Composable
 private fun SafeZones() {
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val shade = Color(0x55FF3B3B)
-        Box(Modifier.fillMaxWidth().height(maxHeight * 0.1f).background(shade))
-        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(maxHeight * 0.22f).background(shade))
-        Box(Modifier.align(Alignment.CenterEnd).width(maxWidth * 0.16f).fillMaxHeight(0.5f).offset(y = maxHeight * 0.1f).background(shade))
+        // The same lines the made video keeps rider-placed text and stickers inside.
+        val shade = RtColors.Error.copy(alpha = 0.33f)
+        Box(Modifier.fillMaxWidth().height(maxHeight * Tok.TOP_SAFE).background(shade))
+        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(maxHeight * (1 - Tok.BOTTOM_SAFE)).background(shade))
+        Box(Modifier.offset(x = maxWidth * Tok.RAIL_X, y = maxHeight * Tok.RAIL_TOP).width(maxWidth * (1 - Tok.RAIL_X)).height(maxHeight * (Tok.RAIL_BOTTOM - Tok.RAIL_TOP)).background(shade))
         Text("Safe area", style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.Center))
     }
 }
@@ -1584,12 +1593,20 @@ private fun BackTool(label: String, onClick: () -> Unit) {
 }
 
 /** The picker's order: None (a plain cut) first, then the style's own, then the rest. */
-private val PICKER_ORDER = listOf(TransitionKind.CUT) + TransitionKind.entries.filter { it != TransitionKind.CUT }
+/**
+ * The transitions [vibe]'s picker offers: Style (its own section transition), None, Fade, Zoom and
+ * its signature ones. Another vibe's signature already on the cut stays in the row, so it still shows.
+ */
+private fun pickerOrder(vibe: Vibe, current: TransitionKind): List<TransitionKind> {
+    val own = (if (vibe.spec.section == TransitionKind.CUT) emptyList() else listOf(TransitionKind.STYLE)) + vibe.spec.picker
+    return if (current in own) own else own + current
+}
 
 /** A mark for each transition, on the timeline and in the picker. */
 private val TRANSITION_GLYPH = mapOf(
     TransitionKind.STYLE to "✦", TransitionKind.CUT to "│", TransitionKind.FADE to "◐", TransitionKind.FLASH to "✺", TransitionKind.ZOOM to "⊕",
-    TransitionKind.WHIP to "≫", TransitionKind.GLITCH to "▚", TransitionKind.SLASH to "⟋", TransitionKind.SHUTTER to "◫", TransitionKind.SUN to "☀", TransitionKind.CARD to "▭",
+    TransitionKind.WHIP to "≫", TransitionKind.GLITCH to "▚", TransitionKind.SLASH to "⟋", TransitionKind.SHUTTER to "◫", TransitionKind.SUN to "●", TransitionKind.CARD to "▭",
+    TransitionKind.DIP to "◼", TransitionKind.ZOOM_THROUGH to "⊙", TransitionKind.LIGHT_LEAK to "☀",
 )
 
 /**
@@ -1597,9 +1614,10 @@ private val TRANSITION_GLYPH = mapOf(
  * chosen one bigger), its length, Apply to all and Done. The cut plays on a loop meanwhile.
  */
 @Composable
-private fun TransitionPicker(tr: Transition, looping: Boolean, onPick: (Transition) -> Unit, onPreview: () -> Unit, onAll: () -> Unit, onDone: () -> Unit) {
+private fun TransitionPicker(vibe: Vibe, tr: Transition, looping: Boolean, onPick: (Transition) -> Unit, onPreview: () -> Unit, onAll: () -> Unit, onDone: () -> Unit) {
     val list = rememberLazyListState()
-    LaunchedEffect(tr.kind) { list.animateScrollToItem((PICKER_ORDER.indexOf(tr.kind) - 2).coerceAtLeast(0)) }
+    val order = pickerOrder(vibe, tr.kind)
+    LaunchedEffect(tr.kind) { list.animateScrollToItem((order.indexOf(tr.kind) - 2).coerceAtLeast(0)) }
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         LazyRow(
             state = list,
@@ -1608,19 +1626,19 @@ private fun TransitionPicker(tr: Transition, looping: Boolean, onPick: (Transiti
             contentPadding = PaddingValues(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            items(PICKER_ORDER) { k ->
+            items(order) { k ->
                 val on = k == tr.kind
                 val z by animateFloatAsState(if (on) 1.2f else 0.9f, tween(200), label = "pick")
                 Box(
                     Modifier.graphicsLayer { scaleX = z; scaleY = z }.size(56.dp).clip(CircleShape)
-                        .background(if (on) Color(0xFF0B7377) else RtColors.SurfaceRaised)
+                        .background(if (on) RtColors.Primary else RtColors.SurfaceRaised)
                         .then(if (on) Modifier.border(2.dp, Color.White, CircleShape) else Modifier)
                         .clickable(role = Role.Button, onClickLabel = k.label) { onPick(tr.copy(kind = k)) },
                     contentAlignment = Alignment.Center,
                 ) { Text(TRANSITION_GLYPH[k] ?: "", fontSize = 20.sp, color = Color.White) }
             }
         }
-        Text(tr.kind.label, style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text(if (tr.kind == TransitionKind.STYLE) "Style · ${vibe.spec.section.label}" else tr.kind.label, style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.align(Alignment.CenterHorizontally))
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             TransitionLength.entries.forEach { l -> Small(l.label, on = tr.length == l) { onPick(tr.copy(length = l)) } }
             Spacer(Modifier.weight(1f))

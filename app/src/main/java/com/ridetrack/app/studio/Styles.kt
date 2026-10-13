@@ -76,10 +76,14 @@ data class BrandKit(
 /** Built-in styles, applying a style to an edit, saving a Reel's look as one, and Shuffle. Pure, unit-tested. */
 object Styles {
     val builtIns: List<StudioStyle> = listOf(
-        StudioStyle("hype", "Hype", Vibe.HYPE, builtIn = true, about = "fast cuts, bold words", pace = 0.8f, punchIn = true),
-        StudioStyle("cine", "Cinematic", Vibe.CINE, builtIn = true, about = "slow, wide, film look", pace = 1.3f, speedBadge = true),
-        StudioStyle("chill", "Chill", Vibe.CHILL, builtIn = true, about = "easy pace, warm", pace = 1.15f),
-        StudioStyle("vlog", "Vlog", Vibe.VLOG, builtIn = true, about = "your voice leads"),
+        // In the order the style swipe goes: Clean, Cinematic, Bold, Playful, Film, Editorial, Native.
+        StudioStyle("vlog", "Clean", Vibe.VLOG, builtIn = true, about = "calm and precise, your voice leads"),
+        StudioStyle("cine", "Cinematic", Vibe.CINE, builtIn = true, about = "slow, wide, film title", pace = 1.3f, speedBadge = true),
+        StudioStyle("hype", "Bold", Vibe.HYPE, builtIn = true, about = "big words, punchy cuts", pace = 0.8f, punchIn = true),
+        StudioStyle("chill", "Playful", Vibe.CHILL, builtIn = true, about = "friendly, round, a little pop", pace = 1.15f),
+        StudioStyle("film", "Film", Vibe.FILM, builtIn = true, about = "analog, warm, shot on film", pace = 1.15f),
+        StudioStyle("editorial", "Editorial", Vibe.EDITORIAL, builtIn = true, about = "printed, crafted, magazine"),
+        StudioStyle("native", "Native", Vibe.NATIVE, builtIn = true, about = "like Instagram's own editor", speedBadge = false, map = false, outro = false, watermark = false),
     )
 
     /** The options a style sets (look, cards, overlays, marks). */
@@ -250,7 +254,7 @@ object StyleJson {
     }.getOrNull()
 
     /** What Gemini is asked to fill in for a style. */
-    const val SCHEMA = """{"name":"short name","about":"a few words","base":"HYPE|CINE|CHILL|VLOG","captions":{"kind":"STYLE|PUNCH|SERIF|LABEL|CHAT|PLAIN","size":1.0,"karaoke":true},"textLook":"STYLE|PLAIN|OUTLINE|BOX|HAND","textColor":-10496,"textIn":"FADE|POP|TYPE|SLIDE|BOUNCE|NONE","textOut":"FADE|POP|TYPE|SLIDE|BOUNCE|NONE","transition":"STYLE|CUT|FADE|FLASH|ZOOM|WHIP|GLITCH|SLASH|SHUTTER|SUN|CARD","transitionLength":"SHORT|NORMAL|LONG","everyCut":false,"pace":1.0,"punchIn":false,"color":{"exp":0.0,"con":0.0,"sat":0.0,"warm":0.0,"look":true},"speedBadge":true,"speedSticker":false,"leanSticker":false,"map":true,"intro":false,"outro":true,"duck":true}"""
+    const val SCHEMA = """{"name":"short name","about":"a few words","base":"HYPE|CINE|CHILL|VLOG|FILM|EDITORIAL|NATIVE","captions":{"kind":"STYLE|PUNCH|SERIF|LABEL|CHAT|PLAIN|CLEAN|TYPE|STRIP","size":1.0,"karaoke":true},"textLook":"STYLE|PLAIN|OUTLINE|BOX|HAND","textColor":-10496,"textIn":"FADE|POP|TYPE|SLIDE|BOUNCE|NONE","textOut":"FADE|POP|TYPE|SLIDE|BOUNCE|NONE","transition":"STYLE|CUT|FADE|FLASH|ZOOM|WHIP|SLASH|SHUTTER|SUN|CARD|DIP|ZOOM_THROUGH|LIGHT_LEAK","transitionLength":"SHORT|NORMAL|LONG","everyCut":false,"pace":1.0,"punchIn":false,"color":{"exp":0.0,"con":0.0,"sat":0.0,"warm":0.0,"look":true},"speedBadge":true,"speedSticker":false,"leanSticker":false,"map":true,"intro":false,"outro":true,"duck":true}"""
 
     /** Asks Gemini for a style from the rider's words. */
     fun wordsPrompt(words: String): String =

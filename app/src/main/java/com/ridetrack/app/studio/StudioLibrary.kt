@@ -204,7 +204,7 @@ fun StudioSettingsScreen(onBack: () -> Unit) {
                 SwitchLine("English subtitles", "A small English line under Hinglish captions", o.english) { v -> set { it.copy(english = v) } }
                 SwitchLine("Jump cuts", "Long pauses, \u201cumm\u201ds and false starts cut from what you say", o.jumpCuts) { v -> set { it.copy(jumpCuts = v) } }
                 SwitchLine("Loop the ending", "Ends on the opening shot, so it plays on", o.loopEnd) { v -> set { it.copy(loopEnd = v) } }
-                SwitchLine("Route opening", "A 2 s route sketch first (off is better for reach)", o.intro) { v -> set { it.copy(intro = v) } }
+                if (o.vibe != Vibe.NATIVE) SwitchLine("Route opening", "A 2 s route sketch first (off is better for reach)", o.intro) { v -> set { it.copy(intro = v) } }
                 SwitchLine("Map", "The route behind the stats", o.map) { v -> set { it.copy(map = v) } }
                 SwitchLine("Speed in the corner", null, o.speedBadge) { v -> set { it.copy(speedBadge = v) } }
                 SwitchLine("Brand kit on the video", "Your logo, handle and font", o.brand) { v -> set { it.copy(brand = v) } }

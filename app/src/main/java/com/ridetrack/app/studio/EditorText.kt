@@ -61,7 +61,7 @@ import kotlin.math.roundToInt
 internal fun fontFamilyOf(font: FontChoice): FontFamily? = when (font) {
     FontChoice.STYLE -> null
     FontChoice.BOLD -> FontFamily(Font(R.font.anton))
-    FontChoice.SERIF -> FontFamily(Font(R.font.instrument_serif_italic))
+    FontChoice.SERIF -> FontFamily(Font(R.font.instrument_serif))
     FontChoice.CLEAN -> FontFamily(Font(R.font.geist_semibold))
     FontChoice.HAND -> FontFamily(Font(R.font.permanent_marker))
     FontChoice.BRAND -> FontFamily(Font(R.font.geist_medium))
@@ -69,14 +69,19 @@ internal fun fontFamilyOf(font: FontChoice): FontFamily? = when (font) {
 
 /** The typeface a text look draws in when no font is picked. */
 internal fun lookFamily(look: TextLook, vibe: Vibe): FontFamily? = when (look) {
-    TextLook.HAND -> VibeFonts[Vibe.CHILL]
+    TextLook.HAND -> FontFamily(Font(R.font.permanent_marker))
     TextLook.OUTLINE -> VibeFonts[Vibe.HYPE]
-    TextLook.PLAIN, TextLook.BOX -> VibeFonts[Vibe.VLOG]
+    TextLook.PLAIN, TextLook.BOX -> if (vibe == Vibe.NATIVE) FontFamily.Default else VibeFonts[Vibe.VLOG]
     TextLook.STYLE -> VibeFonts[vibe]
 }
 
-/** Colours for words on the video: the look's own, then a few. */
-internal val WORD_COLOURS: List<Int?> = listOf(null, 0xFFFFFFFF.toInt(), 0xFFFFD60A.toInt(), 0xFF0B0B0D.toInt(), 0xFFFF5D8F.toInt(), 0xFF60A5FA.toInt(), 0xFF34D399.toInt(), 0xFFFB923C.toInt())
+/** The typefaces offered on [vibe]: each one different, so the vibe's own face isn't offered twice. */
+internal fun fontChoices(vibe: Vibe): List<FontChoice> = FontChoice.entries.filter {
+    it != when (vibe) { Vibe.HYPE -> FontChoice.BOLD; Vibe.CINE -> FontChoice.SERIF; Vibe.VLOG -> FontChoice.CLEAN; else -> null }
+}
+
+/** Colours for words on the video: the look's own, then the curated palette (every vibe's accent is in it). */
+internal val WORD_COLOURS: List<Int?> = listOf<Int?>(null) + Tok.SWATCHES
 
 /** A row of colour dots; the first (null) is the look's own. */
 @Composable
@@ -171,7 +176,7 @@ internal fun TextComposer(start: TextItem?, vibe: Vibe, onCancel: () -> Unit, on
             }
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FontChoice.entries.forEach { f ->
+                    fontChoices(vibe).forEach { f ->
                         val on = f == font
                         Text(
                             if (f == FontChoice.STYLE) "Style's" else f.label,
@@ -195,6 +200,31 @@ private fun TopWord(label: String, strong: Boolean = false, onClick: () -> Unit)
         style = RtType.button,
         color = if (strong) RtColors.Primary else Color.White,
         modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 8.dp),
+    )
+}
+
+/** A caption style's chip: "Aa" in its own type, on its own ground. */
+@Composable
+private fun CaptionGlyph(k: CaptionKind) {
+    val paper = Color(Tok.PAPER)
+    val ink = Color(Tok.INK)
+    val (family, text, ground) = when (k) {
+        CaptionKind.STYLE -> Triple(null, "✦", null)
+        CaptionKind.PUNCH -> Triple(FontFamily(Font(R.font.anton)), "AA", null)
+        CaptionKind.SERIF -> Triple(FontFamily(Font(R.font.instrument_serif)), "Aa", null)
+        CaptionKind.LABEL -> Triple(FontFamily(Font(R.font.fredoka_semibold)), "Aa", paper)
+        CaptionKind.CHAT -> Triple(FontFamily(Font(R.font.geist_semibold)), "Aa", Color.White)
+        CaptionKind.PLAIN -> Triple(FontFamily.Default, "Aa", null)
+        CaptionKind.CLEAN -> Triple(FontFamily(Font(R.font.geist_semibold)), "Aa", null)
+        CaptionKind.TYPE -> Triple(FontFamily(Font(R.font.ibm_plex_mono_medium)), "aa", null)
+        CaptionKind.STRIP -> Triple(FontFamily(Font(R.font.geist_semibold)), "Aa", paper)
+    }
+    val shape = when (k) { CaptionKind.LABEL -> RoundedCornerShape(50); CaptionKind.STRIP -> RoundedCornerShape(0.dp); else -> RoundedCornerShape(6.dp) }
+    Text(
+        text,
+        style = TextStyle(fontFamily = family, fontSize = 18.sp),
+        color = if (ground != null) ink else Color.White,
+        modifier = if (ground != null) Modifier.clip(shape).background(ground).padding(horizontal = 6.dp, vertical = 1.dp) else Modifier,
     )
 }
 
@@ -242,19 +272,25 @@ internal fun CaptionsSheet(
                             Box(
                                 Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(RtColors.SurfaceRaised).then(if (on) Modifier.border(2.dp, Color.White, RoundedCornerShape(12.dp)) else Modifier),
                                 contentAlignment = Alignment.Center,
-                            ) { Text(if (k == CaptionKind.PUNCH) "AA" else "Aa", style = RtType.bodyStrong, color = Color.White) }
+                            ) { CaptionGlyph(k) }
                             Text(k.label, style = RtType.caption, color = if (on) RtColors.Primary else RtColors.TextPrimary)
                         }
                     }
                 }
                 LabelledSlider("Size", "${(look.size * 100).roundToInt()}%", look.size, 0.5f..2f, { v -> vm.drag { TextTools.captionLook(it) { l -> l.copy(size = v) } } }) { vm.endDrag("Captions size") }
-                LabelledSlider("Height", look.y?.let { "${(it * 100).roundToInt()}%" } ?: "Style's", look.y ?: 0.68f, 0.1f..0.9f, { v -> vm.drag { TextTools.captionLook(it) { l -> l.copy(y = v) } } }) { vm.endDrag("Captions height") }
-                Text("Words", style = RtType.caption, color = RtColors.TextSecondary)
+                LabelledSlider("Height", look.y?.let { "${(it * 100).roundToInt()}%" } ?: "Style's", look.y ?: Tok.CAPTION_Y, 0.1f..0.9f, { v -> vm.drag { TextTools.captionLook(it) { l -> l.copy(y = v) } } }) { vm.endDrag("Captions height") }
+                Text("Text colour", style = RtType.caption, color = RtColors.TextSecondary)
                 ColourDots(look.color) { c -> vm.change("Captions colour") { TextTools.captionLook(it) { l -> l.copy(color = c) } } }
+                // Only styles with something behind the words have a background colour.
+                val kind = if (look.kind == CaptionKind.STYLE) plan.vibe.spec.caption else look.kind
+                if (kind == CaptionKind.LABEL || kind == CaptionKind.CHAT || kind == CaptionKind.STRIP || (kind == CaptionKind.PLAIN && look.box)) {
+                    Text("Background colour", style = RtType.caption, color = RtColors.TextSecondary)
+                    ColourDots(look.background) { c -> vm.change("Captions background") { TextTools.captionLook(it) { l -> l.copy(background = c) } } }
+                }
                 Text("The word being said", style = RtType.caption, color = RtColors.TextSecondary)
                 ColourDots(look.highlight) { c -> vm.change("Captions highlight") { TextTools.captionLook(it) { l -> l.copy(highlight = c) } } }
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FontChoice.entries.forEach { f ->
+                    fontChoices(plan.vibe).forEach { f ->
                         val on = f == look.font
                         Text(
                             f.label,
@@ -266,7 +302,7 @@ internal fun CaptionsSheet(
                     }
                 }
                 SwitchRow("Light up each word", "As it's said. Off: the whole line at once.", look.karaoke) { on -> vm.change("Captions words") { TextTools.captionLook(it) { l -> l.copy(karaoke = on) } } }
-                SwitchRow("Dark band behind", "So they read on any shot", look.box) { on -> vm.change("Captions band") { TextTools.captionLook(it) { l -> l.copy(box = on) } } }
+                SwitchRow(if (kind == CaptionKind.PLAIN) "Box behind each line" else "Dark band behind", "So they read on any shot", look.box) { on -> vm.change("Captions band") { TextTools.captionLook(it) { l -> l.copy(box = on) } } }
                 SwitchRow("English under Hinglish", "A small English line under each Hinglish caption", look.english) { on -> vm.setEnglish(on) }
             } else {
                 var from by remember { mutableStateOf("") }

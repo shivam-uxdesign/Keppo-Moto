@@ -2,6 +2,8 @@ package com.ridetrack.app.studio
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -76,26 +78,52 @@ class PreviewPlayer(context: Context) {
 @android.annotation.SuppressLint("RestrictedApi")
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class ExactPreview(private val context: Context, private val onFailed: (Throwable) -> Unit) {
-    val player = androidx.media3.transformer.CompositionPlayer.Builder(context).build()
+    /**
+     * Media3's composition player takes one edit only, so each edit gets a new player (the old one
+     * is let go). Compose reads it, so the video view moves to the new one.
+     */
+    var player: androidx.media3.transformer.CompositionPlayer by androidx.compose.runtime.mutableStateOf(newPlayer())
+        private set
+    private var used = false
     private var total = 0L
     /** The edit is on the player (it's put together in the background first): until then, a seek waits. */
     private var loaded = false
     private var pending: Long? = null
+    /** The screen's listeners, moved onto each new player. */
+    private val listeners = ArrayList<Player.Listener>()
+
+    private val errors = object : Player.Listener {
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            works = false
+            onFailed(error)
+        }
+    }
+
+    private fun newPlayer() = androidx.media3.transformer.CompositionPlayer.Builder(context).build()
 
     init {
-        player.addListener(object : Player.Listener {
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                works = false
-                onFailed(error)
-            }
-        })
+        player.addListener(errors)
     }
+
+    fun addListener(l: Player.Listener) { listeners += l; player.addListener(l) }
+
+    fun removeListener(l: Player.Listener) { listeners -= l; player.removeListener(l) }
 
     /** Loads [input]'s edit and goes to [atMs] (put together off the main thread: it reads each file's length). */
     suspend fun load(input: RenderInput, atMs: Long) {
         try {
             val composition = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { StudioRenderer(context).previewComposition(input) }
+            if (used) {
+                loaded = false
+                val old = player
+                val fresh = newPlayer()
+                fresh.addListener(errors)
+                listeners.forEach { fresh.addListener(it) }
+                player = fresh
+                old.release()
+            }
             total = input.plan.totalMs
+            used = true
             player.setComposition(composition)
             player.prepare()
             loaded = true

@@ -475,7 +475,7 @@ internal fun StyleEditor(start: StudioStyle, frame: Bitmap?, onSaved: (StudioSty
                         Toggle("Speed gauge sticker", st.speedSticker) { st = st.copy(speedSticker = it) }
                         Toggle("Lean sticker", st.leanSticker) { st = st.copy(leanSticker = it) }
                         Toggle("Route map behind the stats", st.map) { st = st.copy(map = it) }
-                        Toggle("Route opening card", st.intro) { st = st.copy(intro = it) }
+                        if (st.base != Vibe.NATIVE) Toggle("Route opening card", st.intro) { st = st.copy(intro = it) }
                         Toggle("Stats at the end", st.outro) { st = st.copy(outro = it) }
                         Toggle("Keppo Moto mark", st.watermark) { st = st.copy(watermark = it) }
                         Toggle("My brand kit (logo, handle, font)", st.brand) { st = st.copy(brand = it) }
@@ -500,7 +500,7 @@ private fun Small2(label: String, onClick: () -> Unit) {
     Text(label, style = RtType.button, color = RtColors.TextPrimary, modifier = Modifier.padding(horizontal = 4.dp).clip(RoundedCornerShape(50)).background(RtColors.SurfaceRaised).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp))
 }
 
-private val SWATCHES: List<Int> = listOf(0xFFFFFFFF, 0xFF0B0B0D, 0xFFFFD60A, 0xFFFF9F0A, 0xFFFF453A, 0xFFFF5D8F, 0xFFBF5AF2, 0xFF60A5FA, 0xFF32D74B, 0xFFFFF3DF).map { it.toInt() }
+private val SWATCHES: List<Int> = Tok.SWATCHES
 
 /**
  * A slider with its value; [v] below the range means "not set" (shown by [label]), and [onReset]

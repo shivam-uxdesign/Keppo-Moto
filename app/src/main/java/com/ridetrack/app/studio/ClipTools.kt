@@ -124,12 +124,14 @@ object ClipTools {
     fun clearFrame(plan: StudioPlan, i: Int): StudioPlan = clip(plan, i)?.let { with(plan, i, it.copy(frame = emptyList())) } ?: plan
 
     /** A quick push-in on each thing said (the emphasis), easing back after. */
-    fun punchIn(plan: StudioPlan, i: Int, zoom: Float = 1.14f): StudioPlan {
+    fun punchIn(plan: StudioPlan, i: Int, zoom: Float = 1.10f): StudioPlan {
         val s = clip(plan, i) ?: return plan
-        if (s.lines.isEmpty()) return plan
+        // Only the lines with a key word get a push (Gemini marks one per line).
+        val lines = s.lines.filter { it.key != null }
+        if (lines.isEmpty()) return plan
         val keys = ArrayList<FrameKey>()
         keys += FrameKey(0)
-        s.lines.forEach { l ->
+        lines.forEach { l ->
             val a = (l.startMs - 60).coerceIn(0, s.durMs)
             val b = (l.startMs + 140).coerceIn(0, s.durMs)
             val c = minOf(l.endMs, l.startMs + 900).coerceIn(0, s.durMs)

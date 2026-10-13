@@ -97,8 +97,11 @@ import java.util.Locale
 internal val VibeFonts = mapOf(
     Vibe.HYPE to FontFamily(Font(R.font.anton)),
     Vibe.CINE to FontFamily(Font(R.font.instrument_serif_italic)),
-    Vibe.CHILL to FontFamily(Font(R.font.permanent_marker)),
+    Vibe.CHILL to FontFamily(Font(R.font.fredoka_semibold)),
     Vibe.VLOG to FontFamily(Font(R.font.geist_semibold)),
+    Vibe.FILM to FontFamily(Font(R.font.ibm_plex_mono_medium)),
+    Vibe.EDITORIAL to FontFamily(Font(R.font.dm_serif_display)),
+    Vibe.NATIVE to FontFamily.Default,
 )
 
 /** Share ride › Reel: Keppo Studio turns the ride's clips into a 30–60 s Reel. */
@@ -319,8 +322,9 @@ private fun StudioSettings(vm: StudioViewModel, s: StudioState, onClose: () -> U
                 Toggle("English subtitles", "A small English line under Hinglish captions", o.english) { v -> vm.setOptions { it.copy(english = v) } }
                 Toggle("Jump cuts", "Long pauses, \u201cumm\u201ds and false starts cut from what you say", o.jumpCuts) { v -> vm.setOptions { it.copy(jumpCuts = v) } }
                 Toggle("Loop the ending", "Ends on the opening shot, so it plays on without a jump", o.loopEnd) { v -> vm.setOptions { it.copy(loopEnd = v) } }
-                Toggle("Route opening", "A 2 s route sketch before the first clip (off is better for reach)", o.intro) { v -> vm.setOptions { it.copy(intro = v) } }
+                if (o.vibe != Vibe.NATIVE) Toggle("Route opening", "A 2 s route sketch before the first clip (off is better for reach)", o.intro) { v -> vm.setOptions { it.copy(intro = v) } }
                 Toggle("Map", "The route behind the stats. Off: no map at all", o.map) { v -> vm.setOptions { it.copy(map = v) } }
+                Toggle("Film grain", "Grain and a little flicker (Film has it on)", o.grain ?: o.vibe.spec.grain) { v -> vm.setOptions { it.copy(grain = v) } }
                 Toggle("Keppo Moto mark", "Small, on the stats", o.watermark) { v -> vm.setOptions { it.copy(watermark = v) } }
                 val prefs = com.ridetrack.app.ui.appContainer().studio
                 var gallery by remember { mutableStateOf(prefs.alsoSaveToGallery) }
@@ -1398,7 +1402,7 @@ private fun Voice(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
                     if (total > 0) {
                         s.takes.forEach { t ->
-                            drawRect(Color(0xFFFFD60A), androidx.compose.ui.geometry.Offset(size.width * t.startMs / total, 0f), androidx.compose.ui.geometry.Size(size.width * t.durMs / total, size.height))
+                            drawRect(Color(Tok.YELLOW), androidx.compose.ui.geometry.Offset(size.width * t.startMs / total, 0f), androidx.compose.ui.geometry.Size(size.width * t.durMs / total, size.height))
                         }
                         drawRect(Color.White, androidx.compose.ui.geometry.Offset(size.width * position / total - 1f, 0f), androidx.compose.ui.geometry.Size(2f, size.height))
                     }

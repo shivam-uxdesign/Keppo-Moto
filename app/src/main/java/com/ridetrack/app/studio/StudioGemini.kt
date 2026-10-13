@@ -309,7 +309,8 @@ object StudioText {
         Ignore wind, engine, horn and traffic noise. Split speech into short lines of at most 8 words, at natural pauses.
         Also write the rider's reactions and drawn-out sounds as they sound ("Tooooo", "Aaaahh", "Fhit!", "Nooo"), each as its own line.
         When a line has Hindi words, add "en": what it means in short, natural English (for subtitles); leave "en" out for English lines and sounds.
-        Reply with JSON only: {"lines":[{"start":1.2,"end":3.4,"text":"...","en":"..."}]} with start and end in seconds from the
+        Add "key": the one word of the line that matters most (a number, a strong word), exactly as written in "text"; leave it out when no word stands out.
+        Reply with JSON only: {"lines":[{"start":1.2,"end":3.4,"text":"...","en":"...","key":"..."}]} with start and end in seconds from the
         beginning of the recording. If there is no clear speech, reply {"lines":[]}.
     """.trimIndent()
 
@@ -321,7 +322,8 @@ object StudioText {
         Ignore wind, engine, horn and traffic noise. Split speech into short lines of at most 8 words, at natural pauses.
         Also write the rider's reactions and drawn-out sounds as they sound ("Tooooo", "Aaaahh", "Fhit!", "Nooo"), each as its own line.
         When a line has Hindi words, add "en": what it means in short, natural English (for subtitles); leave "en" out for English lines and sounds.
-        Reply with JSON only: {"clips":[{"clip":1,"lines":[{"start":1.2,"end":3.4,"text":"...","en":"..."}]}]} with one entry per clip;
+        Add "key": the one word of the line that matters most (a number, a strong word), exactly as written in "text"; leave it out when no word stands out.
+        Reply with JSON only: {"clips":[{"clip":1,"lines":[{"start":1.2,"end":3.4,"text":"...","en":"...","key":"..."}]}]} with one entry per clip;
         a clip with no clear speech has "lines":[].
     """.trimIndent()
 
@@ -381,7 +383,9 @@ object StudioText {
             val a = seconds(o.opt("start"))
             val b = seconds(o.opt("end"))
             val en = o.optString("en").trim().trim('"').takeIf { it.isNotEmpty() && it != "null" && !it.equals(text, ignoreCase = true) }
-            if (text.isEmpty() || a == null || b == null || b <= a) null else CaptionLine((a * 1000).roundToLong(), (b * 1000).roundToLong(), text, en)
+            // The key word must be one of the line's words.
+            val key = o.optString("key").trim().trim('"').takeIf { k -> k.isNotEmpty() && k != "null" && text.split(Regex("\\s+")).any { it.trim(',', '.', '!', '?').equals(k.trim(',', '.', '!', '?'), ignoreCase = true) } }
+            if (text.isEmpty() || a == null || b == null || b <= a) null else CaptionLine((a * 1000).roundToLong(), (b * 1000).roundToLong(), text, en, key)
         }.sortedBy { it.startMs }
     }.getOrNull()
 
@@ -462,7 +466,7 @@ object StudioText {
 
     fun save(clip: File, lines: List<CaptionLine>) {
         val arr = JSONArray()
-        lines.forEach { l -> arr.put(JSONObject().put("start", l.startMs / 1000.0).put("end", l.endMs / 1000.0).put("text", l.text).apply { l.en?.let { put("en", it) } }) }
+        lines.forEach { l -> arr.put(JSONObject().put("start", l.startMs / 1000.0).put("end", l.endMs / 1000.0).put("text", l.text).apply { l.en?.let { put("en", it) }; l.key?.let { put("key", it) } }) }
         linesFile(clip).writeText(JSONObject().put("lines", arr).toString())
     }
 

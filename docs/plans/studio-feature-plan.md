@@ -764,3 +764,40 @@ Rider's answers: yes to 1, 2, 3, 5, 6, 7, 8, 9 and 11; maybe to 10; no to 4 (rou
        - **Result:** no fallback, no reload pause, smooth cuts.
        - **Size:** the biggest job in this list.
      - **C. Check a newer Media3:** whether a later version lets one composition player take a new edit. That fixes A's cause, but not the lag at cuts, and needs a library upgrade tested across the editor and the made videos.
+
+## Style redesign (Keppo Studio visual system)
+
+Done in one pass on the drawing code, because the token rewrite, the restyled vibes and the new vibes all live in the same file (`StudioArt.kt`):
+
+- **Tokens** (`studio/Tokens.kt`): 9 type sizes, 8-swatch palette, 3 scrim alphas, 2 shadows, 3 radii, 4 durations, 5 easings, the layout slots and the safe-area clamp. The defaults table is `Vibe.spec`.
+- **Seven vibes**: Clean, Cinematic, Bold, Playful, Film, Editorial and Native (the last three are added at the end of the enum, so saved Reels still load). Each vibe has its own type, accent, captions, title, badge, stats and section transition.
+- **New caption styles**: Clean, Type and Strip.
+- **Transitions**:
+  - New: Dip, Zoom-through and Light leak.
+  - Rebuilt: Sun is now Pop wipe, and Card is now Paper slide.
+  - The picker shows only the current vibe's transitions.
+  - No transition shows text any more.
+  - Each half of a transition is limited to 40% of the clip it falls on.
+- **Preview parity**:
+  - The export and the editor preview both draw through `ReelOverlay`.
+  - The caption tap area matches where the caption is actually drawn.
+  - The preview camera uses the same fill clamp as the export.
+  - The exact preview gets a fresh player for every edit (fixes bug 2: "falls back to simple preview").
+- **Global fixes**:
+  - The speed shows only once: the corner badge hides while a speed sticker is up.
+  - Bold's beat kick runs only when a song tempo is set.
+  - Word timing is weighted by word length, and the highlight lands 60 ms before the word.
+  - Caption groups never leave a single word alone.
+  - The English line sits inside the caption block.
+  - The dark band is sized to the measured caption block.
+  - The caption colour control is split into Text colour and Background colour.
+  - The font options no longer offer the vibe's own font twice.
+  - The opening text ends before the hook clip does.
+  - Section text goes through the same path as timeline text.
+- **Film**:
+  - Grain and flicker.
+  - Gate weave, plus a small jump at each cut.
+  - Lifted blacks, using an offset in a custom RgbMatrix.
+- **Editorial**: graphics animate at 12 frames a second (stop-motion).
+- **Native**: no route-opening card.
+- **Frame checker**: `shots/StudioFrames` renders still frames to `app/build/frames`.

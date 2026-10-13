@@ -19,12 +19,16 @@ object Cuts {
         return (segs[i] as? ClipSegment)?.takeIf { !it.tail }?.transition?.let { it.kind != TransitionKind.CUT } ?: boundary(segs[i - 1], segs[i])
     }
 
-    /** The frame [localMs] into segment [i] (shown for [durMs]), with its neighbours' transitions; [labels] say what the graphic shows. */
-    fun frameAt(plan: StudioPlan, i: Int, localMs: Long, durMs: Long, labels: (Int) -> Pair<String, String> = { "" to "" }): FrameAt {
+    /**
+     * The frame [localMs] into segment [i] (shown for [durMs]), with its neighbours' transitions;
+     * [beatMs] is the song's beat when the rider set a tempo.
+     */
+    fun frameAt(plan: StudioPlan, i: Int, localMs: Long, durMs: Long, beatMs: Long? = null): FrameAt {
         val segs = plan.segments
         val own = (segs.getOrNull(i) as? ClipSegment)?.takeIf { !it.tail }?.transition
         val next = (segs.getOrNull(i + 1) as? ClipSegment)?.transition
-        val (label, time) = labels(if (localMs < durMs / 2) i else i + 1)
+        val inMs = own?.ms(plan.vibe) ?: plan.vibe.transitionMs
+        val outMs = next?.ms(plan.vibe) ?: plan.vibe.transitionMs
         return FrameAt(
             vibe = plan.vibe,
             localMs = localMs,
@@ -32,12 +36,21 @@ object Cuts {
             hasPrev = plays(plan, i),
             hasNext = plays(plan, i + 1),
             inKind = own?.kind ?: TransitionKind.STYLE,
-            inMs = own?.ms(plan.vibe) ?: plan.vibe.transitionMs,
+            inMs = fitted(inMs, segs.getOrNull(i - 1)?.durMs, durMs),
             outKind = next?.kind ?: TransitionKind.STYLE,
-            outMs = next?.ms(plan.vibe) ?: plan.vibe.transitionMs,
-            nextLabel = label,
-            nextTime = time,
+            outMs = fitted(outMs, durMs, segs.getOrNull(i + 1)?.durMs),
+            cut = i,
+            beatMs = beatMs,
         )
+    }
+
+    /**
+     * A transition's length across a cut, shortened so neither half takes more than 40% of the
+     * clip it falls on (both halves shrink alike, so short clips still get their transition).
+     */
+    fun fitted(ms: Long, before: Long?, after: Long?): Long {
+        val half = listOfNotNull(ms / 2, before?.let { it * 2 / 5 }, after?.let { it * 2 / 5 }).min()
+        return half * 2
     }
 
     /**

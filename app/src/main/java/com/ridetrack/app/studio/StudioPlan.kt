@@ -3,12 +3,19 @@ package com.ridetrack.app.studio
 import kotlin.math.ceil
 import kotlin.math.roundToLong
 
-/** The look and pace of a Reel. Each has one transition, one caption style and a colour grade. */
+/**
+ * The look and pace of a Reel: one typeface, one accent, one way of moving (see [spec]). The
+ * names are kept as they were saved (HYPE is shown as Bold, CHILL as Playful, VLOG as Clean);
+ * new ones are only ever added at the end.
+ */
 enum class Vibe(val label: String, val blurb: String, val bpm: Int, val beats: Int, val transitionMs: Long) {
-    HYPE("Hype", "Fast cuts, bold words", 128, 4, 400),
-    CINE("Cinematic", "Slow, wide, film look", 88, 4, 700),
-    CHILL("Chill", "Easy pace, warm", 84, 6, 700),
-    VLOG("Vlog", "Your voice leads", 100, 6, 600);
+    HYPE("Bold", "Big words, punchy cuts", 128, 4, 300),
+    CINE("Cinematic", "Slow, wide, film title", 88, 4, 700),
+    CHILL("Playful", "Friendly, round, a little pop", 84, 6, 350),
+    VLOG("Clean", "Calm and precise, your voice leads", 100, 6, 600),
+    FILM("Film", "Analog, warm, shot on film", 90, 6, 600),
+    EDITORIAL("Editorial", "Printed, crafted, magazine", 96, 5, 450),
+    NATIVE("Native", "Like Instagram's own editor", 100, 5, 300);
 
     val beatMs: Long get() = 60_000L / bpm
 }
@@ -20,6 +27,8 @@ data class CaptionLine(
     val text: String,
     /** What a Hinglish line means in English (for subtitles under it); null for English lines and sounds. */
     val en: String? = null,
+    /** The line's one key word (Gemini's pick), for emphasis; null when none. */
+    val key: String? = null,
 )
 
 /**
@@ -138,10 +147,14 @@ data class ClipColor(
     val plain: Boolean get() = exposure == 0f && contrast == 0f && saturation == 0f && warmth == 0f
 }
 
-/** The transitions that can go on a cut. */
-enum class TransitionKind(val label: String) {
-    STYLE("Style"), CUT("None"), FADE("Fade"), FLASH("Flash"), ZOOM("Zoom punch"), WHIP("Whip"), GLITCH("Glitch"),
-    SLASH("Slash"), SHUTTER("Shutter"), SUN("Sun"), CARD("Card"),
+/**
+ * The transitions that can go on a cut. SUN is drawn as Pop wipe and CARD as Paper slide (their
+ * saved names kept); new ones are added at the end. [baseMs] is a fixed length, when it has one.
+ */
+enum class TransitionKind(val label: String, val baseMs: Long? = null) {
+    STYLE("Style"), CUT("None"), FADE("Fade"), FLASH("Flash", Tok.T_MICRO), ZOOM("Zoom punch"), WHIP("Whip"), GLITCH("Glitch"),
+    SLASH("Slash", 300), SHUTTER("Shutter"), SUN("Pop wipe", 350), CARD("Paper slide", 450),
+    DIP("Dip", 500), ZOOM_THROUGH("Zoom-through"), LIGHT_LEAK("Light leak", 600),
 }
 
 enum class TransitionLength(val label: String, val factor: Float) { SHORT("Short", 0.5f), NORMAL("Normal", 1f), LONG("Long", 1.6f) }
@@ -153,7 +166,7 @@ data class Transition(
     val customMs: Long? = null,
 ) {
     /** How long it takes across the cut with [vibe]'s timing. */
-    fun ms(vibe: Vibe): Long = customMs ?: (vibe.transitionMs * length.factor).toLong()
+    fun ms(vibe: Vibe): Long = customMs ?: ((kind.on(vibe).baseMs ?: vibe.transitionMs) * length.factor).toLong()
 }
 
 /** The route-sketch opening (optional); the stats over the last clip. Both play muted. */
@@ -172,6 +185,8 @@ data class StudioOptions(
     val jumpCuts: Boolean = true,
     /** New videos show English subtitles under Hinglish captions. */
     val english: Boolean = false,
+    /** Film grain and flicker; null = the vibe's own (on for Film only). */
+    val grain: Boolean? = null,
     /** The song's tempo, so cuts land on its beats; null = the vibe's own pace. */
     val bpm: Int? = null,
     val map: Boolean = true,
@@ -184,7 +199,10 @@ data class StudioOptions(
     val speedBadge: Boolean = true,
     /** The rider's brand kit (logo, handle, font) on the video. */
     val brand: Boolean = false,
-)
+) {
+    /** The route opening plays: Native has none. */
+    val introOn: Boolean get() = intro && vibe != Vibe.NATIVE
+}
 
 /**
  * Text the rider placed on the timeline: shown from [startMs] to [endMs] (Reel time), centred at
@@ -195,7 +213,7 @@ data class TextItem(
     val startMs: Long,
     val endMs: Long,
     val text: String,
-    val y: Float = 0.3f,
+    val y: Float = Tok.TITLE_Y,
     val x: Float = 0.5f,
     val size: Float = 1f,
     val rotation: Float = 0f,
@@ -225,8 +243,10 @@ data class CaptionLook(
     val y: Float? = null,
     /** Light up the word being said (karaoke); off = the whole line at once (plain captions). */
     val karaoke: Boolean = true,
-    /** The words' colour (ARGB; for labels and chat bubbles, the paper's); null = the look's own. */
+    /** The words' colour (ARGB); null = the look's own. */
     val color: Int? = null,
+    /** The colour behind the words (Label's paper, Chat's bubble, Strip's paper, Plain's box); null = the look's own. */
+    val background: Int? = null,
     /** The colour of the word being said; null = yellow. */
     val highlight: Int? = null,
     val font: FontChoice = FontChoice.STYLE,
@@ -242,7 +262,7 @@ enum class FontChoice(val label: String) { STYLE("Style's"), BOLD("Bold"), SERIF
 /** Captions' look and a transition ↔ JSON, shared by saved Reels and styles (older files read as before). */
 object LookJson {
     fun caption(c: CaptionLook): org.json.JSONObject = org.json.JSONObject().put("kind", c.kind.name).put("size", c.size.toDouble()).put("y", c.y?.toDouble() ?: org.json.JSONObject.NULL)
-        .put("karaoke", c.karaoke).put("color", c.color ?: org.json.JSONObject.NULL).put("hi", c.highlight ?: org.json.JSONObject.NULL).put("font", c.font.name).put("box", c.box).put("english", c.english)
+        .put("karaoke", c.karaoke).put("color", c.color ?: org.json.JSONObject.NULL).put("hi", c.highlight ?: org.json.JSONObject.NULL).put("font", c.font.name).put("box", c.box).put("english", c.english).put("bg", c.background ?: org.json.JSONObject.NULL)
 
     fun caption(o: org.json.JSONObject?): CaptionLook = o?.let { c ->
         CaptionLook(
@@ -255,6 +275,7 @@ object LookJson {
             font = FontChoice.entries.firstOrNull { it.name == c.optString("font") } ?: FontChoice.STYLE,
             box = c.optBoolean("box"),
             english = c.optBoolean("english"),
+            background = if (c.isNull("bg") || !c.has("bg")) null else c.getInt("bg"),
         )
     } ?: CaptionLook()
 
@@ -267,7 +288,8 @@ object LookJson {
     )
 }
 
-enum class CaptionKind(val label: String) { STYLE("Style"), PUNCH("Punch"), SERIF("Serif"), LABEL("Label"), CHAT("Chat"), PLAIN("Plain") }
+/** Caption styles: any style's on any vibe ("Style" = the vibe's own). New ones are added at the end. */
+enum class CaptionKind(val label: String) { STYLE("Style"), PUNCH("Punch"), SERIF("Serif"), LABEL("Label"), CHAT("Chat"), PLAIN("Plain"), CLEAN("Clean"), TYPE("Type"), STRIP("Strip") }
 
 /** Stickers: live ride numbers, emoji, and callouts. */
 enum class StickerKind(val label: String) { SPEED("Speed"), LEAN("Lean"), EMOJI("Emoji"), ARROW("Arrow"), CIRCLE("Circle") }
@@ -302,7 +324,7 @@ data class LayerItem(
     val inMs: Long,
     val startMs: Long,
     val durMs: Long,
-    val cx: Float = 0.72f,
+    val cx: Float = 0.30f,
     val cy: Float = 0.22f,
     val w: Float = 0.42f,
     val aspect: Float = 9f / 16f,
@@ -496,7 +518,7 @@ object StudioPlanner {
         val r = java.util.Random(o.seed.toLong() * 7919 + o.vibe.ordinal)
         val beat = o.bpm?.takeIf { it in 50..200 }?.let { 60_000L / it } ?: o.vibe.beatMs
         val shakes = bits.associate { it.id to r.nextDouble() }
-        var room = o.lengthSec * 1000L - (if (o.intro) INTRO_MS else 0) - (if (o.outro) OUTRO_MS else 0) - (if (o.loopEnd) TAIL_MS else 0) -
+        var room = o.lengthSec * 1000L - (if (o.introOn) INTRO_MS else 0) - (if (o.outro) OUTRO_MS else 0) - (if (o.loopEnd) TAIL_MS else 0) -
             (if (o.teaser) TEASER_MS else 0)
         val inStory = story.toSet()
         val ranked = bits.map {
@@ -520,7 +542,7 @@ object StudioPlanner {
         val middle = picked.filter { it !== hook && it !== end }.sortedBy { it.b.atMillis }
         val order = if (o.vibe == Vibe.VLOG) (picked - setOfNotNull(end)).sortedBy { it.b.atMillis } + listOfNotNull(end) else listOf(hook) + middle + listOfNotNull(end)
         val segs = ArrayList<Segment>()
-        if (o.intro) segs += TitleSegment(INTRO_MS)
+        if (o.introOn) segs += TitleSegment(INTRO_MS)
         // A flash of the fastest later moment (the one case a clip shows twice); then it plays in its place.
         if (o.teaser && order.size >= 3) {
             val t = order.drop(1).maxBy { it.b.speedKmh + it.b.punch }

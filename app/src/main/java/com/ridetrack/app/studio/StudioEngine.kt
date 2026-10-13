@@ -418,7 +418,12 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
             brand = c.styles.brand.value.takeIf { !it.empty },
             clockAt = { Format.timeOfDay(it).lowercase(Locale.getDefault()) },
             music = s.musicUri,
-            opener = StudioArt.Opener(label = if (s.options.intro) s.label.takeIf { s.series.isNotBlank() } else s.label, hookLine = s.hookLine.ifBlank { null }),
+            opener = StudioArt.Opener(
+                label = if (s.options.introOn) s.label.takeIf { s.series.isNotBlank() } else s.label,
+                hookLine = s.hookLine.ifBlank { null },
+                // Film's date label: the day of the ride.
+                date = ride.firstOrNull()?.timeMillis?.let { java.text.SimpleDateFormat("d MMM yyyy", Locale.US).format(java.util.Date(it)) },
+            ),
             voice = voice,
             voiceLines = s.takes.flatMap { t -> t.lines.map { it.copy(startMs = it.startMs + t.startMs, endMs = it.endMs + t.startMs) } },
         )

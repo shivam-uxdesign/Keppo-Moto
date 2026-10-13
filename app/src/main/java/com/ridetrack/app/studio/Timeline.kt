@@ -162,7 +162,7 @@ object TimelineEdits {
         var start = 0L
         val segs = plan.segments.map { s ->
             val out = if (s is ClipSegment && s.text != null) {
-                extra += TextItem(newId(), start, start + minOf(2_600L, s.durMs), s.text, 0.3f)
+                extra += TextItem(newId(), start, start + minOf(Tok.SECTION_TEXT_MS, s.durMs), s.text, Tok.TITLE_Y)
                 s.copy(text = null)
             } else s
             start += s.durMs

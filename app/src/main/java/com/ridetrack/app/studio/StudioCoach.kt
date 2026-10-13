@@ -11,7 +11,7 @@ object StudioCoach {
     /** A plain description of the Reel and what was left out. */
     fun summary(plan: StudioPlan, o: StudioOptions, all: List<Bit>, d: Direction?, story: Story?, voiceOver: Boolean, music: Boolean): String = buildString {
         appendLine("Vibe ${plan.vibe.label}, ${sec(plan.totalMs)} long (chosen length ${o.lengthSec} s), ${plan.clips.size} clips.")
-        appendLine(if (o.intro) "Opens with a 2 s route-and-title card before the first clip." else "Opens straight on the first clip, with the title as a small label.")
+        appendLine(if (o.introOn) "Opens with a 2 s route-and-title card before the first clip." else "Opens straight on the first clip, with the title as a small label.")
         d?.hookLine?.let { appendLine("Hook line on the first frame: \"$it\".") } ?: appendLine("No hook line on the first frame.")
         story?.let { appendLine("Story: ${it.name}.") }
         appendLine(if (d?.endingId != null && plan.clips.lastOrNull()?.bit?.id == d.endingId) "Ends on the rider's sign-off." else "No sign-off line; ends on the stats card.")
@@ -34,7 +34,7 @@ object StudioCoach {
     /** The app's own tips: the most useful 3–4 that apply. */
     fun localTips(plan: StudioPlan, o: StudioOptions, all: List<Bit>, d: Direction?, voiceOver: Boolean): List<Tip> {
         val tips = ArrayList<Tip>()
-        if (o.intro) tips += Tip("Most viewers decide in the first 3 seconds. Open on your best line and keep the title as a small label.", TipAction.TITLE_ON_HOOK)
+        if (o.introOn) tips += Tip("Most viewers decide in the first 3 seconds. Open on your best line and keep the title as a small label.", TipAction.TITLE_ON_HOOK)
         if (plan.totalMs > 25_000 && (d?.stories?.isNotEmpty() == true)) {
             tips += Tip("Short Reels get watched to the end and rewatched. Try a 15 s cut of \"${d.stories.first().name}\".", TipAction.SHORTER)
         }

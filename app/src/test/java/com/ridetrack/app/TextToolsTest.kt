@@ -43,14 +43,14 @@ class TextToolsTest {
     @Test
     fun `animations bring text in and out`() {
         val t = TextTools.anim(TextTools.look(plan(), "t1", TextLook.OUTLINE), "t1", TextAnim.TYPE, TextAnim.FADE).texts.single()
-        // Typing on: half the letters at 0.3 s.
-        assertEquals(5, TextTools.animate(t, 300, 2_500, 11).chars)
+        // Typing on: a letter every 40 ms.
+        assertEquals(7, TextTools.animate(t, 300, 2_500, 11).chars)
         assertEquals(11, TextTools.animate(t, 1_000, 2_500, 11).chars)
-        // Fading out at the end.
-        assertTrue(TextTools.animate(t, 2_400, 2_500, 11).alpha < 0.5f)
+        // Fading out at the end (quicker than coming in, speeding up as it goes).
+        assertTrue(TextTools.animate(t, 2_480, 2_500, 11).alpha < 0.5f)
         // Popping in starts small.
         val pop = TextTools.anim(plan(), "t1", TextAnim.POP).texts.single()
-        assertTrue(TextTools.animate(pop, 30, 2_500, 11).scale < 0.8f)
+        assertTrue(TextTools.animate(pop, 30, 2_500, 11).scale < 0.95f)
     }
 
     @Test

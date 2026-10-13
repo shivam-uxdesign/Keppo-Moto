@@ -195,7 +195,7 @@ object ScriptWriter {
             "relatable lines about riding (falling, loving the bike, fuel prices, mom asking where you are; Hinglish is fine), shown one after another. " +
             "The text is the joke: don't just describe the shot."
 
-    private const val SCHEMA = "{\"pieces\":[{\"format\":\"reel|short|story|long|caption\",\"vibe\":\"hype|cine|chill|vlog\",\"style\":\"a style id from the list, or empty\",\"title\":\"max 5 words\",\"why\":\"one line: why this piece works\",\"story\":\"2–4 sentences: the story it tells, start to end\",\"onScreen\":[\"caption clips only: 1–3 short lines shown in turn, else empty\"]," +
+    private const val SCHEMA = "{\"pieces\":[{\"format\":\"reel|short|story|long|caption\",\"vibe\":\"hype|cine|chill|vlog|film|editorial|native\",\"style\":\"a style id from the list, or empty\",\"title\":\"max 5 words\",\"why\":\"one line: why this piece works\",\"story\":\"2–4 sentences: the story it tells, start to end\",\"onScreen\":[\"caption clips only: 1–3 short lines shown in turn, else empty\"]," +
         "\"lengthSec\":30,\"shape\":\"story\",\"hookLine\":\"max 6 words for the first frame or empty\",\"caption\":\"post caption, 1–2 lines + 3–5 hashtags\"," +
         "\"sections\":[{\"kind\":\"hook\",\"form\":\"sound\",\"text\":\"on-screen text or empty\",\"why\":\"short\",\"shots\":[{\"clip\":\"c3\",\"in\":12.4,\"out\":13.2}]}]}]}"
 
@@ -228,7 +228,7 @@ object ScriptWriter {
             appendLine("Include exactly one long reel (format long, 60–120 s): the whole ride in filming order, from its riding shots, talking and reactions. It counts as one of the pieces. Talking isn't needed for it.")
         }
         appendLine("When the footage is thin, suggest fewer, shorter pieces.")
-        appendLine("Pick a vibe for each piece: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm) or vlog (the voice leads).")
+        appendLine("Pick a vibe for each piece: hype (bold: big words, punchy cuts), cine (cinematic: slow, wide, film title), chill (playful: friendly, a little pop), vlog (clean: calm, the voice leads), film (analog, warm, nostalgic), editorial (printed, magazine, crafted), native (plain, like an Instagram edit).")
         append(stylesText(styles))
         append(performance)
         appendLine(CRAFT)
@@ -254,7 +254,7 @@ object ScriptWriter {
         appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
         appendLine(footageText(footage))
         appendLine("The rider asks for: \"${ask.replace("\"", "'")}\". Write ONE piece that does that, from this footage (format, length and vibe as they asked, or what suits it).")
-        appendLine("Vibes: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm), vlog (the voice leads).")
+        appendLine("Vibes: hype (bold: big words, punchy cuts), cine (cinematic: slow, wide, film title), chill (playful: friendly, a little pop), vlog (clean: calm, the voice leads), film (analog, warm, nostalgic), editorial (printed, magazine, crafted), native (plain, like an Instagram edit).")
         appendLine("If they ask for a caption clip: $CAPTION_RULE")
         append(stylesText(styles))
         appendLine(CRAFT)
@@ -279,7 +279,7 @@ object ScriptWriter {
             else "Write one episode for every moment of THIS ride that fits the series, at most 4, best first; each on its own moment.",
         )
         appendLine("Only what truly fits the series' idea: if nothing in this ride fits, reply {\"pieces\":[]}. Don't number episodes or name the series in the title (the app adds \"Ep N\").")
-        appendLine("Vibes: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm), vlog (the voice leads).")
+        appendLine("Vibes: hype (bold: big words, punchy cuts), cine (cinematic: slow, wide, film title), chill (playful: friendly, a little pop), vlog (clean: calm, the voice leads), film (analog, warm, nostalgic), editorial (printed, magazine, crafted), native (plain, like an Instagram edit).")
         if (s.format == PieceFormat.CAPTION) appendLine(CAPTION_RULE)
         if (s.styleId == null) append(stylesText(styles))
         appendLine(CRAFT)
@@ -295,7 +295,7 @@ object ScriptWriter {
         appendLine("This piece was suggested from the ride: ${ScriptJson.toPromptJson(script, keys)}")
         appendLine("Write ONE different take on the same moment, from the same clips (a clip right before or after may be added).")
         appendLine("Make it clearly different from these takes: ${takes.joinToString("; ") { "\"${it.replace("\"", "'")}\"" }}: another format, hook, shape or vibe, and a new title.")
-        appendLine("Vibes: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm), vlog (the voice leads).")
+        appendLine("Vibes: hype (bold: big words, punchy cuts), cine (cinematic: slow, wide, film title), chill (playful: friendly, a little pop), vlog (clean: calm, the voice leads), film (analog, warm, nostalgic), editorial (printed, magazine, crafted), native (plain, like an Instagram edit).")
         appendLine("If it's a caption clip: $CAPTION_RULE")
         append(stylesText(styles))
         appendLine(CRAFT)
@@ -351,7 +351,7 @@ object ScriptWriter {
                 hookLine = p.optString("hookLine").trim().trim('"').takeIf { it.isNotEmpty() }?.split(Regex("\\s+"))?.take(8)?.joinToString(" "),
                 postCaption = p.optString("caption").trim().takeIf { it.isNotEmpty() },
                 sections = sections,
-                vibe = p.optString("vibe").trim().uppercase().let { v -> Vibe.entries.firstOrNull { it.name == v || (v == "CINEMATIC" && it == Vibe.CINE) } },
+                vibe = p.optString("vibe").trim().uppercase().let { v -> Vibe.entries.firstOrNull { it.name == v || it.label.equals(v, ignoreCase = true) || (v == "CINEMATIC" && it == Vibe.CINE) } },
                 style = p.optString("style").trim().takeIf { it.startsWith("st-") || it in setOf("hype", "cine", "chill", "vlog") },
                 story = p.optString("story").trim().takeIf { it.isNotEmpty() }?.take(600),
                 onScreen = p.optJSONArray("onScreen")?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).trim().takeIf { t -> t.isNotEmpty() && !t.startsWith("caption clips only") }?.take(80) } }.orEmpty().take(3),
@@ -571,7 +571,7 @@ object ScriptWriter {
             )
             segs += ClipSegment(b, p.inMs, p.outMs - p.inMs, lines, hook = i == 0, section = p.section, text = p.text.takeIf { i > 0 })
         }
-        if (options.intro) segs.add(0, TitleSegment(StudioPlanner.INTRO_MS))
+        if (options.introOn) segs.add(0, TitleSegment(StudioPlanner.INTRO_MS))
         if (stats) segs += StatsSegment(StudioPlanner.OUTRO_MS)
         if (loop) {
             val first = segs.filterIsInstance<ClipSegment>().first()
@@ -585,11 +585,13 @@ object ScriptWriter {
         if (lines.isEmpty()) return plan
         val clips = plan.segments.withIndex().filter { (_, s) -> s is ClipSegment && !s.tail }
         if (clips.isEmpty()) return plan
-        val from = plan.startOf(clips.first().index)
+        // In the title slot, after the opening text has gone (they'd sit on each other).
+        val from = plan.startOf(clips.first().index) + minOf(Tok.OPENER_MS, clips.first().value.durMs / 2)
         val to = plan.startOf(clips.last().index) + clips.last().value.durMs
+        if (to <= from) return plan
         val each = (to - from) / lines.size
         val items = lines.mapIndexed { i, t ->
-            TextItem("os-$i", from + i * each, if (i == lines.lastIndex) to else from + (i + 1) * each, t, y = 0.2f, look = TextLook.BOX, animIn = TextAnim.POP)
+            TextItem("os-$i", from + i * each, if (i == lines.lastIndex) to else from + (i + 1) * each, t, y = Tok.TITLE_Y, look = TextLook.BOX, animIn = TextAnim.POP)
         }
         return plan.copy(texts = plan.texts + items)
     }

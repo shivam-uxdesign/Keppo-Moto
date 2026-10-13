@@ -41,14 +41,14 @@ internal fun layerSize(l: LayerItem, outW: Int): Pair<Int, Int> {
  * main video shows around it.
  */
 @UnstableApi
-internal class MaskEffect(private val shape: LayerShape, private val border: Boolean) : GlEffect {
-    override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram = MaskProgram(shape, border)
+internal class MaskEffect(private val shape: LayerShape, private val border: Boolean, private val unit: Float) : GlEffect {
+    override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram = MaskProgram(shape, border, unit)
 
     override fun isNoOp(inputWidth: Int, inputHeight: Int): Boolean = shape == LayerShape.RECT && !border
 }
 
 @UnstableApi
-private class MaskProgram(private val shape: LayerShape, private val border: Boolean) : BaseGlShaderProgram(false, 1) {
+private class MaskProgram(private val shape: LayerShape, private val border: Boolean, private val unit: Float) : BaseGlShaderProgram(false, 1) {
     private val program: GlProgram = try {
         GlProgram(VERTEX, FRAGMENT).apply {
             setBufferAttribute("aFramePosition", GlUtil.getNormalizedCoordinateBounds(), GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE)
@@ -72,11 +72,12 @@ private class MaskProgram(private val shape: LayerShape, private val border: Boo
             program.setFloatsUniform("uSize", floatArrayOf(w.toFloat(), h.toFloat()))
             val radius = when (shape) {
                 LayerShape.RECT -> 0f
-                LayerShape.ROUNDED -> minOf(w, h) * 0.08f
+                LayerShape.ROUNDED -> Tok.R_MD * unit
                 LayerShape.CIRCLE -> minOf(w, h) / 2f
             }
             program.setFloatUniform("uRadius", radius)
-            program.setFloatUniform("uBorder", if (border) maxOf(3f, w * 0.012f) else 0f)
+            program.setFloatUniform("uBorder", if (border) Tok.BORDER * unit else 0f)
+            program.setFloatUniform("uBorderA", Tok.BORDER_A)
             program.bindAttributesAndUniforms()
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         } catch (e: GlUtil.GlException) {
@@ -109,6 +110,7 @@ uniform sampler2D uTexSampler;
 uniform vec2 uSize;
 uniform float uRadius;
 uniform float uBorder;
+uniform float uBorderA;
 varying vec2 vTexSamplingCoord;
 void main() {
   vec4 c = texture2D(uTexSampler, vTexSamplingCoord);
@@ -119,7 +121,7 @@ void main() {
   float inside = clamp(0.5 - d, 0.0, 1.0);
   if (uBorder > 0.0) {
     float frame = clamp(d + uBorder + 0.5, 0.0, 1.0);
-    c = mix(c, vec4(1.0, 1.0, 1.0, 1.0), frame);
+    c = mix(c, vec4(1.0, 1.0, 1.0, 1.0), frame * uBorderA);
   }
   gl_FragColor = vec4(c.rgb, c.a * inside);
 }
@@ -175,7 +177,7 @@ internal class LayerDrawer(private val context: Context, private val layers: Lis
             val rect = RectF(k.cx * c.width - w / 2, k.cy * c.height - h / 2, k.cx * c.width + w / 2, k.cy * c.height + h / 2)
             val radius = when (l.shape) {
                 LayerShape.RECT -> 0f
-                LayerShape.ROUNDED -> minOf(w, h) * 0.08f
+                LayerShape.ROUNDED -> Tok.R_MD * c.width / 540f
                 LayerShape.CIRCLE -> minOf(w, h) / 2f
             }
             c.save()
@@ -191,7 +193,8 @@ internal class LayerDrawer(private val context: Context, private val layers: Lis
             c.drawBitmap(bmp, src, rect, paint)
             c.restore()
             if (l.border) {
-                frame.strokeWidth = maxOf(3f, w * 0.012f)
+                frame.strokeWidth = Tok.BORDER * c.width / 540f
+                frame.alpha = (Tok.BORDER_A * 255).roundToInt()
                 c.save()
                 c.rotate(l.rotation, rect.centerX(), rect.centerY())
                 c.drawRoundRect(rect, radius, radius, frame)

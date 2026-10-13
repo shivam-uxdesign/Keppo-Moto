@@ -1571,6 +1571,9 @@ class StudioViewModel(
         return renderInput(plan, s, cd, voice)
     }
 
+    /** What the simple preview draws its graphics from (as the made video, without the voice-over's sound). */
+    fun overlayInput(plan: StudioPlan): RenderInput? = card?.let { renderInput(plan, _state.value, it, null) }
+
     /** The exact preview didn't work here: kept as a warning, the simple one is used. */
     fun previewFailed(e: Throwable) {
         c.errors.warn("Studio preview", "The exact preview didn't play on this phone: using the simple preview", e)

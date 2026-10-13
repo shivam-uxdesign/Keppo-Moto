@@ -30,7 +30,7 @@ class StylesTest {
 
     /** Section 0: a (talking) + b; section 1: c (riding). */
     private fun plan(): StudioPlan {
-        val a = ClipSegment(bit("a"), 0, 4_000, listOf(CaptionLine(500, 1_500, "Arre yaar")), hook = true, section = 0)
+        val a = ClipSegment(bit("a"), 0, 4_000, listOf(CaptionLine(500, 1_500, "Arre yaar", key = "yaar")), hook = true, section = 0)
         val b = ClipSegment(bit("b"), 0, 3_000, emptyList(), hook = false, section = 0)
         val c = ClipSegment(bit("c"), 0, 4_000, emptyList(), hook = false, section = 1)
         return TimelineEdits.addText(StudioPlan(listOf(a, b, c, StatsSegment(1_500)), Vibe.VLOG), 500, "Sixty five", "t1")

@@ -57,15 +57,15 @@ class TracksTest {
     fun `move points ease the layer from one place to the next`() {
         var p = TrackEdits.addLayer(plan(), bit("road"), 0, "l1")
         p = TrackEdits.addKey(p, "l1", 2_000)
-        p = TrackEdits.moveLayer(p, "l1", -0.4f, 0f, atMs = 2_000)
+        p = TrackEdits.moveLayer(p, "l1", 0.4f, 0f, atMs = 2_000)
         val l = p.layers.single()
         assertEquals(2, l.keys.size)
         val start = TrackEdits.keyAt(l, 0)
         val mid = TrackEdits.keyAt(l, 1_000)
         val end = TrackEdits.keyAt(l, 3_000)
-        assertEquals(0.72f, start.cx)
-        assertTrue(abs(end.cx - 0.32f) < 0.001f, "${end.cx}")
-        assertTrue(abs(mid.cx - 0.52f) < 0.001f, "${mid.cx}")
+        assertEquals(0.30f, start.cx)
+        assertTrue(abs(end.cx - 0.70f) < 0.001f, "${end.cx}")
+        assertTrue(abs(mid.cx - 0.50f) < 0.001f, "${mid.cx}")
     }
 
     @Test
