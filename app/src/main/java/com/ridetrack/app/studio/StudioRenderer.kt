@@ -219,6 +219,15 @@ class StudioRenderer(private val context: Context) {
             .apply { if (a.sound) experimentalSetForceAudioTrack(true) }
             .build()
         if (!a.sound || !a.extraTracks) return build()
+        sequences += extraSequences(input)
+        return build()
+    }
+
+    /** The sound tracks besides the clips' own: voice-over, song, detached sounds, the engine mic, layers' sound. */
+    private fun extraSequences(input: RenderInput): List<EditedMediaItemSequence> {
+        val plan = input.plan
+        val mix = plan.mix
+        val sequences = ArrayList<EditedMediaItemSequence>()
         val total = plan.totalMs
         val talk = plan.talkingRanges() + voiceRanges(input)
         input.voice?.let { wav ->
@@ -251,7 +260,38 @@ class StudioRenderer(private val context: Context) {
             val uri = uriOf(input, l.bit) ?: return@forEach
             if (g > 0f) sequences += audioSequence(l.startMs, uri, l.inMs, l.durMs, clean = false) { local -> g * fade(local, l.durMs, 80) }
         }
-        return build()
+        return sequences
+    }
+
+    /**
+     * For the editor's preview: the sound tracks besides the clips' own mixed into one audio file
+     * ([out], AAC) as long as the Reel. Null when there are none.
+     */
+    suspend fun soundMix(input: RenderInput, out: File): File? {
+        val extras = runCatching { extraSequences(input) }.getOrElse { return null }
+        if (extras.isEmpty()) return null
+        // A silent track as long as the Reel first: it sets the length (the song loops to it).
+        val base = EditedMediaItemSequence(listOf(EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(Fillers.silence(context, input.plan.totalMs)))).build()))
+        val composition = Composition.Builder(listOf(base) + extras).experimentalSetForceAudioTrack(true).build()
+        out.delete()
+        return withContext(Dispatchers.Main) {
+            suspendCancellableCoroutine { cont ->
+                val t = Transformer.Builder(context)
+                    .setAudioMimeType(MimeTypes.AUDIO_AAC)
+                    .setMuxerFactory(InAppMuxer.Factory.Builder().build())
+                    .addListener(object : Transformer.Listener {
+                        override fun onCompleted(composition: Composition, exportResult: ExportResult) { if (cont.isActive) cont.resume(out) }
+                        override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
+                            Log.w(TAG, "Preview sound mix failed", exportException)
+                            out.delete()
+                            if (cont.isActive) cont.resume(null)
+                        }
+                    })
+                    .build()
+                t.start(composition, out.path)
+                cont.invokeOnCancellation { t.cancel(); out.delete() }
+            }
+        }
     }
 
     /** The export's own size and frame rate on the finished picture. */
@@ -425,12 +465,7 @@ class StudioRenderer(private val context: Context) {
     }
 
     /** A clip's own colour: exposure, contrast, saturation, warmth. */
-    private fun colour(c: ClipColor): List<Effect> = listOfNotNull(
-        if (c.exposure != 0f) Brightness(c.exposure * 0.35f) else null,
-        if (c.contrast != 0f) Contrast(c.contrast * 0.4f) else null,
-        if (c.saturation != 0f) HslAdjustment.Builder().adjustSaturation(c.saturation * 40f).build() else null,
-        if (c.warmth != 0f) RgbAdjustment.Builder().setRedScale(1f + 0.12f * c.warmth).setBlueScale(1f - 0.12f * c.warmth).build() else null,
-    )
+    private fun colour(c: ClipColor): List<Effect> = effects(Looks.clip(c))
 
     /**
      * The speed over a clip's part ([lengthUs] long): constant, or in a ramp's steps. Times are
@@ -457,17 +492,16 @@ class StudioRenderer(private val context: Context) {
     private fun voiceRanges(input: RenderInput): List<LongRange> = input.voiceLines.map { (it.startMs - 150)..(it.endMs + 250) }
 
     /** Each vibe's colour look. */
-    private fun grade(v: Vibe): List<Effect> = when (v) {
-        Vibe.HYPE -> listOf(Contrast(0.1f), HslAdjustment.Builder().adjustSaturation(16f).build(), RgbAdjustment.Builder().setRedScale(1.04f).setBlueScale(0.96f).build())
-        Vibe.CINE -> listOf(Contrast(0.12f), HslAdjustment.Builder().adjustSaturation(-20f).adjustLightness(-3f).build(), RgbAdjustment.Builder().setRedScale(0.96f).setBlueScale(1.05f).build())
-        Vibe.CHILL -> listOf(HslAdjustment.Builder().adjustSaturation(-12f).adjustLightness(4f).build(), RgbAdjustment.Builder().setRedScale(1.06f).setBlueScale(0.92f).build())
-        Vibe.VLOG -> listOf(Contrast(0.05f), HslAdjustment.Builder().adjustSaturation(8f).build())
-        Vibe.FILM -> listOf(Contrast(-0.06f), HslAdjustment.Builder().adjustSaturation(-10f).build(), RgbAdjustment.Builder().setRedScale(1.05f).setBlueScale(0.92f).build(), LiftBlacks)
-        Vibe.EDITORIAL -> listOf(Contrast(0.08f), HslAdjustment.Builder().adjustSaturation(-8f).build())
-        Vibe.NATIVE -> emptyList()
-        // Speedtrap: crisp and a touch cool, so the red reads.
-        Vibe.SPEEDTRAP -> listOf(Contrast(0.1f), HslAdjustment.Builder().adjustSaturation(-6f).build(), RgbAdjustment.Builder().setRedScale(0.98f).setBlueScale(1.03f).build())
-    }
+    private fun grade(v: Vibe): List<Effect> = effects(Looks.grade(v))
+
+    /** A colour step ([Looks.Spec]) as Media3 effects, in order: brightness, contrast, saturation and lightness, gains, lift. */
+    private fun effects(sp: Looks.Spec): List<Effect> = listOfNotNull(
+        if (sp.bright != 0f) Brightness(sp.bright) else null,
+        if (sp.contrast != 0f) Contrast(sp.contrast) else null,
+        if (sp.sat != 0f || sp.light != 0f) HslAdjustment.Builder().adjustSaturation(sp.sat).adjustLightness(sp.light).build() else null,
+        if (sp.r != 1f || sp.b != 1f) RgbAdjustment.Builder().setRedScale(sp.r).setBlueScale(sp.b).build() else null,
+        if (sp.lift != 0f) LiftBlacks(sp.lift) else null,
+    )
 
     /** The rider's filter as effects (none when off). */
     private fun filterEffects(o: StudioOptions): List<Effect> {
@@ -478,10 +512,9 @@ class StudioRenderer(private val context: Context) {
         return listOf(androidx.media3.effect.RgbMatrix { _, _ -> m })
     }
 
-    /** Film's faded blacks: every channel lifted by [LIFT] (the matrix's last column is an offset). */
-    private object LiftBlacks : androidx.media3.effect.RgbMatrix {
-        private const val LIFT = 0.04f
-        private val m = floatArrayOf(1 - LIFT, 0f, 0f, 0f, 0f, 1 - LIFT, 0f, 0f, 0f, 0f, 1 - LIFT, 0f, LIFT, LIFT, LIFT, 1f)
+    /** Faded blacks (Film): every channel lifted by [lift] (the matrix's last column is an offset). */
+    private class LiftBlacks(lift: Float) : androidx.media3.effect.RgbMatrix {
+        private val m = floatArrayOf(1 - lift, 0f, 0f, 0f, 0f, 1 - lift, 0f, 0f, 0f, 0f, 1 - lift, 0f, lift, lift, lift, 1f)
         override fun getMatrix(presentationTimeUs: Long, useHdr: Boolean): FloatArray = m
     }
 

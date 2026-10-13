@@ -898,12 +898,40 @@ Done in one pass on the drawing code, because the token rewrite, the restyled vi
   - caption taps use the real bounds
   - a fresh exact-preview player after each edit (bug 2, option A)
 
+- **Editor preview rebuilt (option B):** one player, no fallback, the next clip preloaded, half-size graphics; the look and the camera drawn on the picture; the sound tracks mixed in the background; reload-and-retry on errors. This covers bugs 1 and 2.
+
 **Still open:**
-- **Bug 1, preview transitions lag:** not started. Planned: one effect chain for the edit, a half-size overlay in the preview, the next clip decoded ahead.
-- **Bug 2, the rest:** retry instead of falling back, "Updating preview…", option B (the editor's own player).
+- **Preview checks on the rider's phone:**
+  - the cut smoothness
+  - the sound tracks' sync
+  - Red only (a shader on Android 13 and later)
+  - freeze frames
 - **Later (agreed):**
   - blur faces and number plates, after a second camera
   - weekly long video, last, with the rider's permission first
 - **Not checked yet:**
   - redline detection on a real ride's engine sound
   - the style colour and filters in a made video
+
+## Editor preview rebuild (option B, rider's pick, 13 Oct)
+
+There's one preview in the editor; it never switches. It replaces both the exact preview (`CompositionPlayer`) and the simple one.
+
+- **Picture:** one ExoPlayer plays the edit as a playlist, one item per segment, into a `TextureView`.
+  - A change to the clips only replaces the playlist. A normal player handles that any number of times, so there's no one-edit limit.
+  - The next clip is preloaded before the cut (bug 1).
+- **Per segment:**
+  - the clip's part at its speed (the player's speed per item; a ramp plays at its average)
+  - reversed clips play their reversed copy
+  - freeze frames play as images and are shown over the video
+- **Look:** the style's grade, the clip's colour and the filter go into one colour matrix on the video (the same numbers as the made video, shared in `Looks`).
+  - Red only uses a GPU shader on Android 13 and later, and shows as black and white before that.
+- **Camera:** the style's camera and transitions, plus the clip's crop keys, rotation and flip, applied to the picture. The made video's fill clamp applies, so there are no black edges.
+- **Graphics:** drawn by the same `ReelOverlay` as the made video, at 540×960 (half size, bug 1).
+  - Layers show as stills where they'll be.
+- **Sound:**
+  - The clips' own sound plays from the video player, at each clip's level.
+  - The song, voice-over, engine track, detached sounds and layer sound are mixed by the renderer into one audio file in the background, after any change to them.
+  - A second player plays that file, kept in step with the picture.
+  - Until a new mix is ready, the previous one plays.
+- **Errors:** a playback error reloads the player at the same spot (up to 3 tries), then says so on the video ("Preview couldn't update: tap to try again"). It never switches to another preview.

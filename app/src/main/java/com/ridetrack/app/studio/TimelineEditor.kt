@@ -135,6 +135,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
@@ -192,13 +193,10 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     val plan = s.timeline ?: return
     val context = LocalContext.current
     val density = LocalDensity.current
-    val simple = remember { PreviewPlayer(context) }
-    // The exact preview (as the made video) when this phone can play it; the simple one otherwise.
-    // Tried again for every video: one that failed doesn't turn it off for the rest.
-    var exactOn by remember { ExactPreview.works = true; mutableStateOf(true) }
-    val exact = remember { ExactPreview(context) { e -> exactOn = false; vm.previewFailed(e) } }
+    // The one preview: it plays the edit and the picture above draws the look, camera and graphics.
+    val preview = remember { EditorPreview(context) }
     val files = remember { vm.previewFiles() }
-    val active: Player = if (exactOn) exact.player else simple.player
+    val active: Player = preview.player
     var playing by remember { mutableStateOf(false) }
     var pos by remember { mutableLongStateOf(0L) }
     var zoom by remember { mutableFloatStateOf(1f) }
@@ -238,7 +236,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     val styles by appContainer().styles.styles.collectAsStateWithLifecycle()
     // A cut whose transition is playing on a loop (ms into the Reel); null when not.
     var loopAt by remember { mutableStateOf<Long?>(null) }
-    // Transitions drawn over the simple preview (the exact one has them in the video).
+    // The preview's graphics (transitions, captions, text, stickers), drawn at half size.
     val art = remember(s.options.accent, s.options.grain, s.options.redlineStroke) {
         StudioArt(context, w = 540, h = 960, grainOn = s.options.grain, accentOverride = s.options.accent).also { it.redlineStroke = s.options.redlineStroke }
     }
@@ -251,26 +249,22 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
 
     DisposableEffect(Unit) {
         val l = object : Player.Listener { override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying } }
-        simple.player.addListener(l)
-        exact.addListener(l)
-        onDispose { simple.player.removeListener(l); exact.removeListener(l); simple.release(); exact.release() }
+        preview.player.addListener(l)
+        onDispose { preview.player.removeListener(l); preview.release() }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { active.pause() }
     // A change (not mid-drag): play the new edit from where the playhead is.
-    LaunchedEffect(s.timelineVersion, exactOn) {
-        if (exactOn) {
-            simple.player.pause()
-            val input = vm.previewInput(current)
-            if (input != null) exact.load(input, pos) else exactOn = false
-        } else {
-            exact.player.pause()
-            simple.load(current, files, pos)
-        }
+    LaunchedEffect(s.timelineVersion) { preview.load(current, files, pos) }
+    // The sound tracks besides the clips' own, mixed in the background once edits settle (the last mix plays meanwhile).
+    LaunchedEffect(s.timelineVersion, s.takes, s.musicUri) {
+        delay(600)
+        preview.setSound(vm.previewSound(current))
     }
     // Playing: the timeline follows the video.
     LaunchedEffect(playing, pxPerMs) {
         while (playing) {
-            pos = (if (exactOn) exact.positionMs() else simple.positionMs()).coerceIn(0, current.totalMs)
+            pos = preview.positionMs().coerceIn(0, current.totalMs)
+            preview.syncSound()
             vm.playheadMs = pos
             scroll.scrollTo((pos * pxPerMs).roundToInt())
             delay(33)
@@ -290,7 +284,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 val wait = 60 - (android.os.SystemClock.uptimeMillis() - lastSeek)
                 if (wait > 0) delay(wait)
                 lastSeek = android.os.SystemClock.uptimeMillis()
-                if (exactOn) exact.seek(pos) else simple.seek(pos)
+                preview.seek(pos)
             }
         }
     }
@@ -311,7 +305,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         repeat(3) {
             val t = (at - 1_200).coerceAtLeast(0)
             pos = t
-            if (exactOn) exact.seek(t) else simple.seek(t)
+            preview.seek(t)
             scroll.scrollTo((t * pxPerMs).roundToInt())
             active.play()
             delay(2_400)
@@ -327,7 +321,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     // (Watched without reading the playhead here, so the whole editor isn't redrawn 30 times a second.)
     LaunchedEffect(s.recordingAt) {
         if (s.recordingAt == null) return@LaunchedEffect
-        snapshotFlow { pos }.collect { p -> if (p >= current.totalMs - 60) { vm.stopTake(); active.pause(); active.volume = 1f } }
+        snapshotFlow { pos }.collect { p -> if (p >= current.totalMs - 60) { vm.stopTake(); active.pause(); preview.setLevel(1f) } }
     }
     // Two fingers tap: undo; three: redo. A short banner says what went.
     fun undoBanner(label: String?, redo: Boolean) { label?.let { tick(); flash = (if (redo) "Redo · " else "Undo · ") + it } }
@@ -339,7 +333,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         val t = ms.coerceIn(0, current.totalMs)
         pos = t
         vm.playheadMs = t
-        if (exactOn) exact.seek(t) else simple.seek(t)
+        preview.seek(t)
     }
 
     fun close() { if (s.canUndo) discard = true else vm.closeEdit() }
@@ -396,43 +390,57 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             ) {
                 val boxW = maxWidth
                 val boxH = maxHeight
-                // In the simple preview the style's camera (with the transitions' moves) is applied here,
-                // never zoomed less than the made video's fill.
+                // The picture: the style's camera (with the transitions' moves) and the clip's own crop,
+                // turn and flip, never zoomed less than the made video's fill; the look as one colour
+                // matrix (Red only as a shader where the phone can).
                 val (ti, tl) = TimelineEdits.at(plan, pos)
-                val cam = if (exactOn) null else (plan.segments.getOrNull(ti) as? ClipSegment)?.let { seg -> art.camera(Cuts.frameAt(plan, ti, tl, seg.durMs)) }
+                val tseg = plan.segments.getOrNull(ti)
+                val cs = (tseg as? ClipSegment)?.takeIf { !it.tail }
+                val cam = (tseg as? ClipSegment)?.let { seg ->
+                    val c0 = art.camera(Cuts.frameAt(plan, ti, tl, seg.durMs))
+                    if (cs == null || cs.frame.isEmpty()) c0 else ClipTools.frameAt(cs, tl).let { f ->
+                        val room = (f.zoom - 1f) / 2f
+                        c0.copy(k = c0.k * f.zoom, x = c0.x - f.x * art.w * room, y = c0.y - f.y * art.h * room)
+                    }
+                }
                 val unit = with(density) { boxW.toPx() } / art.w
-                // The exact preview only plays into a SurfaceView (Media3's composition player refuses a
-                // TextureView). The simple preview uses a TextureView, so the transition's camera move
-                // below can scale and shift the picture. A new view when the preview changes.
-                androidx.compose.runtime.key(exactOn) {
-                AndroidView(
-                    factory = { ctx ->
-                        val v = if (exactOn) PlayerView(ctx).apply { useController = false; resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM }
-                        else android.view.LayoutInflater.from(ctx).inflate(com.ridetrack.app.R.layout.moment_popup_player, null) as PlayerView
-                        // Never crash the editor over the video view: fall back to the simple preview.
-                        runCatching { v.player = active }.onFailure { e -> if (exactOn) { exactOn = false; vm.previewFailed(e) } }
-                        v
-                    },
-                    update = { v ->
-                        if (v.player !== active) runCatching { v.player = active }
-                        // The simple preview shows the filter on its picture (the exact one has it in the video).
-                        if (!exactOn) (v.videoSurfaceView as? android.view.TextureView)?.setLayerPaint(
-                            s.options.filter.takeIf { it != RideFilter.NONE }?.let { filterPaint(it, s.options.filterAmount) },
-                        )
-                    },
-                    modifier = Modifier.fillMaxSize().graphicsLayer {
-                        val k = (cam?.let { maxOf(it.k, art.fill(it)) } ?: 1f) * crop.z
-                        scaleX = k; scaleY = k
+                val turned = cs != null && (cs.rotation == 90 || cs.rotation == 270)
+                val lookPaint = remember(plan.vibe, cs?.color, s.options.filter, s.options.filterAmount) {
+                    android.graphics.Paint().apply { colorFilter = android.graphics.ColorMatrixColorFilter(Looks.matrix(plan.vibe, cs?.color, s.options.filter, s.options.filterAmount)) }
+                }
+                Box(
+                    Modifier.fillMaxSize().graphicsLayer {
+                        val k = (cam?.let { maxOf(it.k, art.fill(it)) } ?: 1f) * crop.z * (if (turned) maxOf(size.height / size.width, size.width / size.height) else 1f)
+                        scaleX = k * (if (cs?.flip == true) -1f else 1f); scaleY = k
                         translationX = (cam?.x ?: 0f) * unit + crop.x
                         translationY = (cam?.y ?: 0f) * unit + crop.y
-                        rotationZ = (cam?.deg ?: 0f) + crop.r
+                        rotationZ = (cam?.deg ?: 0f) + crop.r + (cs?.rotation ?: 0)
                     },
-                )
+                ) {
+                    AndroidView(
+                        factory = { ctx ->
+                            (android.view.LayoutInflater.from(ctx).inflate(com.ridetrack.app.R.layout.moment_popup_player, null) as PlayerView).also { v -> v.player = active }
+                        },
+                        update = { v ->
+                            if (v.player !== active) v.player = active
+                            (v.videoSurfaceView as? android.view.TextureView)?.let { tv ->
+                                tv.setLayerPaint(lookPaint)
+                                PreviewEffects.redOnly(tv, if (RideFilters.keepsRed(s.options.filter)) s.options.filterAmount else 0f)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    // A freeze frame, where one plays.
+                    preview.still?.let { b ->
+                        androidx.compose.foundation.Image(
+                            b.asImageBitmap(), contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+                            colorFilter = androidx.compose.ui.graphics.ColorFilter.colorMatrix(androidx.compose.ui.graphics.ColorMatrix(Looks.matrix(plan.vibe, cs?.color, s.options.filter, s.options.filterAmount))),
+                        )
+                    }
                 }
-                // The simple preview's graphics: drawn by the same code as the made video (the exact
-                // preview has them in the video).
+                // The graphics: drawn by the same code as the made video.
                 val overlayIn = remember(plan, s.options, s.title, s.hookLine, s.label, s.takes) { vm.overlayInput(plan) }
-                if (!exactOn && overlayIn != null) {
+                if (overlayIn != null) {
                     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
                         val (oi, ol) = TimelineEdits.at(plan, pos)
                         val seg = plan.segments.getOrNull(oi) ?: return@Canvas
@@ -473,7 +481,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 // Text and stickers: drag anywhere, pinch to size and turn (the selected one). They're drawn
                 // with the video's graphics (above, or in the exact preview's video): here only their
                 // spot listens, and the selected one's frame shows, to move it.
-                plan.texts.filter { pos in it.startMs until it.endMs && (!exactOn || (s.pick as? TimelinePick.Text)?.id == it.id) }.forEach { t ->
+                plan.texts.filter { pos in it.startMs until it.endMs && true }.forEach { t ->
                     val selected = (s.pick as? TimelinePick.Text)?.id == t.id
                     Placed(
                         t.x, t.y, t.size, t.rotation, selected,
@@ -496,7 +504,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         )
                     }
                 }
-                plan.stickers.filter { pos in it.startMs until it.endMs && (!exactOn || (s.pick as? TimelinePick.Sticker)?.id == it.id) }.forEach { st ->
+                plan.stickers.filter { pos in it.startMs until it.endMs && true }.forEach { st ->
                     val selected = (s.pick as? TimelinePick.Sticker)?.id == st.id
                     Placed(
                         st.x, st.y, st.size, st.rotation, selected,
@@ -563,12 +571,16 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 if (!playing) {
                     Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.align(Alignment.Center).size(48.dp))
                 }
-                if (!exactOn) Text(
-                    "Simple preview",
-                    style = RtType.caption,
-                    color = Color.White.copy(alpha = 0.8f),
-                    modifier = Modifier.align(Alignment.TopStart).padding(6.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.45f)).padding(horizontal = 4.dp),
-                )
+                // The preview couldn't play after three tries: say so, tap to try again.
+                preview.problem?.let { msg ->
+                    Text(
+                        msg,
+                        style = RtType.caption,
+                        color = Color.White,
+                        modifier = Modifier.align(Alignment.Center).clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.65f))
+                            .clickable(role = Role.Button, onClickLabel = "Try again") { preview.retry() }.padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                }
                 if (holding) s.video?.let { before ->
                     Box(Modifier.fillMaxSize().background(Color.Black)) {
                         Player(android.net.Uri.fromFile(before), Modifier.align(Alignment.Center), height = boxH)
@@ -898,13 +910,13 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         onAsk = { askMic.launch(android.Manifest.permission.RECORD_AUDIO) },
                         onStart = {
                             if (pos >= plan.totalMs - 200) seekTo(0)
-                            active.volume = 0f
+                            preview.setLevel(0f)
                             vm.startTake(pos)
                             active.play()
                         },
-                        onStop = { vm.stopTake(); active.pause(); active.volume = 1f },
+                        onStop = { vm.stopTake(); active.pause(); preview.setLevel(1f) },
                         onDelete = { vm.deleteTake(it) },
-                        onBack = { if (s.recordingAt != null) { vm.stopTake(); active.pause(); active.volume = 1f }; voiceOn = false },
+                        onBack = { if (s.recordingAt != null) { vm.stopTake(); active.pause(); preview.setLevel(1f) }; voiceOn = false },
                     )
                 } else {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1023,7 +1035,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         is TimelinePick.Layer -> "Drag the layer on the video to move it, pinch to resize. Move here marks where it is now, so it glides there."
                         is TimelinePick.Audio -> "A sound can run past its cut. Dip here and Full here shape its volume."
                         is TimelinePick.Text -> "Drag the text on the video to place it; pinch to size and turn."
-                        else -> if (exactOn) "Layers show as stills here; they play in the saved video." else "Simple preview: colours, camera moves and layers show in the saved video."
+                        else -> "Layers show as stills here; they play in the saved video."
                     }
                 },
                 style = RtType.caption,

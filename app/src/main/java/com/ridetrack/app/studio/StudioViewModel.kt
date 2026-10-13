@@ -1600,9 +1600,17 @@ class StudioViewModel(
     /** What the simple preview draws its graphics from (as the made video, without the voice-over's sound). */
     fun overlayInput(plan: StudioPlan): RenderInput? = card?.let { engine.renderInput(plan, _state.value, it, null, waitForRevs = false) }
 
-    /** The exact preview didn't work here: kept as a warning, the simple one is used. */
-    fun previewFailed(e: Throwable) {
-        c.errors.warn("Studio preview", "The exact preview didn't play on this phone: using the simple preview", e)
+    private var soundN = 0
+
+    /**
+     * The editor preview's sound tracks besides the clips' own (song, voice-over, engine, detached
+     * sounds, layers' sound) mixed into one file, in the background; null when there are none.
+     */
+    suspend fun previewSound(plan: StudioPlan): File? {
+        val input = previewInput(plan) ?: return null
+        // Two files in turn, so the one playing isn't overwritten.
+        val out = File(c.appContext.cacheDir, "studio-preview-sound-${soundN++ % 2}.m4a")
+        return runCatching { StudioRenderer(c.appContext).soundMix(input, out) }.getOrNull()
     }
 
     // ---- clip tools that need the clip's pictures --------------------------------------------

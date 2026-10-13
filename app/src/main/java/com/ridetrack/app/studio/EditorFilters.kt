@@ -102,3 +102,34 @@ internal fun FilterSheet(vm: StudioViewModel, options: StudioOptions, visible: B
         }
     }
 }
+
+/** The preview's Red only filter on the picture: a GPU shader where the phone has them (Android 13+). */
+internal object PreviewEffects {
+    private const val SHADER = """
+uniform shader content;
+uniform float amount;
+uniform float contrast;
+half4 main(float2 xy) {
+  half4 c = content.eval(xy);
+  float l = dot(float3(c.rgb), float3(0.2126, 0.7152, 0.0722));
+  float g = clamp((l - 0.5) * contrast + 0.5, 0.0, 1.0);
+  float mx = max(c.r, max(c.g, c.b));
+  float mn = min(c.r, min(c.g, c.b));
+  float sat = mx > 0.0 ? (mx - mn) / mx : 0.0;
+  float red = smoothstep(0.08, 0.22, c.r - max(c.g, c.b)) * smoothstep(0.3, 0.5, sat);
+  float3 f = mix(float3(g), float3(c.rgb), red);
+  return half4(half3(mix(float3(c.rgb), f, amount)), c.a);
+}
+"""
+
+    /** Turns Red only on [v] at [amount] (0 = off); older phones show the picture as it is. */
+    fun redOnly(v: android.view.View, amount: Float) {
+        if (android.os.Build.VERSION.SDK_INT < 33) return
+        if (amount <= 0f) { v.setRenderEffect(null); return }
+        val shader = android.graphics.RuntimeShader(SHADER).apply {
+            setFloatUniform("amount", amount)
+            setFloatUniform("contrast", RideFilters.grade(RideFilter.RED_ONLY).contrast)
+        }
+        v.setRenderEffect(android.graphics.RenderEffect.createRuntimeShaderEffect(shader, "content"))
+    }
+}
