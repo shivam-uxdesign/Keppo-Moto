@@ -854,3 +854,19 @@ Done in one pass on the drawing code, because the token rewrite, the restyled vi
 4. **Speedtrap style:**
    - The redline effect: Full by default, Stroke as an option.
    - Captions, titles, speed badge and stats are to be decided with the rider before building.
+
+### Progress
+
+1. **Colour picker on every style:** done (1620b9e).
+2. **Filters:** done (7ea9350).
+3. **Redline detection:** done.
+   - **Pitch:** `Revs` finds the engine's pitch every 100 ms by autocorrelation, in the 20–320 Hz range.
+   - **Bike's range:** the 10th to 98th percentile of every clip's readings; the redline is at 0.9 of that range.
+   - **Decoding:** `EngineAudio` decodes the engine file, or else the clip's own sound, to mono at about 8 kHz. Results are cached in `<clip>.revs.json`.
+   - **Tags:** "Tag redline" adds 2 s from the playhead. Tags show as red bars on the timeline (tap one to remove it) and save with the Reel. A tag reads as climbing from the line to the limiter.
+   - **Pulse:** fades in over 150 ms and out over 100 ms, at 2–8 pulses a second.
+   - **Light:** `StudioArt.redline` draws it two ways:
+     - **Full:** a flat overlay, up to 30%.
+     - **Stroke:** 7s wide (14 px at 1080) with 4s of soft edge.
+   - It's only drawn when `VibeSpec.redline` is set: Speedtrap, in step 4.
+   - The revs are only worked out when the style uses the light.

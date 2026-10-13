@@ -1368,6 +1368,8 @@ class StudioViewModel(
         _state.update { it.copy(step = StudioStep.EDIT, pick = null, footage = footage(), thumbs = it.thumbs + saved, engineFiles = engine) }
         if (draft != null) say("Carried on from your unsaved edit")
         publish(reload = true)
+        // The redline light needs the revs from the engine sound: work them out in the background.
+        if (plan.vibe.spec.redline) viewModelScope.launch { this@StudioViewModel.engine.analyseRevs(); refreshPreview() }
         if (_state.value.otherBits.isEmpty()) viewModelScope.launch { loadOtherRides() }
     }
 
@@ -1526,6 +1528,11 @@ class StudioViewModel(
 
     fun addMarker() = change("Marker") { TrackEdits.addMarker(it, playheadMs, newId("m")) }
 
+    /** Tags 2 s from the playhead as "at the redline" (the light comes on there whatever the engine sound says). */
+    fun tagRedline() = change("Redline") { TrackEdits.tagRedline(it, playheadMs, newId("rl")) }
+
+    fun deleteRedline(id: String) = change("Remove redline") { TrackEdits.deleteRedline(it, id) }
+
     /** A trim being dragged: [f] gets the plan from before the drag. */
     fun drag(f: (StudioPlan) -> StudioPlan) {
         val h = history ?: return
@@ -1591,7 +1598,7 @@ class StudioViewModel(
     }
 
     /** What the simple preview draws its graphics from (as the made video, without the voice-over's sound). */
-    fun overlayInput(plan: StudioPlan): RenderInput? = card?.let { renderInput(plan, _state.value, it, null) }
+    fun overlayInput(plan: StudioPlan): RenderInput? = card?.let { engine.renderInput(plan, _state.value, it, null, waitForRevs = false) }
 
     /** The exact preview didn't work here: kept as a warning, the simple one is used. */
     fun previewFailed(e: Throwable) {

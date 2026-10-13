@@ -224,7 +224,7 @@ class StudioArt(
      * A clip's graphics. [lines] are the captions in ms from the segment start (the clip's words and
      * any voice-over); [opener] shows on the Reel's first clip: the title label and the hook line.
      */
-    fun drawClip(c: Canvas, f: FrameAt, lines: List<CaptionLine>, kmh: Int, clock: String, captions: Boolean, opener: Opener? = null, look: CaptionLook = CaptionLook()) {
+    fun drawClip(c: Canvas, f: FrameAt, lines: List<CaptionLine>, kmh: Int, clock: String, captions: Boolean, opener: Opener? = null, look: CaptionLook = CaptionLook(), redline: Float = 0f) {
         val t = tq(f.vibe, f.localMs.toFloat())
         vignette(c, f.vibe)
         grain(c, f.vibe, f.localMs.toFloat())
@@ -232,6 +232,8 @@ class StudioArt(
             p.reset(); p.color = Tok.INK
             c.drawRect(0f, 0f, W, H * LETTERBOX, p); c.drawRect(0f, H * (1 - LETTERBOX), W, H, p)
         }
+        // The redline light sits on the video, under the text.
+        if (f.vibe.spec.redline && redline > 0f) redline(c, redline, redlineStroke, accent(f.vibe))
         speedBadge(c, f.vibe, kmh, clock)
         opener?.let { opening(c, f, it, t) }
         if (captions) caption(c, f.vibe, lines, t, look)
@@ -286,6 +288,32 @@ class StudioArt(
         p.shader = null
         if (v == Vibe.FILM) veil(c, Tok.INK, Tok.FLICKER * (0.5f + 0.5f * noise(ms / FLICKER_MS, 3)))
     }
+
+    /**
+     * The redline light at [pulse] (0..1): a flat [color] over the whole frame, up to 30%; or, as
+     * [stroke], a frame round the edge (14 px at 1080, 8 px soft inside), solid at the peak.
+     */
+    fun redline(c: Canvas, pulse: Float, stroke: Boolean, color: Int) {
+        if (!stroke) return veil(c, color, REDLINE_FULL * pulse)
+        val e = REDLINE_EDGE * s
+        val soft = REDLINE_SOFT * s
+        p.reset(); p.color = Tok.alpha(color, pulse)
+        c.drawRect(0f, 0f, W, e, p); c.drawRect(0f, H - e, W, H, p)
+        c.drawRect(0f, e, e, H - e, p); c.drawRect(W - e, e, W, H - e, p)
+        val a = Tok.alpha(color, pulse)
+        val z = Tok.alpha(color, 0f)
+        fun band(x0: Float, y0: Float, x1: Float, y1: Float, gx0: Float, gy0: Float, gx1: Float, gy1: Float) {
+            p.shader = LinearGradient(gx0, gy0, gx1, gy1, a, z, Shader.TileMode.CLAMP); c.drawRect(x0, y0, x1, y1, p)
+        }
+        band(e, e, W - e, e + soft, 0f, e, 0f, e + soft)
+        band(e, H - e - soft, W - e, H - e, 0f, H - e, 0f, H - e - soft)
+        band(e, e, e + soft, H - e, e, 0f, e + soft, 0f)
+        band(W - e - soft, e, W - e, H - e, W - e, 0f, W - e - soft, 0f)
+        p.shader = null
+    }
+
+    /** Speedtrap's redline light as a frame round the edge instead of the whole frame. */
+    var redlineStroke: Boolean = false
 
     // ---- transitions -----------------------------------------------------------------------
 
@@ -1504,6 +1532,11 @@ class StudioArt(
         const val WEAVE_MS = 900f
         const val GATE_JUMP = 0.008f
         const val FLICKER_MS = 140f
+
+        // The redline light: the whole frame at most this strong; or the edge frame and its soft inside (s units).
+        const val REDLINE_FULL = 0.30f
+        const val REDLINE_EDGE = 7f
+        const val REDLINE_SOFT = 4f
 
         // Transition graphics.
         const val FLASH_A = 0.8f

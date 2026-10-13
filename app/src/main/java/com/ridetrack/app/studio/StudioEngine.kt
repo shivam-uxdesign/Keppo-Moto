@@ -299,6 +299,34 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
     @Volatile var lastAnswer: String? = null
         private set
 
+    /** Each clip's engine pitch (from its engine sound, else its own), by moment id, and the bike's range across them. */
+    @Volatile private var revs: Map<String, FloatArray> = emptyMap()
+    @Volatile private var revRange: ClosedFloatingPointRange<Float>? = null
+
+    @Volatile private var revsDone = false
+
+    /** Works out the revs of every clip from its sound (cached next to each clip, so it's slow only once). */
+    suspend fun analyseRevs() = withContext(Dispatchers.IO) { analyseRevsNow() }
+
+    @Synchronized
+    private fun analyseRevsNow() {
+        if (revsDone) return
+        val m = clips.mapNotNull { mo -> EngineAudio.pitches(c.appContext, mo.file, mo.engineFile.takeIf { it.isFile }, null)?.let { mo.id to it } }.toMap()
+        revs = m
+        revRange = Revs.range(m.values.toList())
+        revsDone = true
+    }
+
+    /**
+     * How hard the engine revs (0..1 of this bike's range) [ms] into clip [momentId]; null where
+     * unknown. With [wait], works the revs out first if they aren't yet (off the main thread only).
+     */
+    fun revAt(momentId: String, ms: Long, wait: Boolean = false): Float? {
+        if (wait && !revsDone) analyseRevsNow()
+        val r = revRange ?: return null
+        return revs[momentId]?.let { Revs.level(it, r, ms) }
+    }
+
     /** Each clip's engine sound (the DJI's second channel), by moment id, where it was recorded. */
     fun engineFiles(): Map<String, String> = clips.filter { it.engineFile.isFile }.associate { it.id to android.net.Uri.fromFile(it.engineFile).toString() }
 
@@ -406,7 +434,8 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
     // ---- making -----------------------------------------------------------------------------
 
     /** What the renderer needs for [plan] with the choices in [s]. */
-    fun renderInput(plan: StudioPlan, s: StudioState, baseCard: RideCard, voice: File?): RenderInput {
+    /** [waitForRevs]: the made video and the exact preview (drawn off the main thread) wait for the revs; the simple preview doesn't. */
+    fun renderInput(plan: StudioPlan, s: StudioState, baseCard: RideCard, voice: File?, waitForRevs: Boolean = true): RenderInput {
         val ride = samples.toList()
         return RenderInput(
             plan = plan,
@@ -415,6 +444,8 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
             options = s.options,
             speedAt = { StudioNumbers.speedAt(ride, it) },
             leanAt = { StudioNumbers.leanAt(ride, it) },
+            // Only the styles with the redline light need the revs (working them out takes a while).
+            revAt = if (plan.vibe.spec.redline) { id, ms -> revAt(id, ms, wait = waitForRevs) } else { _, _ -> null },
             brand = c.styles.brand.value.takeIf { !it.empty },
             clockAt = { Format.timeOfDay(it).lowercase(Locale.getDefault()) },
             music = s.musicUri,

@@ -134,6 +134,11 @@ class StudioFrames {
             val paint = if (rf == com.ridetrack.app.studio.RideFilter.NONE) null else com.ridetrack.app.studio.filterPaint(rf, 1f)
             shot("filters/${rf.ordinal}-${rf.name.lowercase()}", clean, frame(Vibe.VLOG, 900, 4_000), paint) { c -> clean.drawClip(c, frame(Vibe.VLOG, 900, 4_000), lines, 62, "6:21 PM", true) }
         }
+        // The redline light at the peak of a pulse: over the whole frame, and as the edge frame.
+        val light = StudioArt(context)
+        shot("redline/full-peak", light, frame(Vibe.HYPE, 900, 4_000)) { c -> light.redline(c, 1f, false, com.ridetrack.app.studio.Tok.RED) }
+        shot("redline/stroke-peak", light, frame(Vibe.HYPE, 900, 4_000)) { c -> light.redline(c, 1f, true, com.ridetrack.app.studio.Tok.RED) }
+        shot("redline/full-half", light, frame(Vibe.HYPE, 900, 4_000)) { c -> light.redline(c, 0.5f, false, com.ridetrack.app.studio.Tok.RED) }
         // Every transition kind on the first vibe's clip, at the cut.
         val art = StudioArt(context)
         for (k in TransitionKind.entries) {

@@ -398,6 +398,9 @@ data class TrackMix(
 /** A marker the rider dropped while watching, at [atMs] (Reel time). */
 data class Marker(val id: String, val atMs: Long, val label: String = "")
 
+/** A stretch the rider tagged as "at the redline" (Reel time): it lights up whatever the engine sound says. */
+data class RedlineTag(val id: String, val startMs: Long, val endMs: Long)
+
 data class StudioPlan(
     val segments: List<Segment>,
     val vibe: Vibe,
@@ -408,6 +411,7 @@ data class StudioPlan(
     val markers: List<Marker> = emptyList(),
     val captionLook: CaptionLook = CaptionLook(),
     val stickers: List<StickerItem> = emptyList(),
+    val redlines: List<RedlineTag> = emptyList(),
 ) {
     val totalMs: Long = segments.sumOf { it.durMs }
     /** The clips the rider chose (the loop tail and the flash-forward teaser are not among them). */

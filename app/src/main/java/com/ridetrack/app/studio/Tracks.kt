@@ -272,6 +272,21 @@ object TrackEdits {
 
     fun deleteMarker(plan: StudioPlan, id: String) = plan.copy(markers = plan.markers.filter { it.id != id })
 
+    /** Tags [lenMs] from [atMs] as "at the redline"; one touching another joins it. */
+    fun tagRedline(plan: StudioPlan, atMs: Long, id: String, lenMs: Long = REDLINE_TAG_MS): StudioPlan {
+        val from = atMs.coerceIn(0, plan.totalMs)
+        val to = (from + lenMs).coerceAtMost(plan.totalMs)
+        if (to - from < MIN_MS / 4) return plan
+        val (touch, rest) = plan.redlines.partition { it.endMs >= from && it.startMs <= to }
+        val joined = RedlineTag(touch.firstOrNull()?.id ?: id, minOf(from, touch.minOfOrNull { it.startMs } ?: from), maxOf(to, touch.maxOfOrNull { it.endMs } ?: to))
+        return plan.copy(redlines = (rest + joined).sortedBy { it.startMs })
+    }
+
+    fun deleteRedline(plan: StudioPlan, id: String) = plan.copy(redlines = plan.redlines.filter { it.id != id })
+
+    /** A redline tag's length when the rider taps "Tag redline". */
+    const val REDLINE_TAG_MS = 2_000L
+
     /** After the clips change: layers, sounds and markers stay inside the Reel. */
     fun clamp(plan: StudioPlan): StudioPlan {
         val total = plan.totalMs
@@ -282,6 +297,7 @@ object TrackEdits {
             if (a.startMs >= total - MIN_MS / 2) null else a.copy(durMs = minOf(a.durMs, total - a.startMs))
         }
         val stickers = plan.stickers.mapNotNull { s -> if (s.startMs >= total - 250) null else s.copy(endMs = minOf(s.endMs, total)) }
-        return plan.copy(layers = layers, audio = audio, markers = plan.markers.filter { it.atMs <= total }, stickers = stickers)
+        val redlines = plan.redlines.filter { it.startMs < total }.map { it.copy(endMs = minOf(it.endMs, total)) }
+        return plan.copy(layers = layers, audio = audio, markers = plan.markers.filter { it.atMs <= total }, stickers = stickers, redlines = redlines)
     }
 }

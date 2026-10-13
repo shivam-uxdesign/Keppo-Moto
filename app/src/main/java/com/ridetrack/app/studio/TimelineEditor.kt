@@ -614,8 +614,15 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     Row(Modifier.horizontalScroll(scroll)) {
                         Spacer(Modifier.width(half))
                         Column(Modifier.width(w(plan.totalMs) + 52.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            // Markers
+                            // Markers, and the redline tags as red bars (tap one to remove it)
                             Box(Modifier.fillMaxWidth().height(10.dp)) {
+                                plan.redlines.forEach { r ->
+                                    Box(
+                                        Modifier.offset { IntOffset((r.startMs * pxPerMs).roundToInt(), 0) }.width(w(r.endMs - r.startMs)).height(10.dp)
+                                            .clip(RoundedCornerShape(3.dp)).background(Color(Tok.RED).copy(alpha = 0.8f))
+                                            .clickable(role = Role.Button, onClickLabel = "Remove redline") { vm.deleteRedline(r.id) },
+                                    )
+                                }
                                 plan.markers.forEach { m ->
                                     val sel = (s.pick as? TimelinePick.Marker)?.id == m.id
                                     Box(
@@ -844,6 +851,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             Tool(Icons.Rounded.AcUnit, "Freeze", n++) { vm.freeze() }
                             Tool(Icons.Rounded.ContentCut, "Split", n++) { vm.change("Split") { TimelineEdits.split(it, pos) } }
                             Tool(Icons.Rounded.Flag, "Marker", n++) { vm.addMarker() }
+                            if (plan.vibe.spec.redline) Tool(Icons.Rounded.Speed, "Tag redline", n++) { vm.tagRedline() }
                             Tool(Icons.Rounded.CropFree, "Safe zones", n++, on = safe) { safe = !safe }
                         }
                     }

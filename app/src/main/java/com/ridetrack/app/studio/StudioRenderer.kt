@@ -66,6 +66,8 @@ data class RenderInput(
     val brand: BrandKit? = null,
     /** Lean (degrees, + right) at a wall time; null where it isn't known. */
     val leanAt: (Long) -> Int? = { null },
+    /** How hard the engine revs (0..1) ms into a moment's clip; null where unknown. */
+    val revAt: (String, Long) -> Float? = { _, _ -> null },
 )
 
 /**

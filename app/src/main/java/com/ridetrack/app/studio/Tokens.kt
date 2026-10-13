@@ -195,6 +195,8 @@ data class VibeSpec(
     val grain: Boolean,
     /** The vignette's alpha at the frame's edge; 0 = none. */
     val vignette: Float,
+    /** The redline light (red pulses while the engine is at the redline): Speedtrap's. */
+    val redline: Boolean = false,
 )
 
 /** The defaults table. */
