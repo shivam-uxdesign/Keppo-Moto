@@ -159,6 +159,7 @@ import com.ridetrack.app.ui.moments.Thumb
 import com.ridetrack.app.ui.theme.RtColors
 import com.ridetrack.app.ui.theme.RtType
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -277,10 +278,16 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     val dragged by scroll.interactionSource.collectIsDraggedAsState()
     LaunchedEffect(pxPerMs) {
         scroll.scrollTo((pos * pxPerMs).roundToInt())
-        snapshotFlow { scroll.value }.collect { v ->
+        var lastSeek = 0L
+        snapshotFlow { scroll.value }.collectLatest { v ->
             if (!active.isPlaying) {
                 pos = (v / pxPerMs).toLong().coerceIn(0, current.totalMs)
                 vm.playheadMs = pos
+                // The time moves at once; the video jumps at most every 60 ms, and to where the
+                // finger stops (a jump on every pixel makes scrubbing heavy).
+                val wait = 60 - (android.os.SystemClock.uptimeMillis() - lastSeek)
+                if (wait > 0) delay(wait)
+                lastSeek = android.os.SystemClock.uptimeMillis()
                 if (exactOn) exact.seek(pos) else simple.seek(pos)
             }
         }
@@ -315,8 +322,10 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     // A different selection closes the transition picker.
     LaunchedEffect(s.pick) { if (s.pick != null) { cutAt = null; voiceOn = false }; clipTab = ClipTab.EDIT }
     // A take stops at the end of the Reel.
-    LaunchedEffect(s.recordingAt, pos) {
-        if (s.recordingAt != null && pos >= plan.totalMs - 60) { vm.stopTake(); active.pause(); active.volume = 1f }
+    // (Watched without reading the playhead here, so the whole editor isn't redrawn 30 times a second.)
+    LaunchedEffect(s.recordingAt) {
+        if (s.recordingAt == null) return@LaunchedEffect
+        snapshotFlow { pos }.collect { p -> if (p >= current.totalMs - 60) { vm.stopTake(); active.pause(); active.volume = 1f } }
     }
     // Two fingers tap: undo; three: redo. A short banner says what went.
     fun undoBanner(label: String?, redo: Boolean) { label?.let { tick(); flash = (if (redo) "Redo · " else "Undo · ") + it } }
@@ -573,7 +582,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             SmallIcon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "Pause" else "Play") { if (playing) active.pause() else active.play() }
             Text("‹", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "One frame back") { seekTo(pos - FRAME_MS) }.padding(horizontal = 8.dp))
             Text("›", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "One frame on") { seekTo(pos + FRAME_MS) }.padding(horizontal = 8.dp))
-            Text("${clock(pos)} / ${clock(plan.totalMs)}", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+            TimeLabel({ pos }, plan.totalMs, Modifier.weight(1f))
             SmallIcon(Icons.AutoMirrored.Rounded.Undo, "Undo", enabled = s.canUndo) { undoBanner(vm.undo(), false) }
             SmallIcon(Icons.AutoMirrored.Rounded.Redo, "Redo", enabled = s.canRedo) { undoBanner(vm.redo(), true) }
             SmallIcon(Icons.Rounded.History, "History", enabled = s.steps.isNotEmpty()) { historyOpen = true }
@@ -649,9 +658,10 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                     Modifier.offset { IntOffset((m.atMs * pxPerMs).roundToInt() - half, with(density) { 15.dp.toPx() }.roundToInt()) }
                                         .graphicsLayer { scaleX = k; scaleY = k; alpha = a }
                                         .size(22.dp).clip(RoundedCornerShape(6.dp))
-                                        .background(if (on) RtColors.Primary else if (m.chosen) Color(0xFF0B7377) else Color.Black.copy(alpha = 0.65f))
-                                        .border(1.5.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape(6.dp))
-                                        .clickable(role = Role.Button, onClickLabel = "Transition: ${m.kind.label}") {
+                                        // A plain cut: a faint mark, still tappable to give it a transition.
+                                        .background(if (on) RtColors.Primary else if (!m.plays) Color.Black.copy(alpha = 0.35f) else if (m.chosen) Color(0xFF0B7377) else Color.Black.copy(alpha = 0.65f))
+                                        .border(1.5.dp, Color.White.copy(alpha = if (m.plays || on) 0.9f else 0.4f), RoundedCornerShape(6.dp))
+                                        .clickable(role = Role.Button, onClickLabel = if (m.plays) "Transition: ${m.kind.label}" else "No transition: add one") {
                                             vm.pick(null); cutAt = m.segment; loopAt = m.atMs
                                         },
                                     contentAlignment = Alignment.Center,
@@ -764,7 +774,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 val cut = cutAt
                 val picked = s.pick
                 if (cut != null) {
-                    val tr = (plan.segments.getOrNull(cut) as? ClipSegment)?.transition ?: Transition()
+                    val tr = (plan.segments.getOrNull(cut) as? ClipSegment)?.transition ?: if (Cuts.plays(plan, cut)) Transition() else Transition(TransitionKind.CUT)
                     val at = plan.startOf(cut)
                     TransitionPicker(
                         tr,
@@ -857,7 +867,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     VoicePanel(
                         s.takes,
                         s.recordingAt,
-                        pos,
+                        { pos },
                         allowed = micAllowed,
                         onAsk = { askMic.launch(android.Manifest.permission.RECORD_AUDIO) },
                         onStart = {
@@ -1422,6 +1432,12 @@ private fun SafeZones() {
 
 private fun clock(ms: Long): String = String.format(Locale.US, "%d:%04.1f", ms / 60_000, (ms % 60_000) / 1000.0)
 
+/** The playhead's time and the length, redrawn on its own as the video plays. */
+@Composable
+private fun TimeLabel(pos: () -> Long, totalMs: Long, modifier: Modifier) {
+    Text("${clock(pos())} / ${clock(totalMs)}", style = RtType.caption, color = RtColors.TextSecondary, modifier = modifier, textAlign = TextAlign.Center)
+}
+
 /** Quick asks in the Ideas sheet; one ending in … is finished by the rider. */
 private val QUICK_ASKS = listOf("Funnier", "15 s", "A caption clip", "Only my voice", "Slow and cinematic", "Fewer cuts", "Open with…")
 
@@ -1567,6 +1583,9 @@ private fun BackTool(label: String, onClick: () -> Unit) {
     }
 }
 
+/** The picker's order: None (a plain cut) first, then the style's own, then the rest. */
+private val PICKER_ORDER = listOf(TransitionKind.CUT) + TransitionKind.entries.filter { it != TransitionKind.CUT }
+
 /** A mark for each transition, on the timeline and in the picker. */
 private val TRANSITION_GLYPH = mapOf(
     TransitionKind.STYLE to "✦", TransitionKind.CUT to "│", TransitionKind.FADE to "◐", TransitionKind.FLASH to "✺", TransitionKind.ZOOM to "⊕",
@@ -1580,7 +1599,7 @@ private val TRANSITION_GLYPH = mapOf(
 @Composable
 private fun TransitionPicker(tr: Transition, looping: Boolean, onPick: (Transition) -> Unit, onPreview: () -> Unit, onAll: () -> Unit, onDone: () -> Unit) {
     val list = rememberLazyListState()
-    LaunchedEffect(tr.kind) { list.animateScrollToItem((tr.kind.ordinal - 2).coerceAtLeast(0)) }
+    LaunchedEffect(tr.kind) { list.animateScrollToItem((PICKER_ORDER.indexOf(tr.kind) - 2).coerceAtLeast(0)) }
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         LazyRow(
             state = list,
@@ -1589,7 +1608,7 @@ private fun TransitionPicker(tr: Transition, looping: Boolean, onPick: (Transiti
             contentPadding = PaddingValues(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            items(TransitionKind.entries) { k ->
+            items(PICKER_ORDER) { k ->
                 val on = k == tr.kind
                 val z by animateFloatAsState(if (on) 1.2f else 0.9f, tween(200), label = "pick")
                 Box(

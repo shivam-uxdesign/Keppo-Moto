@@ -124,7 +124,7 @@ private val TRACK_NAMES = mapOf(TrackKind.CLIPS to "Your voice", TrackKind.DETAC
 internal fun VoicePanel(
     takes: List<VoiceTake>,
     recordingAt: Long?,
-    posMs: Long,
+    posMs: () -> Long,
     allowed: Boolean,
     onAsk: () -> Unit,
     onStart: () -> Unit,
@@ -143,7 +143,7 @@ internal fun VoicePanel(
                 Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = "Back", tint = RtColors.TextPrimary)
             }
             Text("Voice-over", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
-            recordingAt?.let { Text("● ${mmss((posMs - it).coerceAtLeast(0))}", style = RtType.bodyStrong, color = Color(0xFFFF4D5E)) }
+            recordingAt?.let { Text("● ${mmss((posMs() - it).coerceAtLeast(0))}", style = RtType.bodyStrong, color = Color(0xFFFF4D5E)) }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Box(

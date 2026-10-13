@@ -2,8 +2,11 @@ package com.ridetrack.app.studio
 
 /** Where transitions play: the same rule for the made video, the editor's preview and the timeline's marks. Pure. */
 object Cuts {
-    /** A cut that shows a transition: where it is (ms into the Reel), which one, how long, and whether the rider chose it. */
-    data class Mark(val segment: Int, val atMs: Long, val kind: TransitionKind, val ms: Long, val chosen: Boolean)
+    /**
+     * A cut: where it is (ms into the Reel), which transition, how long, whether the rider chose
+     * it, and whether it [plays] one (false: a plain cut).
+     */
+    data class Mark(val segment: Int, val atMs: Long, val kind: TransitionKind, val ms: Long, val chosen: Boolean, val plays: Boolean = true)
 
     /** A transition between [a] and [b]: always, unless both are clips of the same script section. */
     fun boundary(a: Segment, b: Segment): Boolean =
@@ -37,9 +40,13 @@ object Cuts {
         )
     }
 
-    /** Every cut that plays a transition, in order. */
-    fun marks(plan: StudioPlan): List<Mark> = (1..plan.segments.lastIndex).filter { plays(plan, it) }.map { i ->
+    /**
+     * Every cut, in order, so each can be tapped to choose its transition. One that plays nothing
+     * (inside a script section, or set to None) has [Mark.plays] false and kind [TransitionKind.CUT].
+     */
+    fun marks(plan: StudioPlan): List<Mark> = (1..plan.segments.lastIndex).map { i ->
         val t = (plan.segments[i] as? ClipSegment)?.transition
-        Mark(i, plan.startOf(i), t?.kind ?: TransitionKind.STYLE, t?.ms(plan.vibe) ?: plan.vibe.transitionMs, chosen = t != null)
+        val on = plays(plan, i)
+        Mark(i, plan.startOf(i), if (on) t?.kind ?: TransitionKind.STYLE else TransitionKind.CUT, t?.ms(plan.vibe) ?: plan.vibe.transitionMs, chosen = t != null, plays = on)
     }
 }

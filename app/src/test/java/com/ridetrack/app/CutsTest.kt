@@ -30,13 +30,16 @@ class CutsTest {
         val p = plan()
         assertFalse(Cuts.plays(p, 1))
         assertTrue(Cuts.plays(p, 2))
-        assertEquals(listOf(2, 3, 4), Cuts.marks(p).map { it.segment })
-        assertEquals(5_000L, Cuts.marks(p).first().atMs)
+        assertEquals(listOf(2, 3, 4), Cuts.marks(p).filter { it.plays }.map { it.segment })
+        assertEquals(5_000L, Cuts.marks(p).first { it.plays }.atMs)
+        // Every cut has a mark, so a plain one can be given a transition.
+        assertEquals(listOf(1, 2, 3, 4), Cuts.marks(p).map { it.segment })
+        assertEquals(TransitionKind.CUT, Cuts.marks(p).first().kind)
     }
 
     @Test fun `a chosen transition shows inside a section, a chosen cut hides one`() {
         val p = ClipTools.transition(ClipTools.transition(plan(), 1, Transition(TransitionKind.FLASH)), 2, Transition(TransitionKind.CUT))
-        val marks = Cuts.marks(p)
+        val marks = Cuts.marks(p).filter { it.plays }
         assertEquals(listOf(1, 3, 4), marks.map { it.segment })
         assertTrue(marks.first().chosen)
         assertEquals(TransitionKind.FLASH, marks.first().kind)

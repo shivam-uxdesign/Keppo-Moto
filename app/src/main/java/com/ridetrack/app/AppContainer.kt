@@ -37,6 +37,9 @@ class AppContainer(context: Context) {
     private val database = RideTrackDatabase.create(appContext)
     val bikes = BikeRepository(database.bikeDao())
     val rides = RideRepository(database.rideDao())
+
+    /** Names rides by where they went ("13 October | Bandra to Lonavala"). */
+    val places = com.ridetrack.app.ride.RidePlaces(appContext, rides)
     val routes = RouteCache(rides)
     val moments = MomentRepository(appContext, database.momentDao())
     val momentsHub = MomentsHub()
@@ -58,7 +61,11 @@ class AppContainer(context: Context) {
             backUpSoon()
             transcribeSoon()
             appScope.launch { runCatching { fuel.checkRide(id) } }
-            appScope.launch { journal.onRideSaved(id) }
+            appScope.launch {
+                // Named by place first (when the phone can look it up), so the Journal gets the name.
+                runCatching { places.nameRide(id) }
+                journal.onRideSaved(id)
+            }
             // Studio's suggestions for the ride, ready by the time the rider looks.
             runCatching { com.ridetrack.app.studio.AfterRideWorker.schedule(appContext, id) }
                 .onFailure { errors.record("Studio after ride", "Couldn't plan the suggestions after the ride", it) }

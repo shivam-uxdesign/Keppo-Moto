@@ -34,6 +34,8 @@ class RideTrackApp : Application() {
         container.crashAlerts.start()
         PurgeWorker.schedule(this)
         container.appScope.launch { container.trash.purgeExpired() }
+        // Rides saved offline get their place names now.
+        container.appScope.launch { runCatching { container.places.catchUp(container.rides.observeCompleted().first()) } }
         container.appScope.launch { container.reels.purgeExpired() }
         container.transcribeSoon()
         // Reels still waiting when the app was closed are made now.

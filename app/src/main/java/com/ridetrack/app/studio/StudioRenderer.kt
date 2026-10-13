@@ -279,7 +279,6 @@ class StudioRenderer(private val context: Context) {
             .setEffects(Effects(emptyList(), fx))
             .build()
 
-    private val lengths = HashMap<String, Long>()
 
     /**
      * The preview player needs every piece's full length up front (making the video doesn't):
@@ -297,7 +296,7 @@ class StudioRenderer(private val context: Context) {
         return EditedMediaItemSequence(items, seq.isLooping)
     }
 
-    private fun lengthMs(u: Uri): Long = lengths.getOrPut(u.toString()) {
+    private fun lengthMs(u: Uri): Long = LENGTHS.getOrPut(u.toString()) {
         runCatching {
             val r = android.media.MediaMetadataRetriever()
             try {
@@ -550,6 +549,9 @@ class StudioRenderer(private val context: Context) {
     }
 
     private companion object {
+        /** Each file's length (ms), read once per file for the preview. */
+        val LENGTHS = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
         const val TAG = "Studio"
         const val MUSIC_LEVEL = 0.7f
 

@@ -134,7 +134,7 @@ data class ClipColor(
 
 /** The transitions that can go on a cut. */
 enum class TransitionKind(val label: String) {
-    STYLE("Style"), CUT("Cut"), FADE("Fade"), FLASH("Flash"), ZOOM("Zoom punch"), WHIP("Whip"), GLITCH("Glitch"),
+    STYLE("Style"), CUT("None"), FADE("Fade"), FLASH("Flash"), ZOOM("Zoom punch"), WHIP("Whip"), GLITCH("Glitch"),
     SLASH("Slash"), SHUTTER("Shutter"), SUN("Sun"), CARD("Card"),
 }
 
