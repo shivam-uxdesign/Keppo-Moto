@@ -47,7 +47,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
     /** The clip's speech as timed lines; empty when nothing clear was said. */
     suspend fun captions(audio: File, mime: String = "audio/mp4"): List<CaptionLine> {
         val bytes = audio.readBytes()
-        val text = call(json = true) { m ->
+        val text = call(json = true, timeoutMs = timeoutFor(bytes.size.toLong())) { m ->
             m.generateContent(content { inlineData(bytes, mime); text(StudioText.CAPTIONS_PROMPT) }).text.orEmpty()
         }
         return StudioText.parseLines(text) ?: emptyList()
@@ -67,7 +67,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
     suspend fun captionsBatch(audios: List<File>): List<List<CaptionLine>?> {
         if (audios.isEmpty()) return emptyList()
         val parts = audios.map { it.readBytes() }
-        val text = call(json = true, models = FirebaseTranscriber.LITE + FirebaseTranscriber.MODELS) { m ->
+        val text = call(json = true, models = FirebaseTranscriber.LITE + FirebaseTranscriber.MODELS, timeoutMs = timeoutFor(parts.sumOf { it.size.toLong() })) { m ->
             m.generateContent(
                 content {
                     parts.forEachIndexed { i, bytes ->
@@ -97,7 +97,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
 
     /** A style that approximates a reference video's look and pace, from a few of its frames (JPEG). */
     suspend fun styleFromFrames(frames: List<ByteArray>, id: String): StudioStyle? {
-        val text = call(json = true, temperature = 0.4f, timeoutMs = 120_000) { m ->
+        val text = call(json = true, temperature = 0.4f, timeoutMs = timeoutFor(frames.sumOf { it.size.toLong() }, base = 120_000)) { m ->
             m.generateContent(
                 content {
                     frames.forEach { inlineData(it, "image/jpeg") }
@@ -110,7 +110,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
 
     /** What can be seen in each clip, from two frames of each (one request for several clips). */
     suspend fun seen(frames: List<List<ByteArray>>): List<List<String>>? {
-        val text = call(json = true, models = FirebaseTranscriber.LITE + FirebaseTranscriber.MODELS, timeoutMs = 90_000) { m ->
+        val text = call(json = true, models = FirebaseTranscriber.LITE + FirebaseTranscriber.MODELS, timeoutMs = timeoutFor(frames.sumOf { f -> f.sumOf { it.size.toLong() } }, base = 90_000)) { m ->
             m.generateContent(
                 content {
                     frames.forEachIndexed { i, fs ->
@@ -181,6 +181,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         var last: Exception? = null
         var busy: FirebaseTranscriber.Busy? = null
         var refreshed = false
+        val hiccups = HashSet<String>()
         while (true) {
             val name = queue.removeFirstOrNull() ?: if (!remoteTried) {
                 remoteTried = true
@@ -204,9 +205,8 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
                 tools = tools,
             )
             try {
-                // A hung request would leave Studio waiting forever.
-                val reply = lookupRetries { kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { block(model) } }
-                    ?: throw com.ridetrack.app.transcribe.GeminiUnreachable(timedOut = true, java.io.IOException("Gemini didn't answer within ${timeoutMs / 1000} s"))
+                // Sent again through dropped connections; a hung request would leave Studio waiting forever.
+                val reply = steady(timeoutMs) { block(model) }
                 return reply.also { onWorking(name) }
             } catch (e: QuotaExceededException) {
                 // Each model has its own free allowance: remember this one is spent, try the next.
@@ -220,7 +220,16 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
                 // Rejected pass: get a fresh one and try this model again, once.
                 if (AppCheckSetup.isRejected(e) && !refreshed) {
                     refreshed = true
-                    if (AppCheckSetup.refresh()) { tried.remove(name); queue.addFirst(name); continue }
+                    // The pass is fetched over the same shaky connection: once more when the internet is back.
+                    if (AppCheckSetup.refresh() || (com.ridetrack.app.transcribe.GeminiNet.awaitOnline(60_000) && AppCheckSetup.refresh())) {
+                        tried.remove(name); queue.addFirst(name); continue
+                    }
+                }
+                // Gemini's side is briefly overloaded: this model once more a few seconds later, then the next.
+                if (isServerHiccup(e) && !FirebaseTranscriber.isMissingModel(e)) {
+                    last = e
+                    if (hiccups.add(name)) { kotlinx.coroutines.delay(4_000); tried.remove(name); queue.addFirst(name) }
+                    continue
                 }
                 if (!FirebaseTranscriber.isMissingModel(e)) throw e
                 last = e
@@ -232,29 +241,55 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
 }
 
 /**
- * Some phones and networks fail to find Gemini's address on the first try and find it seconds
- * later (a slow or filtering DNS). Before calling it unreachable, [block] is tried again after
- * 1.5, 4 and 8 s while the failure is about finding or connecting to the server.
+ * Sends one Gemini request through a shaky connection (mobile data while moving: a tower or 4G/5G
+ * switch, a moment with no signal, a slow address lookup). When the request is cut off on the way,
+ * it waits a little, then for Android to say the internet works again (up to [offlineMs]), and sends
+ * it again: up to [waitsMs].size times. A reply slower than [timeoutMs] isn't sent again here (the
+ * caller sends less instead); it ends as [GeminiUnreachable] with timedOut, as does a connection
+ * that never comes back. Gemini's own answers (a refusal, a spent quota) pass straight through.
  */
-internal suspend fun <T> lookupRetries(block: suspend () -> T): T {
-    for (wait in LOOKUP_WAITS_MS) {
+internal suspend fun <T : Any> steady(
+    timeoutMs: Long,
+    waitsMs: List<Long> = DROP_WAITS_MS,
+    offlineMs: Long = OFFLINE_WAIT_MS,
+    block: suspend () -> T,
+): T {
+    var drops = 0
+    while (true) {
         try {
-            return block()
+            return kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { block() }
+                ?: throw com.ridetrack.app.transcribe.GeminiUnreachable(timedOut = true, java.io.IOException("Gemini didn't answer within ${timeoutMs / 1000} s"))
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
+        } catch (e: com.ridetrack.app.transcribe.GeminiUnreachable) {
+            throw e
         } catch (e: Exception) {
-            if (!isLookupFailure(e)) throw e
-            kotlinx.coroutines.delay(wait)
+            if (!com.ridetrack.app.transcribe.GeminiNet.isDropped(e)) throw e
+            if (drops == waitsMs.size) throw com.ridetrack.app.transcribe.GeminiUnreachable(false, e)
+            kotlinx.coroutines.delay(waitsMs[drops++])
+            if (!com.ridetrack.app.transcribe.GeminiNet.awaitOnline(offlineMs)) throw com.ridetrack.app.transcribe.GeminiUnreachable(false, e)
+            com.ridetrack.app.transcribe.GeminiNet.drops.incrementAndGet()
         }
     }
-    return block()
 }
 
-/** The server's address wasn't found, or it couldn't be connected to (not a slow answer). */
-internal fun isLookupFailure(e: Throwable): Boolean =
-    generateSequence(e) { it.cause }.take(8).any { it is java.net.UnknownHostException || it is java.net.ConnectException }
+/** How long to give a request that sends [bytes] of sound or pictures: a minute, plus time to upload them slowly (about 24 kB/s, weak mobile data), up to 5 minutes. */
+internal fun timeoutFor(bytes: Long, base: Long = REQUEST_TIMEOUT_MS): Long =
+    (base + bytes * 4 / 3 / 24).coerceAtMost(MAX_TIMEOUT_MS)
 
-private val LOOKUP_WAITS_MS = listOf(1_500L, 4_000L, 8_000L)
+/** Gemini's side is briefly overloaded or failed (HTTP 500/503): worth one more try a few seconds later. */
+internal fun isServerHiccup(e: Throwable): Boolean {
+    val t = generateSequence(e) { it.cause }.take(4).joinToString(" ") { it.message.orEmpty() }
+    return Regex("\\b(500|502|503|504)\\b|overloaded|UNAVAILABLE|INTERNAL|try again later", RegexOption.IGNORE_CASE).containsMatchIn(t)
+}
+
+/** After a cut-off request: 2, 5, 10, 20 and 30 s, each followed by waiting for the internet. */
+private val DROP_WAITS_MS = listOf(2_000L, 5_000L, 10_000L, 20_000L, 30_000L)
+
+/** How long to wait for the internet to come back before giving up on a request. */
+private const val OFFLINE_WAIT_MS = 3 * 60_000L
+
+private const val MAX_TIMEOUT_MS = 5 * 60_000L
 
 private const val REQUEST_TIMEOUT_MS = 60_000L
 

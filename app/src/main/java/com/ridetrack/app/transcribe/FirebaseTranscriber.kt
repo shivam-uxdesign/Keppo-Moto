@@ -22,8 +22,8 @@ class FirebaseTranscriber {
         val model = Firebase.ai(backend = GenerativeBackend.googleAI())
             .generativeModel(modelName = modelName, generationConfig = generationConfig { temperature = 0f })
         val response = try {
-            // A first failed address lookup is often fine seconds later: try again before giving up.
-            com.ridetrack.app.studio.lookupRetries {
+            // Sent again when the connection drops on the way (mobile data while moving).
+            com.ridetrack.app.studio.steady(com.ridetrack.app.studio.timeoutFor(audio.size.toLong())) {
                 model.generateContent(
                     content {
                         inlineData(audio, mime)

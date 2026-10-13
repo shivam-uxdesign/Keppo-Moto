@@ -95,10 +95,16 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 val saved = com.ridetrack.app.studio.StudioText.load(m.file)
                 if (saved != null) { c.moments.setTranscript(m.id, saved.joinToString(" ") { it.text }); rides += m.rideId } else if (m.file.exists()) todo += m
             }
-            // Several clips per request: the free tier allows only a few requests a day.
+            // Several clips per request: the free tier allows only a few requests a day. Fewer on
+            // mobile data (slow uploads, more drops); halved again when Gemini answers too slowly.
+            var most = if (GeminiNet.metered(applicationContext)) METERED_CLIPS else MAX_CLIPS
             var left = todo.size
-            for (batch in batches(todo)) {
+            val queue = ArrayDeque(batches(todo, most))
+            val drops = GeminiNet.drops.get()
+            while (queue.isNotEmpty()) {
                 if (isStopped) break
+                val batch = queue.removeFirst()
+                if (batch.size > most) { batch.chunked(most).asReversed().forEach { queue.addFirst(it) }; continue }
                 val audios = batch.map { m -> m to File(applicationContext.cacheDir, "transcribe-${m.id}.m4a") }
                 try {
                     val usable = audios.filter { (m, f) -> ClipAudio.extract(m.file, f) && f.length() <= MAX_BYTES }
@@ -110,12 +116,21 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         c.moments.setTranscript(m.id, lines.joinToString(" ") { it.text })
                         rides += m.rideId
                     }
+                } catch (e: GeminiUnreachable) {
+                    // Too slow for this connection: the same clips in smaller requests (one clip can't be split).
+                    if (!e.timedOut || batch.size == 1) throw e
+                    most = (batch.size / 2).coerceAtLeast(1)
+                    batch.chunked(most).asReversed().forEach { queue.addFirst(it) }
+                    continue
                 } finally {
                     audios.forEach { it.second.delete() }
                 }
                 left -= batch.size
                 t.setWaiting(left)
                 delay(BETWEEN_MILLIS)
+            }
+            (GeminiNet.drops.get() - drops).takeIf { it > 0 }?.let { n ->
+                c.errors.warn("Transcripts", "The connection dropped $n time${if (n > 1) "s" else ""} while sending clips; they were sent again when it came back")
             }
             t.setError(null)
             Result.success()
@@ -130,11 +145,12 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         } catch (e: Exception) {
             c.errors.record("Transcripts", "Couldn't transcribe", e)
             t.setError(
-                if (AppCheckSetup.isRejected(e)) "Firebase didn't accept this phone (App Check). Add the debug token shown below in Firebase › App Check › Manage debug tokens."
-                else if (GeminiNet.isUnreachable(e)) GeminiNet.message(e)
+                if (GeminiNet.isUnreachable(e)) GeminiNet.message(e)
+                else if (AppCheckSetup.isRejected(e)) "Firebase didn't accept this phone (App Check). Add the debug token shown below in Firebase › App Check › Manage debug tokens."
                 else "Couldn't transcribe: ${e.message}",
             )
-            t.model = null
+            // A dropped connection says nothing about the model: keep the one that worked.
+            if (!GeminiNet.isUnreachable(e)) t.model = null
             Result.retry()
         } finally {
             // Keppo Journal and the backup pick up the new transcripts.
@@ -143,15 +159,15 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         }
     }
 
-    /** Up to 8 clips per request, and not more sound than Gemini takes inline. */
-    private fun batches(list: List<com.ridetrack.app.moments.Moment>): List<List<com.ridetrack.app.moments.Moment>> {
+    /** Up to [most] clips per request, and not more sound than Gemini takes inline. */
+    private fun batches(list: List<com.ridetrack.app.moments.Moment>, most: Int): List<List<com.ridetrack.app.moments.Moment>> {
         val out = ArrayList<List<com.ridetrack.app.moments.Moment>>()
         var cur = ArrayList<com.ridetrack.app.moments.Moment>()
         var bytes = 0L
         for (m in list) {
             // About 12 kB of sound per second of video.
             val est = (m.durationMillis ?: 20_000) * 12
-            if (cur.isNotEmpty() && (cur.size == 8 || bytes + est > MAX_BATCH_BYTES)) { out += cur; cur = ArrayList(); bytes = 0 }
+            if (cur.isNotEmpty() && (cur.size >= most || bytes + est > MAX_BATCH_BYTES)) { out += cur; cur = ArrayList(); bytes = 0 }
             cur += m
             bytes += est
         }
@@ -162,6 +178,9 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     private companion object {
         const val MAX_BATCH_BYTES = 9L * 1024 * 1024
         const val BETWEEN_MILLIS = 5_000L
+        const val MAX_CLIPS = 8
+        /** On mobile data: about 1 MB of sound per request. */
+        const val METERED_CLIPS = 4
         /** Gemini takes up to 20 MB inline; base64 adds a third. */
         const val MAX_BYTES = 14L * 1024 * 1024
     }

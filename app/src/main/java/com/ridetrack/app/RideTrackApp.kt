@@ -21,6 +21,7 @@ class RideTrackApp : Application() {
         keepCrashTrace()
         AppCheckSetup.install(this)
         com.ridetrack.app.transcribe.GeminiQuota.init(this)
+        com.ridetrack.app.transcribe.GeminiNet.appContext = this
         container = AppContainer(this)
         // A crash is written to the error log (with its stack trace) before the app closes.
         val previous = Thread.getDefaultUncaughtExceptionHandler()

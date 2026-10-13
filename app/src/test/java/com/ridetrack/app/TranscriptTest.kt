@@ -56,13 +56,59 @@ class TranscriptTest {
     }
 
     @org.junit.Test
-    fun `a failed address lookup is tried again, other errors are not`() = kotlinx.coroutines.runBlocking {
+    fun `a request cut off by the connection is sent again, other errors are not`() = kotlinx.coroutines.runBlocking {
+        val waits = listOf(1L, 1L, 1L)
         var n = 0
-        val ok = com.ridetrack.app.studio.lookupRetries { n++; if (n < 3) throw java.io.IOException("x", java.net.UnknownHostException("host")) else "fine" }
+        val ok = com.ridetrack.app.studio.steady(5_000, waits) {
+            n++
+            when (n) {
+                1 -> throw java.io.IOException("x", java.net.UnknownHostException("host"))
+                2 -> throw RuntimeException("Something unexpected happened.", java.net.SocketException("Software caused connection abort"))
+                else -> "fine"
+            }
+        }
         kotlin.test.assertEquals("fine", ok)
         kotlin.test.assertEquals(3, n)
         var m = 0
-        kotlin.test.assertFailsWith<IllegalStateException> { com.ridetrack.app.studio.lookupRetries<String> { m++; throw IllegalStateException("bad answer") } }
+        kotlin.test.assertFailsWith<IllegalStateException> { com.ridetrack.app.studio.steady<String>(5_000, waits) { m++; throw IllegalStateException("bad answer") } }
         kotlin.test.assertEquals(1, m)
+        // A spent quota is Gemini's answer, not the connection.
+        var q = 0
+        kotlin.test.assertFailsWith<com.ridetrack.app.transcribe.FirebaseTranscriber.Busy> { com.ridetrack.app.studio.steady<String>(5_000, waits) { q++; throw com.ridetrack.app.transcribe.FirebaseTranscriber.Busy("quota") } }
+        kotlin.test.assertEquals(1, q)
+    }
+
+    @org.junit.Test
+    fun `a connection that never comes back, or a reply too slow, ends as unreachable`() = kotlinx.coroutines.runBlocking {
+        var n = 0
+        val gone = kotlin.test.assertFailsWith<com.ridetrack.app.transcribe.GeminiUnreachable> {
+            com.ridetrack.app.studio.steady<String>(5_000, listOf(1L, 1L)) { n++; throw java.io.EOFException("unexpected end of stream") }
+        }
+        kotlin.test.assertEquals(3, n)
+        kotlin.test.assertTrue(!gone.timedOut)
+        var s = 0
+        val slow = kotlin.test.assertFailsWith<com.ridetrack.app.transcribe.GeminiUnreachable> {
+            com.ridetrack.app.studio.steady<String>(50, listOf(1L)) { s++; kotlinx.coroutines.delay(1_000); "late" }
+        }
+        kotlin.test.assertTrue(slow.timedOut)
+        kotlin.test.assertEquals(1, s) // a slow reply isn't sent again here: the caller sends less
+    }
+
+    @org.junit.Test
+    fun `timeouts grow with what is sent, and server hiccups are told apart`() {
+        kotlin.test.assertEquals(60_000L, com.ridetrack.app.studio.timeoutFor(0))
+        // 2 MB of sound on weak mobile data: well over the old flat minute, under the 5-minute cap.
+        val twoMb = com.ridetrack.app.studio.timeoutFor(2L * 1024 * 1024)
+        kotlin.test.assertTrue(twoMb in 150_000L..200_000L, "$twoMb")
+        kotlin.test.assertEquals(300_000L, com.ridetrack.app.studio.timeoutFor(50L * 1024 * 1024))
+        kotlin.test.assertTrue(com.ridetrack.app.studio.isServerHiccup(RuntimeException("Server error 503: The model is overloaded")))
+        kotlin.test.assertTrue(!com.ridetrack.app.studio.isServerHiccup(RuntimeException("Model not found")))
+        val n = com.ridetrack.app.transcribe.GeminiNet
+        kotlin.test.assertTrue(n.isDropped(RuntimeException("x", java.net.SocketException("Connection reset"))))
+        kotlin.test.assertTrue(!n.isDropped(com.ridetrack.app.transcribe.FirebaseTranscriber.Busy("quota")))
+        kotlin.test.assertTrue(!n.isDropped(java.io.FileNotFoundException("clip.m4a")))
+        // The failure from the earlier try, kept as suppressed, still counts.
+        val e = IllegalStateException("x").apply { addSuppressed(java.net.UnknownHostException("h")) }
+        kotlin.test.assertTrue(n.isUnreachable(e))
     }
 }
