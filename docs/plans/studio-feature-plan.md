@@ -988,3 +988,87 @@ There's one preview in the editor; it never switches. It replaces both the exact
 - **Preview:** Split, Blur and Luma fade show in the editor on Android 13+ (the same shader). Android 12 shows Blur, and older phones a fade to black instead.
 - **Frame checker:** draws all of these, with the shader done pixel by pixel. Unit tests: `PictureCutsTest`.
 
+## Production readiness: audit and Play Store launch (planned 13 Oct, not started)
+
+The rider is happy with the app. Next: a full UI, UX and code audit, then a global launch on Google Play. Plan agreed; the inventory starts when the rider says go.
+
+### Decisions
+- **App ID:** `com.keppo.moto` (permanent once uploaded; changed before the first upload).
+- **SMS from day 1:**
+  - **Crash texts (`SEND_SMS`):** declared under Play's "Physical safety/emergency alerts" exception, in the Permissions Declaration Form with a video. Safety is made prominent in onboarding and the listing so it reads as a core feature.
+  - **Fuel log (`READ_SMS`):** declared under "SMS-based money management". Only payment SMS are read, on the phone, never uploaded; the audit checks this.
+  - `CALL_PHONE` isn't restricted.
+  - **No SMS fallback built.** If Google rejects either one, the rider says so; then a server SMS (DLT registration in India) or the SMS User Consent API.
+- **Crash alert screen, in order:**
+  1. Full-screen alert where allowed.
+  2. Otherwise, with "Display over other apps" on, the alert screen opens directly as a modal over any app and over the lock screen.
+  3. Otherwise a loud, high-priority notification with the countdown.
+  - The countdown and texts run the same in every case.
+- **Paid version:**
+  - A subscription through Google Play Billing, with a 1-week free trial.
+  - **Locked:** Studio (Reels).
+  - **Free:** everything else (rides, moments, pop-up, safety, fuel, journal, ride cards).
+  - **Restore:** the purchase belongs to the Google account; checked on every launch, plus a Restore purchase button in Settings.
+  - **Prices:** global $4.99 a month / $34.99 a year; India ₹299 a month / ₹1,999 a year.
+  - **Launch price:** sold as a launch price, raised later for new subscribers only; existing subscribers keep theirs (Play's legacy price).
+  - **No fake struck-out prices:** these are dark patterns under India's 2023 rules and EU price rules.
+  - **Still open:** what free riders see of Studio (one free Reel, a watermark, or locked screens).
+- **Gemini cost cap:**
+  - About $0.25 a day and $2 a month per paid rider (under half the monthly price); a smaller cap for free features that use Gemini.
+  - Measured from Gemini's own token counts. At the cap: "You've made a lot today, more tomorrow".
+  - Enforced by a small server function with an invisible anonymous sign-in, which also verifies purchases and hears renewals and cancellations.
+  - The rider will revisit the numbers.
+- **Crash reporting:** Firebase Crashlytics. EU and UK riders are asked first.
+- **Face and plate blur:** after launch.
+- **Music:** riders add their own; nothing is bundled (checked). The Terms of Use make riders responsible for music rights.
+- **Developer account:** personal. The rider finds 12+ testers for the 14-day closed test.
+- **Release:** global, in English. Text kept ready for translation later.
+
+### Workstreams
+1. **Inventory** (no fixes):
+   - every screen and flow
+   - every permission and why
+   - where each piece of data goes, including which features use Gemini
+   - starting numbers: app size, start-up time, battery per riding hour, crashes
+2. **Play and legal readiness:**
+   - **Platform rules:** target API (check the current rule; likely Android 16), 16 KB page size for MapLibre's native code, an app bundle signed with the rider's own release key (Play App Signing), and versioning.
+   - **Play Console forms:** foreground service declarations with videos (location, camera, microphone, data sync, media processing), the SMS and full-screen-alert declarations, data safety, content rating, target audience 18+, reviewer instructions for hardware features, and EU trader status (public address: consider a business address).
+   - **Legal:** the privacy policy (GDPR and UK, CCPA, LGPD, India DPDP), Terms of Use, data deletion in the app, the Gemini disclosure and consent, and reporting of bad AI output.
+   - **Licences:** fonts, map tiles and their credit line, and an open-source licences screen.
+   - **Store listing:** icon, feature graphic, screenshots and copy.
+3. **Code audit:**
+   - **Correctness and crash risks:** low storage and battery, calls mid-ride, permissions revoked mid-ride, Android killing the app.
+   - **Resource handling:** releasing players, video decoders, camera and bitmaps; cleaning up caches.
+   - **Background work and data:** Android 14 and 15 background rules and time limits; database upgrades tested on real old data.
+   - **Release build:** test it specifically (R8 shrinking with Media3, MapLibre and Firebase).
+   - **Security:**
+     - App Check with Play Integrity
+     - no secrets in the app
+     - only the needed components open to other apps
+     - personal data kept out of logs and backups
+   - **Housekeeping:** dead code, lint at 0 warnings, missing tests (ride recording, crash alert, saving).
+4. **UX audit:**
+   - **First run:** onboarding and asking for permissions, including saying no.
+   - **States:** empty, loading, error and offline.
+   - **Riding safety:** glanceable with gloves on, no taps needed while moving.
+   - **Copy and deleting:** undo or confirm on every delete, and consistent copy.
+   - **Accessibility:** TalkBack, 48 dp targets, contrast, text at 200%, reduce motion.
+   - **Screens:** small phones, tablets and foldables, landscape, and edge-to-edge.
+5. **UI audit:** design-system consistency; every screen captured as images for the rider to review (screenshot tests, if the tool can be downloaded here).
+6. **New builds:**
+   - **App ID** change.
+   - **Crash alert** fallbacks.
+   - **Subscription:** paywall, trial and restore.
+   - **Server function:** cost cap and purchase checks.
+   - **Crashlytics** with consent.
+   - **Legal screens:** data deletion, the Gemini consent, AI reporting and licences.
+7. **Release:**
+   - findings report (blocker, major, minor), reviewed by the rider before fixing
+   - fixes in batches
+   - a signed bundle to a closed test (Play's pre-launch report runs it on real devices)
+   - 14 days with 12+ testers
+   - production
+
+### What the rider does
+Create and keep the release key (walked through), click through the Play Console, record the declaration videos, find testers, test on the phone. Claude prepares every form's answers, the policy texts and the listing copy.
+
