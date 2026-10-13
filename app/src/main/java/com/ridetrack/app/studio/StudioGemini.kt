@@ -205,7 +205,7 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
             )
             try {
                 // A hung request would leave Studio waiting forever.
-                val reply = kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { block(model) }
+                val reply = lookupRetries { kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { block(model) } }
                     ?: throw com.ridetrack.app.transcribe.GeminiUnreachable(timedOut = true, java.io.IOException("Gemini didn't answer within ${timeoutMs / 1000} s"))
                 return reply.also { onWorking(name) }
             } catch (e: QuotaExceededException) {
@@ -230,6 +230,31 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         throw busy ?: last ?: IllegalStateException("no Gemini model")
     }
 }
+
+/**
+ * Some phones and networks fail to find Gemini's address on the first try and find it seconds
+ * later (a slow or filtering DNS). Before calling it unreachable, [block] is tried again after
+ * 1.5, 4 and 8 s while the failure is about finding or connecting to the server.
+ */
+internal suspend fun <T> lookupRetries(block: suspend () -> T): T {
+    for (wait in LOOKUP_WAITS_MS) {
+        try {
+            return block()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (!isLookupFailure(e)) throw e
+            kotlinx.coroutines.delay(wait)
+        }
+    }
+    return block()
+}
+
+/** The server's address wasn't found, or it couldn't be connected to (not a slow answer). */
+internal fun isLookupFailure(e: Throwable): Boolean =
+    generateSequence(e) { it.cause }.take(8).any { it is java.net.UnknownHostException || it is java.net.ConnectException }
+
+private val LOOKUP_WAITS_MS = listOf(1_500L, 4_000L, 8_000L)
 
 private const val REQUEST_TIMEOUT_MS = 60_000L
 

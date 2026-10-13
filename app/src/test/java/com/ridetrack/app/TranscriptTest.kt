@@ -54,4 +54,15 @@ class TranscriptTest {
         kotlin.test.assertTrue(n.message(com.ridetrack.app.transcribe.GeminiUnreachable(true, null)).startsWith("Gemini took too long"))
         kotlin.test.assertTrue(!n.isUnreachable(RuntimeException("Quota exceeded")))
     }
+
+    @org.junit.Test
+    fun `a failed address lookup is tried again, other errors are not`() = kotlinx.coroutines.runBlocking {
+        var n = 0
+        val ok = com.ridetrack.app.studio.lookupRetries { n++; if (n < 3) throw java.io.IOException("x", java.net.UnknownHostException("host")) else "fine" }
+        kotlin.test.assertEquals("fine", ok)
+        kotlin.test.assertEquals(3, n)
+        var m = 0
+        kotlin.test.assertFailsWith<IllegalStateException> { com.ridetrack.app.studio.lookupRetries<String> { m++; throw IllegalStateException("bad answer") } }
+        kotlin.test.assertEquals(1, m)
+    }
 }
