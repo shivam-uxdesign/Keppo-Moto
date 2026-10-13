@@ -631,3 +631,67 @@ Tests:
 - The long reel's length range.
 
 Not in this round (raised earlier): joining two rides from the same day into one long reel, and a week's vlog.
+
+## Series, and the rider's picks from "What else" (planned 13 Oct, not built)
+
+Rider's answers: yes to 1, 2, 3, 5, 6, 7, 8, 9 and 11; maybe to 10; no to 4 (rough clips look fine on Reels, so none are left out). Build in this order after the round above (long reel, variations, Make all, top 3). Ask before the APK.
+
+### A. Series folders
+- **Several series at once,** each with an on/off switch. They run alongside ordinary Reels that belong to no series.
+- **Set up once:**
+  - name
+  - what the series is, in the rider's words (Gemini's brief)
+  - format and length range
+  - how many per ride: 1, or every moment that fits
+  - look: style, transitions, text and captions, intro card with "Ep N", outro, cover template, caption template
+- **After each ride:** one Gemini pass per active series, with its brief and the ride's clips.
+  - It makes the episodes that fit, automatically.
+  - Or it says "Nothing for <series> today".
+- **Clips can be shared:** a clip may be used by a series episode and by an ordinary idea. On the ride's page, series episodes sit at the top with a series badge.
+- **Your Reels › one folder per series:**
+  - episodes in order, each marked Ready / Posted / Draft
+  - the number is given when shared
+  - a header with the brief, the look and "Make next episode"
+- **Shared look:** a change in one episode stays in that episode unless "Use for the whole series" is tapped. Then unposted episodes are updated too.
+- **Learning per series:** notes and how each episode did shape only that series.
+- **Suggest a series:** when several Reels look alike (same kind of moment, format and style), suggest "Make these a series?". It's set up with a brief Gemini writes from those Reels, which the rider can edit.
+- **Model:**
+  - `Series(id, name, brief, format, perRide, styleId and look overrides, captionTemplate, active, nextEpisode)`
+  - `ReelProject.seriesId`
+  - The old single series name and episode in StudioPrefs become the first series.
+
+### B. Swipe review
+- Ready videos play full screen, one after another.
+- Gestures:
+  - swipe up: next
+  - Share: caption copied
+  - Edit: opens the editor
+  - swipe left: skip
+- Opened from the "N ready" notification and from the ride's page.
+
+### C. One post a day
+- Ready videos are lined up one per day; series episodes keep their order.
+- Every day there's a reminder at the rider's usual posting time (learnt from when they shared before).
+- **Home:** a "Today's post" card **below the Start ride card**, with the video, Share and "Swap".
+
+### D. "Clip that" by voice
+- **What it does:** saying "Keppo, clip that" while riding saves the last 30 s as a clip, marked as a highlight. Marked clips come first in ideas, slots and series.
+- **Risk:** the mic is already recording, so the phrase has to be heard in that same sound, on the phone and without internet.
+- **Fallback if that isn't reliable:** a double press of a volume button, or a tap on the bubble, does the same.
+
+### E. Better videos without editing
+- **Jump cuts:** long pauses, "umm"s and false starts are cut from talking pieces, using the timed caption lines. On by default, with a switch per video.
+- **English subtitles for Hinglish:** an option to show each line with a small English line under it. The translation comes in the same Gemini request as the captions (no extra request).
+- **Engine-sound pieces ("Sound on"):** a fast stretch with only the engine channel (DJI stereo) and a speed sticker, no talking.
+- **Two hooks per video:** each video gets a second opening (a different first shot or line), as a variation. One can be posted now and the other later.
+
+### F. Grow the page
+- **Theme compilations across rides:** from the saved clips' tags and words.
+  - Examples: "Delhi traffic police, 6 times · 0:48", "Every 'bhai kya kar raha hai' this month".
+  - Suggested when 4+ clips share a theme. A compilation can become a series.
+- **Learn from what worked:** how posted videos did (views noted after posting) ranks the next ride's ideas, formats and series. For example: "Caption clips get you 3× the views, so they come first".
+- **Maybe, decide later:** 3–5 hashtags and the ride's area added to the copied caption, matched to Reels or Shorts.
+
+### Later
+- **Blur faces and number plates:** after the rider gets a second camera.
+- **Weekly long video, and series episodes built from several rides:** last of all. **Ask the rider for permission before building this one.**
