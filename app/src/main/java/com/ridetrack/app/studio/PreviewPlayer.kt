@@ -78,6 +78,9 @@ class PreviewPlayer(context: Context) {
 class ExactPreview(private val context: Context, private val onFailed: (Throwable) -> Unit) {
     val player = androidx.media3.transformer.CompositionPlayer.Builder(context).build()
     private var total = 0L
+    /** The edit is on the player (it's put together in the background first): until then, a seek waits. */
+    private var loaded = false
+    private var pending: Long? = null
 
     init {
         player.addListener(object : Player.Listener {
@@ -95,7 +98,10 @@ class ExactPreview(private val context: Context, private val onFailed: (Throwabl
             total = input.plan.totalMs
             player.setComposition(composition)
             player.prepare()
-            player.seekTo(atMs.coerceIn(0, total))
+            loaded = true
+            // Where the playhead went while it was being put together, if it moved.
+            player.seekTo((pending ?: atMs).coerceIn(0, total))
+            pending = null
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -106,7 +112,15 @@ class ExactPreview(private val context: Context, private val onFailed: (Throwabl
 
     fun positionMs(): Long = player.currentPosition.coerceIn(0, total)
 
-    fun seek(ms: Long) = player.seekTo(ms.coerceIn(0, total))
+    /** Goes to [ms]; before the edit is loaded, it's kept for when it is (the player has nothing to seek in yet). */
+    fun seek(ms: Long) {
+        if (!loaded) { pending = ms; return }
+        try {
+            player.seekTo(ms.coerceIn(0, total))
+        } catch (e: IllegalStateException) {
+            pending = ms
+        }
+    }
 
     fun release() = player.release()
 
