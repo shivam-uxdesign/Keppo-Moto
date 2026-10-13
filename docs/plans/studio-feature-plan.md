@@ -1010,7 +1010,7 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
   - **Free:** everything else (rides, moments, pop-up, safety, fuel, journal, ride cards).
   - **Restore:** the purchase belongs to the Google account; checked on every launch, plus a Restore purchase button in Settings.
   - **Prices by country (tiers; up to 4× India allowed by the rider):**
-    1. US, Canada, UK, Western and Northern Europe, Switzerland, Australia, NZ, Japan, Korea, Singapore, Hong Kong, Israel, the Gulf: **$9.99 a month / $64.99 a year** (about 3.2× India; 4× would be $12.99 / $84.99, the rider's call).
+    1. US, Canada, UK, Western and Northern Europe, Switzerland, Australia, NZ, Japan, Korea, Singapore, Hong Kong, Israel, the Gulf: **$9.99 a month / $64.99 a year** (about 3.2× India; for now, to discuss later; 4× would be $12.99 / $84.99).
     2. Southern and Eastern EU, Taiwan, Malaysia, Chile: **$6.99 / $44.99**.
     3. Brazil, Mexico, Türkiye, South Africa, Thailand, Indonesia, Vietnam, Philippines, Colombia: **$4.99 / $29.99**.
     4. India **₹299 / ₹1,999**; Pakistan, Bangladesh, Sri Lanka, Nepal, Egypt, Nigeria, Kenya **$3.49 / $19.99**.
@@ -1025,7 +1025,8 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
     - **Counting:** on the server, against Android's per-app device ID, which survives reinstalls (declared in the data safety form).
     - **After it's used:** Studio shows the latest ride's Reel ideas blurred, built from the ride's own frames and numbers with no Gemini cost, under a lock. On top: the countdown, Unlock Studio (price and "1 week free") and Restore purchase.
     - **Paywall honesty:** the price, that the trial becomes paid after 7 days unless cancelled, how to cancel, easy to close, no fake urgency.
-    - **Still open:** a small "Made with Keppo Moto" watermark on free Reels (Claude suggests yes).
+    - **No automatic Reels for free riders:** no Reel ideas planned after a ride and no Reel made in the background (no Gemini cost). They make their weekly Reel themselves in Studio; paying riders keep the automatic Reels.
+    - **No watermark** on free Reels.
 - **Gemini cost cap:**
   - **35% of what each rider actually pays** (after Google's cut and tax), by their country; the server reads the subscription's country from Google.
     - For example, India about ₹75 a month (monthly) or ₹42 (yearly); Tier 1 monthly about ₹280.
