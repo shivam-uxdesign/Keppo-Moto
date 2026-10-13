@@ -175,6 +175,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.asComposeRenderEffect
 
 /** What a text dialog is for. */
 private sealed interface TextAsk {
@@ -425,6 +426,19 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 // The picture: the style's camera (with the transitions' moves) and the clip's own crop,
                 // turn and flip, never zoomed less than the made video's fill; the look as one colour
                 // matrix (Red only as a shader where the phone can).
+                val cutShader = remember { PreviewEffects.cutShader() }
+                // Split, Blur and Luma fade change the picture: on a layer of their own, round the camera.
+                Box(
+                    Modifier.fillMaxSize().graphicsLayer {
+                        val (ci, cl) = TimelineEdits.at(plan, pos)
+                        val cseg = plan.segments.getOrNull(ci) as? ClipSegment
+                        val cut = cseg?.let { PictureCuts.at(Cuts.frameAt(plan, ci, cl, it.durMs)) }
+                        val fx = cut?.let { PreviewEffects.cut(it, size.width, size.height, cutShader) }
+                        renderEffect = if (android.os.Build.VERSION.SDK_INT >= 31) fx?.asComposeRenderEffect() else null
+                        alpha = if (cut != null && fx == null) 1f - cut.cov * cut.cov * (3 - 2 * cut.cov) else 1f
+                        clip = true
+                    },
+                ) {
                 Box(
                     Modifier.fillMaxSize().graphicsLayer {
                         val (fi, fl) = TimelineEdits.at(plan, pos)
@@ -471,6 +485,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             colorFilter = androidx.compose.ui.graphics.ColorFilter.colorMatrix(androidx.compose.ui.graphics.ColorMatrix(Looks.matrix(plan.vibe, cs?.color, s.options.filter, s.options.filterAmount))),
                         )
                     }
+                }
                 }
                 // The graphics: drawn by the same code as the made video (hidden text and stickers left out).
                 val shown = remember(plan) { plan.shown() }
@@ -922,7 +937,10 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         plan.vibe,
                         tr,
                         looping = loopAt != null,
+                        fit = { ms -> Cuts.fitted(ms, plan.segments.getOrNull(cut - 1)?.durMs, plan.segments.getOrNull(cut)?.durMs) },
                         onPick = { t -> tick(); vm.change("Transition") { ClipTools.transition(it, cut, t) }; loopAt = at },
+                        onLength = { t -> loopAt = null; vm.drag { ClipTools.transition(it, cut, t) } },
+                        onLengthEnd = { vm.endDrag("Transition length"); loopAt = at },
                         onPreview = { if (loopAt != null) { loopAt = null; active.pause() } else loopAt = at },
                         onAll = { vm.change("Transition on all cuts") { ClipTools.transitionAll(it, tr) }; flash = "${tr.kind.label} on every cut" },
                         onDone = { cutAt = null; loopAt = null; active.pause() },
@@ -1857,56 +1875,109 @@ private fun BackTool(label: String, onClick: () -> Unit) {
 
 /** The picker's order: None (a plain cut) first, then the style's own, then the rest. */
 /**
- * The transitions [vibe]'s picker offers: Style (its own section transition), None, Fade, Zoom and
- * its signature ones. Another vibe's signature already on the cut stays in the row, so it still shows.
+ * The transitions in the picker: Instant first, then the style's own and its picks, then every
+ * other one (Glitch is kept for saved edits only). All of them, whatever the style.
  */
-private fun pickerOrder(vibe: Vibe, current: TransitionKind): List<TransitionKind> {
-    val own = (if (vibe.spec.section == TransitionKind.CUT) emptyList() else listOf(TransitionKind.STYLE)) + vibe.spec.picker
-    return if (current in own) own else own + current
+private fun pickerOrder(vibe: Vibe): List<TransitionKind> {
+    val first = listOf(TransitionKind.CUT, TransitionKind.STYLE) + vibe.spec.picker
+    return (first + TransitionKind.entries.filter { it != TransitionKind.GLITCH }).distinct()
 }
 
 /** A mark for each transition, on the timeline and in the picker. */
 private val TRANSITION_GLYPH = mapOf(
-    TransitionKind.STYLE to "✦", TransitionKind.CUT to "│", TransitionKind.FADE to "◐", TransitionKind.FLASH to "✺", TransitionKind.ZOOM to "⊕",
+    TransitionKind.STYLE to "✦", TransitionKind.CUT to "⚡", TransitionKind.FADE to "◐", TransitionKind.FLASH to "✺", TransitionKind.ZOOM to "⊕",
     TransitionKind.WHIP to "≫", TransitionKind.GLITCH to "▚", TransitionKind.SLASH to "▮", TransitionKind.SHUTTER to "◫", TransitionKind.SUN to "●", TransitionKind.CARD to "▭",
     TransitionKind.DIP to "◼", TransitionKind.ZOOM_THROUGH to "⊙", TransitionKind.LIGHT_LEAK to "☀", TransitionKind.TACH to "◔",
+    TransitionKind.GEAR to "⚙", TransitionKind.VISOR to "◒", TransitionKind.MIRROR to "⬭", TransitionKind.EXHAUST to "☁", TransitionKind.BLIP to "〰",
+    TransitionKind.SPLIT to "◧", TransitionKind.BLUR to "◍", TransitionKind.LUMA to "◑",
 )
 
+/** The longest a transition can be set to (the cut's two clips may shorten it further). */
+private const val TRANSITION_MAX_MS = 1_500f
+
 /**
- * The transition picker, where the tools were: the transitions in a row to swipe through (the
- * chosen one bigger), its length, Apply to all and Done. The cut plays on a loop meanwhile.
+ * The transition picker, where the tools were: every transition in a row to swipe through (the
+ * chosen one bigger, each named), its length from Instant to 1.5 s, Apply to all and Done. The
+ * cut plays on a loop meanwhile. [fit] is how long a length really plays on this cut.
  */
 @Composable
-private fun TransitionPicker(vibe: Vibe, tr: Transition, looping: Boolean, onPick: (Transition) -> Unit, onPreview: () -> Unit, onAll: () -> Unit, onDone: () -> Unit) {
+private fun TransitionPicker(
+    vibe: Vibe,
+    tr: Transition,
+    looping: Boolean,
+    fit: (Long) -> Long,
+    onPick: (Transition) -> Unit,
+    onLength: (Transition) -> Unit,
+    onLengthEnd: () -> Unit,
+    onPreview: () -> Unit,
+    onAll: () -> Unit,
+    onDone: () -> Unit,
+) {
     val list = rememberLazyListState()
-    val order = pickerOrder(vibe, tr.kind)
-    LaunchedEffect(tr.kind) { list.animateScrollToItem((order.indexOf(tr.kind) - 2).coerceAtLeast(0)) }
+    val order = remember(vibe) { pickerOrder(vibe) }
+    // The transition to come back to when the length is dragged up from Instant.
+    var lastKind by remember { mutableStateOf(if (tr.kind == TransitionKind.CUT) TransitionKind.STYLE else tr.kind) }
+    LaunchedEffect(tr.kind) {
+        if (tr.kind != TransitionKind.CUT) lastKind = tr.kind
+        list.animateScrollToItem((order.indexOf(tr.kind) - 2).coerceAtLeast(0))
+    }
+    val instant = tr.kind == TransitionKind.CUT
+    val ms = if (instant) 0L else tr.ms(vibe)
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         LazyRow(
             state = list,
-            modifier = Modifier.fillMaxWidth().height(80.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.fillMaxWidth().height(96.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             items(order) { k ->
                 val on = k == tr.kind
-                val z by animateFloatAsState(if (on) 1.2f else 0.9f, tween(200), label = "pick")
-                Box(
-                    Modifier.graphicsLayer { scaleX = z; scaleY = z }.size(56.dp).clip(CircleShape)
-                        .background(if (on) RtColors.Primary else RtColors.SurfaceRaised)
-                        .then(if (on) Modifier.border(2.dp, Color.White, CircleShape) else Modifier)
-                        .clickable(role = Role.Button, onClickLabel = k.label) { onPick(tr.copy(kind = k)) },
-                    contentAlignment = Alignment.Center,
-                ) { Text(TRANSITION_GLYPH[k] ?: "", fontSize = 20.sp, color = Color.White) }
+                val z by animateFloatAsState(if (on) 1.12f else 0.92f, tween(200), label = "pick")
+                Column(
+                    Modifier.width(64.dp).clip(RoundedCornerShape(12.dp))
+                        .clickable(role = Role.Button, onClickLabel = k.label) { onPick(Transition(k)) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Box(
+                        Modifier.graphicsLayer { scaleX = z; scaleY = z }.size(52.dp).clip(CircleShape)
+                            .background(if (on) RtColors.Primary else RtColors.SurfaceRaised)
+                            .then(if (on) Modifier.border(2.dp, Color.White, CircleShape) else Modifier),
+                        contentAlignment = Alignment.Center,
+                    ) { Text(TRANSITION_GLYPH[k] ?: "", fontSize = 20.sp, color = Color.White) }
+                    Text(
+                        if (k == TransitionKind.STYLE) "Style's" else k.label,
+                        style = RtType.caption,
+                        color = if (on) RtColors.Primary else RtColors.TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
-        Text(if (tr.kind == TransitionKind.STYLE) "Style · ${vibe.spec.section.label}" else tr.kind.label, style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text(if (tr.kind == TransitionKind.STYLE) "Style's own · ${vibe.spec.section.label}" else tr.kind.label, style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.align(Alignment.CenterHorizontally))
+        // Length: all the way left is Instant; 0.1 s steps feel too coarse at the short end, so 0.05 s.
+        val plays = if (instant) 0L else fit(ms)
+        val said = when {
+            instant -> "Instant"
+            plays < ms -> "${seconds(ms)} · plays ${seconds(plays)} (short clips)"
+            else -> seconds(ms)
+        }
+        Box(Modifier.padding(horizontal = 16.dp)) {
+            LabelledSlider(
+                "Length", said, ms.toFloat().coerceAtMost(TRANSITION_MAX_MS), 0f..TRANSITION_MAX_MS,
+                { v ->
+                    val step = (v / 50f).roundToInt() * 50L
+                    onLength(if (step < 50) Transition(TransitionKind.CUT) else tr.copy(kind = if (instant) lastKind else tr.kind, customMs = step.coerceAtLeast(100)))
+                },
+                onLengthEnd,
+            )
+        }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TransitionLength.entries.forEach { l -> Small(l.label, on = tr.length == l) { onPick(tr.copy(length = l)) } }
-            Spacer(Modifier.weight(1f))
             Small(if (looping) "■ Stop" else "▶ Play", on = looping, onClick = onPreview)
             Small("Apply to all", onClick = onAll)
+            Spacer(Modifier.weight(1f))
             Text(
                 "Done",
                 style = RtType.button,
@@ -1916,3 +1987,6 @@ private fun TransitionPicker(vibe: Vibe, tr: Transition, looping: Boolean, onPic
         }
     }
 }
+
+/** A length in seconds, as few decimals as it needs ("0.35 s", "0.5 s", "1.0 s"). */
+private fun seconds(ms: Long): String = String.format(Locale.US, "%.2f", ms / 1000.0).trimEnd('0').let { if (it.endsWith('.')) it + "0" else it } + " s"

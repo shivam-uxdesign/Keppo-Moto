@@ -199,6 +199,15 @@ class StudioArt(
                 TransitionKind.CARD -> x += W * PAPER_X * (Tok.inOut(i) - Tok.inOut(o))
                 TransitionKind.ZOOM_THROUGH -> k += THROUGH_K * (leave + land)
                 TransitionKind.TACH -> k += SOFT_K * Tok.inOut(max(o, i))
+                // A gear change: the bike squats into the cut and kicks out of it, with a short shake.
+                TransitionKind.GEAR -> {
+                    k += GEAR_K * (leave + land)
+                    y += H * GEAR_Y * (land - leave)
+                    r += GEAR_DEG * sin(t / GEAR_SHAKE_MS * 2 * Math.PI.toFloat()) * max(o, i)
+                }
+                // Two quick revs into the cut (vroom vroom), then it lands zoomed and settles.
+                TransitionKind.BLIP -> k += BLIP_K * (abs(sin(Math.PI.toFloat() * 2 * leave)) + land)
+                TransitionKind.VISOR, TransitionKind.MIRROR, TransitionKind.EXHAUST, TransitionKind.BLUR -> k += SOFT_K * Tok.inOut(max(o, i))
                 else -> {}
             }
         }
@@ -349,8 +358,105 @@ class StudioArt(
                 tach(c, Tok.inOut(cov), H * TACH_Y, W * TACH_R, accent(f.vibe), Tok.inOut(cov))
                 veil(c, accent(f.vibe), Tok.A_LOW * Tok.inn(cov))
             }
+            // A hard kick of light right at the shift; the camera does the jolt.
+            TransitionKind.GEAR -> veil(c, Tok.PAPER, GEAR_FLASH * Tok.inn(cov) * Tok.inn(cov))
+            TransitionKind.BLIP -> veil(c, Tok.INK, Tok.A_LOW * Tok.inn(cov))
+            TransitionKind.VISOR -> visor(c, cov)
+            TransitionKind.MIRROR -> mirror(c, cov)
+            TransitionKind.EXHAUST -> exhaust(c, cov, if (landing) f.cut else f.cut + 1)
+            // Split, Blur and Luma fade change the picture itself (PictureCuts); nothing on top.
             else -> {}
         }
+    }
+
+    /** A tinted helmet visor slides down over the clip (dark at the cut) and lifts off the next. */
+    private fun visor(c: Canvas, cov: Float) {
+        val e = Tok.inOut(cov)
+        if (e <= 0f) return
+        val edge = H * VISOR_REACH * e
+        val dip = H * VISOR_CURVE
+        val shape = android.graphics.Path().apply {
+            moveTo(0f, -1f); lineTo(W, -1f); lineTo(W, edge - dip)
+            quadTo(W / 2, edge + dip, 0f, edge - dip); close()
+        }
+        p.reset()
+        p.isAntiAlias = true
+        p.shader = LinearGradient(0f, 0f, 0f, edge.coerceAtLeast(1f), Tok.alpha(Tok.INK, VISOR_TOP_A), Tok.alpha(VISOR_TINT, VISOR_BOTTOM_A), Shader.TileMode.CLAMP)
+        c.drawPath(shape, p)
+        p.shader = null
+        // The visor's rim, and a line of light along it.
+        val rim = android.graphics.Path().apply { moveTo(W, edge - dip); quadTo(W / 2, edge + dip, 0f, edge - dip) }
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = VISOR_RIM * s
+        p.color = Tok.INK
+        c.drawPath(rim, p)
+        p.strokeWidth = Tok.RULE_S * s
+        p.color = Tok.alpha(Tok.WHITE, VISOR_SHINE_A)
+        c.save(); c.translate(0f, -VISOR_RIM * s); c.drawPath(rim, p); c.restore()
+        // A soft reflection across the plastic.
+        p.style = Paint.Style.FILL
+        p.shader = LinearGradient(0f, edge * 0.2f, W, edge * 0.6f, intArrayOf(Tok.alpha(Tok.WHITE, 0f), Tok.alpha(Tok.WHITE, VISOR_GLARE_A), Tok.alpha(Tok.WHITE, 0f)), floatArrayOf(0.35f, 0.5f, 0.65f), Shader.TileMode.CLAMP)
+        c.save(); c.clipPath(shape); c.drawRect(0f, 0f, W, H, p); c.restore()
+        p.shader = null
+    }
+
+    /**
+     * The view closes down to a rear-view mirror (dark round it, a chrome rim) by the cut; the next
+     * clip opens out of the mirror to the full frame.
+     */
+    private fun mirror(c: Canvas, cov: Float) {
+        val e = Tok.inOut(cov)
+        if (e <= 0f) return
+        val grow = 1 + (MIRROR_GROW - 1) * (1 - e)
+        val mw = W * MIRROR_W * grow
+        val mh = W * MIRROR_H * grow
+        val cx = W / 2
+        val cy = H * MIRROR_Y
+        val rect = RectF(cx - mw / 2, cy - mh / 2, cx + mw / 2, cy + mh / 2)
+        val around = android.graphics.Path().apply {
+            fillType = android.graphics.Path.FillType.EVEN_ODD
+            addRect(0f, 0f, W, H, android.graphics.Path.Direction.CW)
+            addOval(rect, android.graphics.Path.Direction.CW)
+        }
+        val a = min(1f, e * MIRROR_DARK_IN)
+        p.reset()
+        p.isAntiAlias = true
+        // The mirror's stem, down from its lower edge towards the bars.
+        p.color = Tok.alpha(MIRROR_STEM, a)
+        p.strokeWidth = MIRROR_STEM_W * s * grow
+        p.strokeCap = Paint.Cap.ROUND
+        c.drawPath(around, Paint(p).apply { style = Paint.Style.FILL; color = Tok.alpha(Tok.INK, a) })
+        c.drawLine(cx + mw * 0.18f, rect.bottom, cx + mw * 0.32f, rect.bottom + mh * 0.9f, p)
+        // The chrome rim.
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = MIRROR_RIM * s * grow
+        p.shader = LinearGradient(rect.left, rect.top, rect.right, rect.bottom, intArrayOf(Tok.alpha(Tok.WHITE, a), Tok.alpha(MIRROR_CHROME, a), Tok.alpha(Tok.WHITE, a)), null, Shader.TileMode.CLAMP)
+        c.drawOval(rect, p)
+        p.shader = null
+    }
+
+    /** Smoke puffs from the bottom corner fill the frame by the cut and clear off the next clip. */
+    private fun exhaust(c: Canvas, cov: Float, cut: Int) {
+        val e = Tok.inOut(cov)
+        if (e <= 0f) return
+        val rnd = java.util.Random(cut * 31L + 7)
+        // A haze under the puffs, thick enough at the cut to hide it; the puffs keep it smoky.
+        veil(c, SMOKE_DARK, SMOKE_HAZE * e * e * e)
+        p.reset()
+        p.isAntiAlias = true
+        repeat(SMOKE_PUFFS) { n ->
+            // Each puff starts low by the exhaust and drifts up and out as it grows.
+            val sx = rnd.nextFloat()
+            val sy = rnd.nextFloat()
+            val size = SMOKE_MIN + SMOKE_SPREAD * rnd.nextFloat()
+            val x = W * (SMOKE_FROM_X + (sx - SMOKE_FROM_X) * e)
+            val y = H * (SMOKE_FROM_Y + (sy - SMOKE_FROM_Y) * e)
+            val rad = (H * size * e).coerceAtLeast(1f)
+            val tone = if (n % 2 == 0) SMOKE_LIGHT else SMOKE_DARK
+            p.shader = RadialGradient(x, y, rad, intArrayOf(Tok.alpha(tone, SMOKE_A * e), Tok.alpha(tone, SMOKE_A * e * 0.6f), Tok.alpha(tone, 0f)), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
+            c.drawCircle(x, y, rad, p)
+        }
+        p.shader = null
     }
 
     private fun veil(c: Canvas, color: Int, a: Float) {
@@ -1698,6 +1804,43 @@ class StudioArt(
         const val GLITCH_X = 0.03f
         const val SLASH_K = 0.3f
         const val SOFT_K = 0.05f
+        // Gear shift: the squat and kick, the shake, and the flash at the shift.
+        const val GEAR_K = 0.06f
+        const val GEAR_Y = 0.012f
+        const val GEAR_DEG = 1.6f
+        const val GEAR_SHAKE_MS = 70f
+        const val GEAR_FLASH = 0.22f
+        // Throttle blip: how far each rev zooms.
+        const val BLIP_K = 0.07f
+        // Visor drop: how far down it comes (past the bottom, so the cut's hidden), its curve and look.
+        const val VISOR_REACH = 1.1f
+        const val VISOR_CURVE = 0.045f
+        const val VISOR_TOP_A = 0.88f
+        const val VISOR_BOTTOM_A = 0.96f
+        const val VISOR_TINT = 0xFF14202C.toInt()
+        const val VISOR_RIM = 10f
+        const val VISOR_SHINE_A = 0.35f
+        const val VISOR_GLARE_A = 0.12f
+        // Mirror: its size and place at the cut, how much bigger it starts, its rim and stem.
+        const val MIRROR_W = 0.86f
+        const val MIRROR_H = 0.5f
+        const val MIRROR_Y = 0.42f
+        const val MIRROR_GROW = 4f
+        const val MIRROR_DARK_IN = 3f
+        const val MIRROR_RIM = 9f
+        const val MIRROR_STEM_W = 14f
+        const val MIRROR_CHROME = 0xFF8E959C.toInt()
+        const val MIRROR_STEM = 0xFF1A1C1F.toInt()
+        // Exhaust: how many puffs, where they come from, their size and greys.
+        const val SMOKE_PUFFS = 16
+        const val SMOKE_FROM_X = 0.1f
+        const val SMOKE_FROM_Y = 0.95f
+        const val SMOKE_MIN = 0.18f
+        const val SMOKE_SPREAD = 0.22f
+        const val SMOKE_A = 0.9f
+        const val SMOKE_HAZE = 0.85f
+        const val SMOKE_LIGHT = 0xFFB4B9BE.toInt()
+        const val SMOKE_DARK = 0xFF7C8288.toInt()
         const val THROUGH_K = 0.06f
         const val PAPER_X = 0.06f
         const val WEAVE = 0.003f

@@ -213,7 +213,7 @@ object StyleJson {
             transition = Transition(
                 TransitionKind.entries.firstOrNull { it.name == o.optString("transition") } ?: TransitionKind.STYLE,
                 TransitionLength.entries.firstOrNull { it.name == o.optString("transitionLength") } ?: TransitionLength.NORMAL,
-                if (o.isNull("transitionMs") || !o.has("transitionMs")) null else o.getLong("transitionMs").coerceIn(150, 2_000),
+                if (o.isNull("transitionMs") || !o.has("transitionMs")) null else o.getLong("transitionMs").coerceIn(100, 2_000),
             ),
             everyCut = o.optBoolean("everyCut"),
             pace = o.optDouble("pace", 1.0).toFloat().coerceIn(0.6f, 1.5f),
@@ -258,7 +258,7 @@ object StyleJson {
     }.getOrNull()
 
     /** What Gemini is asked to fill in for a style. */
-    const val SCHEMA = """{"name":"short name","about":"a few words","base":"HYPE|CINE|CHILL|VLOG|FILM|EDITORIAL|NATIVE|SPEEDTRAP","captions":{"kind":"STYLE|PUNCH|SERIF|LABEL|CHAT|PLAIN|CLEAN|TYPE|STRIP|DASH","size":1.0,"karaoke":true},"textLook":"STYLE|PLAIN|OUTLINE|BOX|HAND","textColor":-10496,"textIn":"FADE|POP|TYPE|SLIDE|BOUNCE|NONE","textOut":"FADE|POP|TYPE|SLIDE|BOUNCE|NONE","transition":"STYLE|CUT|FADE|FLASH|ZOOM|WHIP|SLASH|SHUTTER|SUN|CARD|DIP|ZOOM_THROUGH|LIGHT_LEAK|TACH","transitionLength":"SHORT|NORMAL|LONG","everyCut":false,"pace":1.0,"punchIn":false,"color":{"exp":0.0,"con":0.0,"sat":0.0,"warm":0.0,"look":true},"speedBadge":true,"speedSticker":false,"leanSticker":false,"map":true,"intro":false,"outro":true,"duck":true}"""
+    const val SCHEMA = """{"name":"short name","about":"a few words","base":"HYPE|CINE|CHILL|VLOG|FILM|EDITORIAL|NATIVE|SPEEDTRAP","captions":{"kind":"STYLE|PUNCH|SERIF|LABEL|CHAT|PLAIN|CLEAN|TYPE|STRIP|DASH","size":1.0,"karaoke":true},"textLook":"STYLE|PLAIN|OUTLINE|BOX|HAND","textColor":-10496,"textIn":"FADE|POP|TYPE|SLIDE|BOUNCE|NONE","textOut":"FADE|POP|TYPE|SLIDE|BOUNCE|NONE","transition":"STYLE|CUT|FADE|FLASH|ZOOM|WHIP|SLASH|SHUTTER|SUN|CARD|DIP|ZOOM_THROUGH|LIGHT_LEAK|TACH|GEAR|VISOR|MIRROR|EXHAUST|BLIP|SPLIT|BLUR|LUMA","transitionLength":"SHORT|NORMAL|LONG","everyCut":false,"pace":1.0,"punchIn":false,"color":{"exp":0.0,"con":0.0,"sat":0.0,"warm":0.0,"look":true},"speedBadge":true,"speedSticker":false,"leanSticker":false,"map":true,"intro":false,"outro":true,"duck":true}"""
 
     /** Asks Gemini for a style from the rider's words. */
     fun wordsPrompt(words: String): String =

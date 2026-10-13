@@ -73,6 +73,11 @@ class StudioFrames {
 
     /** The scene through the vibe's camera, then [draw] on top; saved at half size. */
     private fun shot(name: String, art: StudioArt, f: FrameAt?, filter: android.graphics.Paint? = null, draw: (Canvas) -> Unit) {
+        shot(name, art, f, filter, null, draw)
+    }
+
+    /** As above; [picture] is Split, Blur or Luma fade, done here as the made video's shader does it. */
+    private fun shot(name: String, art: StudioArt, f: FrameAt?, filter: android.graphics.Paint?, picture: com.ridetrack.app.studio.PictureCuts.At?, draw: (Canvas) -> Unit) {
         val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(b)
         c.drawColor(Color.BLACK)
@@ -87,10 +92,58 @@ class StudioFrames {
         }
         c.drawBitmap(scene, 0f, 0f, filter ?: Paint(Paint.FILTER_BITMAP_FLAG))
         c.restore()
+        picture?.let { cutPicture(b, it) }
         draw(c)
         val small = Bitmap.createScaledBitmap(b, w / 2, h / 2, true)
         val file = File(out, "$name.png").apply { parentFile?.mkdirs() }
         file.outputStream().use { small.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    /** The made video's picture-transition shader (PictureCuts), pixel by pixel. */
+    private fun cutPicture(b: Bitmap, at: com.ridetrack.app.studio.PictureCuts.At) {
+        val bw = b.width
+        val bh = b.height
+        val src = IntArray(bw * bh).also { b.getPixels(it, 0, bw, 0, 0, bw, bh) }
+        val out = IntArray(src.size)
+        val e = at.cov * at.cov * (3 - 2 * at.cov)
+        val ink = com.ridetrack.app.studio.Tok.INK
+        fun px(x: Int, y: Int) = src[y.coerceIn(0, bh - 1) * bw + x.coerceIn(0, bw - 1)]
+        fun luma(c: Int) = (0.2126f * (c shr 16 and 0xFF) + 0.7152f * (c shr 8 and 0xFF) + 0.0722f * (c and 0xFF)) / 255f
+        fun mix(a: Int, c: Int, t: Float): Int {
+            fun ch(sh: Int) = ((a shr sh and 0xFF) + ((c shr sh and 0xFF) - (a shr sh and 0xFF)) * t).toInt().coerceIn(0, 255)
+            return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+        }
+        for (y in 0 until bh) for (x in 0 until bw) {
+            val i = y * bw + x
+            out[i] = when (at.kind) {
+                com.ridetrack.app.studio.TransitionKind.SPLIT -> {
+                    val mid = bw / 2f
+                    val gap = mid * e
+                    val sx = if (x < mid) x + gap else x - gap
+                    val hole = if (x < mid) sx >= mid else sx < mid
+                    if (hole) ink else px(sx.toInt(), y)
+                }
+                com.ridetrack.app.studio.TransitionKind.BLUR -> {
+                    val r = 0.045f * e * bw
+                    var rr = 0f; var gg = 0f; var bb = 0f
+                    for (n in 0..16) {
+                        val c = if (n == 0) src[i] else {
+                            val a = (n - 1) * 2.39996f
+                            val d = r * kotlin.math.sqrt((n - 1 + 0.5f) / 16f)
+                            px((x + kotlin.math.cos(a) * d).toInt(), (y + kotlin.math.sin(a) * d).toInt())
+                        }
+                        rr += c shr 16 and 0xFF; gg += c shr 8 and 0xFF; bb += c and 0xFF
+                    }
+                    mix((0xFF shl 24) or ((rr / 17).toInt() shl 16) or ((gg / 17).toInt() shl 8) or (bb / 17).toInt(), ink, 0.25f * e * e)
+                }
+                else -> {
+                    val thr = e * 1.1f
+                    val t = ((luma(src[i]) - (thr - 0.1f)) / 0.1f).coerceIn(0f, 1f)
+                    mix(ink, src[i], t * t * (3 - 2 * t))
+                }
+            }
+        }
+        b.setPixels(out, 0, bw, 0, 0, bw, bh)
     }
 
     @Test
@@ -151,7 +204,7 @@ class StudioFrames {
                 val vibe = Vibe.entries.first()
                 val d = Transition(k).ms(vibe)
                 val f = if (q < 0.5f) frame(vibe, (4_000 - d / 2 + (q * d)).toLong(), 4_000, next = true, outKind = k) else frame(vibe, ((q - 0.5f) * d).toLong(), 4_000, prev = true, inKind = k)
-                shot("transitions/${k.name.lowercase()}-${(q * 100).toInt()}", art, f) { c -> art.drawClip(c, f, emptyList(), -1, "", false) }
+                shot("transitions/${k.name.lowercase()}-${(q * 100).toInt()}", art, f, null, com.ridetrack.app.studio.PictureCuts.at(f)) { c -> art.drawClip(c, f, emptyList(), -1, "", false) }
             }
         }
     }

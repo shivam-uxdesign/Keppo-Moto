@@ -969,3 +969,22 @@ There's one preview in the editor; it never switches. It replaces both the exact
    - **Fixed:** captions that overlap go on rows of their own.
    - Layers, text and stickers have Hide/Show (kept on the timeline, dimmed with a crossed-out eye; left out of the preview and the made video, a hidden layer's sound too). A selected caption has Hide captions/Show captions.
 
+## Transitions, round 2 (13 Oct, with the rider)
+
+- **Instant:** "None" is now called Instant, first in the picker for every style (icon ⚡).
+- **Every transition, every style:** the picker shows Instant, the style's own, the style's picks, then all the rest, each with its name under it. Glitch stays hidden (kept only for older edits).
+- **Length:** Short/Normal/Long (0.5×, 1× and 1.6× of the transition's own length) are replaced by one slider, Instant → 1.5 s in 0.05 s steps. All the way left is Instant; dragging up from Instant brings back the last transition. Picking a transition sets its own length.
+  - The longest is 1.5 s, not 2 s: each transition is shared by the clips either side of the cut, and never takes more than 40% of either. On 1.5–4 s Reel clips, longer is mostly cut short and feels slow.
+  - When the clips are too short for the length, the slider says so ("0.8 s · plays 0.6 s (short clips)").
+  - The style editor has the same single slider (its own length, or 0.1–1.5 s).
+- **New transitions:**
+  - **Gear shift:** the camera squats into the cut and kicks out, with a short shake and a light kick at the shift. 0.3 s.
+  - **Throttle blip:** two quick zoom revs into the cut, then it lands zoomed and settles. 0.5 s. (Not timed to the engine sound yet.)
+  - **Visor drop:** a tinted helmet visor (curved rim, glint, reflection) slides down over the clip and lifts off the next. 0.6 s.
+  - **Mirror:** the view closes down into a rear-view mirror (oval, chrome rim, stem) by the cut; the next clip opens out of it. 0.7 s.
+  - **Exhaust:** smoke puffs roll up from the bottom corner, thick at the cut, and clear off the next clip. 0.8 s.
+  - **Split, Blur, Luma fade:** these change the picture itself (a new shader, `PictureCuts`, after the camera). Split parts the frame down the middle into the dark; Blur blurs out and in; Luma fade takes the dark parts first and brings the next clip's bright parts first.
+  - Each clip still does its own half (out to the cut, then the next one in), so Split, Blur and Luma fade go through the dark at the cut rather than mixing the two clips. Mixing two clips at once would need the export rebuilt to overlap them: a later step if wanted.
+- **Preview:** Split, Blur and Luma fade show in the editor on Android 13+ (the same shader). Android 12 shows Blur, and older phones a fade to black instead.
+- **Frame checker:** draws all of these, with the shader done pixel by pixel. Unit tests: `PictureCutsTest`.
+

@@ -451,9 +451,10 @@ internal fun StyleEditor(start: StudioStyle, frame: Bitmap?, onSaved: (StudioSty
                         Chips("Goes out", TextAnim.entries.map { it.label to (st.textOut == it) }) { i -> st = st.copy(textOut = TextAnim.entries[i]) }
                     }
                     StylePart.TRANSITIONS -> {
-                        Chips("Transition", TransitionKind.entries.map { it.label to (st.transition.kind == it) }) { i -> st = st.copy(transition = st.transition.copy(kind = TransitionKind.entries[i])) }
-                        Chips("Length", TransitionLength.entries.map { it.label to (st.transition.customMs == null && st.transition.length == it) }) { i -> st = st.copy(transition = st.transition.copy(length = TransitionLength.entries[i], customMs = null)) }
-                        Slide("Exact length", st.transition.customMs?.toFloat() ?: -1f, 150f..2_000f, { if (it < 0) "Off" else String.format(java.util.Locale.US, "%.2f s", it / 1000) }, onReset = { st = st.copy(transition = st.transition.copy(customMs = null)) }) {
+                        val kinds = TransitionKind.entries.filter { it != TransitionKind.GLITCH }
+                        Chips("Transition", kinds.map { it.label to (st.transition.kind == it) }) { i -> st = st.copy(transition = st.transition.copy(kind = kinds[i])) }
+                        // One length for every cut: the transition's own, or the rider's (0.1 to 1.5 s).
+                        Slide("Length", st.transition.customMs?.toFloat() ?: -1f, 100f..1_500f, { if (it < 0) "Its own" else String.format(java.util.Locale.US, "%.2f s", it / 1000) }, onReset = { st = st.copy(transition = st.transition.copy(customMs = null, length = TransitionLength.NORMAL)) }) {
                             st = st.copy(transition = st.transition.copy(customMs = (kotlin.math.round(it / 50) * 50).toLong()))
                         }
                         Toggle("On every cut (off: only between the script's sections)", st.everyCut) { st = st.copy(everyCut = it) }

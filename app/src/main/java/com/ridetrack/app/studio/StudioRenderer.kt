@@ -424,6 +424,8 @@ class StudioRenderer(private val context: Context) {
                 val local = clock.localMs(us)
                 art.cameraMatrix(reframed(art, art.camera(frameAt(local)), cs, local))
             }
+            // Split, Blur and Luma fade work on the picture, after the camera (so they stay put on screen).
+            if (PictureCuts.touches(frameAt(0))) video += CutPictureEffect { us -> PictureCuts.at(frameAt(clock.localMs(us))) }
         } else if (seg is TitleSegment && !o.map) {
             video += MatrixTransformation { us -> Matrix().apply { val k = 1.12f - 0.05f * clock.localMs(us) / dur; setScale(k, k) } }
         }

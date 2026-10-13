@@ -186,6 +186,30 @@ half4 main(float2 xy) {
 }
 """
 
+    /**
+     * The editor preview's picture transitions (Split, Blur, Luma fade) for [at] on a [w]×[h]
+     * picture: the same shader as the made video on Android 13+, a plain blur on 12. Null where the
+     * phone has neither: the preview then fades the picture to black instead.
+     */
+    fun cut(at: PictureCuts.At, w: Float, h: Float, shader: Any?): android.graphics.RenderEffect? {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && shader is android.graphics.RuntimeShader) {
+            shader.setFloatUniform("kind", PictureCuts.code(at.kind))
+            shader.setFloatUniform("cov", at.cov)
+            shader.setFloatUniform("size", w, h)
+            shader.setFloatUniform("ink", (Tok.INK shr 16 and 0xFF) / 255f, (Tok.INK shr 8 and 0xFF) / 255f, (Tok.INK and 0xFF) / 255f)
+            return android.graphics.RenderEffect.createRuntimeShaderEffect(shader, "content")
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 31 && at.kind == TransitionKind.BLUR) {
+            val e = at.cov * at.cov * (3 - 2 * at.cov)
+            val r = (PictureCuts.BLUR_REACH * e * w / 2f).coerceAtLeast(0.01f)
+            return android.graphics.RenderEffect.createBlurEffect(r, r, android.graphics.Shader.TileMode.CLAMP)
+        }
+        return null
+    }
+
+    /** The shader [cut] uses, made once per screen (null before Android 13). */
+    fun cutShader(): Any? = if (android.os.Build.VERSION.SDK_INT >= 33) android.graphics.RuntimeShader(PictureCuts.AGSL) else null
+
     /** Turns Red only on [v] at [amount] (0 = off); older phones show the picture as it is. */
     fun redOnly(v: android.view.View, amount: Float) {
         if (android.os.Build.VERSION.SDK_INT < 33) return

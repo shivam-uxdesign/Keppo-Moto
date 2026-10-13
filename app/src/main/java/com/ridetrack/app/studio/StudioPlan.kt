@@ -149,14 +149,17 @@ data class ClipColor(
 }
 
 /**
- * The transitions that can go on a cut. SUN is drawn as Pop wipe and CARD as Paper slide (their
- * saved names kept); new ones are added at the end. [baseMs] is a fixed length, when it has one.
+ * The transitions that can go on a cut. CUT is Instant (no transition); SUN is drawn as Pop wipe
+ * and CARD as Paper slide (their saved names kept); new ones are added at the end. [baseMs] is a
+ * fixed length, when it has one. SPLIT, BLUR and LUMA change the picture itself ([PictureCuts]).
  */
 enum class TransitionKind(val label: String, val baseMs: Long? = null) {
-    STYLE("Style"), CUT("None"), FADE("Fade"), FLASH("Flash", Tok.T_MICRO), ZOOM("Zoom punch"), WHIP("Whip"), GLITCH("Glitch"),
+    STYLE("Style"), CUT("Instant"), FADE("Fade"), FLASH("Flash", Tok.T_MICRO), ZOOM("Zoom punch"), WHIP("Whip"), GLITCH("Glitch"),
     SLASH("Yellow cut", 300), SHUTTER("Shutter"), SUN("Pop wipe", 350), CARD("Paper slide", 450),
     DIP("Dip", 500), ZOOM_THROUGH("Zoom-through"), LIGHT_LEAK("Light leak", 600),
     TACH("Rev sweep", 500),
+    GEAR("Gear shift", 300), VISOR("Visor drop", 600), MIRROR("Mirror", 700), EXHAUST("Exhaust", 800), BLIP("Throttle blip", 500),
+    SPLIT("Split", 600), BLUR("Blur", 500), LUMA("Luma fade", 700),
 }
 
 enum class TransitionLength(val label: String, val factor: Float) { SHORT("Short", 0.5f), NORMAL("Normal", 1f), LONG("Long", 1.6f) }
@@ -295,7 +298,7 @@ object LookJson {
     fun transition(o: org.json.JSONObject): Transition = Transition(
         TransitionKind.entries.firstOrNull { it.name == o.optString("kind") } ?: TransitionKind.STYLE,
         TransitionLength.entries.firstOrNull { it.name == o.optString("length") } ?: TransitionLength.NORMAL,
-        if (o.isNull("ms") || !o.has("ms")) null else o.getLong("ms").coerceIn(150, 2_000),
+        if (o.isNull("ms") || !o.has("ms")) null else o.getLong("ms").coerceIn(100, 2_000),
     )
 }
 
