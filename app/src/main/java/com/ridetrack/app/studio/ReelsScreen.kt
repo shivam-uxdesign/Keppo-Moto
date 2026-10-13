@@ -75,6 +75,9 @@ private enum class ReelsTab(val label: String) { REELS("Reels"), SAVED("Saved cl
 
 private enum class ReelFilter(val label: String) { ALL("All"), DRAFTS("Not posted"), RIDES("From rides"), PHONE("Your videos"), JOURNAL("In Journal") }
 
+/** 48000 → "0:48". */
+private fun formatClock(ms: Long): String = "%d:%02d".format(ms / 60_000, ms / 1000 % 60)
+
 /**
  * Your Reels, like Photos: Reels | Saved clips | Deleted. Hold a Reel for its menu (it lifts, the
  * rest dims); Select, then tap or swipe across tiles to pick several and act on them together.
@@ -103,6 +106,11 @@ fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String,
     var dismissed by remember { mutableStateOf(c.series.dismissed()) }
     val alike = remember(all, dismissed) { SeriesText.alike(all).firstOrNull { g -> g.none { it.id in dismissed } } }
     var naming by remember { mutableStateOf<List<ReelProject>?>(null) }
+    // Things that keep coming back across rides, for compilations (reads every clip's words: off the main thread).
+    var themes by remember { mutableStateOf<List<Theme>>(emptyList()) }
+    var themesSeen by remember { mutableStateOf(0) }
+    LaunchedEffect(all.size, themesSeen) { themes = runCatching { Compilations.themes(c) }.getOrDefault(emptyList()) }
+    val lesson = remember(all) { Posting.lesson(Posting.boosts(all)) }
     val live = all.filter { it.deletedAt == null && it.seriesId !in inFolders }.filter {
         when (filter) {
             ReelFilter.ALL -> true
@@ -199,6 +207,27 @@ fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String,
                             ) {
                                 Text("+", style = RtType.title, color = RtColors.Primary)
                                 Text("New series", style = RtType.caption, color = RtColors.TextSecondary, textAlign = TextAlign.Center)
+                            }
+                        }
+                        lesson?.let { Text("What works: $it Studio suggests more of them first.", style = RtType.caption, color = RtColors.Primary, modifier = Modifier.padding(bottom = 8.dp)) }
+                        themes.firstOrNull()?.let { t ->
+                            Column(Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("${t.title} · ${formatClock(t.lengthMs)}", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+                                Text(
+                                    (if (t.said) "You said it in ${t.hits.size} clips" else "In ${t.hits.size} clips") + " from ${t.rides} rides. A compilation of them?",
+                                    style = RtType.caption,
+                                    color = RtColors.TextSecondary,
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                                    Text("Make it", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) {
+                                        scope.launch {
+                                            note = if (Compilations.make(c, t)) "Making \u201c${t.title}\u201d: it'll be here when it's done" else "Its clips couldn't be found"
+                                            Compilations.dismiss(c.appContext, t.label); themesSeen++
+                                        }
+                                    }.padding(vertical = 6.dp))
+                                    Text("Not now", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button) { Compilations.dismiss(c.appContext, t.label); themesSeen++ }.padding(vertical = 6.dp))
+                                    if (themes.size > 1) Text("Next idea", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button) { themes = themes.drop(1) + themes.first() }.padding(vertical = 6.dp))
+                                }
                             }
                         }
                         alike?.let { g ->

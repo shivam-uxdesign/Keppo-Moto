@@ -23,7 +23,44 @@ object Posting {
             "\"${p.title}\" (${sc?.format?.label?.lowercase() ?: "reel"}, ${p.durationMs / 1000} s, ${sc?.shape ?: "edit"}, ${p.vibe.label}) ${p.views} views" + (p.likes?.let { ", $it likes" } ?: "")
         }
         val worst = rated.last().takeIf { rated.size > n }?.let { "; least: \"${it.title}\" ${it.views} views" }.orEmpty()
-        return "What did best for this rider (do more like these): " + lines.joinToString("; ") + worst + ".\n"
+        val lead = lesson(boosts(reels))?.let { "$it Suggest more of those, and list them first.\n" }.orEmpty()
+        return "What did best for this rider (do more like these): " + lines.joinToString("; ") + worst + ".\n" + lead
+    }
+
+    /**
+     * How each kind of piece does against the rider's average views (1.0 = average), once there
+     * are 4 videos with views; a kind needs 2 of them to count.
+     */
+    fun boosts(reels: List<ReelProject>): Map<PieceFormat, Double> {
+        val rated = reels.filter { it.deletedAt == null && (it.views ?: 0) > 0 }
+        if (rated.size < 4) return emptyMap()
+        val avg = rated.map { it.views!!.toDouble() }.average()
+        return rated.groupBy { it.script?.format ?: PieceFormat.REEL }
+            .filterValues { it.size >= 2 }
+            .mapValues { (_, v) -> v.map { it.views!!.toDouble() }.average() / avg }
+    }
+
+    /** "Caption clips get you 2.4× your usual views." for the kind doing best, when it's clearly ahead (1.5×). */
+    fun lesson(boosts: Map<PieceFormat, Double>): String? {
+        val (f, x) = boosts.maxByOrNull { it.value } ?: return null
+        if (x < 1.5) return null
+        val name = if (f == PieceFormat.LONG) "Long reels" else "${f.label}s"
+        return "$name get you ${String.format(java.util.Locale.US, "%.1f", x).removeSuffix(".0")}× your usual views."
+    }
+
+    /**
+     * Ideas in the order to show and make: kinds doing clearly better (1.5× or more) first, best
+     * first; otherwise Gemini's order. Show all's ideas and series episodes stay where they were.
+     */
+    fun rank(scripts: List<Script>, boosts: Map<PieceFormat, Double>): List<Script> {
+        val strong = boosts.filterValues { it >= 1.5 }
+        if (strong.isEmpty()) return scripts
+        val (ideas, rest) = scripts.partition { !it.every && it.series == null && it.variationOf == null }
+        val ranked = ideas.withIndex().sortedWith(compareByDescending<IndexedValue<Script>> { strong[it.value.format] ?: 0.0 }.thenBy { it.index }).map { it.value }
+        // Takes stay right after the idea they belong to.
+        val takes = rest.filter { it.variationOf != null && !it.every && it.series == null }
+        val others = rest - takes.toSet()
+        return ranked.flatMap { sc -> listOf(sc) + takes.filter { it.variationOf == sc.title } } + takes.filter { t -> ranked.none { it.title == t.variationOf } } + others
     }
 
     fun postPrompt(title: String, about: String, caption: String): String =

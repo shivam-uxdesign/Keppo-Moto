@@ -708,6 +708,14 @@ Rider's answers: yes to 1, 2, 3, 5, 6, 7, 8, 9 and 11; maybe to 10; no to 4 (rou
 - **Learn from what worked:** how posted videos did (views noted after posting) ranks the next ride's ideas, formats and series. For example: "Caption clips get you 3× the views, so they come first".
 - **Maybe, decide later:** 3–5 hashtags and the ride's area added to the copied caption, matched to Reels or Shorts.
 
+**Status (13 Oct): F built, without hashtags (still "maybe").**
+- Compilations: things Gemini saw (seen in 4+ clips) and phrases said (in 4+ clips), from 2 rides or more.
+  - Offered one at a time in Your Reels, with Make it, Not now and Next idea.
+  - Made from the newest ride's Studio, with the other rides' clips borrowed.
+- Learning:
+  - Once 4 videos have views, a kind doing 1.5× better goes first in new suggestions.
+  - Gemini is told so, and Your Reels says "What works: …".
+
 ### Later
 - **Blur faces and number plates:** after the rider gets a second camera.
 - **Weekly long video, and series episodes built from several rides:** last of all. **Ask the rider for permission before building this one.**

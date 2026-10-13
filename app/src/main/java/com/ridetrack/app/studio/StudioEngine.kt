@@ -355,7 +355,8 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
                 val local = localPieces(fs, "Made by the app: $why", title)
                 Suggested.Scripts(withSoundOn(fs, if (all) withEvery(fs, local) else local), why).also { savePlan(it.scripts, answer, why) }
             } else {
-                val list = withSoundOn(fs, if (all) withEvery(fs, scripts) else scripts)
+                // What did well comes first (learnt from the views the rider noted).
+                val list = Posting.rank(withSoundOn(fs, if (all) withEvery(fs, scripts) else scripts), Posting.boosts(c.reels.reels.value))
                 savePlan(list, answer)
                 Suggested.Scripts(list)
             }
