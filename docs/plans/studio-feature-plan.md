@@ -819,8 +819,8 @@ Done in one pass on the drawing code, because the token rewrite, the restyled vi
 
 - **Speedtrap (new style):** red, white and black, bike-themed.
   - **Redline effect:** a red pulse while the engine is at the redline. Two variants:
-    - **Full screen:** up to 30%.
-    - **Red edge glow:** the middle of the frame stays clear.
+    - **Full (default):** a flat red overlay over the whole frame, with no gradient, up to 30% at the peak of a pulse.
+    - **Stroke:** a red frame round the edge, 14 px wide on 1080 with 8 px blur on the inside; solid red at the peak.
   - **Pulse rhythm:** speeds up as the revs climb, about 2 per second at the line and 8 at the limiter.
   - **Redline detection:**
     - From the engine sound (the DJI engine track): the engine's pitch, learnt per bike.
