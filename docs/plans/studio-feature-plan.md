@@ -988,7 +988,7 @@ There's one preview in the editor; it never switches. It replaces both the exact
 - **Preview:** Split, Blur and Luma fade show in the editor on Android 13+ (the same shader). Android 12 shows Blur, and older phones a fade to black instead.
 - **Frame checker:** draws all of these, with the shader done pixel by pixel. Unit tests: `PictureCutsTest`.
 
-## Production readiness: audit and Play Store launch (planned 13 Oct, not started)
+## Production readiness: audit and Play Store launch (planned 13 Oct; phase 1 done, see `release-audit.md`)
 
 The rider is happy with the app. Next: a full UI, UX and code audit, then a global launch on Google Play. Plan agreed; the inventory starts when the rider says go.
 
