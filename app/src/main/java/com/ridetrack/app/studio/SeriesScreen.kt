@@ -28,7 +28,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,9 +60,9 @@ fun SeriesScreen(id: String, onBack: () -> Unit, onOpenReel: (rideId: String, re
     val reels by c.reels.reels.collectAsStateWithLifecycle()
     val styles by c.styles.styles.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
-    var editing by remember { mutableStateOf<Series?>(null) }
+    // A new series opens straight in its settings (set now, not after the first frame, which would find no series and leave).
+    var editing by remember { mutableStateOf(if (id == Routes.NEW_SERIES) Series(c.series.newId(), "", createdAt = System.currentTimeMillis()) else null) }
     var seriesId by remember { mutableStateOf(id.takeIf { it != Routes.NEW_SERIES }) }
-    LaunchedEffect(id) { if (id == Routes.NEW_SERIES) editing = Series(c.series.newId(), "", createdAt = System.currentTimeMillis()) }
     val s = list.firstOrNull { it.id == seriesId }
     var note by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -79,7 +78,11 @@ fun SeriesScreen(id: String, onBack: () -> Unit, onOpenReel: (rideId: String, re
         return
     }
     if (s == null) {
-        LaunchedEffect(Unit) { onBack() }
+        // Deleted, or not found: say so, with a way back.
+        Column(Modifier.fillMaxSize().statusBarsPadding().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("This series isn't here any more", style = RtType.title, color = RtColors.TextPrimary)
+            Text("‹ Back", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onBack).padding(vertical = 8.dp))
+        }
         return
     }
     val episodes = reels.filter { it.seriesId == s.id && it.deletedAt == null }.sortedBy { it.episode }
