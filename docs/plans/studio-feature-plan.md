@@ -719,3 +719,16 @@ Rider's answers: yes to 1, 2, 3, 5, 6, 7, 8, 9 and 11; maybe to 10; no to 4 (rou
 ### Later
 - **Blur faces and number plates:** after the rider gets a second camera.
 - **Weekly long video, and series episodes built from several rides:** last of all. **Ask the rider for permission before building this one.**
+
+## Bugs and requests from the rider (13 Oct evening, not built yet)
+
+1. **Preview: transitions lag, plain playback is fine.**
+   - Likely causes:
+     1. Every clip in the preview is its own item with its own effects: overlay, colour, crop and camera move. At each cut, Media3 rebuilds the effect chain (shaders and textures) for the next clip, and that rebuild lands right where the transition plays.
+     2. The next clip starts in the middle of its file, so the decoder first decodes from the keyframe before it (clips have a keyframe every 1 s).
+     3. The overlay is drawn at full 1080×1920 on every frame, which adds to both.
+   - Planned fix:
+     1. Measure first: frame timing at cuts, with transitions on and off.
+     2. The preview keeps the same effect chain for the whole edit, so nothing is rebuilt at cuts.
+     3. The overlay is drawn at half size in the preview only (540×960); the made video stays full size.
+     4. The next clip is decoded ahead, before the cut.
