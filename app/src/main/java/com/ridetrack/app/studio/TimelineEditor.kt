@@ -213,6 +213,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var captionsOpen by remember { mutableStateOf(false) }
     var discard by remember { mutableStateOf(false) }
     var styleOpen by remember { mutableStateOf(false) }
+    var filterOpen by remember { mutableStateOf(false) }
     var addOpen by remember { mutableStateOf(false) }
     var soundOpen by remember { mutableStateOf(false) }
     var ideasOpen by remember { mutableStateOf(false) }
@@ -410,7 +411,13 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         runCatching { v.player = active }.onFailure { e -> if (exactOn) { exactOn = false; vm.previewFailed(e) } }
                         v
                     },
-                    update = { v -> if (v.player !== active) runCatching { v.player = active } },
+                    update = { v ->
+                        if (v.player !== active) runCatching { v.player = active }
+                        // The simple preview shows the filter on its picture (the exact one has it in the video).
+                        if (!exactOn) (v.videoSurfaceView as? android.view.TextureView)?.setLayerPaint(
+                            s.options.filter.takeIf { it != RideFilter.NONE }?.let { filterPaint(it, s.options.filterAmount) },
+                        )
+                    },
                     modifier = Modifier.fillMaxSize().graphicsLayer {
                         val k = (cam?.let { maxOf(it.k, art.fill(it)) } ?: 1f) * crop.z
                         scaleX = k; scaleY = k
@@ -825,6 +832,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete") { TimelineEdits.delete(it, i) }; vm.pick(null) }
                         } else {
                             Tool(Icons.Rounded.Palette, "Style", n++) { styleOpen = true }
+                            Tool(Icons.Rounded.Gradient, "Filter", n++) { filterOpen = true }
                             Tool(Icons.Rounded.TextFields, "Text", n++) { active.pause(); typingId = null; typing = true }
                             Tool(Icons.Rounded.ClosedCaption, "Captions", n++) { captionTab = CaptionTab.LOOK; captionLine = null; captionsOpen = true }
                             Tool(Icons.Rounded.Subtitles, "Add caption", n++) { ask = TextAsk.NewCaption }
@@ -1219,6 +1227,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             }
         }
     }
+    FilterSheet(vm, s.options, filterOpen) { filterOpen = false }
     if (styleOpen) {
         val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
         StylePicker(vm, s, onAll = { nav(com.ridetrack.app.ui.nav.Routes.STYLES) }, timeline = true) { styleOpen = false }

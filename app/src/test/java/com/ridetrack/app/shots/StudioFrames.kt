@@ -72,7 +72,7 @@ class StudioFrames {
         FrameAt(vibe, localMs, durMs, prev, next, inKind, Transition(inKind).ms(vibe), outKind, Transition(outKind).ms(vibe), cut = 1)
 
     /** The scene through the vibe's camera, then [draw] on top; saved at half size. */
-    private fun shot(name: String, art: StudioArt, f: FrameAt?, draw: (Canvas) -> Unit) {
+    private fun shot(name: String, art: StudioArt, f: FrameAt?, filter: android.graphics.Paint? = null, draw: (Canvas) -> Unit) {
         val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(b)
         c.drawColor(Color.BLACK)
@@ -85,7 +85,7 @@ class StudioFrames {
             val k = maxOf(cam.k, fill)
             c.translate(w / 2f + cam.x, h / 2f + cam.y); c.rotate(cam.deg); c.scale(k, k); c.translate(-w / 2f, -h / 2f)
         }
-        c.drawBitmap(scene, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
+        c.drawBitmap(scene, 0f, 0f, filter ?: Paint(Paint.FILTER_BITMAP_FLAG))
         c.restore()
         draw(c)
         val small = Bitmap.createScaledBitmap(b, w / 2, h / 2, true)
@@ -127,6 +127,12 @@ class StudioFrames {
                     art.drawSticker(c, StickerItem(k.name, k, 0, 3_000, xy.first, xy.second), 1_000, 62, 24, vibe)
                 }
             }
+        }
+        // Every filter on the same shot, under the Clean vibe's captions (filters sit under the graphics).
+        com.ridetrack.app.studio.RideFilter.entries.forEach { rf ->
+            val clean = StudioArt(context)
+            val paint = if (rf == com.ridetrack.app.studio.RideFilter.NONE) null else com.ridetrack.app.studio.filterPaint(rf, 1f)
+            shot("filters/${rf.ordinal}-${rf.name.lowercase()}", clean, frame(Vibe.VLOG, 900, 4_000), paint) { c -> clean.drawClip(c, frame(Vibe.VLOG, 900, 4_000), lines, 62, "6:21 PM", true) }
         }
         // Every transition kind on the first vibe's clip, at the cut.
         val art = StudioArt(context)

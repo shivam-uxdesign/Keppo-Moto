@@ -263,7 +263,7 @@ class StudioRenderer(private val context: Context) {
     /** A layer's own video track: clear until it starts, the clip, then clear to the end. */
     private fun layerSequence(input: RenderInput, art: StudioArt, l: LayerItem): EditedMediaItemSequence {
         val (w, h) = layerSize(l, art.w)
-        val fx: List<Effect> = listOf(Presentation.createForWidthAndHeight(w, h, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP)) + grade(input.plan.vibe) + MaskEffect(l.shape, l.border, art.w / 540f)
+        val fx: List<Effect> = listOf(Presentation.createForWidthAndHeight(w, h, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP)) + grade(input.plan.vibe) + filterEffects(input.options) + MaskEffect(l.shape, l.border, art.w / 540f)
         val uri = uriOf(input, l.bit) ?: error("Layer clip missing")
         val items = ArrayList<EditedMediaItem>()
         if (l.startMs > 0) items += filler(l.startMs, fx)
@@ -387,6 +387,8 @@ class StudioRenderer(private val context: Context) {
         }
         if (cs == null || cs.color.look) video += grade(plan.vibe)
         if (cs != null && !cs.color.plain) video += colour(cs.color)
+        // The rider's filter: on the video, under every graphic.
+        video += filterEffects(o)
         video += OverlayEffect(listOf(overlay))
 
         // Talking clips at full volume, riding noise softer, the title and stats silent; short fades at the
@@ -461,6 +463,15 @@ class StudioRenderer(private val context: Context) {
         Vibe.FILM -> listOf(Contrast(-0.06f), HslAdjustment.Builder().adjustSaturation(-10f).build(), RgbAdjustment.Builder().setRedScale(1.05f).setBlueScale(0.92f).build(), LiftBlacks)
         Vibe.EDITORIAL -> listOf(Contrast(0.08f), HslAdjustment.Builder().adjustSaturation(-8f).build())
         Vibe.NATIVE -> emptyList()
+    }
+
+    /** The rider's filter as effects (none when off). */
+    private fun filterEffects(o: StudioOptions): List<Effect> {
+        if (o.filter == RideFilter.NONE || o.filterAmount <= 0f) return emptyList()
+        // Red only needs to see the colours first: one shader does it all.
+        if (RideFilters.keepsRed(o.filter)) return listOf(KeepRedEffect(o.filterAmount, RideFilters.grade(o.filter).contrast))
+        val m = RideFilters.media3(o.filter, o.filterAmount)
+        return listOf(androidx.media3.effect.RgbMatrix { _, _ -> m })
     }
 
     /** Film's faded blacks: every channel lifted by [LIFT] (the matrix's last column is an offset). */

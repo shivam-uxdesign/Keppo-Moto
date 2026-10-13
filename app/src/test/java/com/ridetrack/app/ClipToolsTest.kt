@@ -151,7 +151,7 @@ class ClipToolsTest {
         plan = ClipTools.freeze(plan, 500, "/f.jpg")
         val p = ReelProject(
             id = "r", rideId = null, createdAt = 1, updatedAt = 1, title = "t", series = "", episode = 1, hookLine = "", postCaption = "", story = null,
-            options = StudioOptions(accent = 0xFFE5322D.toInt()), musicUri = null, musicName = null, plan = plan, takes = emptyList(), tips = emptyList(), durationMs = plan.totalMs,
+            options = StudioOptions(accent = 0xFFE5322D.toInt(), filter = com.ridetrack.app.studio.RideFilter.MONSOON, filterAmount = 0.6f), musicUri = null, musicName = null, plan = plan, takes = emptyList(), tips = emptyList(), durationMs = plan.totalMs,
         )
         assertEquals(p, ReelJson.read(ReelJson.write(p)))
     }

@@ -325,6 +325,18 @@ private fun StudioSettings(vm: StudioViewModel, s: StudioState, onClose: () -> U
                 if (o.vibe != Vibe.NATIVE) Toggle("Route opening", "A 2 s route sketch before the first clip (off is better for reach)", o.intro) { v -> vm.setOptions { it.copy(intro = v) } }
                 Toggle("Map", "The route behind the stats. Off: no map at all", o.map) { v -> vm.setOptions { it.copy(map = v) } }
                 Toggle("Film grain", "Grain and a little flicker (Film has it on)", o.grain ?: o.vibe.spec.grain) { v -> vm.setOptions { it.copy(grain = v) } }
+                // The rider's filter, on the video under every graphic (the editor's Filter tool shows thumbnails).
+                Text("Filter", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.padding(top = 8.dp))
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    RideFilter.entries.forEach { f ->
+                        val on = f == o.filter
+                        Text(
+                            f.label, style = RtType.caption, color = if (on) RtColors.Background else RtColors.TextPrimary,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) RtColors.TextPrimary else RtColors.SurfaceRaised)
+                                .clickable { vm.setOptions { it.copy(filter = f) } }.padding(horizontal = 12.dp, vertical = 6.dp),
+                        )
+                    }
+                }
                 // The style's colour: titles, highlights, badge and the cut flash ("A" = the style's own).
                 Text("Style colour", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.padding(top = 8.dp))
                 ColourDots(o.accent) { c -> vm.setOptions { it.copy(accent = c) } }

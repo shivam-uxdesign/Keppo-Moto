@@ -1081,7 +1081,11 @@ class StudioViewModel(
 
     // ---- choices ---------------------------------------------------------------------------
 
-    fun setOptions(f: (StudioOptions) -> StudioOptions) {
+    /**
+     * Changes the options. While editing, a change to how the video looks (colour, filter, grain)
+     * reloads the preview, unless [reload] is off (a slider mid-drag; [refreshPreview] after).
+     */
+    fun setOptions(reload: Boolean = true, f: (StudioOptions) -> StudioOptions) {
         val before = _state.value.options
         _state.update {
             val o = f(it.options)
@@ -1089,6 +1093,8 @@ class StudioViewModel(
             it.copy(options = o.copy(lengthSec = if (o.lengthSec in lengths) o.lengthSec else lengths.last()), lengths = lengths)
         }
         if (!phoneOnly) c.studio.options = _state.value.options
+        val now = _state.value.options
+        if (reload && _state.value.timeline != null && (before.accent != now.accent || before.filter != now.filter || before.filterAmount != now.filterAmount || before.grain != now.grain)) refreshPreview()
         // Jump cuts and subtitles change how the ideas are made: plan them again.
         if ((before.jumpCuts != _state.value.options.jumpCuts || before.english != _state.value.options.english) && _state.value.pieces.isNotEmpty()) {
             viewModelScope.launch { showPieces(_state.value.pieces.map { it.script }) }
@@ -1569,6 +1575,19 @@ class StudioViewModel(
             withContext(Dispatchers.IO) { VoiceRecorder.mix(takes, plan.totalMs, File(c.appContext.cacheDir, "studio-preview-voice.wav")) }
         }
         return renderInput(plan, s, cd, voice)
+    }
+
+    /** Plays the edit again in the preview (after a look change that isn't an edit to the timeline). */
+    fun refreshPreview() = _state.update { it.copy(timelineVersion = it.timelineVersion + 1) }
+
+    /** A small still at the playhead, for the filter thumbnails. */
+    suspend fun filterFrame(): android.graphics.Bitmap? = withContext(Dispatchers.IO) {
+        val plan = _state.value.timeline ?: return@withContext null
+        sourceFrame(plan, playheadMs)?.let { b ->
+            val w = 144
+            val h = (w * b.height / b.width.coerceAtLeast(1)).coerceAtLeast(1)
+            android.graphics.Bitmap.createScaledBitmap(b, w, h, true)
+        }
     }
 
     /** What the simple preview draws its graphics from (as the made video, without the voice-over's sound). */

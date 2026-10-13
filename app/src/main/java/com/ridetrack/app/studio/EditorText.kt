@@ -356,7 +356,7 @@ internal fun CaptionsSheet(
 }
 
 @Composable
-private fun LabelledSlider(label: String, value: String, v: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit, onEnd: () -> Unit) {
+internal fun LabelledSlider(label: String, value: String, v: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit, onEnd: () -> Unit) {
     Column {
         Row {
             Text(label, style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))

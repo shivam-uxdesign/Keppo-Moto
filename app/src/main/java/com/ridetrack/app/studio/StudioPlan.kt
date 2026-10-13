@@ -201,6 +201,9 @@ data class StudioOptions(
     val brand: Boolean = false,
     /** The style's colour (ARGB); null = the style's own. */
     val accent: Int? = null,
+    /** The rider's filter on the video (under every graphic), and how strong (0..1). */
+    val filter: RideFilter = RideFilter.NONE,
+    val filterAmount: Float = 1f,
 ) {
     /** The route opening plays: Native has none. */
     val introOn: Boolean get() = intro && vibe != Vibe.NATIVE
