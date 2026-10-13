@@ -228,6 +228,10 @@ fun HomeScreen(
                 onEditBike = onEditBike,
                 modifier = Modifier.riseIn(0),
             )
+            // Below the bike: one ready video to post today.
+            if (!s.rideState.isActive) {
+                com.ridetrack.app.studio.TodayPostCard(Modifier.padding(top = 14.dp).riseIn(1))
+            }
         } else if (!s.loading) {
             if (s.offerRestore) {
                 RestoreCard(onRestore = onOpenProfile, onDismiss = vm::dismissRestore, modifier = Modifier.riseIn(0))

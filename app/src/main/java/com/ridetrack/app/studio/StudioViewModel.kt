@@ -1115,7 +1115,7 @@ class StudioViewModel(
         // No longer a draft; a day later, "How did it do?".
         s.reelId?.let { id ->
             if (c.reels.get(id)?.posted == false) PostedReminderWorker.schedule(c.appContext, id)
-            viewModelScope.launch { c.reels.update(id) { it.copy(posted = true) } }
+            viewModelScope.launch { c.reels.markPosted(id) }
         }
     }
 
@@ -1124,7 +1124,7 @@ class StudioViewModel(
     /** How the posted Reel did; Studio's next suggestions lean towards what did well. */
     fun setStats(views: Int?, likes: Int?) {
         _state.update { it.copy(views = views, likes = likes) }
-        _state.value.reelId?.let { id -> viewModelScope.launch { c.reels.update(id) { it.copy(views = views, likes = likes, posted = true) } } }
+        _state.value.reelId?.let { id -> viewModelScope.launch { c.reels.update(id) { it.copy(views = views, likes = likes, posted = true, postedAt = it.postedAt ?: System.currentTimeMillis()) } } }
     }
 
     /** Gemini writes the YouTube title and description (and a fresh Instagram caption if there's none). */

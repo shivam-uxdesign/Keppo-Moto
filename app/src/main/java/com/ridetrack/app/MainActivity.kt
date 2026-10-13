@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun rideToOpen(intent: Intent?): String? {
         if (intent?.action != ACTION_OPEN_RIDE) return null
+        intent.getStringExtra(EXTRA_REVIEW)?.let { return REVIEW_PREFIX + it }
         val ride = intent.getStringExtra("rideId").orEmpty()
         val reel = intent.getStringExtra(EXTRA_REEL)
         if (reel != null) return STUDIO_PREFIX + ride + "#" + reel
@@ -79,5 +80,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_STUDIO = "studio"
         const val STUDIO_PREFIX = "studio:"
         const val EXTRA_REEL = "reelId"
+        /** Opens ready videos full screen, at this one ("Today's post"). */
+        const val EXTRA_REVIEW = "review"
+        const val REVIEW_PREFIX = "review:"
     }
 }

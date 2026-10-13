@@ -118,13 +118,13 @@ fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String,
     fun save(ids: Set<String>) = scope.launch {
         note = "Saving ${ids.size}…"
         val ok = ids.count { id -> store.video(id).takeIf { it.isFile }?.let { f -> ShareImages.saveVideo(context, f, "Keppo Reel $id") } == true }
-        ids.forEach { id -> store.update(id) { it.copy(posted = true) } }
+        ids.forEach { id -> store.markPosted(id) }
         note = if (ok == ids.size) "Saved $ok to Movies/Keppo Moto" else "Saved $ok of ${ids.size}"
     }
     fun share(ids: Set<String>) {
         val files = ids.map { store.video(it) }.filter { it.isFile }
         ShareImages.shareMany(context, files.map { ShareImages.uriFor(context, it) }, "video/mp4")
-        scope.launch { ids.forEach { id -> store.update(id) { it.copy(posted = true) } } }
+        scope.launch { ids.forEach { id -> store.markPosted(id) } }
     }
     if (selecting) BackHandler { stopSelecting() }
 
@@ -134,6 +134,16 @@ fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String,
                 Text("‹ Studio", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button, onClick = onBack).padding(vertical = 8.dp, horizontal = 4.dp))
                 Spacer(Modifier.weight(1f))
                 if (tab == ReelsTab.REELS) {
+                    val waiting = remember(all) { c.postPlan.queue(all).size }
+                    if (!selecting && waiting > 0) {
+                        val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
+                        Text(
+                            "Watch $waiting ready",
+                            style = RtType.button,
+                            color = RtColors.Primary,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button) { nav(com.ridetrack.app.ui.nav.Routes.review()) }.padding(8.dp),
+                        )
+                    }
                     Text(
                         if (selecting) "Cancel" else "Select",
                         style = RtType.button,

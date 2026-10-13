@@ -107,6 +107,9 @@ object Routes {
     /** Studio › Settings. */
     const val STUDIO_SETTINGS = "studio-settings"
     /** A series' folder (its episodes) and its settings; [NEW_SERIES] makes one. */
+    /** Ready videos full screen to share, one after another; at [reel], or only [ride]'s. */
+    const val REVIEW = "studio-review?reel={reel}&ride={ride}"
+    fun review(reel: String? = null, ride: String? = null) = "studio-review" + listOfNotNull(reel?.let { "reel=$it" }, ride?.let { "ride=$it" }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
     const val SERIES = "studio-series/{id}"
     const val NEW_SERIES = "new"
     fun series(id: String) = "studio-series/$id"
@@ -159,6 +162,11 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
         val asked = openRideId ?: return@LaunchedEffect
         onOpenRideHandled()
         if (session.state.value.isActive) return@LaunchedEffect
+        // "Today's post": ready videos full screen, at that one.
+        if (asked.startsWith(com.ridetrack.app.MainActivity.REVIEW_PREFIX)) {
+            nav.navigate(Routes.review(asked.removePrefix(com.ridetrack.app.MainActivity.REVIEW_PREFIX)))
+            return@LaunchedEffect
+        }
         val studio = asked.startsWith(com.ridetrack.app.MainActivity.STUDIO_PREFIX)
         val id = asked.removePrefix(com.ridetrack.app.MainActivity.STUDIO_PREFIX).substringBefore('#')
         // A Reel (from "How did it do?"): open it.
@@ -343,6 +351,22 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                 }
                 composable(Routes.STUDIO_SEARCH) {
                     DarkRoute { com.ridetrack.app.studio.StudioSearchScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) }, onOpenStudio = { nav.navigate(Routes.reel(it)) }) }
+                }
+                composable(
+                    Routes.REVIEW,
+                    arguments = listOf(
+                        navArgument("reel") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("ride") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    ),
+                ) { entry ->
+                    DarkRoute {
+                        com.ridetrack.app.studio.ReviewScreen(
+                            start = entry.arguments?.getString("reel"),
+                            rideId = entry.arguments?.getString("ride"),
+                            onBack = { nav.popBackStack() },
+                            onEdit = { p -> if (p.rideId != null) nav.navigate(Routes.savedReel(p.rideId, p.id, edit = true)) else nav.navigate(Routes.studioPhone(p.id, edit = true)) },
+                        )
+                    }
                 }
                 composable(Routes.SERIES, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
                     DarkRoute {

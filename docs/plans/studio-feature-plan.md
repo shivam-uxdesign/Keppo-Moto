@@ -679,6 +679,14 @@ Rider's answers: yes to 1, 2, 3, 5, 6, 7, 8, 9 and 11; maybe to 10; no to 4 (rou
 - Every day there's a reminder at the rider's usual posting time (learnt from when they shared before).
 - **Home:** a "Today's post" card **below the Start ride card**, with the video, Share and "Swap".
 
+**Status (13 Oct): B and C built.**
+- The line of videos to post: oldest first (made in the last 30 days), skipped ones last, and a series' episodes in episode order.
+- Entry points:
+  - "Watch N ready" in Your Reels
+  - "Watch N ready to post" on a ride's page
+  - the Home card
+  - the daily reminder
+
 ### D. "Clip that" by voice: dropped (13 Oct, the rider's call)
 
 ### E. Better videos without editing

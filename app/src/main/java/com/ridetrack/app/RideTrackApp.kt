@@ -50,6 +50,8 @@ class RideTrackApp : Application() {
         container.transcribeSoon()
         // Reels still waiting when the app was closed are made now.
         container.reelMaker.resume()
+        // "Today's post" at the rider's usual posting time.
+        com.ridetrack.app.studio.TodayPostWorker.schedule(this)
         container.appScope.launch { runCatching { container.fuel.checkRecent() } }
         // Why the app last stopped, into the log of the ride it interrupted.
         container.appScope.launch {

@@ -56,6 +56,9 @@ class ReelStore(private val context: Context) {
         project
     }
 
+    /** Shared or saved to the phone: no longer a draft (the first time is remembered, to learn when the rider posts). */
+    suspend fun markPosted(id: String): ReelProject? = update(id) { it.copy(posted = true, postedAt = it.postedAt ?: System.currentTimeMillis()) }
+
     /** Updates the saved details only (cover settings, Journal state…). */
     suspend fun update(id: String, f: (ReelProject) -> ReelProject): ReelProject? = withContext(Dispatchers.IO) {
         val p = get(id)?.let(f) ?: return@withContext null

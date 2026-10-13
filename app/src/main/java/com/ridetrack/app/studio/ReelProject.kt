@@ -54,6 +54,8 @@ data class ReelProject(
     val youtubeDescription: String? = null,
     /** The series it's an episode of (its id); null for an ordinary Reel. */
     val seriesId: String? = null,
+    /** When it was first shared or saved to the phone. */
+    val postedAt: Long? = null,
 ) {
     val vibe: Vibe get() = options.vibe
 }
@@ -105,6 +107,7 @@ object ReelJson {
         put("ytTitle", p.youtubeTitle ?: JSONObject.NULL)
         put("ytDescription", p.youtubeDescription ?: JSONObject.NULL)
         put("seriesId", p.seriesId ?: JSONObject.NULL)
+        put("postedAt", p.postedAt ?: JSONObject.NULL)
     }.toString()
 
     fun read(text: String): ReelProject? = runCatching {
@@ -168,6 +171,7 @@ object ReelJson {
             youtubeTitle = o.optStringOrNull("ytTitle"),
             youtubeDescription = o.optStringOrNull("ytDescription"),
             seriesId = o.optStringOrNull("seriesId"),
+            postedAt = o.optLongOrNull("postedAt"),
         )
     }.getOrNull()
 

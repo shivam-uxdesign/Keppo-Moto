@@ -193,7 +193,17 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             if (startWithClips) ClipStrip(vm, s, compact = false)
             Suggestions(vm, s, made)
             AskFor(vm, s)
-            if (!s.phoneOnly) RideReels(vm.rideId, onSendAll = vm::sendAllToJournal) { vm.openSaved(it) } else PhoneReels { vm.openSaved(it) }
+            if (!s.phoneOnly) {
+                // This ride's videos waiting to be posted: watch them full screen, share one by one.
+                val ready = all.count { it.rideId == vm.rideId && it.deletedAt == null && !it.posted }
+                if (ready > 0) {
+                    val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
+                    Button("Watch $ready ready to post", primary = false) { nav(com.ridetrack.app.ui.nav.Routes.review(ride = vm.rideId)) }
+                }
+                RideReels(vm.rideId, onSendAll = vm::sendAllToJournal) { vm.openSaved(it) }
+            } else {
+                PhoneReels { vm.openSaved(it) }
+            }
             if (!startWithClips) ClipStrip(vm, s, compact = true)
             s.error?.let { ErrorBox(vm, it) }
             Text(

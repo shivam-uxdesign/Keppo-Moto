@@ -192,6 +192,8 @@ fun StudioSettingsScreen(onBack: () -> Unit) {
                     SwitchLine("Make the top 3", "A long reel, the best moment and your story, waiting in Your Reels", top) { top = it; prefs.autoMakeTop = it }
                     SwitchLine("Use mobile data on low battery", "Otherwise it waits for Wi-Fi", mobile) { mobile = it; prefs.autoMobileData = it }
                 }
+                var daily by remember { mutableStateOf(c.postPlan.on) }
+                SwitchLine("A post a day", "Today's post on Home, and a reminder at the time you usually post", daily) { daily = it; c.postPlan.on = it }
                 SwitchLine("Make every idea overnight", "While the phone charges: they're in Your Reels by morning", overnight) {
                     overnight = it; prefs.makeOvernight = it; OvernightMakeWorker.set(c.appContext, it)
                 }
