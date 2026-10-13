@@ -695,6 +695,12 @@ Rider's answers: yes to 1, 2, 3, 5, 6, 7, 8, 9 and 11; maybe to 10; no to 4 (rou
 - **Engine-sound pieces ("Sound on"):** a fast stretch with only the engine channel (DJI stereo) and a speed sticker, no talking.
 - **Two hooks per video:** each video gets a second opening (a different first shot or line), as a variation. One can be posted now and the other later.
 
+**Status (13 Oct): E built.**
+- Jump cuts and English subtitles each have a switch for new videos (Settings, and the ride's settings sheet).
+- For one video: subtitles have a switch in the editor (Captions › Look), and clips read before subtitles existed get their English in one text request. Jump cuts can be undone by trimming in the editor.
+- Sound on: up to 2 per ride, from the fastest clips (35 km/h or more) with 8 s or more without words.
+- Second hooks: made without Gemini for the top 3 ideas, shown as takes under their cards.
+
 ### F. Grow the page
 - **Theme compilations across rides:** from the saved clips' tags and words.
   - Examples: "Delhi traffic police, 6 times · 0:48", "Every 'bhai kya kar raha hai' this month".

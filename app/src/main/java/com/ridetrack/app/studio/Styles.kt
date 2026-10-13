@@ -91,7 +91,7 @@ object Styles {
      * sound. [newId] names new stickers.
      */
     fun apply(plan: StudioPlan, s: StudioStyle, newId: () -> String): StudioPlan {
-        var p = plan.copy(vibe = s.base, captionLook = s.captions, mix = plan.mix.copy(duck = s.duck, cleanVoice = s.cleanVoice))
+        var p = plan.copy(vibe = s.base, captionLook = s.captions.copy(english = s.captions.english || plan.captionLook.english), mix = plan.mix.copy(duck = s.duck, cleanVoice = s.cleanVoice))
         // Text presets onto the timeline's text.
         p = p.copy(texts = p.texts.map { it.copy(look = s.textLook, color = s.textColor, animIn = s.textIn, animOut = s.textOut, font = s.textFont, size = s.textSize, y = s.textY ?: it.y) })
         // Pace: riding shots (no words) longer or shorter, within their clip.

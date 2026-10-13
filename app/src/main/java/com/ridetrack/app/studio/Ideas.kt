@@ -69,3 +69,28 @@ object TopSlots {
         return out
     }
 }
+
+/**
+ * A second opening for an idea: its strongest later moment (the peak) flashed first, the rest as
+ * it was, so one can be posted now and the other later. Shown as a take under the idea's card.
+ * Pure, unit-tested.
+ */
+object SecondHook {
+    private const val FLASH_MS = 2_500L
+
+    fun of(sc: Script): Script? {
+        if (sc.every || sc.series != null || sc.variationOf != null || sc.shape == SoundOn.SHAPE) return null
+        if (sc.format == PieceFormat.CAPTION || sc.format == PieceFormat.LONG) return null
+        val hookClip = sc.sections.firstOrNull { it.kind == SectionKind.HOOK }?.shots?.firstOrNull()?.clip
+        val peak = sc.sections.filter { it.kind != SectionKind.HOOK }.let { rest -> rest.firstOrNull { it.kind == SectionKind.PEAK } ?: rest.lastOrNull() }
+            ?.shots?.firstOrNull { it.clip != hookClip } ?: return null
+        val flash = ScriptShot(peak.clip, peak.inMs, minOf(peak.outMs, peak.inMs + FLASH_MS))
+        return sc.copy(
+            title = "${sc.title} · other hook",
+            why = "The same piece, opening on its peak instead",
+            hookLine = null,
+            sections = listOf(Section(SectionKind.HOOK, "flash", listOf(flash))) + sc.sections.filter { it.kind != SectionKind.HOOK },
+            variationOf = sc.title,
+        )
+    }
+}

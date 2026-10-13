@@ -438,6 +438,29 @@ class StudioArt(context: Context, val w: Int = 1080, val h: Int = 1920, private 
             else -> plainCaption(c, lines, t, look.karaoke, baseY)
         }
         c.restore()
+        if (look.english) english(c, lines, t, (look.y ?: baseY) + 0.085f * look.size)
+    }
+
+    /** The English meaning of the Hinglish line being said, small, under the captions. */
+    private fun english(c: Canvas, lines: List<CaptionLine>, t: Float, y: Float) {
+        val l = lines.indices.firstOrNull { k ->
+            val x = lines[k]
+            val next = lines.getOrNull(k + 1)
+            val until = if (next != null) min(next.startMs / 1000f - 0.05f, x.endMs / 1000f + 0.8f) else x.endMs / 1000f + 0.8f
+            t >= x.startMs / 1000f - 0.05f && t < until
+        }?.let { lines[it] } ?: return
+        val en = l.en?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        text(plainFace, 30 * s, Color.WHITE, Paint.Align.CENTER)
+        val rows = wrap(en.split(Regex("\\s+")), W * 0.78f).take(2)
+        rows.forEachIndexed { i, row ->
+            val line = row.joinToString(" ")
+            val by = H * y.coerceAtMost(0.9f) + i * 38 * s
+            p.style = Paint.Style.STROKE; p.strokeWidth = 5 * s; p.color = Color.argb(190, 0, 0, 0)
+            c.drawText(line, W / 2, mid(by), p)
+            p.style = Paint.Style.FILL; p.color = Color.argb(235, 255, 255, 255)
+            c.drawText(line, W / 2, mid(by), p)
+        }
+        p.style = Paint.Style.FILL
     }
 
     /** Plain captions: white words with a dark edge, two rows at most; the word being said lights up yellow. */

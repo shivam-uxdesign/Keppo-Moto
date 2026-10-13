@@ -267,6 +267,7 @@ internal fun CaptionsSheet(
                 }
                 SwitchRow("Light up each word", "As it's said. Off: the whole line at once.", look.karaoke) { on -> vm.change("Captions words") { TextTools.captionLook(it) { l -> l.copy(karaoke = on) } } }
                 SwitchRow("Dark band behind", "So they read on any shot", look.box) { on -> vm.change("Captions band") { TextTools.captionLook(it) { l -> l.copy(box = on) } } }
+                SwitchRow("English under Hinglish", "A small English line under each Hinglish caption", look.english) { on -> vm.setEnglish(on) }
             } else {
                 var from by remember { mutableStateOf("") }
                 var to by remember { mutableStateOf("") }

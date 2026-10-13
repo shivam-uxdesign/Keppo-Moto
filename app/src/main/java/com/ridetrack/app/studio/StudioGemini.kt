@@ -159,6 +159,13 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         return ScriptWriter.parseJokes(text)
     }
 
+    /** English for [lines] (Hinglish captions), by position; null for lines that need none. */
+    suspend fun english(lines: List<String>): List<String?> {
+        if (lines.isEmpty()) return emptyList()
+        val text = call(json = true, models = FirebaseTranscriber.LITE + FirebaseTranscriber.MODELS) { m -> m.generateContent(StudioText.englishPrompt(lines)).text.orEmpty() }
+        return StudioText.parseEnglish(text, lines.size) ?: List(lines.size) { null }
+    }
+
     /** Tips for the next Reel, from a plain description of this one (text only). */
     suspend fun coach(summary: String): List<Tip> {
         val text = call(json = true) { m -> m.generateContent(StudioText.coachPrompt(summary)).text.orEmpty() }
@@ -301,7 +308,8 @@ object StudioText {
         Hindi words the way people text them (for example "bhai ye road mast hai"). Do not translate, never use Devanagari.
         Ignore wind, engine, horn and traffic noise. Split speech into short lines of at most 8 words, at natural pauses.
         Also write the rider's reactions and drawn-out sounds as they sound ("Tooooo", "Aaaahh", "Fhit!", "Nooo"), each as its own line.
-        Reply with JSON only: {"lines":[{"start":1.2,"end":3.4,"text":"..."}]} with start and end in seconds from the
+        When a line has Hindi words, add "en": what it means in short, natural English (for subtitles); leave "en" out for English lines and sounds.
+        Reply with JSON only: {"lines":[{"start":1.2,"end":3.4,"text":"...","en":"..."}]} with start and end in seconds from the
         beginning of the recording. If there is no clear speech, reply {"lines":[]}.
     """.trimIndent()
 
@@ -312,9 +320,24 @@ object StudioText {
         Hindi words the way people text them (for example "bhai ye road mast hai"). Do not translate, never use Devanagari.
         Ignore wind, engine, horn and traffic noise. Split speech into short lines of at most 8 words, at natural pauses.
         Also write the rider's reactions and drawn-out sounds as they sound ("Tooooo", "Aaaahh", "Fhit!", "Nooo"), each as its own line.
-        Reply with JSON only: {"clips":[{"clip":1,"lines":[{"start":1.2,"end":3.4,"text":"..."}]}]} with one entry per clip;
+        When a line has Hindi words, add "en": what it means in short, natural English (for subtitles); leave "en" out for English lines and sounds.
+        Reply with JSON only: {"clips":[{"clip":1,"lines":[{"start":1.2,"end":3.4,"text":"...","en":"..."}]}]} with one entry per clip;
         a clip with no clear speech has "lines":[].
     """.trimIndent()
+
+    /** English for Hinglish caption lines that have none yet (clips read before subtitles), in one text request. */
+    fun englishPrompt(lines: List<String>): String = buildString {
+        appendLine("These are caption lines a motorcycle rider said, in English and Hinglish (Hindi in English letters).")
+        appendLine("For each line, write what it means in short, natural English, for subtitles. A line already in English, or a sound (\"Aaaah\", \"Tooooo\"), gets \"\".")
+        lines.forEachIndexed { i, l -> appendLine("${i + 1}. ${l.replace("\n", " ")}") }
+        append("Reply with JSON only: {\"en\":[\"...\"]} with exactly ${lines.size} entries, in the same order.")
+    }
+
+    /** The English lines from [reply], by position ("" or missing = none); null when unreadable. */
+    fun parseEnglish(reply: String, n: Int): List<String?>? = runCatching {
+        val a = JSONObject(jsonPart(reply)).getJSONArray("en")
+        (0 until n).map { i -> a.optString(i).trim().takeIf { it.isNotEmpty() && it != "null" } }
+    }.getOrNull()
 
     /** Each clip's lines from a batch reply, by position; null where the clip is missing. */
     fun parseBatch(reply: String, n: Int): List<List<CaptionLine>?> {
@@ -357,7 +380,8 @@ object StudioText {
             val text = o.optString("text").trim().trim('"')
             val a = seconds(o.opt("start"))
             val b = seconds(o.opt("end"))
-            if (text.isEmpty() || a == null || b == null || b <= a) null else CaptionLine((a * 1000).roundToLong(), (b * 1000).roundToLong(), text)
+            val en = o.optString("en").trim().trim('"').takeIf { it.isNotEmpty() && it != "null" && !it.equals(text, ignoreCase = true) }
+            if (text.isEmpty() || a == null || b == null || b <= a) null else CaptionLine((a * 1000).roundToLong(), (b * 1000).roundToLong(), text, en)
         }.sortedBy { it.startMs }
     }.getOrNull()
 
@@ -438,7 +462,7 @@ object StudioText {
 
     fun save(clip: File, lines: List<CaptionLine>) {
         val arr = JSONArray()
-        lines.forEach { arr.put(JSONObject().put("start", it.startMs / 1000.0).put("end", it.endMs / 1000.0).put("text", it.text)) }
+        lines.forEach { l -> arr.put(JSONObject().put("start", l.startMs / 1000.0).put("end", l.endMs / 1000.0).put("text", l.text).apply { l.en?.let { put("en", it) } }) }
         linesFile(clip).writeText(JSONObject().put("lines", arr).toString())
     }
 

@@ -316,6 +316,8 @@ private fun StudioSettings(vm: StudioViewModel, s: StudioState, onClose: () -> U
             Section("On the video") {
                 Toggle("Captions", "What you said, word by word (Gemini reads the clips' sound)", o.captions) { v -> vm.setOptions { it.copy(captions = v) } }
                 Toggle("Stats at the end", "When the script ends on them: distance, top speed, time", o.outro) { v -> vm.setOptions { it.copy(outro = v) } }
+                Toggle("English subtitles", "A small English line under Hinglish captions", o.english) { v -> vm.setOptions { it.copy(english = v) } }
+                Toggle("Jump cuts", "Long pauses, \u201cumm\u201ds and false starts cut from what you say", o.jumpCuts) { v -> vm.setOptions { it.copy(jumpCuts = v) } }
                 Toggle("Loop the ending", "Ends on the opening shot, so it plays on without a jump", o.loopEnd) { v -> vm.setOptions { it.copy(loopEnd = v) } }
                 Toggle("Route opening", "A 2 s route sketch before the first clip (off is better for reach)", o.intro) { v -> vm.setOptions { it.copy(intro = v) } }
                 Toggle("Map", "The route behind the stats. Off: no map at all", o.map) { v -> vm.setOptions { it.copy(map = v) } }

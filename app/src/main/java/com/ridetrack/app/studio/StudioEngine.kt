@@ -299,6 +299,24 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
     @Volatile var lastAnswer: String? = null
         private set
 
+    /** Each clip's engine sound (the DJI's second channel), by moment id, where it was recorded. */
+    fun engineFiles(): Map<String, String> = clips.filter { it.engineFile.isFile }.associate { it.id to android.net.Uri.fromFile(it.engineFile).toString() }
+
+    /**
+     * Gemini's ideas, each of the top 3 with a second hook (a take under its card), then up to 2
+     * Sound on pieces from the fastest stretches without words. No Gemini request.
+     */
+    private fun withSoundOn(fs: List<Footage>, list: List<Script>): List<Script> {
+        val titles = list.map { it.title }.toMutableSet()
+        val out = ArrayList<Script>()
+        var hooks = 0
+        list.forEach { sc ->
+            out += sc
+            if (hooks < 3) SecondHook.of(sc)?.takeIf { it.title !in titles }?.let { out += it; titles += it.title; hooks++ }
+        }
+        return out + SoundOn.scripts(fs).filter { it.title !in titles && list.none { s -> s.shape == SoundOn.SHAPE } }
+    }
+
     /** The suggestions as pieces to show and make (each turned into a plan by the app's checks). */
     fun pieces(scripts: List<Script>, o: StudioOptions = c.studio.options): List<ContentPiece> {
         val fs = footage()
@@ -310,7 +328,9 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
             if (sc.format == PieceFormat.LONG && planned.plan.totalMs < ScriptWriter.LONG_MIN_MS) return@mapIndexedNotNull null
             // The style Gemini picked from the rider's own: its whole look on the piece.
             var n = 0
-            val plan = st?.let { Styles.apply(planned.plan, it) { "s${i}-${n++}" } } ?: planned.plan
+            var plan = st?.let { Styles.apply(planned.plan, it) { "s${i}-${n++}" } } ?: planned.plan
+            // Sound on: the engine's sound only, and the speed.
+            if (sc.shape == SoundOn.SHAPE) plan = SoundOn.apply(plan, engineFiles()) { "so${i}-${n++}" }
             ContentPiece("p$i", sc, plan, planned.plannedMs, planned.fixes)
         }
     }
@@ -333,9 +353,9 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
             if (scripts.isEmpty()) {
                 val why = "Gemini's answer couldn't be read"
                 val local = localPieces(fs, "Made by the app: $why", title)
-                Suggested.Scripts(if (all) withEvery(fs, local) else local, why).also { savePlan(it.scripts, answer, why) }
+                Suggested.Scripts(withSoundOn(fs, if (all) withEvery(fs, local) else local), why).also { savePlan(it.scripts, answer, why) }
             } else {
-                val list = if (all) withEvery(fs, scripts) else scripts
+                val list = withSoundOn(fs, if (all) withEvery(fs, scripts) else scripts)
                 savePlan(list, answer)
                 Suggested.Scripts(list)
             }

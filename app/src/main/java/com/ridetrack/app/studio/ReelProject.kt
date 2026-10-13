@@ -181,7 +181,7 @@ object ReelJson {
     private fun options(o: StudioOptions) = JSONObject()
         .put("vibe", o.vibe.name).put("lengthSec", o.lengthSec).put("intro", o.intro).put("outro", o.outro).put("loopEnd", o.loopEnd)
         .put("map", o.map).put("captions", o.captions).put("watermark", o.watermark).put("seed", o.seed).put("bpm", o.bpm ?: JSONObject.NULL).put("teaser", o.teaser)
-        .put("speedBadge", o.speedBadge).put("brand", o.brand)
+        .put("speedBadge", o.speedBadge).put("brand", o.brand).put("jumpCuts", o.jumpCuts).put("english", o.english)
 
     private fun readOptions(o: JSONObject) = StudioOptions(
         vibe = o.optStringOrNull("vibe")?.let { n -> Vibe.entries.firstOrNull { it.name == n } } ?: Vibe.HYPE,
@@ -197,6 +197,8 @@ object ReelJson {
         teaser = o.optBoolean("teaser"),
         speedBadge = o.optBoolean("speedBadge", true),
         brand = o.optBoolean("brand"),
+        jumpCuts = o.optBoolean("jumpCuts", true),
+        english = o.optBoolean("english"),
     )
 
     private fun segment(s: Segment): JSONObject = when (s) {
@@ -302,10 +304,10 @@ object ReelJson {
         cleanVoice = o.optBoolean("clean", false),
     )
 
-    private fun lines(l: List<CaptionLine>) = JSONArray().apply { l.forEach { put(JSONObject().put("s", it.startMs).put("e", it.endMs).put("t", it.text)) } }
+    private fun lines(l: List<CaptionLine>) = JSONArray().apply { l.forEach { put(JSONObject().put("s", it.startMs).put("e", it.endMs).put("t", it.text).apply { it.en?.let { e -> put("en", e) } }) } }
 
     private fun readLines(a: JSONArray?): List<CaptionLine> =
-        if (a == null) emptyList() else (0 until a.length()).map { i -> a.getJSONObject(i).let { CaptionLine(it.getLong("s"), it.getLong("e"), it.getString("t")) } }
+        if (a == null) emptyList() else (0 until a.length()).map { i -> a.getJSONObject(i).let { CaptionLine(it.getLong("s"), it.getLong("e"), it.getString("t"), it.optStringOrNull("en")) } }
 
     private fun JSONObject.optStringOrNull(k: String): String? = if (isNull(k) || !has(k)) null else optString(k)
     private fun JSONObject.optLongOrNull(k: String): Long? = if (isNull(k) || !has(k)) null else optLong(k)

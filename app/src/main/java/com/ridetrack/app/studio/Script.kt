@@ -531,6 +531,16 @@ object ScriptWriter {
             p.outMs = out
             fixes += "filled ${p.f.key}"
         }
+        // Jump cuts: talking shots lose their long pauses, "umm"s and false starts (one shot, several pieces).
+        if (options.jumpCuts) {
+            val cut = placed.flatMap { p ->
+                val r = JumpCuts.ranges(p.inMs, p.outMs, p.f.lines)
+                if (r.size > 1) fixes += "jump cuts ${p.f.key}"
+                r.mapIndexed { k, x -> p.copy(inMs = x.first, outMs = x.last, text = p.text.takeIf { k == 0 }) }
+            }
+            placed.clear()
+            placed += cut
+        }
         val segs = ArrayList<Segment>()
         placed.forEachIndexed { i, p ->
             val bit = bits.firstOrNull { it.momentId == p.f.momentId }
@@ -567,7 +577,7 @@ object ScriptWriter {
             val first = segs.filterIsInstance<ClipSegment>().first()
             segs += ClipSegment(first.bit, first.inMs, StudioPlanner.TAIL_MS.coerceAtMost(first.durMs), emptyList(), hook = false, tail = true)
         }
-        return Planned(withOnScreen(StudioPlan(segs, vibe), script.onScreen), fixes, script.lengthSec * 1000L)
+        return Planned(withOnScreen(StudioPlan(segs, vibe, captionLook = CaptionLook(english = options.english)), script.onScreen), fixes, script.lengthSec * 1000L)
     }
 
     /** The lines written on the video, one after another across its clips (top of the frame, on a box). */

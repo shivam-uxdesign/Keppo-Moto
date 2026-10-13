@@ -14,7 +14,13 @@ enum class Vibe(val label: String, val blurb: String, val bpm: Int, val beats: I
 }
 
 /** A line the rider said, in ms from the start of the clip (or of a segment, once planned). */
-data class CaptionLine(val startMs: Long, val endMs: Long, val text: String)
+data class CaptionLine(
+    val startMs: Long,
+    val endMs: Long,
+    val text: String,
+    /** What a Hinglish line means in English (for subtitles under it); null for English lines and sounds. */
+    val en: String? = null,
+)
 
 /**
  * A usable part of a clip: a sentence or two the rider said, or a few seconds of riding.
@@ -162,6 +168,10 @@ data class StudioOptions(
     val outro: Boolean = true,
     /** End on a split second of the opening shot, so the Reel loops. */
     val loopEnd: Boolean = true,
+    /** Talking shots lose their long pauses, "umm"s and false starts. */
+    val jumpCuts: Boolean = true,
+    /** New videos show English subtitles under Hinglish captions. */
+    val english: Boolean = false,
     /** The song's tempo, so cuts land on its beats; null = the vibe's own pace. */
     val bpm: Int? = null,
     val map: Boolean = true,
@@ -222,6 +232,8 @@ data class CaptionLook(
     val font: FontChoice = FontChoice.STYLE,
     /** A dark band behind the captions, so they read on any shot. */
     val box: Boolean = false,
+    /** A small English line under each Hinglish one. */
+    val english: Boolean = false,
 )
 
 /** Typefaces the rider can pick for captions and text; Style's = the look's own, Brand = the brand kit's font. */
@@ -230,7 +242,7 @@ enum class FontChoice(val label: String) { STYLE("Style's"), BOLD("Bold"), SERIF
 /** Captions' look and a transition ↔ JSON, shared by saved Reels and styles (older files read as before). */
 object LookJson {
     fun caption(c: CaptionLook): org.json.JSONObject = org.json.JSONObject().put("kind", c.kind.name).put("size", c.size.toDouble()).put("y", c.y?.toDouble() ?: org.json.JSONObject.NULL)
-        .put("karaoke", c.karaoke).put("color", c.color ?: org.json.JSONObject.NULL).put("hi", c.highlight ?: org.json.JSONObject.NULL).put("font", c.font.name).put("box", c.box)
+        .put("karaoke", c.karaoke).put("color", c.color ?: org.json.JSONObject.NULL).put("hi", c.highlight ?: org.json.JSONObject.NULL).put("font", c.font.name).put("box", c.box).put("english", c.english)
 
     fun caption(o: org.json.JSONObject?): CaptionLook = o?.let { c ->
         CaptionLook(
@@ -242,6 +254,7 @@ object LookJson {
             highlight = if (c.isNull("hi") || !c.has("hi")) null else c.getInt("hi"),
             font = FontChoice.entries.firstOrNull { it.name == c.optString("font") } ?: FontChoice.STYLE,
             box = c.optBoolean("box"),
+            english = c.optBoolean("english"),
         )
     } ?: CaptionLook()
 

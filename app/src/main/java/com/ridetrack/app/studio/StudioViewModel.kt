@@ -1082,12 +1082,17 @@ class StudioViewModel(
     // ---- choices ---------------------------------------------------------------------------
 
     fun setOptions(f: (StudioOptions) -> StudioOptions) {
+        val before = _state.value.options
         _state.update {
             val o = f(it.options)
             val lengths = StudioPlanner.lengthsFor(bits, o.vibe)
             it.copy(options = o.copy(lengthSec = if (o.lengthSec in lengths) o.lengthSec else lengths.last()), lengths = lengths)
         }
         if (!phoneOnly) c.studio.options = _state.value.options
+        // Jump cuts and subtitles change how the ideas are made: plan them again.
+        if ((before.jumpCuts != _state.value.options.jumpCuts || before.english != _state.value.options.english) && _state.value.pieces.isNotEmpty()) {
+            viewModelScope.launch { showPieces(_state.value.pieces.map { it.script }) }
+        }
     }
 
     fun setMusic(uri: Uri?) {
@@ -1370,6 +1375,37 @@ class StudioViewModel(
     }
 
     /** One change on the timeline (one undo step, named [label] in History). */
+    /**
+     * English subtitles under the Hinglish captions, on or off. Lines read before subtitles existed
+     * get their English now, in one text request to Gemini.
+     */
+    fun setEnglish(on: Boolean) {
+        change(if (on) "English subtitles" else "No English subtitles") { TextTools.captionLook(it) { l -> l.copy(english = on) } }
+        if (!on || !c.transcripts.available) return
+        val plan = _state.value.plan ?: return
+        val need = plan.segments.filterIsInstance<ClipSegment>().flatMap { it.lines }
+            .filter { it.en == null && !ScriptWriter.isSound(it.text) }.map { it.text }.distinct()
+        if (need.isEmpty()) return
+        viewModelScope.launch {
+            say("Writing the English…")
+            val en = try {
+                gemini().english(need)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                c.errors.record("Studio subtitles", "Couldn't get the English for the captions", e)
+                say(if (com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e)) "No internet: the English comes when you turn it on again online" else "Couldn't get the English (${e.message?.take(50)})")
+                return@launch
+            }
+            val byText = need.zip(en).mapNotNull { (t, e) -> e?.let { t to it } }.toMap()
+            fun fill(lines: List<CaptionLine>) = lines.map { l -> if (l.en == null) l.copy(en = byText[l.text]) else l }
+            change("English subtitles") { p ->
+                p.copy(segments = p.segments.map { sg -> if (sg is ClipSegment) sg.copy(lines = fill(sg.lines), bit = sg.bit.copy(lines = fill(sg.bit.lines))) else sg })
+            }
+            say(if (byText.isEmpty()) "Everything's in English already" else "English added under ${byText.size} line${if (byText.size == 1) "" else "s"}")
+        }
+    }
+
     fun change(label: String = "Change", f: (StudioPlan) -> StudioPlan) {
         val h = history ?: return
         h.apply(f(h.current), label)
