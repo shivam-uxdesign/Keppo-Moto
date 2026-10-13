@@ -472,6 +472,15 @@ internal fun StudioHomeContent(
         StudioSheet(more, { more = false }) {
             SheetRow("Styles", "Your looks, the brand kit") { more = false; onOpenStyles() }
             SheetRow("Your Reels", "Made, drafts, saved clips, deleted") { more = false; onOpenReels() }
+            // Series: each one's folder, and starting one.
+            val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
+            val series by com.ridetrack.app.ui.appContainer().series.series.collectAsStateWithLifecycle()
+            series.forEach { se ->
+                SheetRow("Series · ${se.name}", if (se.active) "Its episodes · Ep ${se.nextEpisode} next" else "Off") { more = false; nav(com.ridetrack.app.ui.nav.Routes.series(se.id)) }
+            }
+            SheetRow("New series", "A name, what it's about and its look; episodes are found after each ride") {
+                more = false; nav(com.ridetrack.app.ui.nav.Routes.series(com.ridetrack.app.ui.nav.Routes.NEW_SERIES))
+            }
             val shown = list?.firstOrNull { it.id == picked } ?: list?.firstOrNull { visible(it).isNotEmpty() } ?: list?.firstOrNull()
             shown?.takeIf { visible(it).any { i -> !i.made && !i.fromClips } }?.let { r ->
                 SheetRow("Make all of ${r.name}'s ideas", "In the background; they'll be in Your Reels") {
