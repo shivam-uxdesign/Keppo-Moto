@@ -1009,12 +1009,22 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
   - **Locked:** Studio (Reels).
   - **Free:** everything else (rides, moments, pop-up, safety, fuel, journal, ride cards).
   - **Restore:** the purchase belongs to the Google account; checked on every launch, plus a Restore purchase button in Settings.
-  - **Prices:** global $6.99 a month / $44.99 a year (46% off; Play converts it per country); India ₹299 a month / ₹1,999 a year (set by hand). The Gemini cap ($2 a month) is about 29% of the global price.
+  - **Prices by country (tiers; up to 4× India allowed by the rider):**
+    1. US, Canada, UK, Western and Northern Europe, Switzerland, Australia, NZ, Japan, Korea, Singapore, Hong Kong, Israel, the Gulf: **$9.99 a month / $64.99 a year** (about 3.2× India; 4× would be $12.99 / $84.99, the rider's call).
+    2. Southern and Eastern EU, Taiwan, Malaysia, Chile: **$6.99 / $44.99**.
+    3. Brazil, Mexico, Türkiye, South Africa, Thailand, Indonesia, Vietnam, Philippines, Colombia: **$4.99 / $29.99**.
+    4. India **₹299 / ₹1,999**; Pakistan, Bangladesh, Sri Lanka, Nepal, Egypt, Nigeria, Kenya **$3.49 / $19.99**.
+    - Claude prepares the full country list for the Play Console.
+  - **What the rider receives (about ₹95 per $, before income tax):** India ₹215 a month (monthly) or ₹120 a month (yearly). Tier 1 US monthly about ₹807, UK about ₹672.
+    - Google takes 15% of the price before tax; VAT and GST are inside the price, except US sales tax, which is added on top.
   - **Launch price:** sold as a launch price, raised later for new subscribers only; existing subscribers keep theirs (Play's legacy price).
   - **No fake struck-out prices:** these are dark patterns under India's 2023 rules and EU price rules.
   - **Still open:** what free riders see of Studio (one free Reel, a watermark, or locked screens).
 - **Gemini cost cap:**
-  - About $0.25 a day and $2 a month per paid rider (under half the monthly price); a smaller cap for free features that use Gemini.
+  - **35% of what each rider actually pays** (after Google's cut and tax), by their country; the server reads the subscription's country from Google.
+    - For example, India about ₹75 a month (monthly) or ₹42 (yearly); Tier 1 monthly about ₹280.
+    - A daily share of it stops one day using the whole month.
+  - A smaller cap for free features that use Gemini.
   - Measured from Gemini's own token counts. At the cap: "You've made a lot today, more tomorrow".
   - Enforced by a small server function with an invisible anonymous sign-in, which also verifies purchases and hears renewals and cancellations.
   - The rider will revisit the numbers.
