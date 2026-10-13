@@ -106,6 +106,10 @@ object Routes {
     const val STYLES = "styles"
     /** Studio › Settings. */
     const val STUDIO_SETTINGS = "studio-settings"
+    /** A series' folder (its episodes) and its settings; [NEW_SERIES] makes one. */
+    const val SERIES = "studio-series/{id}"
+    const val NEW_SERIES = "new"
+    fun series(id: String) = "studio-series/$id"
     /** Studio › Search: what was said or seen in every clip. */
     const val STUDIO_SEARCH = "studio-search"
     /** Studio with videos from the phone only (no ride). */
@@ -333,11 +337,22 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                             onOpenReel = { ride, reel, edit -> nav.navigate(Routes.savedReel(ride, reel, edit)) },
                             onOpenPhone = { reel, edit -> nav.navigate(Routes.studioPhone(reel, edit)) },
                             onStyle = { nav.navigate(Routes.STUDIO_STYLE) },
+                            onSeries = { nav.navigate(Routes.series(it)) },
                         )
                     }
                 }
                 composable(Routes.STUDIO_SEARCH) {
                     DarkRoute { com.ridetrack.app.studio.StudioSearchScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) }, onOpenStudio = { nav.navigate(Routes.reel(it)) }) }
+                }
+                composable(Routes.SERIES, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+                    DarkRoute {
+                        com.ridetrack.app.studio.SeriesScreen(
+                            id = entry.arguments?.getString("id").orEmpty(),
+                            onBack = { nav.popBackStack() },
+                            onOpenReel = { ride, reel -> nav.navigate(Routes.savedReel(ride, reel)) },
+                            onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
+                        )
+                    }
                 }
                 composable(Routes.STUDIO_SETTINGS) {
                     DarkRoute { com.ridetrack.app.studio.StudioSettingsScreen(onBack = { nav.popBackStack() }) }

@@ -81,7 +81,7 @@ private enum class ReelFilter(val label: String) { ALL("All"), DRAFTS("Not poste
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String, edit: Boolean) -> Unit, onOpenPhone: (reelId: String, edit: Boolean) -> Unit, onStyle: () -> Unit) {
+fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String, edit: Boolean) -> Unit, onOpenPhone: (reelId: String, edit: Boolean) -> Unit, onStyle: () -> Unit, onSeries: (String) -> Unit = {}) {
     val c = appContainer()
     val store = c.reels
     val all by store.reels.collectAsStateWithLifecycle()
@@ -97,7 +97,13 @@ fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String,
     LaunchedEffect(note) { if (note != null && !note!!.endsWith("…")) { kotlinx.coroutines.delay(3_000); note = null } }
     var bytes by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(all.size) { bytes = withContext(Dispatchers.IO) { store.bytes() } }
-    val live = all.filter { it.deletedAt == null }.filter {
+    val seriesList by c.series.series.collectAsStateWithLifecycle()
+    // Episodes live in their series' folder, not in the grid.
+    val inFolders = seriesList.map { it.id }.toSet()
+    var dismissed by remember { mutableStateOf(c.series.dismissed()) }
+    val alike = remember(all, dismissed) { SeriesText.alike(all).firstOrNull { g -> g.none { it.id in dismissed } } }
+    var naming by remember { mutableStateOf<List<ReelProject>?>(null) }
+    val live = all.filter { it.deletedAt == null && it.seriesId !in inFolders }.filter {
         when (filter) {
             ReelFilter.ALL -> true
             ReelFilter.DRAFTS -> !it.posted
@@ -169,6 +175,34 @@ fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String,
                         }
                     }
                     Text("${all.count { it.deletedAt == null }} made · ${bytes?.let { formatMb(it) } ?: "…"} on this phone", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.padding(bottom = 8.dp))
+                    if (!selecting) {
+                        // Series folders, newest episode on top; and starting one.
+                        Row(Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            seriesList.forEach { se ->
+                                SeriesFolder(se, all.filter { it.seriesId == se.id && it.deletedAt == null }, Modifier.width(104.dp)) { onSeries(se.id) }
+                            }
+                            Column(
+                                Modifier.width(104.dp).aspectRatio(9f / 16f).clip(RoundedCornerShape(10.dp)).border(1.dp, RtColors.Hairline, RoundedCornerShape(10.dp))
+                                    .clickable(role = Role.Button) { onSeries(com.ridetrack.app.ui.nav.Routes.NEW_SERIES) }.padding(8.dp),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Text("+", style = RtType.title, color = RtColors.Primary)
+                                Text("New series", style = RtType.caption, color = RtColors.TextSecondary, textAlign = TextAlign.Center)
+                            }
+                        }
+                        alike?.let { g ->
+                            Column(Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("These ${g.size} look alike", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+                                Text(g.take(3).joinToString(" · ") { "\u201c${it.title}\u201d" } + if (g.size > 3) " and ${g.size - 3} more" else "", style = RtType.caption, color = RtColors.TextSecondary, maxLines = 2)
+                                Text("Make them a series? They go in one folder as episodes, and new ones are found after each ride.", style = RtType.caption, color = RtColors.TextTertiary)
+                                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                                    Text("Make a series", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { naming = g }.padding(vertical = 6.dp))
+                                    Text("Not now", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = Role.Button) { c.series.dismiss(g.map { it.id }); dismissed = c.series.dismissed() }.padding(vertical = 6.dp))
+                                }
+                            }
+                        }
+                    }
                     val grid = rememberLazyGridState()
                     // While selecting, a swipe across the tiles picks every one it passes (up and down still scrolls).
                     val swipeSelect = Modifier.pointerInput(selecting, live) {
@@ -246,6 +280,28 @@ fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String,
                 }
             }
         }
+        naming?.let { g ->
+            var name by remember(g) { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { naming = null },
+                title = { Text("Name the series") },
+                text = {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        placeholder = { Text("e.g. Delhi Commute Diaries") },
+                        singleLine = true,
+                    )
+                },
+                confirmButton = {
+                    TextButton(enabled = name.isNotBlank(), onClick = {
+                        naming = null
+                        scope.launch { val se = SeriesWork.fromReels(c, g, name.trim()); onSeries(se.id) }
+                    }) { Text("Make it") }
+                },
+                dismissButton = { TextButton(onClick = { naming = null }) { Text("Cancel") } },
+            )
+        }
         // The hold menu: the Reel lifts, the rest dims.
         ReelMenu(
             menu,
@@ -256,6 +312,7 @@ fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String,
             onSave = { p -> menu = null; save(setOf(p.id)) },
             onJournal = { p -> menu = null; scope.launch { sendToJournal(c, listOf(p)); note = "Sent to Keppo Journal" } },
             onDuplicate = { p -> menu = null; scope.launch { store.duplicate(p.id); note = "Duplicated" } },
+            onSeriesLook = { p -> menu = null; scope.launch { val n = SeriesWork.useLook(c, p); note = "The series uses this look now" + if (n > 0) " · making $n again" else "" } },
             onDelete = { p -> menu = null; confirm = setOf(p.id) },
         )
     }
@@ -297,6 +354,7 @@ private fun ReelMenu(
     onSave: (ReelProject) -> Unit,
     onJournal: (ReelProject) -> Unit,
     onDuplicate: (ReelProject) -> Unit,
+    onSeriesLook: (ReelProject) -> Unit,
     onDelete: (ReelProject) -> Unit,
 ) {
     if (p != null) BackHandler(onBack = onDismiss)
@@ -325,6 +383,7 @@ private fun ReelMenu(
                     MenuRow("Save to phone", "↓") { onSave(r) }
                     if (r.rideId != null && !r.inJournal) MenuRow("Send to Keppo Journal", "◫") { onJournal(r) }
                     MenuRow("Duplicate", "⧉") { onDuplicate(r) }
+                    if (r.seriesId != null) MenuRow("Use its look for the series", "◐") { onSeriesLook(r) }
                     MenuRow("Delete", "⌫", danger = true) { onDelete(r) }
                 }
             }

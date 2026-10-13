@@ -71,15 +71,22 @@ class AfterRideWorker(context: Context, params: WorkerParameters) : CoroutineWor
                     }
                     val groups = IdeaGroups.group(pieces) { it.script }
                     val top = if (c.studio.autoMakeTop) TopSlots.pick(groups, { it.script }, talks) else emptyList()
-                    notifyReady(rideId, title, groups.size, top.map { (slot, pc) -> "${slot.label}: ${pc.script.title}" })
-                    if (top.isNotEmpty()) {
+                    // Each active series looks for its episodes in the ride (one Gemini request each).
+                    val found = SeriesWork.find(c, engine, rideId).filter { it.episodes.isNotEmpty() }
+                    notifyReady(
+                        rideId, title, groups.size,
+                        top.map { (slot, pc) -> "${slot.label}: ${pc.script.title}" } + found.flatMap { f -> f.episodes.map { "${f.series.name}: ${it.title}" } },
+                    )
+                    val episodes = found.flatMap { it.episodes }
+                    if (top.isNotEmpty() || episodes.isNotEmpty()) {
                         val s = StudioState(
-                            title = title, series = c.studio.series, episode = c.studio.nextEpisode, options = c.studio.options,
+                            title = title, options = c.studio.options,
                             musicUri = c.studio.music?.first?.let(android.net.Uri::parse), musicName = c.studio.music?.second,
                         )
                         val jobs = top.mapNotNull { (_, pc) -> engine.job(pc, s) }
-                        if (jobs.isNotEmpty()) {
-                            c.reelMaker.enqueue(jobs, service = false)
+                        c.reelMaker.enqueue(jobs, service = false)
+                        val queued = jobs.size + SeriesWork.make(c, engine, episodes, service = false)
+                        if (queued > 0) {
                             // Stay running while they're made (the app may be in the background); what's
                             // left when the system stops this is made the next time the app starts.
                             withTimeoutOrNull(MAKE_WAIT_MS) { while (!c.reelMaker.state.value.idle) delay(2_000) }

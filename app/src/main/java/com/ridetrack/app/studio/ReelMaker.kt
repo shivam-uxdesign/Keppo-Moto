@@ -107,6 +107,18 @@ class ReelMaker(
         start(service)
     }
 
+    /**
+     * Makes saved Reels again as they are now (e.g. in a series' new look): each keeps its id, so
+     * it's replaced in Your Reels when done. How many could be queued (their clips still there).
+     */
+    suspend fun remake(projects: List<ReelProject>): Int {
+        val jobs = projects.mapNotNull { p ->
+            runCatching { rebuild(p) }.onFailure { errors.record("Studio series", "Couldn't make \"${p.title}\" again", it) }.getOrNull()?.let { MakeJob(p, it) }
+        }
+        enqueue(jobs)
+        return jobs.size
+    }
+
     /** Keeps the app running while [block] makes a Reel on the Studio screen. */
     suspend fun <T> keepRunning(block: suspend () -> T): T {
         _state.update { it.copy(holding = it.holding + 1) }

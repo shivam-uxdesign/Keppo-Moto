@@ -28,6 +28,8 @@ object IdeaGroups {
     }
 
     fun same(main: Script, other: Script): Boolean {
+        // A series episode is its own card: it's the series' video, not a take on an idea.
+        if (main.series != null || other.series != null) return false
         if (other.variationOf == main.title) return true
         if (main.format == PieceFormat.LONG || other.format == PieceFormat.LONG) return false
         val a = main.clips
@@ -54,7 +56,8 @@ object TopSlots {
      * uses the rider's words. With none of the slots filled, the top card alone.
      */
     fun <T> pick(groups: List<IdeaGroup<T>>, script: (T) -> Script, talks: (Script) -> Boolean): List<Pair<Slot, T>> {
-        val left = groups.map { it.main }.toMutableList()
+        // Series episodes are made for their series, not as slots.
+        val left = groups.map { it.main }.filter { script(it).series == null }.toMutableList()
         val out = ArrayList<Pair<Slot, T>>()
         fun take(slot: Slot, ok: (Script) -> Boolean) {
             left.firstOrNull { ok(script(it)) }?.let { left.remove(it); out += slot to it }
@@ -62,7 +65,7 @@ object TopSlots {
         take(Slot.LONG) { it.format == PieceFormat.LONG }
         take(Slot.MOMENT) { it.format == PieceFormat.CAPTION || (it.format in setOf(PieceFormat.SHORT, PieceFormat.STORY) && it.totalMs <= MOMENT_MS) }
         take(Slot.STORY) { it.format != PieceFormat.LONG && it.format != PieceFormat.CAPTION && talks(it) }
-        if (out.isEmpty()) groups.firstOrNull()?.let { out += Slot.STORY to it.main }
+        if (out.isEmpty()) left.firstOrNull()?.let { out += Slot.STORY to it }
         return out
     }
 }

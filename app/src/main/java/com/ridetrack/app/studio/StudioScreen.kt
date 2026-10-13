@@ -295,9 +295,10 @@ private fun StudioSettings(vm: StudioViewModel, s: StudioState, onClose: () -> U
                 )
             }
             Section("Series") {
-                Field(s.series, "Optional, e.g. Evening Ride Diaries") { vm.setSeries(it) }
+                val list by com.ridetrack.app.ui.appContainer().series.series.collectAsStateWithLifecycle()
                 Text(
-                    if (s.series.isBlank()) "A running name helps followers know what's next." else "Shows as \u201c${s.label}\u201d on the first clip.",
+                    if (list.isEmpty()) "None yet. Start one in Your Reels › Series: a name, what it's about and its look; episodes are found after each ride."
+                    else list.joinToString("\n") { "${it.name}${if (it.active) "" else " (off)"} · Ep ${it.nextEpisode} next" } + "\nChange them in Your Reels › Series.",
                     style = RtType.caption,
                     color = RtColors.TextTertiary,
                 )
@@ -470,14 +471,40 @@ private fun Suggestions(vm: StudioViewModel, s: StudioState, made: Set<String>) 
             )
         }
         val groups = remember(s.pieces) { vm.groups() }
-        groups.forEach { g -> IdeaCard(vm, s, g, made) }
+        // Series episodes first, under their series' name; then the ride's ideas.
+        val c = com.ridetrack.app.ui.appContainer()
+        val allSeries by c.series.series.collectAsStateWithLifecycle()
+        val active = allSeries.filter { it.active && it.name.isNotBlank() }
+        val episodes = groups.filter { it.main.script.series != null }
+        if (!s.phoneOnly && (episodes.isNotEmpty() || active.isNotEmpty())) {
+            Text("SERIES", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 4.dp))
+            episodes.forEach { g -> IdeaCard(vm, s, g, made, allSeries.firstOrNull { it.id == g.main.script.series }) }
+            // Series with nothing from this ride yet: look again.
+            val without = active.filter { se -> episodes.none { it.main.script.series == se.id } }
+            if (without.isNotEmpty() && s.gemini && s.planning == null && s.canMake) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    without.forEach { se ->
+                        Text(
+                            "Find a \u201c${se.name}\u201d episode",
+                            style = RtType.caption,
+                            color = RtColors.Primary,
+                            maxLines = 1,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).border(1.dp, RtColors.Hairline, RoundedCornerShape(50))
+                                .clickable(role = Role.Button) { vm.findEpisode(se.id) }.padding(horizontal = 12.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+            }
+            if (groups.size > episodes.size) Text("IDEAS", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 8.dp))
+        }
+        groups.filter { it.main.script.series == null }.forEach { g -> IdeaCard(vm, s, g, made, null) }
         s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
     }
 }
 
 /** One card: the take it shows, and other takes on the same moment under it. */
 @Composable
-private fun IdeaCard(vm: StudioViewModel, s: StudioState, g: IdeaGroup<ContentPiece>, made: Set<String>) {
+private fun IdeaCard(vm: StudioViewModel, s: StudioState, g: IdeaGroup<ContentPiece>, made: Set<String>, series: Series?) {
     val pc = vm.shown(g)
     val sc = pc.script
     Column(
@@ -499,6 +526,7 @@ private fun IdeaCard(vm: StudioViewModel, s: StudioState, g: IdeaGroup<ContentPi
                     if (sc.every) Text("· From your clips", style = RtType.caption, color = RtColors.TextTertiary)
                     if (sc.title in made) Text("· Made", style = RtType.caption, color = RtColors.Primary)
                 }
+                series?.let { Text("${it.name} · Ep ${it.nextEpisode} next", style = RtType.caption, color = RtColors.Primary, maxLines = 1) }
                 Text(sc.title, style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 2)
                 sc.why?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary, maxLines = 4) }
                 val shots = pc.plan.clips.size
@@ -527,7 +555,7 @@ private fun IdeaCard(vm: StudioViewModel, s: StudioState, g: IdeaGroup<ContentPi
                     )
                 }
             }
-            if (s.gemini && s.planning == null) {
+            if (s.gemini && s.planning == null && series == null) {
                 Text(
                     "Try something else with this",
                     style = RtType.caption,
@@ -1182,7 +1210,9 @@ internal fun ReelTile(p: ReelProject, modifier: Modifier, clickable: Boolean = t
             if (!p.posted) {
                 Text("Draft", style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 4.dp))
             }
-            if (p.inJournal) {
+            if (p.seriesId != null) {
+                Text("Ep ${p.episode}", style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.TopStart).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(RtColors.Primary.copy(alpha = 0.85f)).padding(horizontal = 4.dp))
+            } else if (p.inJournal) {
                 Text("Journal", style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.TopStart).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 4.dp))
             }
         }

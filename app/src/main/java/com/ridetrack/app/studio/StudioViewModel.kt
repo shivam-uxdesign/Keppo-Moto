@@ -71,6 +71,8 @@ data class StudioState(
     val title: String = "",
     val series: String = "",
     val episode: Int = 1,
+    /** The series this Reel is an episode of (its id); null for an ordinary one. */
+    val seriesId: String? = null,
     val hookLine: String = "",
     val story: String? = null,
     val postCaption: String = "",
@@ -216,7 +218,7 @@ class StudioViewModel(
             engine.load()?.let { why -> _state.update { it.copy(loading = false, blocked = why) }; return@launch }
             if (phoneOnly) {
                 _state.update {
-                    it.copy(loading = false, phoneOnly = true, title = "My videos", series = c.studio.series, episode = c.studio.nextEpisode, options = it.options.copy(outro = false, map = false))
+                    it.copy(loading = false, phoneOnly = true, title = "My videos", options = it.options.copy(outro = false, map = false))
                 }
                 c.studio.takePending().takeIf { it.isNotEmpty() }?.let { addPhoneVideos(it).join() }
                 if (openReelId == null && phone.isNotEmpty()) loadPlan()
@@ -231,8 +233,6 @@ class StudioViewModel(
                     talkingCount = talking,
                     posters = clips.sortedByDescending { m -> m.starred }.mapNotNull { m -> m.thumb?.takeIf(File::isFile) }.take(4),
                     title = card?.title.orEmpty(),
-                    series = c.studio.series,
-                    episode = c.studio.nextEpisode,
                     lengths = StudioPlanner.lengthsFor(bits, it.options.vibe),
                     thumbs = clips.associate { m -> m.id to m.thumb },
                 )
@@ -257,10 +257,13 @@ class StudioViewModel(
     fun editIdea(key: String) {
         val piece = _state.value.pieces.firstOrNull { it.key == key } ?: return
         val sc = piece.script
+        // A series episode: its label and the episode it would be (taken when it's made).
+        val se = c.series.get(sc.series)
         _state.update {
             it.copy(
                 piece = piece, reelId = null, takes = emptyList(), tips = null, coverFrames = emptyList(), video = null, notes = emptyList(),
                 plan = piece.plan, script = sc, fromIdea = true,
+                series = se?.name.orEmpty(), episode = se?.nextEpisode ?: 1, seriesId = se?.id,
                 title = sc.title.ifBlank { card?.title ?: it.title },
                 hookLine = if (sc.format == PieceFormat.CAPTION) "" else sc.hookLine ?: sc.sections.firstOrNull { s -> s.kind == SectionKind.HOOK }?.text.orEmpty(),
                 postCaption = sc.postCaption ?: it.postCaption,
@@ -338,7 +341,27 @@ class StudioViewModel(
     /** Loads the saved suggestions, or asks for them the first time the ride's Studio opens. */
     private suspend fun loadPlan() {
         val saved = engine.loadPlan()
-        if (saved != null) showPieces(saved) else if (_state.value.canMake) suggest()
+        if (saved != null) { showPieces(saved); findEpisodes() } else if (_state.value.canMake) suggest()
+    }
+
+    /** Series not yet looked for in this ride look for their episodes (one Gemini request each); they show at the top. */
+    private suspend fun findEpisodes(only: String? = null) {
+        if (phoneOnly || !c.transcripts.available) return
+        if (only == null && c.series.active().all { c.series.tried(rideId, it.id) }) return
+        _state.update { it.copy(planning = "Looking for series episodes") }
+        try {
+            val found = SeriesWork.find(c, engine, rideId, only)
+            if (found.any { it.episodes.isNotEmpty() }) engine.loadPlan()?.let { showPieces(it) }
+            if (only != null && found.all { it.episodes.isEmpty() }) say("Nothing in this ride fits \u201c${c.series.get(only)?.name}\u201d")
+        } finally {
+            _state.update { it.copy(planning = null) }
+        }
+    }
+
+    /** Looks for an episode of [seriesId] in this ride again (the rider asked). */
+    fun findEpisode(seriesId: String) {
+        if (job?.isActive == true || _state.value.planning != null) return
+        job = viewModelScope.launch { findEpisodes(seriesId) }
     }
 
     private suspend fun showPieces(scripts: List<Script>) {
@@ -374,11 +397,12 @@ class StudioViewModel(
                         return@launch
                     }
                 }
-                showPieces(scripts)
+                showPieces(engine.loadPlan() ?: scripts)
+                findEpisodes()
                 // Say when some of Gemini's suggestions couldn't be used, and keep why for Studio details.
                 val asked = ScriptWriter.piecesAsked(engine.lastAnswer)
                 // Gemini's own ideas only (Show all adds every moment of the clips after them).
-                val shown = _state.value.pieces.count { !it.script.every }
+                val shown = _state.value.pieces.count { !it.script.every && it.script.series == null }
                 if (asked > shown) {
                     val unread = asked - scripts.count { !it.every }
                     val unfit = scripts.count { !it.every } - shown
@@ -690,6 +714,7 @@ class StudioViewModel(
                 title = p.title,
                 series = p.series,
                 episode = p.episode,
+                seriesId = p.seriesId,
                 hookLine = p.hookLine,
                 postCaption = p.postCaption,
                 story = p.story,
@@ -717,6 +742,8 @@ class StudioViewModel(
         val old = c.reels.get(id)
         // Making it again: the Reel as it was stays as a version to go back to.
         if (old != null) c.reels.archive(id)
+        // A new episode takes its number now, so one made in the background doesn't get the same.
+        if (isNew && old == null) s.seriesId?.let { sid -> c.series.takeEpisode(sid).let { ep -> _state.update { it.copy(episode = ep) } } }
         val project = ReelProject(
             id = id,
             rideId = rideId.takeIf { !phoneOnly },
@@ -724,7 +751,8 @@ class StudioViewModel(
             updatedAt = System.currentTimeMillis(),
             title = s.title,
             series = s.series,
-            episode = s.episode,
+            episode = _state.value.episode,
+            seriesId = s.seriesId,
             hookLine = s.hookLine,
             postCaption = s.postCaption,
             story = s.story,
@@ -1073,11 +1101,6 @@ class StudioViewModel(
         c.studio.music = uri?.let { it.toString() to (name ?: "Your song") }
     }
 
-    fun setSeries(name: String) {
-        c.studio.series = name
-        _state.update { it.copy(series = name) }
-    }
-
     fun back() = _state.update {
         it.copy(
             step = if (it.step in setOf(StudioStep.EDIT, StudioStep.VOICE, StudioStep.COVER, StudioStep.SCRIPT) && it.scriptPiece == null && it.video != null) StudioStep.READY else StudioStep.SETUP,
@@ -1088,7 +1111,7 @@ class StudioViewModel(
     /** Shared or saved: the next Reel of the series is the next episode. */
     fun posted() {
         val s = _state.value
-        if (s.series.isNotBlank()) c.studio.episodeUsed(s.episode)
+        s.seriesId?.let { c.series.used(it, s.episode) }
         // No longer a draft; a day later, "How did it do?".
         s.reelId?.let { id ->
             if (c.reels.get(id)?.posted == false) PostedReminderWorker.schedule(c.appContext, id)

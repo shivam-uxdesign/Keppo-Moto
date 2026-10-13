@@ -660,6 +660,11 @@ Rider's answers: yes to 1, 2, 3, 5, 6, 7, 8, 9 and 11; maybe to 10; no to 4 (rou
   - `ReelProject.seriesId`
   - The old single series name and episode in StudioPrefs become the first series.
 
+**Status (13 Oct): A built.**
+- An episode's number is given when it's made, not when it's shared, because "Ep N" is drawn on the video.
+- "Make these a series?" writes a starting brief from the Reels' titles (no Gemini request); the rider can edit it.
+- "Use its look" is under each episode in the folder.
+
 ### B. Swipe review
 - Ready videos play full screen, one after another.
 - Gestures:

@@ -29,8 +29,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -171,7 +169,7 @@ fun StudioSettingsScreen(onBack: () -> Unit) {
     var mobile by remember { mutableStateOf(prefs.autoMobileData) }
     var overnight by remember { mutableStateOf(prefs.makeOvernight) }
     var gallery by remember { mutableStateOf(prefs.alsoSaveToGallery) }
-    var series by remember { mutableStateOf(prefs.series) }
+    val seriesList by c.series.series.collectAsStateWithLifecycle()
     var music by remember { mutableStateOf(prefs.music) }
     val styles by c.styles.styles.collectAsStateWithLifecycle()
     val pickSong = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -207,19 +205,10 @@ fun StudioSettingsScreen(onBack: () -> Unit) {
                 SwitchLine("Speed in the corner", null, o.speedBadge) { v -> set { it.copy(speedBadge = v) } }
                 SwitchLine("Brand kit on the video", "Your logo, handle and font", o.brand) { v -> set { it.copy(brand = v) } }
                 SwitchLine("Keppo Moto mark", "Small, on the stats", o.watermark) { v -> set { it.copy(watermark = v) } }
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    Text("Series", style = RtType.body, color = RtColors.TextPrimary)
-                    OutlinedTextField(
-                        value = series,
-                        onValueChange = { series = it; prefs.series = it },
-                        placeholder = { Text("Optional, e.g. Mumbai Rides", style = RtType.body, color = RtColors.TextTertiary) },
-                        singleLine = true,
-                        textStyle = RtType.body.copy(color = RtColors.TextPrimary),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RtColors.Primary, unfocusedBorderColor = RtColors.Hairline, cursorColor = RtColors.Primary),
-                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                    )
-                    Text(if (series.isBlank()) "A running name helps followers know what's next." else "Episode ${prefs.nextEpisode} is next.", style = RtType.caption, color = RtColors.TextTertiary)
-                }
+            }
+            Group("Series") {
+                seriesList.forEach { se -> LinkLine(se.name, if (se.active) "Ep ${se.nextEpisode} next" else "Off") { nav(Routes.series(se.id)) } }
+                LinkLine("New series", "A name, what it's about and its look") { nav(Routes.series(Routes.NEW_SERIES)) }
             }
             Group("Music") {
                 LinkLine(if (music == null) "Add it in Instagram" else "♪ ${music!!.second}", if (music == null) "Its library is licensed and current" else "Dips while you talk") { pickSong.launch(arrayOf("audio/*")) }

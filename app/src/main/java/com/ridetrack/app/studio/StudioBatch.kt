@@ -27,7 +27,7 @@ object StudioBatch {
         val made = engine.madeIdeas()
         val waiting = c.reelMaker.state.value.let { m -> m.next.map { it.second }.toSet() + listOfNotNull(m.current) }
         val s = StudioState(
-            title = engine.card?.title.orEmpty(), series = c.studio.series, episode = c.studio.nextEpisode, options = c.studio.options,
+            title = engine.card?.title.orEmpty(), options = c.studio.options,
             musicUri = c.studio.music?.first?.let(android.net.Uri::parse), musicName = c.studio.music?.second,
         )
         val jobs = IdeaGroups.group(engine.pieces(scripts)) { it.script }

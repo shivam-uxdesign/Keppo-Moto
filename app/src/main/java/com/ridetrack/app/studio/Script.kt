@@ -58,6 +58,8 @@ data class Script(
     val every: Boolean = false,
     /** Asked for as another take on the idea with this title ("Try something else"); shown under it. */
     val variationOf: String? = null,
+    /** An episode of this series (its id); null for an ordinary idea. */
+    val series: String? = null,
 ) {
     val totalMs: Long get() = sections.sumOf { s -> s.shots.sumOf { it.durMs } }
 
@@ -258,6 +260,31 @@ object ScriptWriter {
         appendLine(CRAFT)
         append(styleText(style))
         append("Reply with JSON only (one piece): $SCHEMA")
+    }
+
+    /**
+     * Episodes of [s] from THIS ride: one, or one for every moment that fits; none when nothing
+     * fits the brief. [performance] is how its earlier episodes did.
+     */
+    fun seriesPrompt(s: Series, ride: String, stats: String, footage: List<Footage>, style: StyleContext?, performance: String = "", styles: List<StudioStyle> = emptyList()): String = buildString {
+        appendLine("You are the editor of a motorcycle rider's motovlog (often Hinglish), making episodes of their series \"${s.name.replace("\"", "'")}\".")
+        appendLine("What the series is, in the rider's words: \"${s.brief.ifBlank { s.name }.replace("\"", "'")}\"")
+        appendLine("Every episode is a ${s.format.name.lowercase()} (${s.format.hint}), ${s.minSec}–${s.maxSec} s.")
+        if (s.notes.isNotEmpty()) appendLine("The rider told this series: ${s.notes.joinToString("; ") { "\"${it.replace("\"", "'")}\"" }}.")
+        if (performance.isNotBlank()) append(performance)
+        appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
+        appendLine(footageText(footage))
+        appendLine(
+            if (s.perRide == 1) "Write ONE episode from THIS ride that fits the series: its best moment for it."
+            else "Write one episode for every moment of THIS ride that fits the series, at most 4, best first; each on its own moment.",
+        )
+        appendLine("Only what truly fits the series' idea: if nothing in this ride fits, reply {\"pieces\":[]}. Don't number episodes or name the series in the title (the app adds \"Ep N\").")
+        appendLine("Vibes: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm), vlog (the voice leads).")
+        if (s.format == PieceFormat.CAPTION) appendLine(CAPTION_RULE)
+        if (s.styleId == null) append(stylesText(styles))
+        appendLine(CRAFT)
+        append(styleText(style))
+        append("Reply with JSON only: $SCHEMA")
     }
 
     /** Asks for another take on [script]: the same moment and clips, told differently from [takes] (format · title). */
@@ -696,6 +723,7 @@ object ScriptJson {
         .put("onScreen", JSONArray(s.onScreen))
         .put("every", s.every)
         .put("variationOf", s.variationOf ?: JSONObject.NULL)
+        .put("series", s.series ?: JSONObject.NULL)
         .put("captions", JSONObject().apply { s.captions.forEach { (k, v) -> put(k, v) } })
         .put("sections", JSONArray().apply {
             s.sections.forEach { sec ->
@@ -722,6 +750,7 @@ object ScriptJson {
                 onScreen = o.optJSONArray("onScreen")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty(),
                 every = o.optBoolean("every"),
                 variationOf = o.optStringOrNull("variationOf"),
+                series = o.optStringOrNull("series"),
                 captions = o.optJSONObject("captions")?.let { c -> c.keys().asSequence().associateWith { k -> c.optString(k) } }.orEmpty(),
                 sections = o.getJSONArray("sections").let { a ->
                     (0 until a.length()).mapNotNull { i ->

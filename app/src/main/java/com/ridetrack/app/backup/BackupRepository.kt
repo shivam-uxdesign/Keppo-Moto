@@ -102,6 +102,7 @@ class BackupRepository(
             putText(f.moto, SETTINGS, BackupFormat.settingsJson(settings.exportPrefs()), f.motoFiles[SETTINGS])
             // Studio's styles and the brand kit (logo, font) are small: always refresh.
             File(context.filesDir, com.ridetrack.app.studio.StyleLibrary.FILE).takeIf { it.isFile }?.let { putText(f.moto, STYLES, it.readText(), f.motoFiles[STYLES]) }
+            File(context.filesDir, com.ridetrack.app.studio.SeriesStore.FILE).takeIf { it.isFile }?.let { putText(f.moto, SERIES, it.readText(), f.motoFiles[SERIES]) }
             BRAND_FILES.forEach { n ->
                 val file = File(File(context.filesDir, "brand"), n)
                 if (file.isFile) drive.putLarge(f.moto, "brand-$n", file, if (n.endsWith(".png")) "image/png" else "application/octet-stream", f.motoFiles["brand-$n"])
@@ -217,6 +218,8 @@ class BackupRepository(
             // Styles and the brand kit, unless this phone has its own already.
             val styles = File(context.filesDir, com.ridetrack.app.studio.StyleLibrary.FILE)
             if (!styles.isFile) f.motoFiles[STYLES]?.let { styles.writeText(drive.downloadText(it)) }
+            val series = File(context.filesDir, com.ridetrack.app.studio.SeriesStore.FILE)
+            if (!series.isFile) f.motoFiles[SERIES]?.let { series.writeText(drive.downloadText(it)) }
             BRAND_FILES.forEach { n ->
                 val file = File(File(context.filesDir, "brand").apply { mkdirs() }, n)
                 if (!file.isFile) f.motoFiles["brand-$n"]?.let { download(it, file) }
@@ -391,6 +394,7 @@ class BackupRepository(
         private const val SETTINGS = "settings.json"
         private const val BIKES = "bikes.json"
         private const val STYLES = "studio-styles.json"
+        private const val SERIES = "studio-series.json"
         private val BRAND_FILES = listOf("logo.png", "font.ttf")
         private const val RIDE = "ride.json"
         private const val SAMPLES = "samples.jsonl.gz"

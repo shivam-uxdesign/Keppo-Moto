@@ -259,13 +259,18 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
     suspend fun savePlan(scripts: List<Script>, answer: String? = null, why: String? = null) = withContext(Dispatchers.IO) {
         val fs = footage()
         val o = c.studio.options
-        val fixes = JSONArray().apply {
-            scripts.forEach { sc -> put(JSONArray(ScriptWriter.toPlan(sc, fs, bits, sc.vibe ?: o.vibe, o).fixes)) }
-        }
         val old = runCatching { JSONObject(planFile.readText()) }.getOrNull()
+        // New suggestions keep the series episodes found before (they're found once per ride and series).
+        val kept = if (scripts.any { it.series != null }) emptyList() else old?.optJSONArray("pieces")?.let { a ->
+            (0 until a.length()).mapNotNull { ScriptJson.read(a.optJSONObject(it)) }.filter { it.series != null }
+        }.orEmpty()
+        val all = kept + scripts
+        val fixes = JSONArray().apply {
+            all.forEach { sc -> put(JSONArray(ScriptWriter.toPlan(sc, fs, bits, sc.vibe ?: o.vibe, o).fixes)) }
+        }
         planFile.writeText(
             JSONObject()
-                .put("pieces", JSONArray().apply { scripts.forEach { put(ScriptJson.write(it)) } })
+                .put("pieces", JSONArray().apply { all.forEach { put(ScriptJson.write(it)) } })
                 .put("fixes", fixes)
                 .put("at", System.currentTimeMillis())
                 .apply {
@@ -420,16 +425,24 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         val cd = card ?: return null
         val sc = pc.script
         val now = System.currentTimeMillis()
-        val st = sc.style?.let(c.styles::get)?.also { c.styles.used(it.id) }
+        // A series episode: the series' look, label and caption, and the next episode number (taken now).
+        val series = c.series.get(sc.series)
+        val st = (series?.styleId ?: sc.style)?.let(c.styles::get)?.also { c.styles.used(it.id) }
+        val ep = series?.let { c.series.takeEpisode(it.id) }
+        var n = 0
+        val plan = if (series?.styleId != null && st != null && sc.style != st.id) Styles.apply(pc.plan, st) { "se${n++}" } else pc.plan
         val opts = st?.let { Styles.options(s.options, it) } ?: s.options.copy(vibe = sc.vibe ?: s.options.vibe)
+        val own = sc.postCaption ?: fallbackCaption()
         val project = ReelProject(
             id = c.reels.newId(), rideId = rideId.takeIf { !phoneOnly }, createdAt = now, updatedAt = now,
-            title = sc.title, series = s.series, episode = s.episode, hookLine = sc.hookLine ?: sc.sections.firstOrNull()?.text.orEmpty(),
-            postCaption = sc.postCaption ?: fallbackCaption(), story = null, options = opts,
+            title = sc.title, series = series?.name ?: s.series, episode = ep ?: s.episode, hookLine = sc.hookLine ?: sc.sections.firstOrNull()?.text.orEmpty(),
+            postCaption = series?.let { SeriesText.caption(it, ep ?: 1, own) } ?: own, story = null, options = opts,
             musicUri = s.musicUri?.toString(), musicName = s.musicName,
-            plan = pc.plan, takes = emptyList(), tips = emptyList(), durationMs = pc.plan.totalMs, idea = sc.title, script = sc,
+            plan = plan, takes = emptyList(), tips = emptyList(), durationMs = plan.totalMs, idea = sc.title, script = sc,
+            seriesId = series?.id,
         )
-        return MakeJob(project, renderInput(pc.plan, s.copy(title = sc.title, hookLine = project.hookLine, options = project.options), cd, voice = null))
+        val state = s.copy(title = sc.title, hookLine = project.hookLine, options = project.options, series = project.series, episode = project.episode)
+        return MakeJob(project, renderInput(plan, state, cd, voice = null))
     }
 
     /** The suggestions already made into Reels (by their title). */
