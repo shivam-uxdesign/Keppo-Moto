@@ -36,6 +36,15 @@ class RideTrackApp : Application() {
         container.appScope.launch { container.trash.purgeExpired() }
         // Rides saved offline get their place names now.
         container.appScope.launch { runCatching { container.places.catchUp(container.rides.observeCompleted().first()) } }
+        // Neighbouring clips of the last two days' rides joined (before Reels are made from them).
+        container.appScope.launch {
+            runCatching {
+                val since = System.currentTimeMillis() - 2 * 86_400_000L
+                val recent = container.rides.observeCompleted().first().filter { it.startTimeMillis >= since }.map { it.id }
+                val changed = container.momentMerger.catchUp(recent) { id -> container.reels.reels.value.any { it.rideId == id } }
+                changed.forEach { com.ridetrack.app.studio.AfterRideWorker.schedule(this@RideTrackApp, it) }
+            }
+        }
         container.appScope.launch { container.reels.purgeExpired() }
         container.transcribeSoon()
         // Reels still waiting when the app was closed are made now.

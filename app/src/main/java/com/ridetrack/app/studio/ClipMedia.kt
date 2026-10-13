@@ -115,6 +115,31 @@ object ClipMedia {
         export(context, Composition.Builder(EditedMediaItemSequence(listOf(EditedMediaItem.Builder(item).build()))).build(), out)
     }
 
+    /**
+     * Joins [parts] (a file, from and to ms into it) end to end into [out]; [audioOnly] for sound
+     * files (the engine mic's track).
+     */
+    suspend fun join(context: Context, parts: List<Triple<File, Long, Long>>, out: File, audioOnly: Boolean = false) {
+        val items = parts.map { (f, from, to) ->
+            val item = MediaItem.Builder().setUri(Uri.fromFile(f))
+                .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setStartPositionMs(from).setEndPositionMs(to).build())
+                .build()
+            EditedMediaItem.Builder(item).apply { if (audioOnly) setRemoveVideo(true) }.build()
+        }
+        export(context, Composition.Builder(EditedMediaItemSequence(items)).build(), out)
+    }
+
+    /** A media file's length in ms; null when it can't be read. */
+    fun lengthMs(file: File): Long? = runCatching {
+        val r = MediaMetadataRetriever()
+        try {
+            r.setDataSource(file.path)
+            r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+        } finally {
+            r.release()
+        }
+    }.getOrNull()
+
     /** A video's width, height (as shown, upright) and frame rate; null when it can't be read. */
     fun info(context: Context, uri: Uri): Triple<Int, Int, Float>? = runCatching {
         val ex = MediaExtractor()

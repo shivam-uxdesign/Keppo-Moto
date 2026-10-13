@@ -22,7 +22,12 @@ enum class CameraIndicator {
     OFF, ON, REC;
 
     companion object {
-        fun from(s: MomentState): CameraIndicator = when {
+        /**
+         * [filming]: a video is being filmed (by hand, by voice, GPS lost). It shows as recording
+         * even while the camera otherwise rests because the ride is stopped.
+         */
+        fun from(s: MomentState, filming: Boolean = false): CameraIndicator = when {
+            filming -> REC
             s.status == MomentStatus.OFF || s.status == MomentStatus.PAUSED -> OFF
             s.saving -> REC
             else -> ON

@@ -264,7 +264,9 @@ private fun TopBar(chrome: LiveChrome, frame: TelemetryFrame?) {
             }
             Text(text, style = RtType.caption, color = color)
         }
-        CameraIndicator.from(chrome.moments).takeIf { it != CameraIndicator.OFF }?.let { cam ->
+        // A video being filmed shows red even while stopped (the camera otherwise rests then).
+        val liveVideo by com.ridetrack.app.ui.appContainer().momentsHub.live.collectAsStateWithLifecycle()
+        CameraIndicator.from(chrome.moments, filming = liveVideo != null).takeIf { it != CameraIndicator.OFF }?.let { cam ->
             CameraBadge(cam, RtColors.TextSecondary)
         }
         chrome.battery?.let { b ->

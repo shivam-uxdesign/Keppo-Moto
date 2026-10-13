@@ -107,6 +107,14 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
 
     suspend fun setStarred(id: String, starred: Boolean) = dao.setStarred(id, starred)
 
+    /** Removes [m] for good, with its files (a clip joined into another). */
+    suspend fun remove(m: Moment) {
+        dao.delete(m.id)
+        withContext(Dispatchers.IO) {
+            listOfNotNull(m.file, m.thumb, m.engineFile, File(m.file.parentFile, "${m.file.name}.lines.json"), File(m.file.parentFile, "${m.file.name}.seen.json")).forEach { it.delete() }
+        }
+    }
+
     /**
      * Works out and stores the top speed of each clip of [rideId] that doesn't have one yet,
      * from the ride's [samples]. Returns how many it filled. Cheap when they're all done.

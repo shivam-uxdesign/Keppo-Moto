@@ -167,7 +167,7 @@ class HudController(
             active = session.active.value,
             paused = paused,
             stoppedForMillis = stoppedSinceMillis?.let { now - it },
-            camera = CameraIndicator.from(moments.state.value),
+            camera = CameraIndicator.from(moments.state.value, filming = moments.live.value != null),
             manuallyPaused = session.manuallyPaused.value,
             video = moments.live.value?.let { HudVideo(it.source, it.starting, it.paused, it.elapsedMillis(now), it.back) },
             savedNote = moments.liveSaved.value?.takeIf { now - it.atMillis < SAVED_NOTE_MILLIS }?.let { saved ->

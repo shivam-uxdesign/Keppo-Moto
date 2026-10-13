@@ -42,6 +42,9 @@ class AppContainer(context: Context) {
     val places = com.ridetrack.app.ride.RidePlaces(appContext, rides)
     val routes = RouteCache(rides)
     val moments = MomentRepository(appContext, database.momentDao())
+
+    /** Joins a ride's clips that overlap or are under 5 s apart, once it's saved. */
+    val momentMerger by lazy { com.ridetrack.app.moments.MomentMerger(appContext, moments) }
     val momentsHub = MomentsHub()
     val settings = SettingsRepository(appContext)
     val sensorInventory = SensorInventory(appContext)
@@ -59,16 +62,19 @@ class AppContainer(context: Context) {
         scope = appScope,
         onRideSaved = { id ->
             backUpSoon()
-            transcribeSoon()
             appScope.launch { runCatching { fuel.checkRide(id) } }
             appScope.launch {
-                // Named by place first (when the phone can look it up), so the Journal gets the name.
+                // Clips that overlap or are under 5 s apart become one, before anything reads them.
+                runCatching { momentMerger.mergeRide(id) }
+                    .onFailure { errors.record("Moments", "Couldn't join neighbouring clips", it) }
+                transcribeSoon()
+                // Named by place (when the phone can look it up), so the Journal gets the name.
                 runCatching { places.nameRide(id) }
                 journal.onRideSaved(id)
+                // Studio's suggestions for the ride, ready by the time the rider looks.
+                runCatching { com.ridetrack.app.studio.AfterRideWorker.schedule(appContext, id) }
+                    .onFailure { errors.record("Studio after ride", "Couldn't plan the suggestions after the ride", it) }
             }
-            // Studio's suggestions for the ride, ready by the time the rider looks.
-            runCatching { com.ridetrack.app.studio.AfterRideWorker.schedule(appContext, id) }
-                .onFailure { errors.record("Studio after ride", "Couldn't plan the suggestions after the ride", it) }
         },
     )
 

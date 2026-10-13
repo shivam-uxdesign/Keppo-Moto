@@ -406,7 +406,10 @@ class RideSessionManager(
             p.due(frame.timeMillis).forEach { w ->
                 // Never save again what the last video already has.
                 val start = maxOf(w.startMillis, rec.lastVideoEndMillis)
-                if (start < w.endMillis - MIN_CLIP_MILLIS) momentsHub.submit(MomentRequest.Clip(rec.rideId, w.copy(startMillis = start)))
+                if (start < w.endMillis - MIN_CLIP_MILLIS) {
+                    momentsHub.submit(MomentRequest.Clip(rec.rideId, w.copy(startMillis = start)))
+                    rec.lastClipEndMillis = maxOf(rec.lastClipEndMillis, w.endMillis)
+                }
             }
             momentsHub.setEventPending(p.hasPending, p.pendingStartMillis)
         }
@@ -539,9 +542,9 @@ class RideSessionManager(
         chain.start(now, holdUntil = maxOf(until, pending?.endMillis ?: 0L))
     }
 
-    /** A video's look-back, cut so it never reaches back into the previous video. */
+    /** A video's look-back, cut so it never reaches back into the previous video or saved clip. */
     private fun leadIn(rec: Recorder, now: Long, wanted: Long): Long =
-        wanted.coerceAtMost((now - rec.lastVideoEndMillis).coerceAtLeast(0L))
+        wanted.coerceAtMost((now - maxOf(rec.lastVideoEndMillis, rec.lastClipEndMillis)).coerceAtLeast(0L))
 
     /**
      * The mic in the moments log: every 5 s the level, the background and the margin; and a
@@ -758,6 +761,8 @@ class RideSessionManager(
         var liveWasRunning = false
         /** When the last video ended (ride clock); new videos and clips start after it. */
         var lastVideoEndMillis = 0L
+        /** Where the last clip cut from the buffer ends: a video's look-back stops there. */
+        var lastClipEndMillis = 0L
     }
 
     companion object {
