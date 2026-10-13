@@ -1019,7 +1019,13 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
     - Google takes 15% of the price before tax; VAT and GST are inside the price, except US sales tax, which is added on top.
   - **Launch price:** sold as a launch price, raised later for new subscribers only; existing subscribers keep theirs (Play's legacy price).
   - **No fake struck-out prices:** these are dark patterns under India's 2023 rules and EU price rules.
-  - **Still open:** what free riders see of Studio (one free Reel, a watermark, or locked screens).
+  - **Free riders:** one free Reel every week, to keep them coming back.
+    - **When it counts:** when a Reel is made or shared; browsing ideas and editing don't count, and an unfinished draft can still be finished.
+    - **When it comes back:** 7 days after it's used, with a countdown ("Next free Reel in 3 days").
+    - **Counting:** on the server, against Android's per-app device ID, which survives reinstalls (declared in the data safety form).
+    - **After it's used:** Studio shows the latest ride's Reel ideas blurred, built from the ride's own frames and numbers with no Gemini cost, under a lock. On top: the countdown, Unlock Studio (price and "1 week free") and Restore purchase.
+    - **Paywall honesty:** the price, that the trial becomes paid after 7 days unless cancelled, how to cancel, easy to close, no fake urgency.
+    - **Still open:** a small "Made with Keppo Moto" watermark on free Reels (Claude suggests yes).
 - **Gemini cost cap:**
   - **35% of what each rider actually pays** (after Google's cut and tax), by their country; the server reads the subscription's country from Google.
     - For example, India about ₹75 a month (monthly) or ₹42 (yearly); Tier 1 monthly about ₹280.
