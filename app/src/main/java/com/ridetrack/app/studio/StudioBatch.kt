@@ -17,8 +17,8 @@ import java.util.concurrent.TimeUnit
 /** Making a ride's ideas in one go, from the Studio tab or overnight. */
 object StudioBatch {
     /**
-     * Queues every idea of [rideId] not made yet (Gemini's, not Show all's every-moment list, and
-     * not ones already waiting). Returns how many were queued.
+     * Queues one video for every card of [rideId] with nothing made yet (the idea leading it, not its
+     * variations; Show all's ideas too), leaving out ones already waiting. Returns how many were queued.
      */
     suspend fun makeAll(c: AppContainer, rideId: String, service: Boolean): Int {
         val engine = StudioEngine(c, rideId)
@@ -30,7 +30,11 @@ object StudioBatch {
             title = engine.card?.title.orEmpty(), series = c.studio.series, episode = c.studio.nextEpisode, options = c.studio.options,
             musicUri = c.studio.music?.first?.let(android.net.Uri::parse), musicName = c.studio.music?.second,
         )
-        val jobs = engine.pieces(scripts).filter { !it.script.every && it.script.title !in made && it.script.title !in waiting }.mapNotNull { engine.job(it, s) }
+        val jobs = IdeaGroups.group(engine.pieces(scripts)) { it.script }
+            .filter { g -> g.all.none { it.script.title in made } }
+            .map { it.main }
+            .filter { it.script.title !in waiting }
+            .mapNotNull { engine.job(it, s) }
         c.reelMaker.enqueue(jobs, service)
         return jobs.size
     }

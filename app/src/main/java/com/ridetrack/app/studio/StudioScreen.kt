@@ -174,7 +174,7 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     val all by c.reels.reels.collectAsStateWithLifecycle()
     val maker by c.reelMaker.state.collectAsStateWithLifecycle()
     val made = all.filter { it.deletedAt == null && (it.rideId == vm.rideId || (s.phoneOnly && it.rideId == null)) }.mapNotNull { it.idea }.toSet()
-    val toMake = s.pieces.count { it.script.title !in made && !it.script.every }
+    val toMake = remember(s.pieces, s.picks, made) { vm.toMake(made).size }
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -214,7 +214,7 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                 )
                 Text("Stop", style = RtType.button, color = RtColors.Error, modifier = Modifier.clickable(role = Role.Button) { vm.cancelMakeAll() }.padding(8.dp))
             }
-            toMake > 1 -> Button("Make all $toMake · in the background", primary = true) { vm.makeAll() }
+            toMake > 0 -> Button("Make all · $toMake video${if (toMake == 1) "" else "s"}", primary = true) { vm.makeAll() }
             !s.canMake -> Text("Studio needs at least 2 clips. Add videos from your phone above.", style = RtType.caption, color = RtColors.TextSecondary)
         }
         Spacer(Modifier.height(12.dp))
@@ -318,7 +318,7 @@ private fun StudioSettings(vm: StudioViewModel, s: StudioState, onClose: () -> U
                 var mobile by remember { mutableStateOf(prefs.autoMobileData) }
                 Toggle("Suggestions after each ride", "Ready when the ride ends (above 50% battery), or on Wi-Fi when it's lower", auto) { v -> prefs.autoSuggest = v; auto = v }
                 if (auto) {
-                    Toggle("Make the top suggestion", "So one piece is waiting in Your Reels", top) { v -> prefs.autoMakeTop = v; top = v }
+                    Toggle("Make the top 3", "A long reel, the best moment and your story, waiting in Your Reels", top) { v -> prefs.autoMakeTop = v; top = v }
                     Toggle("Use mobile data on low battery", "Otherwise it waits for Wi-Fi", mobile) { v -> prefs.autoMobileData = v; mobile = v }
                 }
             }
@@ -454,8 +454,12 @@ private fun Suggestions(vm: StudioViewModel, s: StudioState, made: Set<String>) 
                 Spacer(Modifier.width(10.dp))
                 Text(listOfNotNull(s.planning, s.work.firstOrNull()?.detail).joinToString(" · "), style = RtType.caption, color = RtColors.TextPrimary)
             }
-            if (s.pieces.isEmpty()) repeat(2) {
-                Box(Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(16.dp)).background(RtColors.Surface))
+            if (s.pieces.isEmpty()) {
+                Text(
+                    "Your ideas land here: a long reel of the ride when there's a minute of clips, and shorter pieces for its moments.",
+                    style = RtType.caption,
+                    color = RtColors.TextTertiary,
+                )
             }
         } else if (s.pieces.isEmpty() && s.geminiIssue == null) {
             Text(
@@ -465,38 +469,76 @@ private fun Suggestions(vm: StudioViewModel, s: StudioState, made: Set<String>) 
                 modifier = Modifier.clickable(enabled = s.canMake, role = Role.Button) { vm.retryGemini() }.padding(vertical = 6.dp),
             )
         }
-        s.pieces.forEach { pc ->
-            val sc = pc.script
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.Surface)
-                    .clickable(role = Role.Button, onClickLabel = "Read the script") { vm.openPiece(pc.key) }
-                    .padding(10.dp),
-            ) {
-                Box(Modifier.width(90.dp).aspectRatio(9f / 16f).clip(RoundedCornerShape(10.dp)).background(RtColors.SurfaceRaised)) {
-                    Thumb(pc.opening?.bit?.momentId?.let { s.thumbs[it] }, Modifier.fillMaxSize())
-                    Text(Format.clock(pc.plan.totalMs), style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 4.dp))
+        val groups = remember(s.pieces) { vm.groups() }
+        groups.forEach { g -> IdeaCard(vm, s, g, made) }
+        s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
+    }
+}
+
+/** One card: the take it shows, and other takes on the same moment under it. */
+@Composable
+private fun IdeaCard(vm: StudioViewModel, s: StudioState, g: IdeaGroup<ContentPiece>, made: Set<String>) {
+    val pc = vm.shown(g)
+    val sc = pc.script
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.Surface)
+            .clickable(role = Role.Button, onClickLabel = "Read the script") { vm.openPiece(pc.key) }
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row {
+            Box(Modifier.width(90.dp).aspectRatio(9f / 16f).clip(RoundedCornerShape(10.dp)).background(RtColors.SurfaceRaised)) {
+                Thumb(pc.opening?.bit?.momentId?.let { s.thumbs[it] }, Modifier.fillMaxSize())
+                Text(Format.clock(pc.plan.totalMs), style = RtType.caption, color = Color.White, modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 4.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(sc.format.label, style = RtType.caption, color = RtColors.OnPrimary, modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(RtColors.Primary).padding(horizontal = 6.dp))
+                    Text((sc.vibe ?: s.options.vibe).label, style = RtType.caption, color = RtColors.TextSecondary)
+                    if (sc.every) Text("· From your clips", style = RtType.caption, color = RtColors.TextTertiary)
+                    if (sc.title in made) Text("· Made", style = RtType.caption, color = RtColors.Primary)
                 }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(sc.format.label, style = RtType.caption, color = RtColors.OnPrimary, modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(RtColors.Primary).padding(horizontal = 6.dp))
-                        Text((sc.vibe ?: s.options.vibe).label, style = RtType.caption, color = RtColors.TextSecondary)
-                        if (sc.every) Text("· From your clips", style = RtType.caption, color = RtColors.TextTertiary)
-                        if (sc.title in made) Text("· Made", style = RtType.caption, color = RtColors.Primary)
-                    }
-                    Text(sc.title, style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 2)
-                    sc.why?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary, maxLines = 4) }
-                    Text("${pc.plan.clips.size} shots · ${sc.shape.replace('_', ' ')}", style = RtType.caption, color = RtColors.TextTertiary)
-                    // The app's checks changed it noticeably: say so, so the length isn't a surprise.
-                    if (pc.lengthChanged) Text("Planned ${Format.clock(pc.plannedMs)} · ${Format.clock(pc.plan.totalMs)} after checks", style = RtType.caption, color = RtColors.Warning)
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("Read the script", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.openPiece(pc.key) }.padding(vertical = 4.dp))
-                        Text("Make it", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.makePiece(pc.key) }.padding(vertical = 4.dp))
-                    }
+                Text(sc.title, style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 2)
+                sc.why?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary, maxLines = 4) }
+                val shots = pc.plan.clips.size
+                Text("$shots shot${if (shots == 1) "" else "s"} · ${sc.shape.replace('_', ' ')}", style = RtType.caption, color = RtColors.TextTertiary)
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Read the script", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.openPiece(pc.key) }.padding(vertical = 4.dp))
+                    Text("Make it", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.makePiece(pc.key) }.padding(vertical = 4.dp))
                 }
             }
         }
-        s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
+        // Other takes on this moment, and asking Gemini for one more.
+        val many = g.variations.isNotEmpty()
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (many) {
+                Text("${g.all.size} takes", style = RtType.caption, color = RtColors.TextSecondary)
+                g.all.forEach { v ->
+                    val on = v.key == pc.key
+                    Text(
+                        "${v.script.format.label} · ${v.script.title.take(18)}${if (v.script.title.length > 18) "…" else ""}",
+                        style = RtType.caption,
+                        color = if (on) RtColors.OnPrimary else RtColors.TextPrimary,
+                        maxLines = 1,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) RtColors.Primary else RtColors.SurfaceRaised)
+                            .clickable(role = Role.Button, onClickLabel = "Show this take") { vm.pick(g, v.key) }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                    )
+                }
+            }
+            if (s.gemini && s.planning == null) {
+                Text(
+                    "Try something else with this",
+                    style = RtType.caption,
+                    color = RtColors.Primary,
+                    maxLines = 1,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).border(1.dp, RtColors.Hairline, RoundedCornerShape(50))
+                        .clickable(role = Role.Button) { vm.tryAnother(g) }
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                )
+            }
+        }
     }
 }
 

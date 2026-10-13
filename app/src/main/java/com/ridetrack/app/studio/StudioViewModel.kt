@@ -95,8 +95,10 @@ data class StudioState(
     val coverBusy: Boolean = false,
     /** A short message after Journal or cover actions. */
     val toast: String? = null,
-    /** What Gemini suggests making from this ride (Reels, Shorts, Stories, long videos). */
+    /** What Gemini suggests making from this ride (Reels, Shorts, Stories, long reels). */
     val pieces: List<ContentPiece> = emptyList(),
+    /** Which take each card shows: the title of the idea leading the card → the title of the one picked. */
+    val picks: Map<String, String> = emptyMap(),
     /** Suggesting content: what's happening ("Reading what you said · 3–8 of 12"); null when not. */
     val planning: String? = null,
     /** The suggestion being made; null for a Reel of your own choices. */
@@ -587,14 +589,75 @@ class StudioViewModel(
         }
     }
 
-    /** Makes every suggestion not made yet, in the background (a notification shows progress). */
+    /** The cards on the page: ideas telling the same moment are one card, with variations. */
+    fun groups(): List<IdeaGroup<ContentPiece>> = IdeaGroups.group(_state.value.pieces) { it.script }
+
+    /** The take a card shows: the one picked, or the one leading it. */
+    fun shown(g: IdeaGroup<ContentPiece>): ContentPiece =
+        _state.value.picks[g.main.script.title]?.let { t -> g.all.firstOrNull { it.script.title == t } } ?: g.main
+
+    /** Shows another take on a card. */
+    fun pick(g: IdeaGroup<ContentPiece>, key: String) {
+        val t = g.all.firstOrNull { it.key == key }?.script?.title ?: return
+        _state.update { it.copy(picks = it.picks + (g.main.script.title to t)) }
+    }
+
+    /** The cards with nothing made yet: one video each, the take each card shows. */
+    fun toMake(made: Set<String>): List<ContentPiece> = groups().filter { g -> g.all.none { it.script.title in made } }.map(::shown)
+
+    /** Makes every card not made yet (the take it shows), in the background (a notification shows progress). */
     fun makeAll() {
-        val made = engine.madeIdeas()
+        val waiting = c.reelMaker.state.value.let { m -> m.next.map { it.second }.toSet() + listOfNotNull(m.current) }
         val s = _state.value
-        // Gemini's ideas only: Show all's list of every moment would be dozens of videos.
-        val jobs = s.pieces.filter { it.script.title !in made && !it.script.every }.mapNotNull { engine.job(it, s) }
+        val jobs = toMake(engine.madeIdeas()).filter { it.script.title !in waiting }.mapNotNull { engine.job(it, s) }
         c.reelMaker.enqueue(jobs)
         say(if (jobs.isEmpty()) "All suggestions are made already" else "Making ${jobs.size} in the background. They'll be in Your Reels.")
+    }
+
+    /**
+     * "Try something else with this": Gemini writes another take on the card's moment, from the
+     * same clips. It goes under the card as a variation, and the card shows it.
+     */
+    fun tryAnother(g: IdeaGroup<ContentPiece>) {
+        if (job?.isActive == true || _state.value.planning != null) return
+        val cd = card ?: return
+        val base = shown(g).script
+        job = viewModelScope.launch {
+            _state.update { it.copy(planning = "Gemini is trying something else with \u201c${base.title.take(40)}\u201d", geminiIssue = null) }
+            val fs = withContext(Dispatchers.Default) { footage() }
+            val takes = g.all.map { "${it.script.format.label} · ${it.script.title}" }
+            val sc = try {
+                gemini().scripts(ScriptWriter.variationPrompt(cd.title, cd.subtitle, fs, style(), base, takes, ScriptWriter.keys(fs), c.styles.forSuggestions()), fs) { raw ->
+                    c.errors.record("Studio variation", "Gemini's answer couldn't be read", null, raw.take(4_000))
+                }.firstOrNull()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                c.errors.record("Studio variation", "Gemini couldn't try something else", e)
+                _state.update {
+                    it.copy(geminiIssue = when {
+                        com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e) -> com.ridetrack.app.transcribe.GeminiNet.message(e)
+                        e is FirebaseTranscriber.Busy -> "Gemini's free limit is used up, so it can't try something else now."
+                        else -> "Gemini couldn't try something else (${e.message?.take(60)})."
+                    })
+                }
+                null
+            } finally {
+                _state.update { it.copy(planning = null) }
+            }
+            if (sc == null) return@launch
+            // A new title, so it's told apart from the takes already on the card.
+            val titles = _state.value.pieces.map { it.script.title }.toSet()
+            val title = generateSequence(sc.title) { "$it ·" }.first { it !in titles }
+            val v = sc.copy(title = title, variationOf = g.main.script.title, every = false)
+            // Right after the card's last take, so it's listed with them.
+            val scripts = _state.value.pieces.map { it.script }.toMutableList()
+            val at = scripts.indexOfLast { t -> g.all.any { it.script.title == t.title } } + 1
+            scripts.add(at.coerceIn(0, scripts.size), v)
+            savePlan(scripts)
+            showPieces(scripts)
+            _state.update { it.copy(picks = it.picks + (g.main.script.title to title)) }
+        }
     }
 
     fun cancelMakeAll() = c.reelMaker.cancelAll()

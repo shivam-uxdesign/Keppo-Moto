@@ -154,7 +154,8 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel(), StudioHome
             val thumbOf = ms.associate { it.id to it.thumb?.takeIf(File::isFile) }
             val fileOf = ms.associate { it.id to it.file }
             val drafts = File(c.appContext.filesDir, "studio-drafts")
-            val ideas = planOf(r.id).map { sc ->
+            // One card per moment: other takes on it are on the ride's own page, under its card.
+            val ideas = IdeaGroups.group(planOf(r.id)) { it }.map { it.main }.map { sc ->
                 val first = sc.sections.firstOrNull { it.shots.isNotEmpty() }?.shots?.first()
                 IdeaCard(
                     title = sc.title, format = sc.format.label, why = sc.why, lengthSec = sc.lengthSec,

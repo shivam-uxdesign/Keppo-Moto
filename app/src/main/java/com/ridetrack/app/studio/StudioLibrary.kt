@@ -191,7 +191,7 @@ fun StudioSettingsScreen(onBack: () -> Unit) {
             Group("After each ride") {
                 SwitchLine("Find ideas", "Ready when the ride ends (above 50% battery), or on Wi-Fi", auto) { auto = it; prefs.autoSuggest = it }
                 if (auto) {
-                    SwitchLine("Make the top idea", "So one is waiting in Your Reels", top) { top = it; prefs.autoMakeTop = it }
+                    SwitchLine("Make the top 3", "A long reel, the best moment and your story, waiting in Your Reels", top) { top = it; prefs.autoMakeTop = it }
                     SwitchLine("Use mobile data on low battery", "Otherwise it waits for Wi-Fi", mobile) { mobile = it; prefs.autoMobileData = it }
                 }
                 SwitchLine("Make every idea overnight", "While the phone charges: they're in Your Reels by morning", overnight) {

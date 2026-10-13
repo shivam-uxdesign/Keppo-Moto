@@ -301,6 +301,8 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
             val st = sc.style?.let(c.styles::get)
             val planned = ScriptWriter.toPlan(sc, fs, bits, st?.base ?: sc.vibe ?: o.vibe, o)
             if (planned.plan.clips.isEmpty()) return@mapIndexedNotNull null
+            // A long reel the clips couldn't fill to about a minute isn't one: left out.
+            if (sc.format == PieceFormat.LONG && planned.plan.totalMs < ScriptWriter.LONG_MIN_MS) return@mapIndexedNotNull null
             // The style Gemini picked from the rider's own: its whole look on the piece.
             var n = 0
             val plan = st?.let { Styles.apply(planned.plan, it) { "s${i}-${n++}" } } ?: planned.plan

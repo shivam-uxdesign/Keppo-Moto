@@ -674,10 +674,7 @@ Rider's answers: yes to 1, 2, 3, 5, 6, 7, 8, 9 and 11; maybe to 10; no to 4 (rou
 - Every day there's a reminder at the rider's usual posting time (learnt from when they shared before).
 - **Home:** a "Today's post" card **below the Start ride card**, with the video, Share and "Swap".
 
-### D. "Clip that" by voice
-- **What it does:** saying "Keppo, clip that" while riding saves the last 30 s as a clip, marked as a highlight. Marked clips come first in ideas, slots and series.
-- **Risk:** the mic is already recording, so the phrase has to be heard in that same sound, on the phone and without internet.
-- **Fallback if that isn't reliable:** a double press of a volume button, or a tap on the bubble, does the same.
+### D. "Clip that" by voice: dropped (13 Oct, the rider's call)
 
 ### E. Better videos without editing
 - **Jump cuts:** long pauses, "umm"s and false starts are cut from talking pieces, using the timed caption lines. On by default, with a switch per video.

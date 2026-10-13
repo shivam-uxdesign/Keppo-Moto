@@ -9,7 +9,7 @@ enum class PieceFormat(val label: String, val minSec: Int, val maxSec: Int, val 
     REEL("Reel", 6, 90, "Instagram Reel"),
     SHORT("Short", 6, 60, "YouTube Short"),
     STORY("Story", 5, 60, "Instagram Story: casual, of the day"),
-    LONG("Long video", 120, 300, "YouTube video, 2–5 min, chapters"),
+    LONG("Long reel", 60, 120, "long Instagram Reel, 1–2 min: the ride told in order. Riding shots carry it (speed, the road, the view); talking and reactions are its highlights, not required"),
     CAPTION("Caption clip", 12, 25, "ONE uncut riding shot of 15–20 s (accelerating, leaning, a fast or pretty stretch) with funny or relatable text on screen; no talking needed");
 
     companion object {
@@ -56,8 +56,13 @@ data class Script(
     val onScreen: List<String> = emptyList(),
     /** Listed by Show all from a part of the clips (not one of Gemini's ideas); Make all leaves these out. */
     val every: Boolean = false,
+    /** Asked for as another take on the idea with this title ("Try something else"); shown under it. */
+    val variationOf: String? = null,
 ) {
     val totalMs: Long get() = sections.sumOf { s -> s.shots.sumOf { it.durMs } }
+
+    /** The clips it uses (moment or phone video ids), in order of first use. */
+    val clips: List<String> get() = sections.flatMap { s -> s.shots.map { it.clip } }.distinct()
 }
 
 /** One clip as the script writer sees it. [key] is the short name used in prompts ("c3"). */
@@ -106,6 +111,14 @@ data class ContentSummary(val clips: Int, val talkingSec: Int, val sounds: Int, 
 
 /** Gemini's script prompts and replies, and turning a script into a video plan safely. Pure, unit-tested. */
 object ScriptWriter {
+    /** Footage for a long reel: about 75 s of clips, so 60 s of it is worth watching. */
+    const val LONG_FOOTAGE_MS = 75_000L
+
+    /** Shortest long reel worth keeping after the checks. */
+    const val LONG_MIN_MS = 55_000L
+
+    fun longReelFits(footage: List<Footage>): Boolean = footage.sumOf { it.durationMs } >= LONG_FOOTAGE_MS
+
     /** A drawn-out sound or a one-word reaction: "Tooooo", "Aaaahh", "Fhit!", "No…". */
     private val SOUND = Regex("^\\W*(\\p{L})\\1{2,}|(\\p{L})\\2{3,}|^\\W*(fhit|fit|shit|no+|oh+|wow+|whoa+|arre+|ayy+|yay+|ha(ha)+|oops|damn|bhai+)\\W*$", RegexOption.IGNORE_CASE)
 
@@ -204,9 +217,15 @@ object ScriptWriter {
             appendLine(CAPTION_RULE)
         }
         appendLine("List them best first: the first one is made automatically. Each piece must fill at least 80% of its own length with real content.")
-        appendLine("Formats allowed: ${formats.joinToString { "${it.name.lowercase()} (${it.hint}, ${it.minSec}–${it.maxSec} s)" }}.")
+        // A long reel needs footage, not talking: riding shots fill it.
+        val longOk = longReelFits(footage)
+        val allowed = if (longOk) formats else formats - PieceFormat.LONG
+        appendLine("Formats allowed: ${allowed.joinToString { "${it.name.lowercase()} (${it.hint}, ${it.minSec}–${it.maxSec} s)" }}.")
         appendLine("Make them different from each other: different hooks, shapes and lengths; no two pieces open on the same moment or share a shape. Clips may be reused across pieces.")
-        appendLine("Suggest a long video only if there's enough talking for 2+ minutes. When the footage is thin, suggest fewer, shorter pieces.")
+        if (longOk && PieceFormat.LONG in formats) {
+            appendLine("Include exactly one long reel (format long, 60–120 s): the whole ride in filming order, from its riding shots, talking and reactions. It counts as one of the pieces. Talking isn't needed for it.")
+        }
+        appendLine("When the footage is thin, suggest fewer, shorter pieces.")
         appendLine("Pick a vibe for each piece: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm) or vlog (the voice leads).")
         append(stylesText(styles))
         append(performance)
@@ -235,6 +254,22 @@ object ScriptWriter {
         appendLine("The rider asks for: \"${ask.replace("\"", "'")}\". Write ONE piece that does that, from this footage (format, length and vibe as they asked, or what suits it).")
         appendLine("Vibes: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm), vlog (the voice leads).")
         appendLine("If they ask for a caption clip: $CAPTION_RULE")
+        append(stylesText(styles))
+        appendLine(CRAFT)
+        append(styleText(style))
+        append("Reply with JSON only (one piece): $SCHEMA")
+    }
+
+    /** Asks for another take on [script]: the same moment and clips, told differently from [takes] (format · title). */
+    fun variationPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, script: Script, takes: List<String>, keys: Map<String, String>, styles: List<StudioStyle> = emptyList()): String = buildString {
+        appendLine("You are the editor of a motorcycle rider's motovlog (often Hinglish).")
+        appendLine("Ride: \"$ride\" ($stats).")
+        appendLine(footageText(footage))
+        appendLine("This piece was suggested from the ride: ${ScriptJson.toPromptJson(script, keys)}")
+        appendLine("Write ONE different take on the same moment, from the same clips (a clip right before or after may be added).")
+        appendLine("Make it clearly different from these takes: ${takes.joinToString("; ") { "\"${it.replace("\"", "'")}\"" }}: another format, hook, shape or vibe, and a new title.")
+        appendLine("Vibes: hype (fast cuts, bold words), cine (slow, wide, film look), chill (easy, warm), vlog (the voice leads).")
+        appendLine("If it's a caption clip: $CAPTION_RULE")
         append(stylesText(styles))
         appendLine(CRAFT)
         append(styleText(style))
@@ -660,6 +695,7 @@ object ScriptJson {
         .put("story", s.story ?: JSONObject.NULL)
         .put("onScreen", JSONArray(s.onScreen))
         .put("every", s.every)
+        .put("variationOf", s.variationOf ?: JSONObject.NULL)
         .put("captions", JSONObject().apply { s.captions.forEach { (k, v) -> put(k, v) } })
         .put("sections", JSONArray().apply {
             s.sections.forEach { sec ->
@@ -685,6 +721,7 @@ object ScriptJson {
                 story = o.optStringOrNull("story"),
                 onScreen = o.optJSONArray("onScreen")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty(),
                 every = o.optBoolean("every"),
+                variationOf = o.optStringOrNull("variationOf"),
                 captions = o.optJSONObject("captions")?.let { c -> c.keys().asSequence().associateWith { k -> c.optString(k) } }.orEmpty(),
                 sections = o.getJSONArray("sections").let { a ->
                     (0 until a.length()).mapNotNull { i ->

@@ -64,16 +64,23 @@ class AfterRideWorker(context: Context, params: WorkerParameters) : CoroutineWor
                     // What's in the new clips, so search finds it (while Gemini's allowance lasts).
                     runCatching { ClipSeen.look(c, engine.clips, limit = 24) }
                     val pieces = engine.pieces(r.scripts)
-                    val top = pieces.firstOrNull()?.takeIf { c.studio.autoMakeTop }
-                    notifyReady(rideId, title, pieces.size, top?.script?.title)
-                    top?.let { pc ->
+                    // The top 3: a long reel, the best moment and your story, each from its own card.
+                    val fs = engine.footage().associateBy { it.momentId }
+                    val talks = { sc: Script ->
+                        sc.sections.any { sec -> sec.shots.any { sh -> fs[sh.clip]?.lines?.any { l -> l.startMs < sh.outMs && l.endMs > sh.inMs } == true } }
+                    }
+                    val groups = IdeaGroups.group(pieces) { it.script }
+                    val top = if (c.studio.autoMakeTop) TopSlots.pick(groups, { it.script }, talks) else emptyList()
+                    notifyReady(rideId, title, groups.size, top.map { (slot, pc) -> "${slot.label}: ${pc.script.title}" })
+                    if (top.isNotEmpty()) {
                         val s = StudioState(
                             title = title, series = c.studio.series, episode = c.studio.nextEpisode, options = c.studio.options,
                             musicUri = c.studio.music?.first?.let(android.net.Uri::parse), musicName = c.studio.music?.second,
                         )
-                        engine.job(pc, s)?.let { job ->
-                            c.reelMaker.enqueue(listOf(job), service = false)
-                            // Stay running while it's made (the app may be in the background); what's
+                        val jobs = top.mapNotNull { (_, pc) -> engine.job(pc, s) }
+                        if (jobs.isNotEmpty()) {
+                            c.reelMaker.enqueue(jobs, service = false)
+                            // Stay running while they're made (the app may be in the background); what's
                             // left when the system stops this is made the next time the app starts.
                             withTimeoutOrNull(MAKE_WAIT_MS) { while (!c.reelMaker.state.value.idle) delay(2_000) }
                         }
@@ -97,7 +104,7 @@ class AfterRideWorker(context: Context, params: WorkerParameters) : CoroutineWor
         }
 
     @SuppressLint("MissingPermission")
-    private fun notifyReady(rideId: String, title: String, count: Int, making: String?) {
+    private fun notifyReady(rideId: String, title: String, count: Int, making: List<String>) {
         val ctx = applicationContext
         if (count == 0) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -115,8 +122,12 @@ class AfterRideWorker(context: Context, params: WorkerParameters) : CoroutineWor
         val pi = PendingIntent.getActivity(ctx, rideId.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_ride)
-            .setContentTitle(if (count == 1) "1 suggestion ready for $title" else "$count suggestions ready for $title")
-            .setContentText(making?.let { "Making “$it” for you" } ?: "Open Studio to make them")
+            .setContentTitle(
+                if (making.isNotEmpty()) "Making ${making.size} from $title"
+                else if (count == 1) "1 idea for $title" else "$count ideas for $title",
+            )
+            .setContentText(if (making.isNotEmpty()) making.joinToString(" · ") else "Open Studio to make them")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(if (making.isNotEmpty()) making.joinToString("\n") + "\n$count ideas in all" else "Open Studio to make them"))
             .setContentIntent(pi)
             .setAutoCancel(true)
             .build()
@@ -126,7 +137,7 @@ class AfterRideWorker(context: Context, params: WorkerParameters) : CoroutineWor
     companion object {
         private const val RIDE = "ride"
         private const val CHANNEL = "studio_ready"
-        private const val MAKE_WAIT_MS = 8 * 60_000L
+        private const val MAKE_WAIT_MS = 9 * 60_000L
 
         /**
          * After [rideId] ends: straight away above 50% battery, otherwise on Wi-Fi (or any network
