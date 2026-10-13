@@ -111,6 +111,10 @@ class StudioFrames {
                 val f = if (q < 0.5f) frame(vibe, (4_000 - d / 2 + (q * d)).toLong(), 4_000, next = true) else frame(vibe, ((q - 0.5f) * d).toLong(), 4_000, prev = true)
                 shot("$v/transition-style-${(q * 100).toInt()}", art, f) { c -> art.drawClip(c, f, emptyList(), 62, "6:21 PM", false) }
             }
+            // The same opening and stats in the rider's own colour (red), to check every accent element follows it.
+            val red = StudioArt(context, accentOverride = com.ridetrack.app.studio.Tok.RED)
+            shot("$v/accent-opening", red, frame(vibe, 1_000, 4_000)) { c -> red.drawClip(c, frame(vibe, 1_000, 4_000), lines, 62, "6:21 PM", true, StudioArt.Opener("Commute Diaries · Ep 4", "3 hours. No water.", "13 Oct 2026")) }
+            shot("$v/accent-stats", red, null) { c -> red.drawStats(c, frame(vibe, 1_200, 1_500), card, true, true) }
             shot("$v/title", art, null) { c -> art.drawTitle(c, frame(vibe, 1_000, 2_000), card, true) }
             shot("$v/stats", art, null) { c -> art.drawStats(c, frame(vibe, 1_200, 1_500), card, true, true) }
             shot("$v/text-looks", art, frame(vibe, 500, 4_000)) { c ->

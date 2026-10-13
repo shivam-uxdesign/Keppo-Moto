@@ -98,7 +98,7 @@ object ReelCover {
      * Draws the cover: [frame] centre-cropped to 9:16 (or [route] on dark when the rider chose the
      * route card), then [line] in the [vibe]'s style.
      */
-    fun render(context: Context, frame: Bitmap?, route: Bitmap?, vibe: Vibe, line: String?): Bitmap {
+    fun render(context: Context, frame: Bitmap?, route: Bitmap?, vibe: Vibe, line: String?, accent: Int? = null): Bitmap {
         val out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
         c.drawColor(Color.rgb(10, 10, 11))
@@ -111,7 +111,7 @@ object ReelCover {
             }
             frame != null -> c.drawBitmap(frame, crop(frame.width, frame.height), Rect(0, 0, W, H), p)
         }
-        if (!line.isNullOrBlank()) StudioArt(context, W, H).drawCoverText(c, vibe, line)
+        if (!line.isNullOrBlank()) StudioArt(context, W, H, accentOverride = accent).drawCoverText(c, vibe, line)
         return out
     }
 

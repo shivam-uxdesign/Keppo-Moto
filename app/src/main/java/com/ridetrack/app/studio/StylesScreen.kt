@@ -463,6 +463,8 @@ internal fun StyleEditor(start: StudioStyle, frame: Bitmap?, onSaved: (StudioSty
                     }
                     StylePart.CAMERA -> Toggle("Punch in on the words that matter", st.punchIn) { st = st.copy(punchIn = it) }
                     StylePart.COLOUR -> {
+                        Text("Style colour", style = RtType.caption, color = RtColors.TextSecondary)
+                        ColourDots(st.accent) { st = st.copy(accent = it) }
                         Toggle("Keep the base look's colour", st.color.look) { st = st.copy(color = st.color.copy(look = it)) }
                         val pct = { v: Float -> (if (v > 0) "+" else "") + "${(v * 100).toInt()}" }
                         Slide("Exposure", st.color.exposure, -1f..1f, pct) { st = st.copy(color = st.color.copy(exposure = it)) }

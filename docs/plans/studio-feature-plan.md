@@ -839,3 +839,18 @@ Done in one pass on the drawing code, because the token rewrite, the restyled vi
     | Signature | Red only, Grit, Teal & orange, Chrome |
 
 - **Colour picker on every style:** curated swatches, with the style's own colour as the default.
+
+### Build order (agreed)
+
+1. **Colour picker on every style.**
+   - **Data:** `StudioOptions.accent` (null = the style's own), saved in the Reel JSON as "accent" and in Styles as "accent".
+   - **Drawing:** `StudioArt` takes the accent and draws every accent element with it.
+   - **Picker:** a "Style colour" row, using the 8 swatches plus "Style's", in the ride settings sheet and the style editor.
+   - **Native:** the colour only sets the caption highlight.
+2. **Filters:** their own setting. Applied to the video under all graphics, with an intensity slider, chosen by the rider.
+3. **Speedtrap redline detection:**
+   - Rev level from the engine track's pitch, normalised per bike.
+   - Plus manual "Tag redline" ranges in the editor.
+4. **Speedtrap style:**
+   - The redline effect: Full by default, Stroke as an option.
+   - Captions, titles, speed badge and stats are to be decided with the rider before building.

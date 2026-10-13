@@ -65,6 +65,8 @@ class StudioArt(
     private val brand: BrandKit? = null,
     /** Grain and flicker on or off; null = the vibe's own (Film only). */
     private val grainOn: Boolean? = null,
+    /** The rider's colour for the style; null = the style's own. */
+    private val accentOverride: Int? = null,
 ) {
     private val s = w / 540f
     private val W = w.toFloat()
@@ -130,7 +132,10 @@ class StudioArt(
         else -> geistMed
     }
 
-    private fun accent(v: Vibe): Int = v.spec.accent ?: Tok.WHITE
+    private fun accent(v: Vibe): Int = accentOverride ?: v.spec.accent ?: Tok.WHITE
+
+    /** The style's colour, or null for Native's none (unless the rider picked one). */
+    private fun accentOrNull(v: Vibe): Int? = accentOverride ?: v.spec.accent
 
     /** Hooks and section text; Film and Native stay at caption size. */
     private fun hookSize(v: Vibe) = when (v) { Vibe.FILM, Vibe.NATIVE -> Tok.CAP; Vibe.HYPE -> Tok.HERO; else -> Tok.CAP_L }
@@ -297,15 +302,15 @@ class StudioArt(
             TransitionKind.WHIP -> veil(c, Tok.INK, Tok.A_LOW * cov)
             TransitionKind.GLITCH -> glitch(c, t, cov)
             // Bold: the camera punches in, then one frame of yellow at the cut.
-            TransitionKind.SLASH -> veil(c, Tok.YELLOW, if (abs(t - 0.5f) * ms <= FRAME_MS) 1f else Tok.A_LOW * Tok.inn(cov))
+            TransitionKind.SLASH -> veil(c, accent(f.vibe), if (abs(t - 0.5f) * ms <= FRAME_MS) 1f else Tok.A_LOW * Tok.inn(cov))
             TransitionKind.SHUTTER -> shutter(c, cov)
-            TransitionKind.SUN -> popWipe(c, cov)
+            TransitionKind.SUN -> popWipe(c, cov, accent(f.vibe))
             TransitionKind.CARD -> paperSlide(c, t)
             // To black, held a moment at the cut.
             TransitionKind.DIP -> veil(c, Tok.INK, Tok.inOut(cl(cov / DIP_HOLD)))
             // A 120 ms dip to black at the cut; the camera does the rest.
             TransitionKind.ZOOM_THROUGH -> veil(c, Tok.INK, 1 - Tok.inn(cl(abs(t - 0.5f) * ms / (Tok.T_MICRO / 2f))))
-            TransitionKind.LIGHT_LEAK -> lightLeak(c, cov, (if (landing) f.cut else f.cut + 1) % 2 == 0)
+            TransitionKind.LIGHT_LEAK -> lightLeak(c, cov, (if (landing) f.cut else f.cut + 1) % 2 == 0, accent(f.vibe))
             else -> {}
         }
     }
@@ -339,10 +344,10 @@ class StudioArt(
     }
 
     /** Playful: a flat coral circle grows from the centre over the cut and shrinks off the next clip. */
-    private fun popWipe(c: Canvas, cov: Float) {
+    private fun popWipe(c: Canvas, cov: Float, color: Int) {
         val r = hypot(W, H) / 2 * Tok.inOut(cov)
         if (r < 1) return
-        p.reset(); p.color = Tok.CORAL
+        p.reset(); p.color = color
         c.drawCircle(W / 2, H / 2, r, p)
     }
 
@@ -356,7 +361,7 @@ class StudioArt(
     }
 
     /** Film: warm light (amber into paper) sweeps in from one edge, strongest at the cut. */
-    private fun lightLeak(c: Canvas, cov: Float, fromLeft: Boolean) {
+    private fun lightLeak(c: Canvas, cov: Float, fromLeft: Boolean, warm: Int) {
         val e = Tok.inOut(cov)
         if (e <= 0f) return
         val a = Tok.A_HIGH * e
@@ -364,7 +369,7 @@ class StudioArt(
         val x0 = if (fromLeft) 0f else W
         val x1 = if (fromLeft) reach else W - reach
         p.reset()
-        p.shader = LinearGradient(x0, 0f, x1, 0f, intArrayOf(Tok.alpha(Tok.AMBER, a), Tok.alpha(Tok.PAPER, a), Tok.alpha(Tok.PAPER, 0f)), floatArrayOf(0f, LEAK_MID, 1f), Shader.TileMode.CLAMP)
+        p.shader = LinearGradient(x0, 0f, x1, 0f, intArrayOf(Tok.alpha(warm, a), Tok.alpha(Tok.PAPER, a), Tok.alpha(Tok.PAPER, 0f)), floatArrayOf(0f, LEAK_MID, 1f), Shader.TileMode.CLAMP)
         c.drawRect(0f, 0f, W, H, p)
         p.shader = null
     }
@@ -426,9 +431,10 @@ class StudioArt(
         val bg = look.background
         val paper = bg ?: when (kind) { CaptionKind.LABEL, CaptionKind.STRIP -> Tok.PAPER; CaptionKind.CHAT, CaptionKind.PLAIN -> Tok.WHITE; else -> null }
         // Each style's highlight: a colour (the rider's, else the vibe's accent where it reads), or the others dimmed.
-        val accent = vibe.spec.accent
+        val accent = accentOrNull(vibe)
         val hi = look.highlight ?: when (kind) {
-            CaptionKind.CLEAN, CaptionKind.SERIF -> null
+            // These dim the other words; a colour the rider picked lights the word being said instead.
+            CaptionKind.CLEAN, CaptionKind.SERIF -> accentOverride
             CaptionKind.PUNCH -> accent ?: Tok.WHITE
             CaptionKind.LABEL -> accent?.takeIf { readable(it, paper!!) } ?: Tok.CORAL
             CaptionKind.STRIP -> accent?.takeIf { readable(it, paper!!) } ?: Tok.RED
@@ -612,7 +618,7 @@ class StudioArt(
             soft()
             val sc = POSTER_FROM - (POSTER_FROM - 1) * q
             c.save(); c.scale(sc, sc, x, y - lh / 2)
-            ink(color ?: if (ri == 0) Tok.WHITE else Tok.YELLOW, 1f)
+            ink(color ?: if (ri == 0) Tok.WHITE else accent(Vibe.HYPE), 1f)
             c.drawText(words.slice(r).joinToString(" "), x, mid(y - lh / 2), p)
             c.restore()
         }
@@ -853,7 +859,7 @@ class StudioArt(
                 fade = alpha * Tok.inOut(Tok.prog(t, Tok.T_SLOW))
                 labelA = fade
                 soft()
-                rows.forEachIndexed { ri, r -> ink(color ?: Tok.PAPER, 1f); c.drawText(line(r), cx, mid(rowY(ri)), p) }
+                rows.forEachIndexed { ri, r -> ink(color ?: accent(vibe), 1f); c.drawText(line(r), cx, mid(rowY(ri)), p) }
             }
             Vibe.VLOG -> rows.forEachIndexed { ri, r ->
                 val q = Tok.out(Tok.prog(t - ri * Tok.STAGGER, Tok.T_EMPH))
@@ -873,7 +879,7 @@ class StudioArt(
                 val r = if (rows.size == 1) min(Tok.R_PILL * s, bh / 2) else Tok.R_MD * s
                 c.save(); c.translate(cx, cy); c.rotate(PLAYFUL_TITLE_TILT); c.scale(pop, pop)
                 ink(accent(vibe), 1f); c.drawRoundRect(RectF(-bw / 2, -bh / 2, bw / 2, bh / 2), r, r, p)
-                rows.forEachIndexed { ri, row -> ink(color ?: Tok.INK, 1f); c.drawText(line(row), 0f, mid(rowY(ri) - cy), p) }
+                rows.forEachIndexed { ri, row -> ink(color ?: inkOn(accent(vibe)), 1f); c.drawText(line(row), 0f, mid(rowY(ri) - cy), p) }
                 c.restore()
             }
             Vibe.FILM -> {
@@ -922,7 +928,7 @@ class StudioArt(
         type(labelFace(vibe), Tok.LABEL, Tok.WHITE, align, track)
         fade = a
         soft()
-        ink(when (vibe) { Vibe.FILM -> Tok.AMBER; Vibe.CINE -> Tok.PAPER; else -> Tok.WHITE }, 1f)
+        ink(when (vibe) { Vibe.FILM, Vibe.CINE -> accent(vibe); else -> Tok.WHITE }, 1f)
         c.drawText(text.uppercase(), cx, mid(cy), p)
         p.clearShadowLayer()
         fade = 1f
@@ -1113,16 +1119,16 @@ class StudioArt(
                 soft(); ink(accent(vibe), 1f); c.drawText("KM/H", x + nw + Tok.SP_S * s, nb, p)
             }
             Vibe.CINE -> {
-                type(geistMed, Tok.LABEL, Tok.PAPER, track = Tok.TRACK_CAPS)
-                soft(); ink(Tok.PAPER, Tok.QUIET)
+                type(geistMed, Tok.LABEL, accent(vibe), track = Tok.TRACK_CAPS)
+                soft(); ink(accent(vibe), Tok.QUIET)
                 c.drawText("$kmh KM/H", x, mid(y), p)
             }
             Vibe.CHILL -> {
                 val r = BADGE_DISC * s
                 c.save(); c.translate(x + r, y); c.rotate(PLAYFUL_BADGE_TILT)
                 p.reset(); p.isAntiAlias = true; p.color = accent(vibe); c.drawCircle(0f, 0f, r, p)
-                type(fredoka, Tok.BODY, Tok.WHITE, Paint.Align.CENTER); c.drawText("$kmh", 0f, mid(-Tok.SP_S * s), p)
-                type(fredoka, Tok.LABEL, Tok.WHITE, Paint.Align.CENTER); c.drawText("km/h", 0f, mid(r / 2 - Tok.SP_XS * s), p)
+                type(fredoka, Tok.BODY, inkOn(accent(vibe)), Paint.Align.CENTER); c.drawText("$kmh", 0f, mid(-Tok.SP_S * s), p)
+                type(fredoka, Tok.LABEL, inkOn(accent(vibe)), Paint.Align.CENTER); c.drawText("km/h", 0f, mid(r / 2 - Tok.SP_XS * s), p)
                 c.restore()
             }
             Vibe.VLOG -> {
@@ -1134,8 +1140,8 @@ class StudioArt(
                 ink(Tok.WHITE, 1f); c.drawText(label, x + Tok.SP_M * s, mid(y), p)
             }
             Vibe.FILM -> {
-                type(mono, Tok.LABEL_L, Tok.AMBER)
-                soft(); ink(Tok.AMBER, 1f)
+                type(mono, Tok.LABEL_L, accent(vibe))
+                soft(); ink(accent(vibe), 1f)
                 c.drawText(listOf("$kmh km/h", clock).filter { it.isNotBlank() }.joinToString(" · ").uppercase(), x, mid(y), p)
             }
             Vibe.EDITORIAL -> {
@@ -1246,14 +1252,14 @@ class StudioArt(
                 p.reset(); p.isAntiAlias = true; ink(Tok.PAPER, 1f)
                 c.drawRoundRect(RectF(-W * TILE_W, -H * TILE_H, W * TILE_W, H * TILE_H), Tok.R_MD * s, Tok.R_MD * s, p)
             }
-            val numInk = if (v == Vibe.CHILL) Tok.INK else if (v == Vibe.CINE) Tok.PAPER else fg
+            val numInk = if (v == Vibe.CHILL) Tok.INK else if (v == Vibe.CINE) accent(v) else fg
             val z = fit(numFace(v), shown, numSize, W * (STATS_RIGHT - STATS_LEFT) - Tok.SP_L * s, Tok.CAP)
             type(numFace(v), z, numInk, Paint.Align.CENTER); ink(numInk, 1f)
             c.drawText(shown, 0f, mid(-Tok.SP_M * s), p)
             val numBottom = -Tok.SP_M * s + (p.descent() - p.ascent()) / 2
             val (uFace, uSize, uInk, uA) = when (v) {
                 Vibe.HYPE -> Quad(geistMed, Tok.LABEL_L, accent(v), 1f)
-                Vibe.CINE -> Quad(geistMed, Tok.LABEL, Tok.PAPER, Tok.QUIET)
+                Vibe.CINE -> Quad(geistMed, Tok.LABEL, accent(v), Tok.QUIET)
                 Vibe.CHILL -> Quad(fredoka, Tok.LABEL_L, Tok.INK, 1f)
                 Vibe.FILM -> Quad(mono, Tok.LABEL, accent(v), 1f)
                 Vibe.EDITORIAL -> Quad(geistMed, Tok.LABEL, Tok.INK, 1f)
@@ -1281,8 +1287,8 @@ class StudioArt(
         c.save(); c.scale(sc, sc, x, H * POSTER_NUM_Y)
         ink(Tok.WHITE, 1f); c.drawText(countUp(value, Tok.out(Tok.prog(t, Tok.T_SLOW))), x - Tok.SP_XS * s, mid(H * POSTER_NUM_Y), p)
         c.restore()
-        type(archivo, Tok.CAP, Tok.YELLOW, track = POSTER_TRACK)
-        ink(Tok.YELLOW, 1f); c.drawText(unit.uppercase(), x, mid(H * POSTER_UNIT_Y), p)
+        type(archivo, Tok.CAP, accent(Vibe.HYPE), track = POSTER_TRACK)
+        ink(accent(Vibe.HYPE), 1f); c.drawText(unit.uppercase(), x, mid(H * POSTER_UNIT_Y), p)
         // The other numbers, smaller, in a row.
         val rest = card.stats.take(4).filterIndexed { i, _ -> i != hero }
         val colW = W * Tok.TITLE_W / rest.size.coerceAtLeast(1)

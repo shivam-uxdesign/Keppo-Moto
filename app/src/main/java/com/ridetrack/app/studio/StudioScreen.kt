@@ -325,6 +325,9 @@ private fun StudioSettings(vm: StudioViewModel, s: StudioState, onClose: () -> U
                 if (o.vibe != Vibe.NATIVE) Toggle("Route opening", "A 2 s route sketch before the first clip (off is better for reach)", o.intro) { v -> vm.setOptions { it.copy(intro = v) } }
                 Toggle("Map", "The route behind the stats. Off: no map at all", o.map) { v -> vm.setOptions { it.copy(map = v) } }
                 Toggle("Film grain", "Grain and a little flicker (Film has it on)", o.grain ?: o.vibe.spec.grain) { v -> vm.setOptions { it.copy(grain = v) } }
+                // The style's colour: titles, highlights, badge and the cut flash ("A" = the style's own).
+                Text("Style colour", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.padding(top = 8.dp))
+                ColourDots(o.accent) { c -> vm.setOptions { it.copy(accent = c) } }
                 Toggle("Keppo Moto mark", "Small, on the stats", o.watermark) { v -> vm.setOptions { it.copy(watermark = v) } }
                 val prefs = com.ridetrack.app.ui.appContainer().studio
                 var gallery by remember { mutableStateOf(prefs.alsoSaveToGallery) }

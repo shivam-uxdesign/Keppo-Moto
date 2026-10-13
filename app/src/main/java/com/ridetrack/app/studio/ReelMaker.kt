@@ -308,7 +308,7 @@ suspend fun drawReelCover(context: Context, reels: ReelStore, p: ReelProject, fi
     }.maxByOrNull { it.second }?.first ?: (p.durationMs / 6)
     val f = frame(at) ?: ReelStore.frame(reels.video(p.id), at)
     val line = if (p.coverText) (p.coverLine ?: p.hookLine.ifBlank { p.title }) else null
-    val bmp = ReelCover.render(context, f, route, p.vibe, line)
+    val bmp = ReelCover.render(context, f, route, p.vibe, line, p.options.accent)
     withContext(Dispatchers.IO) { reels.writeCover(p.id, bmp) }
     bmp.recycle()
     f?.recycle()

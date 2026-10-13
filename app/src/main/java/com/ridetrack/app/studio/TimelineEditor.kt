@@ -238,7 +238,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     // A cut whose transition is playing on a loop (ms into the Reel); null when not.
     var loopAt by remember { mutableStateOf<Long?>(null) }
     // Transitions drawn over the simple preview (the exact one has them in the video).
-    val art = remember { StudioArt(context, w = 540, h = 960) }
+    val art = remember(s.options.accent, s.options.grain) { StudioArt(context, w = 540, h = 960, grainOn = s.options.grain, accentOverride = s.options.accent) }
     val pxPerMs = with(density) { 64.dp.toPx() } * zoom / 1000f
     val scroll = rememberScrollState()
     val current by rememberUpdatedState(plan)

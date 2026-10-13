@@ -119,7 +119,7 @@ class StyleLibrary(private val context: Context) {
         } else {
             c.drawColor(android.graphics.Color.rgb(40, 44, 52))
         }
-        val art = StudioArt(context, w, h)
+        val art = StudioArt(context, w, h, accentOverride = s.accent)
         val f = FrameAt(vibe = s.base, localMs = 1_400, durMs = 4_000, hasPrev = false, hasNext = false)
         art.drawClip(c, f, listOf(CaptionLine(0, 3_000, "Sixty five on the flyover")), if (s.speedBadge) 62 else -1, "6:21 pm", true, null, s.captions)
         val t = TextItem("p", 0, 3_000, "Monsoon run", y = Tok.TITLE_Y, look = s.textLook, color = s.textColor, animIn = TextAnim.NONE, animOut = TextAnim.NONE)

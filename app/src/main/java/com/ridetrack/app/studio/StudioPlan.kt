@@ -199,6 +199,8 @@ data class StudioOptions(
     val speedBadge: Boolean = true,
     /** The rider's brand kit (logo, handle, font) on the video. */
     val brand: Boolean = false,
+    /** The style's colour (ARGB); null = the style's own. */
+    val accent: Int? = null,
 ) {
     /** The route opening plays: Native has none. */
     val introOn: Boolean get() = intro && vibe != Vibe.NATIVE

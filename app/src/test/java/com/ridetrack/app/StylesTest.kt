@@ -50,8 +50,11 @@ class StylesTest {
             captions = CaptionLook(CaptionKind.PLAIN, 1.6f, 0.4f, true, color = 0xFF60A5FA.toInt(), highlight = 0xFFFF453A.toInt(), font = com.ridetrack.app.studio.FontChoice.SERIF, box = true),
             textFont = com.ridetrack.app.studio.FontChoice.HAND, textSize = 1.3f, textY = 0.2f,
             transition = Transition(TransitionKind.WHIP, customMs = 450),
+            accent = 0xFFE5322D.toInt(),
         )
         assertEquals(st, StyleJson.read(StyleJson.write(st)))
+        // The style's colour goes onto the Reel's options.
+        assertEquals(0xFFE5322D.toInt(), com.ridetrack.app.studio.Styles.options(com.ridetrack.app.studio.StudioOptions(), st).accent)
         // A caption look saved before these existed.
         val old = com.ridetrack.app.studio.LookJson.caption(org.json.JSONObject("""{"kind":"PUNCH","size":1.2,"y":null,"karaoke":false}"""))
         assertEquals(CaptionLook(CaptionKind.PUNCH, 1.2f, null, false), old)

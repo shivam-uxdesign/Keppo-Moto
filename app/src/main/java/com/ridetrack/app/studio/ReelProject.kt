@@ -181,7 +181,7 @@ object ReelJson {
     private fun options(o: StudioOptions) = JSONObject()
         .put("vibe", o.vibe.name).put("lengthSec", o.lengthSec).put("intro", o.intro).put("outro", o.outro).put("loopEnd", o.loopEnd)
         .put("map", o.map).put("captions", o.captions).put("watermark", o.watermark).put("seed", o.seed).put("bpm", o.bpm ?: JSONObject.NULL).put("teaser", o.teaser)
-        .put("speedBadge", o.speedBadge).put("brand", o.brand).put("jumpCuts", o.jumpCuts).put("english", o.english).put("grain", o.grain ?: JSONObject.NULL)
+        .put("speedBadge", o.speedBadge).put("brand", o.brand).put("jumpCuts", o.jumpCuts).put("english", o.english).put("grain", o.grain ?: JSONObject.NULL).put("accent", o.accent ?: JSONObject.NULL)
 
     private fun readOptions(o: JSONObject) = StudioOptions(
         vibe = o.optStringOrNull("vibe")?.let { n -> Vibe.entries.firstOrNull { it.name == n } } ?: Vibe.HYPE,
@@ -200,6 +200,7 @@ object ReelJson {
         jumpCuts = o.optBoolean("jumpCuts", true),
         english = o.optBoolean("english"),
         grain = if (o.has("grain") && !o.isNull("grain")) o.optBoolean("grain") else null,
+        accent = if (o.has("accent") && !o.isNull("accent")) o.getInt("accent") else null,
     )
 
     private fun segment(s: Segment): JSONObject = when (s) {

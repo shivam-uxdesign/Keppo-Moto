@@ -201,7 +201,7 @@ class StudioRenderer(private val context: Context) {
         val segs = plan.segments
         val clips = plan.clips
         require(clips.isNotEmpty()) { "No clips to use" }
-        val art = StudioArt(context, brand = input.brand?.takeIf { input.options.brand }, grainOn = input.options.grain)
+        val art = StudioArt(context, brand = input.brand?.takeIf { input.options.brand }, grainOn = input.options.grain, accentOverride = input.options.accent)
         val mix = plan.mix
         drawer?.release()
         drawer = if (a.layers == LayerMode.DRAWN) LayerDrawer(context, plan.layers) { l -> uriOf(input, l.bit) } else null

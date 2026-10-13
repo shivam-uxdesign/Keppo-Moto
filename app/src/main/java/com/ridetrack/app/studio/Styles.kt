@@ -50,6 +50,8 @@ data class StudioStyle(
     val watermark: Boolean = true,
     /** Your brand kit (logo, handle, font) on the piece. */
     val brand: Boolean = false,
+    /** The style's colour (ARGB); null = its own. */
+    val accent: Int? = null,
 ) {
     /** In words, for Gemini choosing among the rider's styles. */
     fun describe(): String = buildString {
@@ -88,7 +90,7 @@ object Styles {
 
     /** The options a style sets (look, cards, overlays, marks). */
     fun options(o: StudioOptions, s: StudioStyle): StudioOptions =
-        o.copy(vibe = s.base, intro = s.intro, outro = s.outro, map = s.map, watermark = s.watermark, speedBadge = s.speedBadge, brand = s.brand)
+        o.copy(vibe = s.base, intro = s.intro, outro = s.outro, map = s.map, watermark = s.watermark, speedBadge = s.speedBadge, brand = s.brand, accent = s.accent)
 
     /**
      * [plan] in style [s]: its captions, text, transitions, pace, camera, colour, stickers and
@@ -142,7 +144,7 @@ object Styles {
             punchIn = clips.any { c -> c.frame.size >= 3 && c.frame.any { it.zoom > 1.05f } },
             color = clips.map { it.color }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: ClipColor(),
             speedBadge = o.speedBadge, speedSticker = plan.stickers.any { it.kind == StickerKind.SPEED }, leanSticker = plan.stickers.any { it.kind == StickerKind.LEAN },
-            map = o.map, intro = o.intro, outro = o.outro, duck = plan.mix.duck, cleanVoice = plan.mix.cleanVoice, watermark = o.watermark, brand = o.brand,
+            map = o.map, intro = o.intro, outro = o.outro, duck = plan.mix.duck, cleanVoice = plan.mix.cleanVoice, watermark = o.watermark, brand = o.brand, accent = o.accent,
         )
     }
 
@@ -169,7 +171,7 @@ object Styles {
         StylePart.TRANSITIONS -> s.copy(transition = original.transition, everyCut = original.everyCut)
         StylePart.PACE -> s.copy(pace = original.pace)
         StylePart.CAMERA -> s.copy(punchIn = original.punchIn)
-        StylePart.COLOUR -> s.copy(color = original.color)
+        StylePart.COLOUR -> s.copy(color = original.color, accent = original.accent)
         StylePart.OVERLAYS -> s.copy(speedBadge = original.speedBadge, speedSticker = original.speedSticker, leanSticker = original.leanSticker, map = original.map, intro = original.intro, outro = original.outro, watermark = original.watermark, brand = original.brand)
         StylePart.SOUND -> s.copy(duck = original.duck, cleanVoice = original.cleanVoice)
     }
@@ -191,7 +193,7 @@ object StyleJson {
         .put("pace", s.pace.toDouble()).put("punchIn", s.punchIn)
         .put("color", JSONObject().put("exp", s.color.exposure.toDouble()).put("con", s.color.contrast.toDouble()).put("sat", s.color.saturation.toDouble()).put("warm", s.color.warmth.toDouble()).put("look", s.color.look))
         .put("speedBadge", s.speedBadge).put("speedSticker", s.speedSticker).put("leanSticker", s.leanSticker).put("map", s.map)
-        .put("intro", s.intro).put("outro", s.outro).put("duck", s.duck).put("clean", s.cleanVoice).put("watermark", s.watermark).put("brand", s.brand)
+        .put("intro", s.intro).put("outro", s.outro).put("duck", s.duck).put("clean", s.cleanVoice).put("watermark", s.watermark).put("brand", s.brand).put("accent", s.accent ?: JSONObject.NULL)
 
     fun read(o: JSONObject): StudioStyle? = runCatching {
         val base = Vibe.entries.firstOrNull { it.name == o.optString("base") } ?: Vibe.HYPE
@@ -219,6 +221,7 @@ object StyleJson {
             speedBadge = o.optBoolean("speedBadge", true), speedSticker = o.optBoolean("speedSticker"), leanSticker = o.optBoolean("leanSticker"),
             map = o.optBoolean("map", true), intro = o.optBoolean("intro"), outro = o.optBoolean("outro", true),
             duck = o.optBoolean("duck", true), cleanVoice = o.optBoolean("clean"), watermark = o.optBoolean("watermark", true), brand = o.optBoolean("brand"),
+            accent = if (o.isNull("accent") || !o.has("accent")) null else o.getInt("accent"),
         )
     }.getOrNull()
 
