@@ -95,7 +95,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import java.util.Locale
 
 internal val VibeFonts = mapOf(
-    Vibe.HYPE to FontFamily(Font(R.font.anton)),
+    Vibe.HYPE to FontFamily(Font(R.font.archivo_black)),
     Vibe.CINE to FontFamily(Font(R.font.instrument_serif_italic)),
     Vibe.CHILL to FontFamily(Font(R.font.fredoka_semibold)),
     Vibe.VLOG to FontFamily(Font(R.font.geist_semibold)),

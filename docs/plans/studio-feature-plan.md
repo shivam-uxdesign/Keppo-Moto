@@ -801,3 +801,16 @@ Done in one pass on the drawing code, because the token rewrite, the restyled vi
 - **Editorial**: graphics animate at 12 frames a second (stop-motion).
 - **Native**: no route-opening card.
 - **Frame checker**: `shots/StudioFrames` renders still frames to `app/build/frames`.
+
+### Bold rebuilt as "Poster" (rider's pick of four mocked-up directions)
+
+- **Font:** Archivo Black (OFL, licence in assets), replacing Anton.
+- **Captions:** 1–2 words at a time, as big as fits in two rows (up to 92). White with a soft shadow, and no block or hard shadow behind them. Each word snaps in from 1.08× to 1× in 120 ms with no bounce. Words not yet said wait at 40%. Gemini's key word turns yellow once it's said.
+- **Opening text and titles:** flush left. The first line is huge and white, and the rest is a size smaller in yellow.
+- **Speed badge:** the number is drawn as an outline, with a small yellow "KM/H".
+- **Section change:** "Yellow cut" (saved as SLASH). The camera punches in, then shows one frame of yellow at the cut.
+- **Stats:** top speed as one huge number (230, deliberately above the type scale), with the other three in a row below it.
+- **Choices I made:**
+  - The English line under the captions is capped at body size (36).
+  - The "Punch" caption style is renamed "Poster".
+- **Mockup frames:** `shots/BoldMocks`.

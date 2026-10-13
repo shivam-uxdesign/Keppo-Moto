@@ -71,6 +71,7 @@ class StudioArt(
     private val H = h.toFloat()
 
     private val anton = font(context, R.font.anton)
+    private val archivo = font(context, R.font.archivo_black)
     private val serifItalic = font(context, R.font.instrument_serif_italic)
     private val serif = font(context, R.font.instrument_serif)
     private val fredoka = font(context, R.font.fredoka_semibold)
@@ -109,7 +110,7 @@ class StudioArt(
 
     /** Titles, hooks, covers and section text. */
     private fun headFace(v: Vibe): Typeface = when (v) {
-        Vibe.HYPE -> anton
+        Vibe.HYPE -> archivo
         Vibe.CINE -> serifItalic
         Vibe.CHILL -> fredoka
         Vibe.VLOG -> geist
@@ -132,9 +133,9 @@ class StudioArt(
     private fun accent(v: Vibe): Int = v.spec.accent ?: Tok.WHITE
 
     /** Hooks and section text; Film and Native stay at caption size. */
-    private fun hookSize(v: Vibe) = if (v == Vibe.FILM || v == Vibe.NATIVE) Tok.CAP else Tok.CAP_L
+    private fun hookSize(v: Vibe) = when (v) { Vibe.FILM, Vibe.NATIVE -> Tok.CAP; Vibe.HYPE -> Tok.HERO; else -> Tok.CAP_L }
 
-    private fun titleSize(v: Vibe) = if (v == Vibe.FILM || v == Vibe.NATIVE) Tok.CAP else Tok.TITLE
+    private fun titleSize(v: Vibe) = when (v) { Vibe.FILM, Vibe.NATIVE -> Tok.CAP; Vibe.HYPE -> Tok.HERO; else -> Tok.TITLE }
 
     /** Editorial's graphics move at 12 frames a second (stop-motion); the others are smooth. */
     private fun tq(v: Vibe, ms: Float): Float = if (v == Vibe.EDITORIAL) floor(ms / Tok.STOP_MOTION_MS) * Tok.STOP_MOTION_MS else ms
@@ -185,7 +186,7 @@ class StudioArt(
                 TransitionKind.ZOOM -> k += ZOOM_K * (leave + land)
                 TransitionKind.WHIP -> x += W * WHIP_X * (land - leave)
                 TransitionKind.GLITCH -> x += W * GLITCH_X * (if (((t / Tok.T_MICRO * 3).toInt() and 1) == 0) 1 else -1) * max(o, i)
-                TransitionKind.SLASH -> { k += SLASH_K * (leave + land); x += W * SLASH_X * (land - leave); r += SLASH_DEG * (land - leave) }
+                TransitionKind.SLASH -> k += SLASH_K * (leave + land)
                 TransitionKind.SHUTTER, TransitionKind.DIP, TransitionKind.SUN -> k += SOFT_K * Tok.inOut(max(o, i))
                 TransitionKind.CARD -> x += W * PAPER_X * (Tok.inOut(i) - Tok.inOut(o))
                 TransitionKind.ZOOM_THROUGH -> k += THROUGH_K * (leave + land)
@@ -244,7 +245,7 @@ class StudioArt(
         val above = (if (f.vibe == Vibe.FILM) o.date ?: o.label else o.label)?.takeIf { it.isNotBlank() }
         val line = o.hookLine?.takeIf { it.isNotBlank() }
         if (line == null) {
-            above?.let { smallLabel(c, f.vibe, it, W / 2, H * Tok.TITLE_Y, a * Tok.out(Tok.prog(t, Tok.T_BASE))) }
+            above?.let { if (f.vibe == Vibe.HYPE) smallLabel(c, f.vibe, it, W * Tok.INFO_X, H * Tok.TITLE_Y, a * Tok.out(Tok.prog(t, Tok.T_BASE)), Paint.Align.LEFT) else smallLabel(c, f.vibe, it, W / 2, H * Tok.TITLE_Y, a * Tok.out(Tok.prog(t, Tok.T_BASE))) }
             return
         }
         headline(c, f.vibe, line, W / 2, H * Tok.TITLE_Y, hookSize(f.vibe), t, a, above = above)
@@ -295,7 +296,8 @@ class StudioArt(
             TransitionKind.FLASH -> veil(c, Tok.PAPER, FLASH_A * Tok.inn(cov))
             TransitionKind.WHIP -> veil(c, Tok.INK, Tok.A_LOW * cov)
             TransitionKind.GLITCH -> glitch(c, t, cov)
-            TransitionKind.SLASH -> slash(c, t, cov)
+            // Bold: the camera punches in, then one frame of yellow at the cut.
+            TransitionKind.SLASH -> veil(c, Tok.YELLOW, if (abs(t - 0.5f) * ms <= FRAME_MS) 1f else Tok.A_LOW * Tok.inn(cov))
             TransitionKind.SHUTTER -> shutter(c, cov)
             TransitionKind.SUN -> popWipe(c, cov)
             TransitionKind.CARD -> paperSlide(c, t)
@@ -326,17 +328,6 @@ class StudioArt(
             p.color = Tok.alpha(if (it % 2 == 0) Tok.BLUE else Tok.RED, Tok.A_HIGH * cov)
             c.drawRect(dx, y, W + dx, y + bh, p)
         }
-    }
-
-    /** Bold: an ink band with a yellow edge sweeps across on a diagonal. */
-    private fun slash(c: Canvas, t: Float, cov: Float) {
-        val d = hypot(W, H) * SLASH_SPAN
-        val cx = (Tok.inOut(t) - 0.5f) * SLASH_TRAVEL * d
-        val bw = d * SLASH_BAND * Tok.out(cov) + Tok.SP_L * s
-        c.save(); c.translate(W / 2, H / 2); c.rotate(SLASH_ANGLE)
-        p.reset(); p.color = Tok.YELLOW; c.drawRect(cx + bw / 2 - Tok.SP_XS * s, -d, cx + bw / 2 + Tok.SP_XL * s, d, p)
-        p.color = Tok.INK; c.drawRect(cx - bw / 2, -d, cx + bw / 2, d, p)
-        c.restore()
     }
 
     /** Cinematic: the bars close to black and open on the next clip. */
@@ -474,7 +465,7 @@ class StudioArt(
         var enLh = 0f
         val enTop = blk.bottom + capLh / 2
         if (en != null) {
-            type(if (vibe == Vibe.NATIVE) sys else plainFace, Tok.snap(capSize * EN_SCALE), Tok.WHITE)
+            type(if (vibe == Vibe.NATIVE) sys else plainFace, enSize(), Tok.WHITE)
             enWords = en.split(WS).filter { it.isNotEmpty() }
             enRows = wrapIdx(enWords, enWords.indices, W * Tok.CAPTION_W).take(2)
             enLh = p.textSize * Tok.LEADING
@@ -489,7 +480,7 @@ class StudioArt(
         }
         pic?.let { c.drawPicture(it) }
         if (en != null) {
-            type(if (vibe == Vibe.NATIVE) sys else plainFace, Tok.snap(capSize * EN_SCALE), Tok.WHITE, Paint.Align.CENTER)
+            type(if (vibe == Vibe.NATIVE) sys else plainFace, enSize(), Tok.WHITE, Paint.Align.CENTER)
             fade = lineFade
             soft()
             enRows.forEachIndexed { i, r ->
@@ -504,6 +495,9 @@ class StudioArt(
         val z = look.size
         return RectF(W / 2 + (all.left - W / 2) * z, ay + (all.top - ay) * z, W / 2 + (all.right - W / 2) * z, ay + (all.bottom - ay) * z)
     }
+
+    /** The English line: 0.6 × the caption size, never more than body size (next to poster-size captions it would compete). */
+    private fun enSize() = min(Tok.snap(capSize * EN_SCALE), Tok.BODY)
 
     /** Clean: 2–3 words at a time, each chunk sliding up out of a mask; the word being said at full, the rest dimmed. */
     private fun cleanCaption(c: Canvas, sp: Spoken, t: Float, ay: Float, k: Cap) {
@@ -547,42 +541,85 @@ class StudioArt(
     private fun punchCaption(c: Canvas, sp: Spoken, t: Float, ay: Float, k: Cap) {
         val a = sp.active(t)
         val words = sp.words.map { it.uppercase() }
-        val g = chunks(words, 3).first { a in it }
-        val face = k.face ?: anton
-        val size = fit(face, words.slice(g).joinToString(" "), Tok.TITLE, W * Tok.CAPTION_W, Tok.CAPTION_FLOOR)
-        type(face, size, Tok.WHITE, Paint.Align.CENTER)
-        val rows = wrapIdx(words, g, W * Tok.CAPTION_W)
-        val lh = size * s * Tok.LEADING_TIGHT
+        val g = chunks(words, 2).first { a in it }
+        val face = k.face ?: archivo
+        // As big as fits in two rows at most: two words usually stack, a poster's way.
+        var size = words.slice(g).minOf { fit(face, it, Tok.HERO, W * Tok.CAPTION_W, Tok.CAPTION_FLOOR) }
+        type(face, size, Tok.WHITE, track = POSTER_TRACK)
+        var rows = wrapIdx(words, g, W * Tok.CAPTION_W)
+        while (rows.size > 2 && size > Tok.CAPTION_FLOOR) {
+            size = Tok.down(size)
+            type(face, size, Tok.WHITE, track = POSTER_TRACK)
+            rows = wrapIdx(words, g, W * Tok.CAPTION_W)
+        }
+        val lh = size * s * POSTER_LEADING
         capSize = size; capLh = lh
-        val block = k.hi ?: Tok.YELLOW
-        val padX = Tok.SP_M * s
+        val key = k.hi ?: Tok.YELLOW
         val space = p.measureText(" ")
+        soft()
         rows.forEachIndexed { ri, r ->
             val y = ay - (rows.size - 1 - ri) * lh
             val total = p.measureText(words.slice(r).joinToString(" "))
             var x = W / 2 - total / 2
-            mark(x - padX, y - lh / 2, x + total + padX, y + lh / 2)
+            mark(x, y - lh / 2, x + total, y + lh / 2)
             for (i in r) {
                 val ww = p.measureText(words[i])
-                if (t >= sp.starts[i]) {
-                    val q = Tok.prog(t - sp.starts[i], Tok.T_MICRO)
-                    val sc = PUNCH_FROM - (PUNCH_FROM - 1) * Tok.springHard(q)
-                    val active = k.karaoke && i == a
-                    c.save(); c.translate(x + ww / 2, y); c.scale(sc, sc); if (active) c.rotate(PUNCH_TILT)
-                    if (active) {
-                        ink(block, 1f)
-                        c.drawRoundRect(RectF(-ww / 2 - padX, -lh / 2, ww / 2 + padX, lh / 2), Tok.R_SM * s, Tok.R_SM * s, p)
-                        ink(inkOn(block), 1f)
-                    } else {
-                        ink(Tok.INK, 1f); c.drawText(words[i], Tok.HARD_X * s, mid(Tok.HARD_Y * s), p)
-                        ink(if (isKey(sp, i)) block else k.ink ?: Tok.WHITE, 1f)
-                    }
-                    c.drawText(words[i], 0f, mid(0f), p)
-                    c.restore()
-                }
+                val said = t >= sp.starts[i]
+                // Each word snaps in, no bounce; the next one waits, quiet.
+                val q = Tok.out(Tok.prog(t - sp.starts[i], Tok.T_MICRO))
+                val sc = if (said) POSTER_FROM - (POSTER_FROM - 1) * q else 1f
+                c.save(); c.translate(x + ww / 2, y); c.scale(sc, sc)
+                // The key word turns yellow once it's said; before that it waits in white like the rest.
+                ink(if (isKey(sp, i) && (said || !k.karaoke)) key else k.ink ?: Tok.WHITE, if (!k.karaoke || said) 1f else POSTER_WAIT)
+                c.drawText(words[i], -ww / 2, mid(0f), p)
+                c.restore()
                 x += ww + space
             }
         }
+        p.clearShadowLayer()
+    }
+
+    /**
+     * Bold's headline, a poster: the first line huge and white, the rest a size smaller in yellow,
+     * flush left (or centred on [cx] when [left] is off); each line snaps in.
+     */
+    private fun posterHeadline(c: Canvas, text: String, cx: Float, cy: Float, size: Float, ms: Float?, alpha: Float, above: String?, below: String?, maxW: Float, color: Int?, left: Boolean) {
+        val t = ms ?: STILL
+        val words = text.trim().split(WS).filter { it.isNotEmpty() }.map { it.uppercase() }
+        if (words.isEmpty() || alpha <= 0f) return
+        val (z, rows) = rowsAt(archivo, words, size, maxW, POSTER_TRACK)
+        val lead = rows.first()
+        val rest = if (rows.size > 1) (rows[1].first..words.lastIndex) else IntRange.EMPTY
+        val zs = Tok.down(Tok.down(z))
+        p.reset(); p.typeface = archivo; p.textSize = zs * s; p.letterSpacing = POSTER_TRACK
+        val small = if (rest.isEmpty()) emptyList() else wrapIdx(words, rest, maxW).take(2)
+        val lh0 = z * s * POSTER_LEADING
+        val lhs = zs * s * POSTER_LEADING
+        val blockH = lh0 + small.size * lhs
+        val labelTop = cy - blockH / 2 - Tok.SP_L * s - Tok.LABEL * s
+        val cyy = cy + if (above != null) max(0f, H * Tok.INFO_BOTTOM + Tok.SP_S * s - labelTop) else 0f
+        val top = cyy - blockH / 2
+        val x = if (left) W * Tok.INFO_X else cx
+        val align = if (left) Paint.Align.LEFT else Paint.Align.CENTER
+        val lines = listOf(Triple(lead, z, lh0)) + small.map { Triple(it, zs, lhs) }
+        var y = top
+        lines.forEachIndexed { ri, (r, zz, lh) ->
+            val q = Tok.out(Tok.prog(t - ri * Tok.STAGGER, Tok.T_MICRO))
+            y += lh
+            if (q <= 0f) return@forEachIndexed
+            type(archivo, zz, Tok.WHITE, align, POSTER_TRACK)
+            fade = alpha * q
+            soft()
+            val sc = POSTER_FROM - (POSTER_FROM - 1) * q
+            c.save(); c.scale(sc, sc, x, y - lh / 2)
+            ink(color ?: if (ri == 0) Tok.WHITE else Tok.YELLOW, 1f)
+            c.drawText(words.slice(r).joinToString(" "), x, mid(y - lh / 2), p)
+            c.restore()
+        }
+        fade = 1f
+        val labelA = alpha * Tok.out(Tok.prog(t, Tok.T_BASE))
+        above?.let { smallLabel(c, Vibe.HYPE, it, x, top - Tok.SP_L * s - Tok.LABEL * s / 2, labelA, align) }
+        below?.let { smallLabel(c, Vibe.HYPE, it, x, top + blockH + Tok.SP_L * s + Tok.LABEL * s / 2, labelA, align) }
     }
 
     /** Playful: 3–4 words on a paper pill that pops in, tilted one way then the other; the word being said in the accent. */
@@ -783,7 +820,8 @@ class StudioArt(
      * the intro title and covers. [ms] is the time since it appeared (null = still, fully in);
      * [above] and [below] are small caps labels.
      */
-    private fun headline(c: Canvas, vibe: Vibe, text: String, cx: Float, cy: Float, size: Float, ms: Float?, alpha: Float, above: String? = null, below: String? = null, maxW: Float = W * Tok.TITLE_W, color: Int? = null) {
+    private fun headline(c: Canvas, vibe: Vibe, text: String, cx: Float, cy: Float, size: Float, ms: Float?, alpha: Float, above: String? = null, below: String? = null, maxW: Float = W * Tok.TITLE_W, color: Int? = null, left: Boolean = true) {
+        if (vibe == Vibe.HYPE) return posterHeadline(c, text, cx, cy, size, ms, alpha, above, below, maxW, color, left)
         val t = ms ?: STILL
         val raw = text.trim().split(WS).filter { it.isNotEmpty() }
         if (raw.isEmpty() || alpha <= 0f) return
@@ -810,16 +848,7 @@ class StudioArt(
         val widest = rows.maxOf { p.measureText(line(it)) }
         var labelA = alpha * Tok.out(Tok.prog(t, Tok.T_BASE))
         when (vibe) {
-            Vibe.HYPE -> rows.forEachIndexed { ri, r ->
-                val q = Tok.prog(t - ri * Tok.STAGGER, Tok.T_BASE)
-                if (q <= 0f) return@forEachIndexed
-                val sc = PUNCH_FROM - (PUNCH_FROM - 1) * Tok.springHard(q)
-                fade = alpha * Tok.out(q)
-                c.save(); c.translate(cx, rowY(ri)); c.scale(sc, sc)
-                ink(Tok.INK, 1f); c.drawText(line(r), Tok.HARD_X * s, mid(Tok.HARD_Y * s), p)
-                ink(color ?: if (ri == rows.lastIndex && rows.size > 1) accent(vibe) else Tok.WHITE, 1f); c.drawText(line(r), 0f, mid(0f), p)
-                c.restore()
-            }
+            Vibe.HYPE -> {}
             Vibe.CINE -> {
                 fade = alpha * Tok.inOut(Tok.prog(t, Tok.T_SLOW))
                 labelA = fade
@@ -887,10 +916,10 @@ class StudioArt(
     }
 
     /** A small caps label in the vibe's label face (Film: amber). */
-    private fun smallLabel(c: Canvas, vibe: Vibe, text: String, cx: Float, cy: Float, a: Float) {
+    private fun smallLabel(c: Canvas, vibe: Vibe, text: String, cx: Float, cy: Float, a: Float, align: Paint.Align = Paint.Align.CENTER) {
         if (a <= 0f) return
         val track = if (vibe == Vibe.EDITORIAL) Tok.TRACK_CAPS_EDITORIAL else Tok.TRACK_CAPS
-        type(labelFace(vibe), Tok.LABEL, Tok.WHITE, Paint.Align.CENTER, track)
+        type(labelFace(vibe), Tok.LABEL, Tok.WHITE, align, track)
         fade = a
         soft()
         ink(when (vibe) { Vibe.FILM -> Tok.AMBER; Vibe.CINE -> Tok.PAPER; else -> Tok.WHITE }, 1f)
@@ -940,7 +969,7 @@ class StudioArt(
                 // The vibe's own entrance stands in for a plain fade in.
                 val styleIn = t.animIn == TextAnim.FADE
                 val a = if (styleIn) TextTools.animate(t.copy(animIn = TextAnim.NONE), ms, durMs, t.text.length).alpha else f.alpha
-                headline(c, vibe, shown, px, py, hookSize(vibe), if (styleIn) ms.toFloat() else null, a, color = t.color)
+                headline(c, vibe, shown, px, py, if (vibe == Vibe.HYPE) Tok.TITLE else hookSize(vibe), if (styleIn) ms.toFloat() else null, a, color = t.color, left = t.id == SECTION_ID)
             }
             TextLook.PLAIN -> styledText(c, shown, px, py, t.align, faceOf(t.font) ?: if (vibe == Vibe.NATIVE) sys else plainFace, Tok.CAP, t.color ?: brand?.color ?: Tok.WHITE, f.alpha, shadow = true)
             TextLook.OUTLINE -> styledText(c, shown.uppercase(), px, py, t.align, faceOf(t.font) ?: anton, Tok.TITLE, t.color ?: Tok.WHITE, f.alpha, outline = true)
@@ -1073,15 +1102,15 @@ class StudioArt(
         val y = H * Tok.INFO_Y
         when (vibe) {
             Vibe.HYPE -> {
-                type(anton, Tok.CAP_L, Tok.WHITE)
+                // The number drawn as an outline, the unit small in yellow.
+                type(archivo, Tok.CAP_L, Tok.WHITE, track = POSTER_TRACK)
                 val n = "$kmh"
                 val nb = mid(y)
-                ink(Tok.INK, 1f); c.drawText(n, x + Tok.HARD_X * s, nb + Tok.HARD_Y * s, p)
+                p.style = Paint.Style.STROKE; p.strokeWidth = POSTER_OUTLINE * s
                 ink(Tok.WHITE, 1f); c.drawText(n, x, nb, p)
                 val nw = p.measureText(n)
-                type(anton, Tok.LABEL_L, Tok.YELLOW, track = Tok.TRACK_CAPS)
-                ink(Tok.INK, 1f); c.drawText("KM/H", x + nw + Tok.SP_S * s + Tok.HARD_X * s, nb + Tok.HARD_Y * s, p)
-                ink(accent(vibe), 1f); c.drawText("KM/H", x + nw + Tok.SP_S * s, nb, p)
+                type(geistMed, Tok.LABEL, Tok.YELLOW, track = Tok.TRACK_CAPS)
+                soft(); ink(accent(vibe), 1f); c.drawText("KM/H", x + nw + Tok.SP_S * s, nb, p)
             }
             Vibe.CINE -> {
                 type(geistMed, Tok.LABEL, Tok.PAPER, track = Tok.TRACK_CAPS)
@@ -1174,6 +1203,28 @@ class StudioArt(
             drawRoute(c, card.route, card.route.size, 1f, Tok.SP_XS * s, ROUTE_PAD)
             c.restore()
         }
+        if (v == Vibe.HYPE) posterStats(c, card, t) else gridStats(c, v, card, t, fg, paperGround)
+        fade = Tok.out(Tok.prog(t - Tok.T_SLOW, Tok.T_EMPH))
+        val l = logo
+        if (l != null) {
+            // The rider's own logo instead of the Keppo mark.
+            val hgt = LOGO * s
+            val wid = hgt * l.width / l.height.coerceAtLeast(1)
+            c.drawBitmap(l, null, RectF(W / 2 - wid / 2, H * LOGO_Y - hgt / 2, W / 2 + wid / 2, H * LOGO_Y + hgt / 2), Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = (fade * 255).toInt() })
+        }
+        val handle = brand?.handle?.trim()?.takeIf { it.isNotEmpty() }?.let { if (it.startsWith("@")) it else "@$it" }
+        val mark = handle ?: if (watermark && l == null) "made with Keppo Moto" else null
+        mark?.let {
+            type(labelFace(v), Tok.LABEL_L, fg, Paint.Align.CENTER)
+            ink(if (handle != null) brand?.color ?: fg else fg, if (handle != null) 1f else Tok.A_HIGH)
+            c.drawText(it, W / 2, mid(H * MARK_Y), p)
+        }
+        fade = 1f
+        edge(f)?.let { transition(c, f, it) }
+    }
+
+    /** The ride's numbers in a 2×2 grid, counting up, in the vibe's type. */
+    private fun gridStats(c: Canvas, v: Vibe, card: RideCard, t: Float, fg: Int, paperGround: Boolean) {
         headline(c, v, card.title, W / 2, H * Tok.TITLE_Y, hookSize(v), t, 1f, color = if (paperGround) Tok.INK else null)
         if (v == Vibe.EDITORIAL) {
             // A red rule between the rows.
@@ -1214,23 +1265,36 @@ class StudioArt(
             c.drawText(if (caps) unit.uppercase() else unit, 0f, numBottom + Tok.SP_S * s - p.ascent(), p)
             c.restore()
         }
-        fade = Tok.out(Tok.prog(t - Tok.T_SLOW, Tok.T_EMPH))
-        val l = logo
-        if (l != null) {
-            // The rider's own logo instead of the Keppo mark.
-            val hgt = LOGO * s
-            val wid = hgt * l.width / l.height.coerceAtLeast(1)
-            c.drawBitmap(l, null, RectF(W / 2 - wid / 2, H * LOGO_Y - hgt / 2, W / 2 + wid / 2, H * LOGO_Y + hgt / 2), Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = (fade * 255).toInt() })
-        }
-        val handle = brand?.handle?.trim()?.takeIf { it.isNotEmpty() }?.let { if (it.startsWith("@")) it else "@$it" }
-        val mark = handle ?: if (watermark && l == null) "made with Keppo Moto" else null
-        mark?.let {
-            type(labelFace(v), Tok.LABEL_L, fg, Paint.Align.CENTER)
-            ink(if (handle != null) brand?.color ?: fg else fg, if (handle != null) 1f else Tok.A_HIGH)
-            c.drawText(it, W / 2, mid(H * MARK_Y), p)
+    }
+
+    /** Bold's stats, a poster: the title flush left, top speed as one huge number, the rest in a row below. */
+    private fun posterStats(c: Canvas, card: RideCard, t: Float) {
+        posterHeadline(c, card.title, W / 2, H * Tok.TITLE_Y, Tok.TITLE, t, 1f, null, null, W * Tok.TITLE_W, null, left = true)
+        val x = W * Tok.INFO_X
+        val hero = card.stats.indexOfFirst { "top" in it.second.lowercase() }.takeIf { it >= 0 } ?: 0
+        val (value, unit) = card.stats.getOrNull(hero) ?: return
+        val q = Tok.out(Tok.prog(t, Tok.T_EMPH))
+        fade = q
+        val z = fit(archivo, value, POSTER_NUMBER, W * Tok.TITLE_W, Tok.HERO)
+        type(archivo, z, Tok.WHITE, track = POSTER_TRACK)
+        val sc = POSTER_FROM - (POSTER_FROM - 1) * q
+        c.save(); c.scale(sc, sc, x, H * POSTER_NUM_Y)
+        ink(Tok.WHITE, 1f); c.drawText(countUp(value, Tok.out(Tok.prog(t, Tok.T_SLOW))), x - Tok.SP_XS * s, mid(H * POSTER_NUM_Y), p)
+        c.restore()
+        type(archivo, Tok.CAP, Tok.YELLOW, track = POSTER_TRACK)
+        ink(Tok.YELLOW, 1f); c.drawText(unit.uppercase(), x, mid(H * POSTER_UNIT_Y), p)
+        // The other numbers, smaller, in a row.
+        val rest = card.stats.take(4).filterIndexed { i, _ -> i != hero }
+        val colW = W * Tok.TITLE_W / rest.size.coerceAtLeast(1)
+        rest.forEachIndexed { i, (v, u) ->
+            fade = Tok.out(Tok.prog(t - (i + 1) * Tok.STAGGER * 2, Tok.T_BASE))
+            val cx = x + i * colW
+            type(archivo, Tok.CAP, Tok.WHITE, track = POSTER_TRACK); ink(Tok.WHITE, 1f)
+            c.drawText(countUp(v, Tok.out(Tok.prog(t - (i + 1) * Tok.STAGGER * 2, Tok.T_SLOW))), cx, mid(H * POSTER_ROW_Y), p)
+            type(geistMed, Tok.LABEL, Tok.WHITE, track = Tok.TRACK_CAPS); ink(Tok.WHITE, Tok.DIM)
+            c.drawText(u.uppercase(), cx, mid(H * POSTER_ROW_Y + Tok.CAP * s * Tok.LEADING_TIGHT), p)
         }
         fade = 1f
-        edge(f)?.let { transition(c, f, it) }
     }
 
     private data class Quad(val face: Typeface, val size: Float, val ink: Int, val a: Float)
@@ -1427,8 +1491,6 @@ class StudioArt(
         const val WHIP_X = 0.75f
         const val GLITCH_X = 0.03f
         const val SLASH_K = 0.3f
-        const val SLASH_X = 0.22f
-        const val SLASH_DEG = 1.5f
         const val SOFT_K = 0.05f
         const val THROUGH_K = 0.06f
         const val PAPER_X = 0.06f
@@ -1440,10 +1502,6 @@ class StudioArt(
         // Transition graphics.
         const val FLASH_A = 0.8f
         const val DIP_HOLD = 0.8f
-        const val SLASH_SPAN = 1.15f
-        const val SLASH_TRAVEL = 2.2f
-        const val SLASH_BAND = 0.112f
-        const val SLASH_ANGLE = -21.8f
         const val LEAK_MIN = 0.2f
         const val LEAK_REACH = 1.0f
         const val LEAK_MID = 0.45f
@@ -1460,8 +1518,16 @@ class StudioArt(
 
         // Captions and type motion.
         const val EN_SCALE = 0.6f
-        const val PUNCH_FROM = 1.2f
-        const val PUNCH_TILT = -1f
+        const val POSTER_FROM = 1.08f
+        const val POSTER_WAIT = 0.4f
+        const val POSTER_TRACK = -0.02f
+        const val POSTER_LEADING = 0.98f
+        /** Bold's one big number on the stats (beyond the type scale on purpose: it's the whole card). */
+        const val POSTER_NUMBER = 230f
+        const val POSTER_OUTLINE = 2.5f
+        const val POSTER_NUM_Y = 0.42f
+        const val POSTER_UNIT_Y = 0.53f
+        const val POSTER_ROW_Y = 0.64f
         const val POP_FROM = 0.85f
         const val PLAYFUL_TILT = 1.5f
         const val PLAYFUL_TITLE_TILT = -2f

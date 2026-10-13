@@ -70,14 +70,14 @@ internal fun fontFamilyOf(font: FontChoice): FontFamily? = when (font) {
 /** The typeface a text look draws in when no font is picked. */
 internal fun lookFamily(look: TextLook, vibe: Vibe): FontFamily? = when (look) {
     TextLook.HAND -> FontFamily(Font(R.font.permanent_marker))
-    TextLook.OUTLINE -> VibeFonts[Vibe.HYPE]
+    TextLook.OUTLINE -> FontFamily(Font(R.font.anton))
     TextLook.PLAIN, TextLook.BOX -> if (vibe == Vibe.NATIVE) FontFamily.Default else VibeFonts[Vibe.VLOG]
     TextLook.STYLE -> VibeFonts[vibe]
 }
 
 /** The typefaces offered on [vibe]: each one different, so the vibe's own face isn't offered twice. */
 internal fun fontChoices(vibe: Vibe): List<FontChoice> = FontChoice.entries.filter {
-    it != when (vibe) { Vibe.HYPE -> FontChoice.BOLD; Vibe.CINE -> FontChoice.SERIF; Vibe.VLOG -> FontChoice.CLEAN; else -> null }
+    it != when (vibe) { Vibe.CINE -> FontChoice.SERIF; Vibe.VLOG -> FontChoice.CLEAN; else -> null }
 }
 
 /** Colours for words on the video: the look's own, then the curated palette (every vibe's accent is in it). */
@@ -210,7 +210,7 @@ private fun CaptionGlyph(k: CaptionKind) {
     val ink = Color(Tok.INK)
     val (family, text, ground) = when (k) {
         CaptionKind.STYLE -> Triple(null, "✦", null)
-        CaptionKind.PUNCH -> Triple(FontFamily(Font(R.font.anton)), "AA", null)
+        CaptionKind.PUNCH -> Triple(FontFamily(Font(R.font.archivo_black)), "AA", null)
         CaptionKind.SERIF -> Triple(FontFamily(Font(R.font.instrument_serif)), "Aa", null)
         CaptionKind.LABEL -> Triple(FontFamily(Font(R.font.fredoka_semibold)), "Aa", paper)
         CaptionKind.CHAT -> Triple(FontFamily(Font(R.font.geist_semibold)), "Aa", Color.White)

@@ -79,7 +79,7 @@ object Styles {
         // In the order the style swipe goes: Clean, Cinematic, Bold, Playful, Film, Editorial, Native.
         StudioStyle("vlog", "Clean", Vibe.VLOG, builtIn = true, about = "calm and precise, your voice leads"),
         StudioStyle("cine", "Cinematic", Vibe.CINE, builtIn = true, about = "slow, wide, film title", pace = 1.3f, speedBadge = true),
-        StudioStyle("hype", "Bold", Vibe.HYPE, builtIn = true, about = "big words, punchy cuts", pace = 0.8f, punchIn = true),
+        StudioStyle("hype", "Bold", Vibe.HYPE, builtIn = true, about = "poster-size words, hard cuts", pace = 0.8f, punchIn = true),
         StudioStyle("chill", "Playful", Vibe.CHILL, builtIn = true, about = "friendly, round, a little pop", pace = 1.15f),
         StudioStyle("film", "Film", Vibe.FILM, builtIn = true, about = "analog, warm, shot on film", pace = 1.15f),
         StudioStyle("editorial", "Editorial", Vibe.EDITORIAL, builtIn = true, about = "printed, crafted, magazine"),

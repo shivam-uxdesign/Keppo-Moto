@@ -1605,7 +1605,7 @@ private fun pickerOrder(vibe: Vibe, current: TransitionKind): List<TransitionKin
 /** A mark for each transition, on the timeline and in the picker. */
 private val TRANSITION_GLYPH = mapOf(
     TransitionKind.STYLE to "✦", TransitionKind.CUT to "│", TransitionKind.FADE to "◐", TransitionKind.FLASH to "✺", TransitionKind.ZOOM to "⊕",
-    TransitionKind.WHIP to "≫", TransitionKind.GLITCH to "▚", TransitionKind.SLASH to "⟋", TransitionKind.SHUTTER to "◫", TransitionKind.SUN to "●", TransitionKind.CARD to "▭",
+    TransitionKind.WHIP to "≫", TransitionKind.GLITCH to "▚", TransitionKind.SLASH to "▮", TransitionKind.SHUTTER to "◫", TransitionKind.SUN to "●", TransitionKind.CARD to "▭",
     TransitionKind.DIP to "◼", TransitionKind.ZOOM_THROUGH to "⊙", TransitionKind.LIGHT_LEAK to "☀",
 )
 

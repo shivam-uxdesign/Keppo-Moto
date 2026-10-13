@@ -9,7 +9,7 @@ import kotlin.math.roundToLong
  * new ones are only ever added at the end.
  */
 enum class Vibe(val label: String, val blurb: String, val bpm: Int, val beats: Int, val transitionMs: Long) {
-    HYPE("Bold", "Big words, punchy cuts", 128, 4, 300),
+    HYPE("Bold", "Poster-size words, hard cuts", 128, 4, 300),
     CINE("Cinematic", "Slow, wide, film title", 88, 4, 700),
     CHILL("Playful", "Friendly, round, a little pop", 84, 6, 350),
     VLOG("Clean", "Calm and precise, your voice leads", 100, 6, 600),
@@ -153,7 +153,7 @@ data class ClipColor(
  */
 enum class TransitionKind(val label: String, val baseMs: Long? = null) {
     STYLE("Style"), CUT("None"), FADE("Fade"), FLASH("Flash", Tok.T_MICRO), ZOOM("Zoom punch"), WHIP("Whip"), GLITCH("Glitch"),
-    SLASH("Slash", 300), SHUTTER("Shutter"), SUN("Pop wipe", 350), CARD("Paper slide", 450),
+    SLASH("Yellow cut", 300), SHUTTER("Shutter"), SUN("Pop wipe", 350), CARD("Paper slide", 450),
     DIP("Dip", 500), ZOOM_THROUGH("Zoom-through"), LIGHT_LEAK("Light leak", 600),
 }
 
@@ -289,7 +289,7 @@ object LookJson {
 }
 
 /** Caption styles: any style's on any vibe ("Style" = the vibe's own). New ones are added at the end. */
-enum class CaptionKind(val label: String) { STYLE("Style"), PUNCH("Punch"), SERIF("Serif"), LABEL("Label"), CHAT("Chat"), PLAIN("Plain"), CLEAN("Clean"), TYPE("Type"), STRIP("Strip") }
+enum class CaptionKind(val label: String) { STYLE("Style"), PUNCH("Poster"), SERIF("Serif"), LABEL("Label"), CHAT("Chat"), PLAIN("Plain"), CLEAN("Clean"), TYPE("Type"), STRIP("Strip") }
 
 /** Stickers: live ride numbers, emoji, and callouts. */
 enum class StickerKind(val label: String) { SPEED("Speed"), LEAN("Lean"), EMOJI("Emoji"), ARROW("Arrow"), CIRCLE("Circle") }
