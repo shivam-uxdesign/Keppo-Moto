@@ -749,6 +749,10 @@ Rider's answers: yes to 1, 2, 3, 5, 6, 7, 8, 9 and 11; maybe to 10; no to 4 (rou
    - **Cause found (rider's log, 13 Oct 15:26):**
      - In Media3 1.5.1, `CompositionPlayer.setComposition` can only be called once per player: it does `checkState(composition == null)`. Confirmed in the library's code.
      - So the first edit always threw, and the editor dropped to the simple preview every time. This is a design limit, not a phone problem.
+   - **Done (322bd2d):** option A, a fresh exact-preview player after each edit. Still open from the fix list above:
+     - retrying instead of switching to the simple preview on another error
+     - "Updating preview…" while it rebuilds
+     - option B
    - **Options:**
      - **A. Quick fix:** a fresh exact-preview player for each version of the edit.
        - The new one is put together in the background while the old one keeps showing its frame, then swapped in, and the old one released.
@@ -880,3 +884,26 @@ Done in one pass on the drawing code, because the token rewrite, the restyled vi
    - **Redline light:** Full by default; "Redline light round the edge" in the ride settings switches it to Stroke.
    - **Editor:** "Tag redline" is in its tools.
    - **Grade:** contrast +0.1, saturation −6, slightly cool.
+
+## Next APK (after keppo-moto-f1bfcfb): what's in it, what's still open
+
+**In it:**
+- **Style redesign:** 7 styles on design tokens; Clean, Type and Strip captions; Dip, Zoom-through and Light leak; Pop wipe and Paper slide rebuilt; the 40% transition cap; safe zones.
+- **Bold as Poster.**
+- **Speedtrap:** the redline light (Full or Stroke) and Tag redline.
+- **Style colour** on every style.
+- **Filters:** 9, with strength.
+- **Preview:**
+  - the editor preview draws through the same overlay code as the made video
+  - caption taps use the real bounds
+  - a fresh exact-preview player after each edit (bug 2, option A)
+
+**Still open:**
+- **Bug 1, preview transitions lag:** not started. Planned: one effect chain for the edit, a half-size overlay in the preview, the next clip decoded ahead.
+- **Bug 2, the rest:** retry instead of falling back, "Updating preview…", option B (the editor's own player).
+- **Later (agreed):**
+  - blur faces and number plates, after a second camera
+  - weekly long video, last, with the rider's permission first
+- **Not checked yet:**
+  - redline detection on a real ride's engine sound
+  - the style colour and filters in a made video
