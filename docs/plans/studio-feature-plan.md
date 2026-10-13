@@ -746,3 +746,21 @@ Rider's answers: yes to 1, 2, 3, 5, 6, 7, 8, 9 and 11; maybe to 10; no to 4 (rou
         - log the exact reason when it fails
      3. **Remove the simple preview from the editor** once that holds on the rider's phone.
      4. **Lag:** the fix in item 1 (one effect chain, half-size overlay, next clip decoded ahead) applies here too.
+   - **Cause found (rider's log, 13 Oct 15:26):**
+     - In Media3 1.5.1, `CompositionPlayer.setComposition` can only be called once per player: it does `checkState(composition == null)`. Confirmed in the library's code.
+     - So the first edit always threw, and the editor dropped to the simple preview every time. This is a design limit, not a phone problem.
+   - **Options:**
+     - **A. Quick fix:** a fresh exact-preview player for each version of the edit.
+       - The new one is put together in the background while the old one keeps showing its frame, then swapped in, and the old one released.
+       - About 0.3–1 s after each edit before the change shows.
+     - **B. Rebuild the editor's preview (recommended for "never again"):** one player for the whole edit session that draws the video itself.
+       - **Playback:**
+         - clips play through a normal video player into the app's own drawing surface
+         - the next clip is opened before the cut
+       - **Drawing:** each frame, the app draws colour, crop, camera moves, speed, transitions, captions, text, stickers and layers. It uses the same drawing code as the made video, so the preview matches it, at preview size.
+       - **Edits:**
+         - Look changes (text, captions, colour, transitions, stickers) show on the next frame, with nothing rebuilt.
+         - Changes to clips (order, trims, speed) only update the list of clips, which a normal player handles any number of times.
+       - **Result:** no fallback, no reload pause, smooth cuts.
+       - **Size:** the biggest job in this list.
+     - **C. Check a newer Media3:** whether a later version lets one composition player take a new edit. That fixes A's cause, but not the lag at cuts, and needs a library upgrade tested across the editor and the made videos.
