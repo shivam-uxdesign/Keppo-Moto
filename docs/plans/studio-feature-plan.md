@@ -593,3 +593,41 @@ One commit per build. The APK comes at the end, after asking. Defaults taken whe
 - Gemini issues: the pill on the Studio tab says when Gemini is free again; its sheet has the error log.
 - The title: Share page, tap it.
 - New: hold an idea to peek at its opening clip; "Continue editing" on the Studio tab when an edit was left with changes; a tick when the playhead snaps to a cut, a style changes or a transition is picked; Settings › Make every idea overnight (while charging).
+
+## Ride ideas: long reel, variations, Make all, top slots (planned 13 Oct, not built)
+
+From the rider's feedback on the ride's Studio page (13 October, two rides, 20 clips, 6 with voice). Many ideas are fine; duplicates are not. No long piece was suggested, because the prompt asked for 2+ minutes of talking.
+
+1. **Long reel, 1–2 minutes.**
+   - `PieceFormat.LONG` becomes "Long reel", 60–120 s, 9:16. It no longer means a 2–5 min YouTube video.
+   - The rule "only if there's enough talking for 2+ minutes" goes. In its place: when the ride has at least about 75 s of usable footage, always include one long reel. It's a recap of the ride in order.
+     - Riding shots carry it, with music, speed and lean stickers, and the map at the end.
+     - Talking and reactions are the highlights, not a requirement.
+   - Checks: the long reel may be trimmed to 60 s at the shortest. If the footage can't fill 60 s, it's left out quietly.
+2. **No duplicates: variations under one card.**
+   - Ideas that open on the same clip, or share most of their clips, become one card: the best one shows, and the others become its variations. Grouping is done in the app (pure, unit-tested), so it works whatever Gemini returns.
+   - Under the card:
+     - a "2 variations" row of chips (e.g. Caption clip · Short · Story). Tapping one swaps the card to it. Make it and Read the script follow the one shown.
+     - "Try something else with this": asks Gemini for a new take on the same clips. The answer is added as a variation.
+3. **Make all.**
+   - The button says "Make all · N videos" and makes every card on the page, Show all's ideas included. Variations are made only when picked.
+   - It uses no Gemini allowance (videos are made on the phone), only time and battery.
+4. **Top slots made automatically after every ride.**
+   - Up to three, each from a different card:
+     - **Long reel**
+     - **Best moment**: the top caption clip or short
+     - **Your story**: the top talking piece
+   - One notification: "3 ready from 13 October | Uttam Nagar to …: Recap 1:12 · …". On the ride's page they sit at the top, marked Ready.
+   - Settings: "Make the top idea" becomes "Make the top 3 after each ride" (on).
+5. **Small fixes on the same page:**
+   - Remove the yellow "Planned 0:06 · 0:04 after checks" (the thumbnail shows the length).
+   - "1 shots" → "1 shot".
+   - While loading, say what's coming instead of empty grey boxes.
+
+Tests:
+- Grouping: same opening clip, overlapping clips, and different ideas kept apart.
+- Slot picking: no two slots from one card, and a slot is skipped when nothing fits.
+- The prompt asks for a long reel only when there's enough footage.
+- The long reel's length range.
+
+Not in this round (raised earlier): joining two rides from the same day into one long reel, and a week's vlog.
