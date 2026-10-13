@@ -942,4 +942,5 @@ There's one preview in the editor; it never switches. It replaces both the exact
    - **What the rider sees (screenshot):** only the video, in the top ~40% of the screen, running up under the status bar. Below it the screen is black.
    - **Missing:** the top bar (close, Ideas, Next), the timeline and the tools.
    - **Captions:** they draw ("tight ho raha"), so the preview plays.
-   - **Likely area:** the rebuilt preview (6e2d564). Its picture is a `PlayerView` inflated from `moment_popup_player`, inside a box that moves with the camera. The old code inflated the same layout only for the simple preview, and it showed the exact preview's view first. The view, or its black shutter, may be drawn outside the preview's rounded box and cover the editor.
+   - **Cause (found):** not the preview. The new Filter sheet (`FilterSheet`) was called outside the editor's full-size box. A sheet's root fills the whole screen, so even while hidden it took a screen of height in the page's column. That pushed the whole editor up: the top bar went off screen, the preview's top sat above the screen, and the timeline and tools fell below it.
+   - **Fixed:** the call moved inside the editor's box, next to the other sheets, so it lies on top and takes no space.

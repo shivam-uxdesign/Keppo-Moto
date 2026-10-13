@@ -1248,8 +1248,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 }
             }
         }
+        FilterSheet(vm, s.options, filterOpen) { filterOpen = false }
     }
-    FilterSheet(vm, s.options, filterOpen) { filterOpen = false }
     if (styleOpen) {
         val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
         StylePicker(vm, s, onAll = { nav(com.ridetrack.app.ui.nav.Routes.STYLES) }, timeline = true) { styleOpen = false }
