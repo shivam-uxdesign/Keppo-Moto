@@ -1164,3 +1164,4 @@ Statuses: Open · Fixing · To test (fixed, waiting for the rider) · Done · La
 | 1 | Bug | Recorded with 2 mics (mono): nothing showed in the HUD, settings or editor; the clip's own sound had no row of its own | To test | 6a19ba8: HUD meters, Moments › Mics page, Voice and Engine rows in the editor |
 | 2 | Question | Why no separate engine sound on that ride? | To test | Saved only from a USB-C receiver when both sides differ. The moments log now says which case it was; check after the next two-mic ride |
 | 3 | Question | Which APK has all the recent changes? | Done | 6a19ba8 |
+| 4 | Idea | Achievements page: earned ones and ones still to reach (seen on Home today) | Open | Waiting for the rider's decision on timing and which achievements |
