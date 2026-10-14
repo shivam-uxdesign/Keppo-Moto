@@ -76,6 +76,7 @@ class RideTrackApp : Application() {
         // "Today's post" at the rider's usual posting time.
         com.ridetrack.app.studio.TodayPostWorker.schedule(this)
         container.appScope.launch { runCatching { container.fuel.checkRecent() } }
+        watchPumps()
         // Why the app last stopped, into the log of the ride it interrupted.
         container.appScope.launch {
             val prefs = getSharedPreferences(STATE_PREFS_NAME, MODE_PRIVATE)
@@ -87,6 +88,36 @@ class RideTrackApp : Application() {
             if (b.connected) BackupWorker.scheduleDaily(this@RideTrackApp, b.allowMobileData)
         }
     }
+
+    /**
+     * During a ride: riding away from a petrol pump asks "Filled up at …?" there and then. The
+     * stations around the start are kept on the phone first, so this works offline later on.
+     */
+    private fun watchPumps() = container.appScope.launch {
+        var watch: com.ridetrack.app.fuel.LivePumpWatch? = null
+        var ride: String? = null
+        container.session.frame.collect { f ->
+            val a = container.session.active.value
+            if (a == null || f == null || a.source == com.ridetrack.telemetry.model.DataSourceKind.DEMO) {
+                watch = null; ride = null
+                return@collect
+            }
+            if (a.rideId != ride) {
+                ride = a.rideId
+                watch = com.ridetrack.app.fuel.LivePumpWatch()
+                keptArea = false
+            }
+            val lat = f.latitude
+            val lon = f.longitude
+            if (lat != null && lon != null && !keptArea) {
+                keptArea = true
+                launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { container.fuel.stations.keepArea(lat, lon) } }
+            }
+            val stop = watch?.feed(f.timeMillis, f.speedMps, lat, lon) ?: return@collect
+            launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { container.fuel.liveStop(a.rideId, a.bikeId, stop) } }
+        }
+    }
+    @Volatile private var keptArea = false
 
     /** An uncaught crash's stack trace, kept for the ride log on the next launch. */
     private fun keepCrashTrace() {

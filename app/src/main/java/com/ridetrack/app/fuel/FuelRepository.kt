@@ -179,6 +179,35 @@ class FuelRepository(
         settings.setFuelPrompts(Fuel.encodePrompts(others + FuelPrompt(rideId, ride.bikeId, time, name, null, lat, lon, sure = true, how = "marked")))
     }
 
+    /**
+     * During a ride, riding away from [stop]: when it's at a station kept on the phone (works
+     * offline), "Filled up at …?" is asked there and then. Each stop once.
+     */
+    fun liveStop(rideId: String, bikeId: String, stop: Stop) {
+        val station = stations.nearKept(stop.latitude, stop.longitude)
+        if (station == null) {
+            rideLog(rideId, "fuel: rode off from a ${(stop.toMillis - stop.fromMillis) / 1000} s stop at ${clock(stop.toMillis)}, no station kept on the phone there: checked after the ride")
+            return
+        }
+        rideLog(rideId, "fuel: rode off from ${station.name} at ${clock(stop.toMillis)}: asked on the spot")
+        LivePumpNotice.ask(context, FuelPrompt(rideId, bikeId, stop.toMillis, station.name, null, stop.latitude, stop.longitude, sure = true, how = "live"))
+    }
+
+    /** "Yes" on the spot: waits for the amount on Home and the Fuel page. */
+    suspend fun liveYes(prompt: FuelPrompt) {
+        rideLog(prompt.rideId, "fuel: you said yes at ${clock(prompt.timeMillis)}")
+        val now = Fuel.decodePrompts(settings.settings.first().fuelPrompts)
+        if (now.none { it.rideId == prompt.rideId && kotlin.math.abs(it.timeMillis - prompt.timeMillis) < SAME_STOP_MS }) {
+            settings.setFuelPrompts(Fuel.encodePrompts(now + prompt))
+        }
+    }
+
+    /** "No" on the spot: that stop isn't asked about after the ride. */
+    fun liveNo(prompt: FuelPrompt) {
+        rideLog(prompt.rideId, "fuel: you said no at ${clock(prompt.timeMillis)}")
+        decline(prompt.rideId, prompt.timeMillis)
+    }
+
     /** "Not a fill-up": the prompt goes and that stop isn't asked again. */
     suspend fun dismiss(prompt: FuelPrompt) = dismiss(prompt, declinedToo = true)
 

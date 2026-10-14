@@ -145,6 +145,10 @@
         <receiver
             android:name=".fuel.FuelUndoReceiver"
             android:exported="false" />
+        <!-- "Filled up at …?" Yes / No, asked as the rider rides away from a pump. -->
+        <receiver
+            android:name=".fuel.LivePumpReceiver"
+            android:exported="false" />
         <!-- The crash alert notification's I'm OK and Send now buttons. -->
         <receiver
             android:name=".safety.CrashAlertActionReceiver"
