@@ -392,6 +392,17 @@ private fun DeveloperPage(s: ProfileUiState, vm: ProfileViewModel) {
         )
     }
     if (BuildConfig.DEBUG) BetaExportSection()
+    if (BuildConfig.TEST_BUILD) {
+        // Try the app as a free rider would see it (no Gemini, no automatic Reels).
+        val ent = com.ridetrack.app.ui.appContainer().entitlements
+        val pro by ent.pro.collectAsStateWithLifecycle()
+        ToggleRow(
+            "Act as a free rider (test builds)",
+            "Turns off everything Pro: Gemini captions, the petrol price lookup and Studio's automatic ideas.",
+            !pro,
+            { ent.actAsFree = it },
+        )
+    }
 }
 
 @Composable

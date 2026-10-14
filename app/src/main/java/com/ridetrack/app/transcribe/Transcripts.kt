@@ -82,7 +82,8 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val c = (applicationContext as RideTrackApp).container
         val t = c.transcripts
-        if (!t.available || !c.settings.settings.first().moments.transcribe) return@withContext Result.success()
+        // Gemini captions are Pro; free riders type theirs in the moment viewer.
+        if (!t.available || !c.entitlements.isPro || !c.settings.settings.first().moments.transcribe) return@withContext Result.success()
         val waiting = c.moments.untranscribed().filter { it.timeMillis >= t.since }
         t.setWaiting(waiting.size)
         if (waiting.isEmpty()) return@withContext Result.success()

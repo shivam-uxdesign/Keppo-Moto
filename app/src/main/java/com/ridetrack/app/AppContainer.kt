@@ -78,12 +78,15 @@ class AppContainer(context: Context) {
         },
     )
 
+    /** Pro (Reels and everything that uses Gemini) or free. */
+    val entitlements = com.ridetrack.app.pro.Entitlements(appContext)
+
     /** Fill-ups, petrol pump stops and mileage. */
     val fuel = FuelRepository(
         appContext, settings, rides,
-        // Today's petrol price for the city, found by Gemini with Google Search.
+        // Today's petrol price for the city, found by Gemini with Google Search (Pro; free riders type it).
         com.ridetrack.app.fuel.FuelPrices(appContext) { prompt ->
-            if (!transcripts.available) null
+            if (!transcripts.available || !entitlements.isPro) null
             else com.ridetrack.app.studio.StudioGemini(preferred = { transcripts.model }, onWorking = { transcripts.model = it }).searched(prompt)
         },
     )
@@ -95,7 +98,7 @@ class AppContainer(context: Context) {
     fun transcribeSoon() {
         appScope.launch {
             val m = settings.settings.first().moments
-            if (m.transcribe) transcripts.schedule(m.transcribeWifiOnly)
+            if (m.transcribe && entitlements.isPro) transcripts.schedule(m.transcribeWifiOnly)
         }
     }
 

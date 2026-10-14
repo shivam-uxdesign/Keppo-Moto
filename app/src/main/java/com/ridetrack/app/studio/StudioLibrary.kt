@@ -187,10 +187,14 @@ fun StudioSettingsScreen(onBack: () -> Unit) {
         Text("Settings", style = RtType.title, color = RtColors.TextPrimary, modifier = Modifier.padding(vertical = 6.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Group("After each ride") {
-                SwitchLine("Find ideas", "Ready when the ride ends (above 50% battery), or on Wi-Fi", auto) { auto = it; prefs.autoSuggest = it }
-                if (auto) {
-                    SwitchLine("Make the top 3", "A long reel, the best moment and your story, waiting in Your Reels", top) { top = it; prefs.autoMakeTop = it }
-                    SwitchLine("Use mobile data on low battery", "Otherwise it waits for Wi-Fi", mobile) { mobile = it; prefs.autoMobileData = it }
+                if (!c.entitlements.isPro) {
+                    Text("Pro: ideas and Reels ready after each ride.", style = RtType.caption, color = RtColors.TextTertiary)
+                } else {
+                    SwitchLine("Find ideas", "Ready when the ride ends (above 50% battery), or on Wi-Fi", auto) { auto = it; prefs.autoSuggest = it }
+                    if (auto) {
+                        SwitchLine("Make the top 3", "A long reel, the best moment and your story, waiting in Your Reels", top) { top = it; prefs.autoMakeTop = it }
+                        SwitchLine("Use mobile data on low battery", "Otherwise it waits for Wi-Fi", mobile) { mobile = it; prefs.autoMobileData = it }
+                    }
                 }
                 var daily by remember { mutableStateOf(c.postPlan.on) }
                 SwitchLine("A post a day", "Today's post on Home, and a reminder at the time you usually post", daily) { daily = it; c.postPlan.on = it }

@@ -69,6 +69,8 @@ android {
         // anyone use the Gemini allowance from outside the app).
         buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"\"")
         buildConfigField("Boolean", "APPCHECK_DEBUG", "false")
+        // Test builds (debug, releaseTest) show testing tools such as "Act as a free rider".
+        buildConfigField("Boolean", "TEST_BUILD", "false")
         // Optional: `-PabiFilter=arm64-v8a` builds a smaller APK for modern phones only.
         providers.gradleProperty("abiFilter").orNull?.let { abis ->
             ndk { abiFilters += abis.split(",").map(String::trim) }
@@ -106,6 +108,7 @@ android {
         debug {
             buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"$appCheckDebugToken\"")
             buildConfigField("Boolean", "APPCHECK_DEBUG", "true")
+            buildConfigField("Boolean", "TEST_BUILD", "true")
         }
         // The Play build: shrunk, optimised and renamed by R8, unused resources dropped, signed
         // with the upload key (Play App Signing re-signs it for riders).
@@ -123,6 +126,7 @@ android {
             matchingFallbacks += listOf("release")
             buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"$appCheckDebugToken\"")
             buildConfigField("Boolean", "APPCHECK_DEBUG", "true")
+            buildConfigField("Boolean", "TEST_BUILD", "true")
         }
     }
 

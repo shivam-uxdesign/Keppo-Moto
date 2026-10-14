@@ -71,7 +71,14 @@ No photo or video library permissions (the system picker is used). Good.
    - **Protomaps:** a self-hosted file on cheap storage.
    - **MapTiler or Stadia:** paid plans.
    - Any choice needs a dark style and the "© OpenStreetMap contributors" credit.
-5. **Free riders cost money today** (decided: no Gemini for free riders apart from the weekly free Reel; captions manual; petrol price lookup paid): Moments transcription and the petrol price lookup call Gemini for everyone. These need the free cap, a Gemini consent screen, and a decision on whether free riders keep automatic transcription.
+5. **Free riders cost money today (fixed 14 Oct):**
+   - **Pro switch:** `pro/Entitlements` holds Pro. Until billing everyone is Pro (`BETA_ALL_ACCESS`); test builds have "Act as a free rider" in Profile.
+   - **Free riders get no Gemini:**
+     - Moments captions are off (the setting shows "· Pro"); the worker and `transcribeSoon` check Pro.
+     - The petrol price lookup returns nothing, so the price is asked.
+     - Studio's automatic ideas and top 3 don't run (`AfterRideWorker`), and their settings say Pro.
+   - **Typed captions:** anyone can type or fix what they said in the moment viewer ("Write what you said").
+   - **Still to come:** Studio's own Gemini use for free riders, limited to the weekly Reel, arrives with the paywall.
 6. **Restricted permissions:** the SMS and full-screen-alert declarations are for the Play Console.
    - **Crash alert fallbacks (built 14 Oct):**
      - Full screen where allowed.

@@ -40,7 +40,8 @@ class AfterRideWorker(context: Context, params: WorkerParameters) : CoroutineWor
     override suspend fun doWork(): Result {
         val c = (applicationContext as RideTrackApp).container
         val rideId = inputData.getString(RIDE) ?: return Result.success()
-        if (!c.studio.autoSuggest) return Result.success()
+        // Automatic ideas and Reels are Pro (free riders make their weekly Reel themselves).
+        if (!c.studio.autoSuggest || !c.entitlements.isPro) return Result.success()
         val engine = StudioEngine(c, rideId)
         if (engine.load() != null || engine.bits.size < 2) return Result.success()
         // Already suggested (Studio was opened first): nothing to do.
@@ -152,7 +153,7 @@ class AfterRideWorker(context: Context, params: WorkerParameters) : CoroutineWor
          */
         fun schedule(context: Context, rideId: String, delayMs: Long = 0L) {
             val c = (context.applicationContext as RideTrackApp).container
-            if (!c.studio.autoSuggest) return
+            if (!c.studio.autoSuggest || !c.entitlements.isPro) return
             val battery = context.getSystemService(BatteryManager::class.java)?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: 100
             val network = if (battery > 50 || c.studio.autoMobileData) NetworkType.CONNECTED else NetworkType.UNMETERED
             val req = OneTimeWorkRequestBuilder<AfterRideWorker>()

@@ -40,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableLongStateOf
@@ -113,6 +114,11 @@ class MomentViewerViewModel(private val c: AppContainer, rideId: String) : ViewM
             samples.value = s
             c.moments.fillTopSpeeds(rideId, s)
         }
+    }
+
+    /** What the rider said, typed by hand (free riders' captions, or a fix to Gemini's). */
+    fun setSaid(m: Moment, text: String) {
+        viewModelScope.launch { c.moments.setTranscript(m.id, text.trim()) }
     }
 
     fun toggleStar(m: Moment) {
@@ -276,14 +282,29 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                 ),
                 style = RtType.metricM,
             )
-            // What the rider said (Gemini), in quotes.
-            if (clip) current.transcript?.takeIf { it.isNotBlank() }?.let { said ->
+            // What the rider said, in quotes (Gemini's with Pro, or typed): tap to write or fix it.
+            if (clip) {
+                var writing by remember(current.id) { mutableStateOf(false) }
+                val said = current.transcript?.takeIf { it.isNotBlank() }
                 Text(
-                    "“$said”",
-                    style = RtType.body,
-                    color = RtColors.TextPrimary,
-                    modifier = Modifier.padding(top = 8.dp),
+                    if (said != null) "“$said”" else "Write what you said ›",
+                    style = if (said != null) RtType.body else RtType.caption,
+                    color = if (said != null) RtColors.TextPrimary else RtColors.Primary,
+                    modifier = Modifier.padding(top = 8.dp)
+                        .clickable(role = Role.Button, onClickLabel = if (said != null) "Edit what you said" else "Write what you said") { writing = true },
                 )
+                if (writing) {
+                    var text by remember { mutableStateOf(said.orEmpty()) }
+                    AlertDialog(
+                        onDismissRequest = { writing = false },
+                        title = { Text("What you said") },
+                        text = {
+                            OutlinedTextField(text, { text = it }, placeholder = { Text("Bhai, ye road toh ekdum mast hai") }, minLines = 2)
+                        },
+                        confirmButton = { TextButton(onClick = { vm.setSaid(current, text); writing = false }) { Text("Save") } },
+                        dismissButton = { TextButton(onClick = { writing = false }) { Text("Cancel") } },
+                    )
+                }
             }
             if (clip) current.topSpeedMps?.let { top ->
                 Text(

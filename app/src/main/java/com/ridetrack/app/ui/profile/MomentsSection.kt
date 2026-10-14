@@ -597,6 +597,18 @@ private fun TranscribeSettings(m: MomentSettings, onChange: (MomentSettings) -> 
     val context = LocalContext.current
     val t = com.ridetrack.app.ui.appContainer().transcripts
     val status by t.status.collectAsStateWithLifecycle()
+    val pro by com.ridetrack.app.ui.appContainer().entitlements.pro.collectAsStateWithLifecycle()
+    if (!pro) {
+        // Free riders: no Gemini. They type what they said on each moment (in the moment viewer).
+        ToggleRow(
+            "Write down what I say · Pro",
+            "With Pro, what you say in talking clips is written out for you after the ride. Without it, open a moment and tap Write what you said.",
+            false,
+            {},
+            enabled = false,
+        )
+        return
+    }
     ToggleRow(
         "Write down what I say",
         "After the ride, what you say in talking clips is written out in Hinglish (English letters) with Google's Gemini. " +
