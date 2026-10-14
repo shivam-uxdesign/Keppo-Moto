@@ -403,7 +403,7 @@ private fun AboutPage() {
     RtCard {
         Text(
             "Your rides are stored only on this phone. Keppo Moto has no account, and recording works fully offline. " +
-                "Map backgrounds are downloaded from OpenStreetMap/CARTO tile servers when you view a map. " +
+                "Map backgrounds are downloaded from OpenFreeMap's servers (OpenStreetMap data) when you view a map. " +
                 "Drive backup, if you turn it on, goes to your own Google Drive.",
             style = RtType.body,
             color = RtColors.TextSecondary,

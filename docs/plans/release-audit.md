@@ -66,7 +66,7 @@ No photo or video library permissions (the system picker is used). Good.
    - **Shrinking:** `isMinifyEnabled = false`, so the release isn't shrunk; the size and the R8 rules for Media3, MapLibre, ONNX and Firebase need testing.
    - **Format:** Play needs an app bundle (`bundleRelease`).
    - **Version:** versionCode 1, versionName 0.1.0.
-4. **Map tiles licence** (decided: OpenFreeMap with our own dark style): CARTO dark tiles need a commercial licence (reportedly about $20K a year as part of their platform). Options:
+4. **Map tiles licence** (fixed 14 Oct: OpenFreeMap's Dark style in `assets/map/dark.json`, the credit line updated, the licence in `assets/licenses`): CARTO dark tiles need a commercial licence (reportedly about $20K a year as part of their platform). Options:
    - **OpenFreeMap:** free, commercial use allowed, OpenStreetMap data.
    - **Protomaps:** a self-hosted file on cheap storage.
    - **MapTiler or Stadia:** paid plans.

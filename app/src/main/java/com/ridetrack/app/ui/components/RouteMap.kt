@@ -96,31 +96,12 @@ private const val PROGRESS_REFRESH_MS = 80L
 data class MapPin(val id: String, val latitude: Double, val longitude: Double, val thumb: java.io.File?, val color: androidx.compose.ui.graphics.Color)
 
 /**
- * Fallback dark raster basemap (OpenStreetMap data, CARTO tiles) used when no MapTiler key
- * is configured. Tiles need a connection; the route is local data and always draws.
+ * The dark basemap used when no MapTiler key is configured: OpenFreeMap's vector tiles
+ * (OpenStreetMap data, free for commercial use) with its Dark style, kept in the app's assets
+ * with the app's own background colour. Tiles need a connection; the route is local data and
+ * always draws.
  */
-private val DARK_STYLE = """
-{
-  "version": 8,
-  "sources": {
-    "basemap": {
-      "type": "raster",
-      "tiles": [
-        "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
-      ],
-      "tileSize": 256,
-      "maxzoom": 19,
-      "attribution": "© OpenStreetMap contributors © CARTO"
-    }
-  },
-  "layers": [
-    { "id": "background", "type": "background", "paint": { "background-color": "#0A0A0B" } },
-    { "id": "basemap", "type": "raster", "source": "basemap" }
-  ]
-}
-""".trimIndent()
+private const val DARK_STYLE_URI = "asset://map/dark.json"
 
 internal fun hex(c: androidx.compose.ui.graphics.Color): String {
     val argb = android.graphics.Color.argb((c.alpha * 255).toInt(), (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
@@ -424,11 +405,11 @@ internal object MapTiler {
 
 /** MapTiler vector/satellite styles when a key is configured; otherwise a keyless dark basemap. */
 internal fun styleBuilder(style: MapStyle): Style.Builder =
-    if (MapTiler.available) Style.Builder().fromUri(MapTiler.styleUrl(style)) else Style.Builder().fromJson(DARK_STYLE)
+    if (MapTiler.available) Style.Builder().fromUri(MapTiler.styleUrl(style)) else Style.Builder().fromUri(DARK_STYLE_URI)
 
 /** Credit line for map pictures drawn without MapLibre's attribution (route snapshots). */
 internal fun mapAttribution(): String =
-    if (MapTiler.available) "© MapTiler © OpenStreetMap contributors" else "© OpenStreetMap contributors © CARTO"
+    if (MapTiler.available) "© MapTiler © OpenStreetMap contributors" else "© OpenStreetMap contributors · OpenFreeMap · © OpenMapTiles"
 
 private fun addRouteLayers(s: Style) {
     s.addSource(GeoJsonSource(ROUTE_SOURCE))

@@ -1,0 +1,12 @@
+Map tiles and style
+
+Map data: © OpenStreetMap contributors, available under the Open Database
+License (ODbL): https://www.openstreetmap.org/copyright
+
+Vector tiles: OpenFreeMap (https://openfreemap.org), in the OpenMapTiles
+schema. © OpenMapTiles (https://openmaptiles.org).
+
+Style: assets/map/dark.json is OpenFreeMap's "Dark" style with its background
+colour changed to match the app. It derives from the OpenMapTiles "Dark Matter"
+style: code under the BSD 3-Clause licence, design under CC-BY 4.0
+(© OpenMapTiles, © CARTO). https://github.com/openmaptiles/dark-matter-gl-style

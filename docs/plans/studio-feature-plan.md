@@ -1009,6 +1009,8 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
   - **Locked:** Studio (Reels).
   - **Free:** everything else (rides, moments, pop-up, safety, fuel, journal, ride cards).
   - **Restore:** the purchase belongs to the Google account; checked on every launch, plus a Restore purchase button in Settings.
+  - **Access codes (beta testers, influencers):** codes made on the server that give full access for a set time and a set number of uses, redeemed in Settings → Redeem code. No payment, so allowed by Play; their Gemini use still counts against a cap. Until the paywall ships, everything is free anyway.
+  - **Discount codes (campaigns):** Play subscription offers with developer-chosen eligibility (for example 3 months at 90% off), shown only after the server accepts a code. Play's minimum price per country rules out 99% off; use an access code for "almost free". Play's own promo codes (extra free months) are a simpler option, limited per quarter.
   - **Prices by country (tiers; up to 4× India allowed by the rider):**
     1. US, Canada, UK, Western and Northern Europe, Switzerland, Australia, NZ, Japan, Korea, Singapore, Hong Kong, Israel, the Gulf: **$9.99 a month / $64.99 a year** (about 3.2× India; for now, to discuss later; 4× would be $12.99 / $84.99).
     2. Southern and Eastern EU, Taiwan, Malaysia, Chile: **$6.99 / $44.99**.
@@ -1040,7 +1042,7 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
   - The rider will revisit the numbers.
 - **Crash reporting:** Firebase Crashlytics. EU and UK riders are asked first.
 - **Face and plate blur:** after launch.
-- **Map tiles:** switch from CARTO (needs a commercial licence) to OpenFreeMap (free, commercial use allowed, OpenStreetMap data), with our own dark style to match today's look.
+- **Map tiles (done, 14 Oct):** switched from CARTO (needs a commercial licence) to OpenFreeMap (free, commercial use allowed, OpenStreetMap data), with our own dark style to match today's look.
   - Same features; satellite only ever worked with a MapTiler key, which isn't set.
   - If OpenFreeMap becomes unreliable, host the same data ourselves.
 - **Music:** riders add their own; nothing is bundled (checked). The Terms of Use make riders responsible for music rights.
