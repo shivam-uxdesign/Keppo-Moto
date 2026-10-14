@@ -76,6 +76,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.gestures.draggable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -180,8 +185,18 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
     var muted by remember { mutableStateOf(false) }
     // The info panel: collapsed to one line (remembered for the next moments) so the video shows.
     val prefs = remember { context.getSharedPreferences("moment_viewer", Context.MODE_PRIVATE) }
-    var collapsed by remember { mutableStateOf(runCatching { prefs.getBoolean("collapsed", false) }.getOrDefault(false)) }
-    fun setCollapsed(c: Boolean) { collapsed = c; runCatching { prefs.edit().putBoolean("collapsed", c).apply() } }
+    val startCollapsed = remember { runCatching { prefs.getBoolean("collapsed", false) }.getOrDefault(false) }
+    // How open the panel is: 0 = one line, 1 = everything. It follows the finger while dragged.
+    val open = remember { androidx.compose.animation.core.Animatable(if (startCollapsed) 0f else 1f) }
+    val collapsed = open.value < 0.5f
+    val panelScope = rememberCoroutineScope()
+    fun settle(to: Float) {
+        panelScope.launch { open.animateTo(to, androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow)) }
+        runCatching { prefs.edit().putBoolean("collapsed", to == 0f).apply() }
+    }
+    fun setCollapsed(c: Boolean) = settle(if (c) 0f else 1f)
+    // The height of what opens (details and actions), for turning a drag into how open it is.
+    var revealPx by remember { mutableIntStateOf(1) }
     // Two-mic clips: the engine mic plays alongside, kept in step; listen to Voice, Engine or Both.
     val enginePlayer = remember { ExoPlayer.Builder(context).build().apply { repeatMode = Player.REPEAT_MODE_ONE } }
     DisposableEffect(enginePlayer) { onDispose { enginePlayer.release() } }
@@ -280,23 +295,26 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                 .fillMaxWidth()
                 .background(Color.Black.copy(alpha = 0.55f))
                 .navigationBarsPadding()
-                .animateContentSize()
+                // Drag anywhere on the panel: it opens and closes with the finger, then springs
+                // to open or closed (a flick decides; otherwise whichever is nearer).
+                .draggable(
+                    orientation = androidx.compose.foundation.gestures.Orientation.Vertical,
+                    state = androidx.compose.foundation.gestures.rememberDraggableState { dy ->
+                        panelScope.launch { open.snapTo((open.value - dy / revealPx.coerceAtLeast(1)).coerceIn(0f, 1f)) }
+                    },
+                    onDragStopped = { v ->
+                        settle(when { v > 600f -> 0f; v < -600f -> 1f; open.value < 0.5f -> 0f; else -> 1f })
+                    },
+                )
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // Handle: tap, or swipe down to collapse and up to open.
-            var dragY by remember { mutableFloatStateOf(0f) }
+            // Handle: tap to open or close; or drag anywhere on the panel.
             Box(
                 Modifier
                     .fillMaxWidth()
                     .height(22.dp)
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures(
-                            onDragEnd = { if (dragY > 24f) setCollapsed(true) else if (dragY < -24f) setCollapsed(false); dragY = 0f },
-                            onDragCancel = { dragY = 0f },
-                        ) { _, dy -> dragY += dy }
-                    }
                     .clickable(onClickLabel = if (collapsed) "Show details" else "Hide details", indication = null, interactionSource = null) { setCollapsed(!collapsed) },
                 contentAlignment = Alignment.Center,
             ) {
@@ -326,7 +344,11 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                     }
                 }
             }
-            if (!collapsed) {
+            // What opens: grows and fades with how open the panel is.
+            Column(
+                Modifier.reveal({ open.value }) { revealPx = it },
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
             val elevation = s.samples.sampleAt(at)?.altitudeM
             val g = point?.longitudinalG
             StatRow(
@@ -417,7 +439,7 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                     onMute = { muted = !muted },
                 )
             }
-            if (!collapsed) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.reveal({ open.value }), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 // Share = the styled graphic with details; Original = the plain file.
                 Action(Icons.Outlined.IosShare, "Share") { onShareMoment(current.id) }
                 Action(Icons.Outlined.Share, "Original") { share(context, current) }
@@ -464,6 +486,20 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
 }
 
 private const val POSITION_TICK_MS = 100L
+
+/**
+ * Shows [fraction] of the content's height (clipped) and fades with it: the panel's details
+ * open and close smoothly. [onFull] gets the content's full height.
+ */
+private fun Modifier.reveal(fraction: () -> Float, onFull: (Int) -> Unit = {}): Modifier =
+    this.clipToBounds()
+        .layout { m, c ->
+            val p = m.measure(c.copy(minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity))
+            onFull(p.height)
+            val h = (p.height * fraction().coerceIn(0f, 1f)).roundToInt()
+            layout(p.width, h) { p.placeRelative(0, 0) }
+        }
+        .graphicsLayer { alpha = fraction().coerceIn(0f, 1f) }
 
 /** Which of a two-mic clip's mics to hear. */
 private enum class Listen(val label: String) { VOICE("Voice"), ENGINE("Engine"), BOTH("Both") }
