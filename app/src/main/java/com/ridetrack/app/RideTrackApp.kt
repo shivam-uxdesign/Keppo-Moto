@@ -33,6 +33,7 @@ class RideTrackApp : Application() {
         createNotificationChannel()
         container.hud.start()
         container.crashAlerts.start()
+        container.billing.start()
         PurgeWorker.schedule(this)
         container.appScope.launch { container.trash.purgeExpired() }
         // Rides saved offline get their place names now.

@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.ridetrack.app.data.AppTheme
 import com.ridetrack.app.ui.nav.RideTrackNavHost
 import com.ridetrack.app.ui.theme.RideTrackTheme
@@ -48,6 +49,13 @@ class MainActivity : ComponentActivity() {
                 RideTrackNavHost(openRideId = openRide.value, onOpenRideHandled = { openRide.value = null })
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // A purchase, renewal or cancellation may have happened outside the app.
+        val c = (application as RideTrackApp).container
+        c.appScope.launch { c.billing.refresh() }
     }
 
     override fun onNewIntent(intent: Intent) {

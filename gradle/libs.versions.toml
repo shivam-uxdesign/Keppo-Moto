@@ -14,6 +14,7 @@ maplibre = "11.8.0"
 camerax = "1.4.1"
 onnxruntime = "1.30.0"
 firebaseBom = "34.19.0"
+billing = "8.3.0"
 googleServices = "4.5.0"
 media3 = "1.5.1"
 junit = "4.13.2"
@@ -46,6 +47,7 @@ androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+billing-ktx = { module = "com.android.billingclient:billing-ktx", version.ref = "billing" }
 firebase-ai = { module = "com.google.firebase:firebase-ai" }
 firebase-config = { module = "com.google.firebase:firebase-config" }
 firebase-appcheck-debug = { module = "com.google.firebase:firebase-appcheck-debug" }

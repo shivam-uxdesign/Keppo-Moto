@@ -81,6 +81,9 @@ class AppContainer(context: Context) {
     /** Pro (Reels and everything that uses Gemini) or free. */
     val entitlements = com.ridetrack.app.pro.Entitlements(appContext)
 
+    /** The Pro subscription through Google Play. */
+    val billing = com.ridetrack.app.pro.Billing(appContext, appScope) { entitlements.setSubscribed(it) }
+
     /** Fill-ups, petrol pump stops and mileage. */
     val fuel = FuelRepository(
         appContext, settings, rides,

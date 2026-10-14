@@ -1009,6 +1009,8 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
   - **Locked:** Studio (Reels).
   - **Free:** everything else (rides, moments, pop-up, safety, fuel, journal, ride cards).
   - **Restore:** the purchase belongs to the Google account; checked on every launch, plus a Restore purchase button in Settings.
+  - **Built (7a, 14 Oct):** `pro/Billing` (Play Billing 8.3.0) asks Play what the rider owns on launch and on every return to the app, prices the plans, opens Play's payment sheet and acknowledges new purchases. `Entitlements` remembers the answer for offline use. Profile has a Keppo Moto Pro card: status, Unlock, Manage subscription and Restore purchase.
+  - **Play Console set-up:** subscription `keppo_pro`; base plans `monthly` and `yearly` (auto-renewing); on each, an offer `free-week` (7-day free trial, new customers only).
   - **Access codes (beta testers, influencers):** codes made on the server that give full access for a set time and a set number of uses, redeemed in Settings → Redeem code. No payment, so allowed by Play; their Gemini use still counts against a cap. Until the paywall ships, everything is free anyway.
   - **Discount codes (campaigns):** Play subscription offers with developer-chosen eligibility (for example 3 months at 90% off), shown only after the server accepts a code. Play's minimum price per country rules out 99% off; use an access code for "almost free". Play's own promo codes (extra free months) are a simpler option, limited per quarter.
   - **Prices by country (tiers; up to 4× India allowed by the rider):**

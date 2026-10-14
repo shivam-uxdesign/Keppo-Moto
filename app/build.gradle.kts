@@ -189,6 +189,8 @@ dependencies {
     implementation(libs.firebase.config)
     implementation(libs.firebase.appcheck.debug)
     implementation(libs.firebase.appcheck.playintegrity)
+    // Google Play Billing: the Pro subscription.
+    implementation(libs.billing.ktx)
     // Silero voice detector for "Film when I speak".
     implementation(libs.onnxruntime.android)
     implementation(libs.androidx.camera.camera2)

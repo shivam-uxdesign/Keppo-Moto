@@ -97,7 +97,7 @@ enum class ProfilePage(val route: String, val title: String) {
  * it's set. The settings themselves live on the page each row opens.
  */
 @Composable
-fun ProfileScreen(onOpenPage: (ProfilePage) -> Unit, onOpenHudSettings: () -> Unit, onOpenRecentlyDeleted: () -> Unit) {
+fun ProfileScreen(onOpenPage: (ProfilePage) -> Unit, onOpenHudSettings: () -> Unit, onOpenRecentlyDeleted: () -> Unit, onOpenPaywall: () -> Unit = {}) {
     val vm = appViewModel { ProfileViewModel(it) }
     val s by vm.state.collectAsStateWithLifecycle()
     val st = s.settings
@@ -124,6 +124,9 @@ fun ProfileScreen(onOpenPage: (ProfilePage) -> Unit, onOpenHudSettings: () -> Un
                 }
             }
         }
+
+        Spacer(Modifier.height(RtDimens.md))
+        ProSection(onUnlock = onOpenPaywall)
 
         Group("Ride") {
             NavRow(Icons.Outlined.TwoWheeler, "Riding", ridingSummary(st)) { onOpenPage(ProfilePage.RIDING) }
