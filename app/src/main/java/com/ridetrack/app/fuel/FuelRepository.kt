@@ -37,9 +37,6 @@ class FuelRepository(
 
     suspend fun delete(id: String) = settings.setFuelLog(Fuel.encodeFills(Fuel.decodeFills(settings.settings.first().fuelLog).filterNot { it.id == id }))
 
-    suspend fun dismiss(prompt: FuelPrompt) = settings.setFuelPrompts(
-        Fuel.encodePrompts(Fuel.decodePrompts(settings.settings.first().fuelPrompts).filterNot { it.rideId == prompt.rideId && it.timeMillis == prompt.timeMillis }),
-    )
 
     /** Mileage for [bikeId] from its fills and its real rides. */
     fun mileage(bikeId: String, fills: List<FuelFill>, allRides: List<com.ridetrack.telemetry.model.Ride>): Mileage = Fuel.mileage(
@@ -47,45 +44,139 @@ class FuelRepository(
         allRides.filter { it.bikeId == bikeId && it.source != DataSourceKind.DEMO }.map { it.startTimeMillis to it.stats.distanceM },
     )
 
+    /** Stations: yours, kept on the phone for your areas, then OpenStreetMap online. */
+    val stations = StationFinder(context)
+
     /**
-     * After a ride: its stops of 1–15 min near a petrol pump (OpenStreetMap; only each stop's
-     * position is sent) become "Filled up here?" on Home, with the card SMS amount when that's on.
+     * After a ride, every way a fill-up shows itself, so one miss doesn't lose it:
+     *  - a stop of 1–15 min (creeping in the queue and GPS wobble allowed) near a station;
+     *  - a card payment to a fuel company (when reading SMS is on), even with no stop found;
+     *  - a stop of a few minutes with no station known: kept under "Not sure" on the Fuel page.
+     * Ones already asked on the spot, or that you said weren't fill-ups, aren't asked again. Why
+     * a stop wasn't counted goes in the ride's log.
      */
     suspend fun checkRide(rideId: String) {
         val ride = rides.observeCompleted().first().firstOrNull { it.id == rideId } ?: return
         if (ride.source == DataSourceKind.DEMO) return markChecked(rideId)
-        val stops = PumpStops.find(rides.track(rideId).samples).take(MAX_STOPS)
-        if (stops.isEmpty()) return markChecked(rideId)
+        val samples = rides.track(rideId).samples
+        val stops = PumpStops.find(samples).take(MAX_STOPS)
         val readSms = settings.settings.first().fuelReadSms && canReadSms()
+        val before = Fuel.decodePrompts(settings.settings.first().fuelPrompts).filter { it.rideId == rideId }
+        val handled = before.map { it.timeMillis } + declined(rideId)
         var offline = false
-        val asked = stops.mapNotNull { stop ->
-            val station = runCatching { nearestPump(stop.latitude, stop.longitude) }.onFailure { offline = true }.getOrNull() ?: return@mapNotNull null
+        val asked = ArrayList<FuelPrompt>()
+        for (stop in stops) {
+            val at = clock(stop.toMillis)
+            val minutes = (stop.toMillis - stop.fromMillis) / 60_000.0
+            if (handled.any { kotlin.math.abs(it - stop.toMillis) < SAME_STOP_MS }) continue
+            val station = try {
+                stations.near(stop.latitude, stop.longitude)
+            } catch (e: Exception) {
+                offline = true
+                rideLog(rideId, "fuel: stop at $at: couldn't look up stations (no internet?); checked again later")
+                continue
+            }
             val sms = if (readSms) cardPayments(stop.fromMillis - SMS_BEFORE_MILLIS, stop.toMillis + SMS_AFTER_MILLIS) else emptyList()
             if (readSms && sms.isEmpty()) reportUnread(stop)
-            stop to FuelPrompt(rideId, ride.bikeId, stop.toMillis, station, CardSms.pick(sms, stop.toMillis)?.amount)
+            val pay = CardSms.pick(sms, stop.toMillis)
+            val guessed = if (stop.guessed) " (no GPS during the stop: used where the bike was just before)" else ""
+            when {
+                station != null -> {
+                    rideLog(rideId, "fuel: stop at $at, ${"%.1f".format(java.util.Locale.US, minutes)} min, at ${station.name}${if (station.mine) " (you've filled up here before)" else ""}$guessed: asking")
+                    asked += FuelPrompt(rideId, ride.bikeId, stop.toMillis, station.name, pay?.amount, stop.latitude, stop.longitude, sure = true, how = "stop")
+                }
+                pay?.fuel == true -> {
+                    rideLog(rideId, "fuel: stop at $at with no station on the map, but a card payment to ${pay.merchant ?: "a fuel company"}: asking")
+                    asked += FuelPrompt(rideId, ride.bikeId, stop.toMillis, pay.merchant ?: "Fuel station", pay.amount, stop.latitude, stop.longitude, sure = true, how = "sms")
+                }
+                stop.toMillis - stop.fromMillis >= UNSURE_MIN_MS -> {
+                    rideLog(rideId, "fuel: stop at $at, ${"%.1f".format(java.util.Locale.US, minutes)} min, no station known within ${StationFinder.RADIUS_M.toInt()} m$guessed: kept under Not sure")
+                    asked += FuelPrompt(rideId, ride.bikeId, stop.toMillis, "A stop with no station on the map", pay?.amount, stop.latitude, stop.longitude, sure = false, how = "stop")
+                }
+                else -> rideLog(rideId, "fuel: stop at $at, ${"%.1f".format(java.util.Locale.US, minutes)} min, no station known within ${StationFinder.RADIUS_M.toInt()} m$guessed: not a fill-up")
+            }
+        }
+        // Card payments to fuel companies during the ride that no stop explains: still fill-ups.
+        if (readSms) {
+            val end = ride.endTimeMillis ?: samples.lastOrNull()?.timeMillis ?: ride.startTimeMillis
+            cardPayments(ride.startTimeMillis - SMS_BEFORE_MILLIS, end + SMS_AFTER_MILLIS).filter { it.fuel }.forEach { pay ->
+                val known = (asked.map { it.timeMillis } + handled).any { kotlin.math.abs(it - pay.timeMillis) < SAME_STOP_MS * 3 }
+                if (known) return@forEach
+                val where = samples.filter { it.latitude != null && it.longitude != null }.minByOrNull { kotlin.math.abs(it.timeMillis - pay.timeMillis) }
+                rideLog(rideId, "fuel: card payment to ${pay.merchant ?: "a fuel company"} at ${clock(pay.timeMillis)} with no stop found: asking")
+                asked += FuelPrompt(rideId, ride.bikeId, pay.timeMillis, pay.merchant ?: "Fuel station", pay.amount, where?.latitude, where?.longitude, sure = true, how = "sms")
+            }
         }
         // No internet: look again later (on the next launch).
         if (!offline) markChecked(rideId)
         // With the amount from the card SMS and today's price, the fill is saved without asking (Undo in the notification).
-        val found = asked.mapNotNull { (stop, prompt) -> if (prompt.amount != null && autoFill(prompt, stop)) null else prompt }
-        if (found.isEmpty()) return
-        val now = Fuel.decodePrompts(settings.settings.first().fuelPrompts)
-        settings.setFuelPrompts(Fuel.encodePrompts(now + found.filter { f -> now.none { it.rideId == f.rideId && it.timeMillis == f.timeMillis } }))
+        val found = asked.mapNotNull { p -> if (p.sure && p.amount != null && autoFill(p)) null else p }
+        if (found.isNotEmpty()) {
+            val now = Fuel.decodePrompts(settings.settings.first().fuelPrompts)
+            settings.setFuelPrompts(Fuel.encodePrompts(now + found.filter { f -> now.none { it.rideId == f.rideId && it.timeMillis == f.timeMillis } }))
+        }
+        // The stations around this ride kept on the phone, for asking on the spot next time (offline).
+        listOfNotNull(samples.firstOrNull { it.latitude != null }, samples.lastOrNull { it.latitude != null }).forEach { s ->
+            runCatching { stations.keepArea(s.latitude!!, s.longitude!!) }
+        }
     }
 
     /** Saves [prompt]'s fill with today's price for the place; false when no price is known (it's asked instead). */
-    private suspend fun autoFill(prompt: FuelPrompt, stop: Stop): Boolean {
+    private suspend fun autoFill(prompt: FuelPrompt): Boolean {
         val amount = prompt.amount ?: return false
+        val lat = prompt.latitude ?: return false
+        val lon = prompt.longitude ?: return false
         val all = Fuel.decodeFills(settings.settings.first().fuelLog)
         // Already in the log (typed, or saved before): nothing to do.
         if (all.any { it.bikeId == prompt.bikeId && kotlin.math.abs(it.timeMillis - prompt.timeMillis) < 30 * 60_000L }) return true
         val last = all.filter { it.pricePerLitre != null }.maxByOrNull { it.timeMillis }?.pricePerLitre
-        val price = prices?.let { runCatching { it.at(stop.latitude, stop.longitude, last) }.getOrNull() } ?: return false
+        val price = prices?.let { runCatching { it.at(lat, lon, last) }.getOrNull() } ?: return false
         val fill = Fuel.newFill(prompt.bikeId, prompt.timeMillis, FuelPriceText.litres(amount, price.perLitre), amount, price.perLitre, prompt.station, if (price.exact) "auto" else "auto-about")
         add(fill)
+        stations.remember(prompt.station, lat, lon)
         FuelNotice.saved(context, fill, prompt, price)
         return true
     }
+
+    /** "Yes, I filled up": the fill saved, the prompt gone, and the station remembered. */
+    suspend fun confirm(prompt: FuelPrompt, litres: Double, amount: Double?, price: Double?) {
+        val source = when {
+            prompt.how == "sms" || prompt.amount != null -> "sms"
+            prompt.how == "live" -> "live"
+            prompt.how == "button" -> "button"
+            else -> "stop"
+        }
+        add(Fuel.newFill(prompt.bikeId, prompt.timeMillis, litres, amount, price, prompt.station.takeIf { prompt.sure }, source))
+        dismiss(prompt, declinedToo = false)
+        val lat = prompt.latitude
+        val lon = prompt.longitude
+        if (lat != null && lon != null) stations.remember(prompt.station.takeIf { prompt.sure } ?: "Your fuel stop", lat, lon)
+    }
+
+    /** "Not a fill-up": the prompt goes and that stop isn't asked again. */
+    suspend fun dismiss(prompt: FuelPrompt) = dismiss(prompt, declinedToo = true)
+
+    private suspend fun dismiss(prompt: FuelPrompt, declinedToo: Boolean) {
+        if (declinedToo) decline(prompt.rideId, prompt.timeMillis)
+        settings.setFuelPrompts(
+            Fuel.encodePrompts(Fuel.decodePrompts(settings.settings.first().fuelPrompts).filterNot { it.rideId == prompt.rideId && it.timeMillis == prompt.timeMillis }),
+        )
+    }
+
+    /** Stops the rider said weren't fill-ups (on the spot or after), per ride: not asked again. */
+    fun decline(rideId: String, timeMillis: Long) {
+        val set = prefs.getStringSet(DECLINED, emptySet()).orEmpty()
+        prefs.edit().putStringSet(DECLINED, (set + "$rideId@$timeMillis").toList().takeLast(200).toSet()).apply()
+    }
+
+    private fun declined(rideId: String): List<Long> =
+        prefs.getStringSet(DECLINED, emptySet()).orEmpty().mapNotNull { e -> e.split('@').takeIf { it.size == 2 && it[0] == rideId }?.get(1)?.toLongOrNull() }
+
+    /** A line in the ride's log (exported with the ride), so a missed fill-up can be explained. */
+    private fun rideLog(rideId: String, message: String) =
+        com.ridetrack.app.moments.MomentLog.append(java.io.File(java.io.File(java.io.File(context.filesDir, "moments"), rideId), com.ridetrack.app.moments.MomentLog.FILE_NAME), message)
+
+    private fun clock(ms: Long) = java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).toLocalTime().withNano(0).toString()
 
     /** Undo from the notification: the fill goes, and "Filled up here?" comes back to correct it by hand. */
     suspend fun undoAuto(fillId: String, prompt: FuelPrompt) {
@@ -109,27 +200,6 @@ class FuelRepository(
     }
 
     fun canReadSms() = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
-
-    /** The pump's name within ~70 m, from OpenStreetMap; null if none. */
-    private fun nearestPump(lat: Double, lon: Double): String? {
-        val q = "[out:json][timeout:15];nwr[\"amenity\"=\"fuel\"](around:70,$lat,$lon);out center 1;"
-        val c = URL("https://overpass-api.de/api/interpreter").openConnection() as HttpURLConnection
-        try {
-            c.requestMethod = "POST"
-            c.connectTimeout = 15_000
-            c.readTimeout = 20_000
-            c.doOutput = true
-            c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-            c.setRequestProperty("User-Agent", "KeppoMoto/1 (Android)")
-            c.outputStream.use { it.write("data=${URLEncoder.encode(q, "UTF-8")}".toByteArray()) }
-            if (c.responseCode !in 200..299) return null
-            val el = JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optJSONArray("elements")?.optJSONObject(0) ?: return null
-            val tags = el.optJSONObject("tags")
-            return listOf("name", "brand", "operator").firstNotNullOfOrNull { k -> tags?.optString(k)?.takeIf { it.isNotBlank() } } ?: "Petrol pump"
-        } finally {
-            c.disconnect()
-        }
-    }
 
     /**
      * Outside India (Beta): there were messages around the stop, but no payment could be read.
@@ -174,6 +244,11 @@ class FuelRepository(
     private companion object {
         const val MAX_STOPS = 6
         const val CHECKED = "checked_rides"
+        const val DECLINED = "declined_stops"
+        /** Two finds this close are the same fill-up. */
+        const val SAME_STOP_MS = 10 * 60_000L
+        /** A stop this long with no station known is kept under "Not sure". */
+        const val UNSURE_MIN_MS = 2 * 60_000L
         const val RECENT_MILLIS = 3 * 86_400_000L
         const val SMS_BEFORE_MILLIS = 15 * 60_000L
         const val SMS_AFTER_MILLIS = 30 * 60_000L

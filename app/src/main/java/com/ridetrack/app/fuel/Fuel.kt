@@ -3,9 +3,6 @@ package com.ridetrack.app.fuel
 import com.ridetrack.telemetry.model.TelemetrySample
 import java.util.Locale
 import java.util.UUID
-import kotlin.math.cos
-import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 /** One fill-up. The rider fills the tank every time, so km/l = km since the last fill ÷ these litres. */
 data class FuelFill(
@@ -29,6 +26,16 @@ data class FuelPrompt(
     val station: String,
     /** From the card SMS, when reading it is on. */
     val amount: Double? = null,
+    /** Where the bike stood (to remember the station once it's confirmed). */
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    /**
+     * False: a stop of a few minutes with no station known nearby (an unmapped pump?). Only on
+     * the Fuel page under "Not sure", never on Home.
+     */
+    val sure: Boolean = true,
+    /** How it was found: "stop", "sms" (a card payment alone), "live" (asked on the spot), "button" (you tapped Filled up), "nudge". */
+    val how: String = "stop",
 )
 
 /** One tank: from the previous full fill to [fill]. */
@@ -85,15 +92,19 @@ object Fuel {
         )
     }
 
-    // rideId|bikeId|time|station|amount
+    // rideId|bikeId|time|station|amount|lat|lon|sure|how (older lines have the first five)
     fun encodePrompts(prompts: List<FuelPrompt>): String = prompts.joinToString("\n") { p ->
-        listOf(p.rideId, p.bikeId, p.timeMillis, clean(p.station), p.amount ?: "").joinToString("|")
+        listOf(p.rideId, p.bikeId, p.timeMillis, clean(p.station), p.amount ?: "", p.latitude ?: "", p.longitude ?: "", p.sure, p.how).joinToString("|")
     }
 
     fun decodePrompts(value: String?): List<FuelPrompt> = value.orEmpty().lines().mapNotNull { line ->
         val p = line.split('|')
-        if (p.size != 5) return@mapNotNull null
-        FuelPrompt(p[0], p[1], p[2].toLongOrNull() ?: return@mapNotNull null, p[3], p[4].toDoubleOrNull())
+        if (p.size != 5 && p.size != 9) return@mapNotNull null
+        FuelPrompt(
+            p[0], p[1], p[2].toLongOrNull() ?: return@mapNotNull null, p[3], p[4].toDoubleOrNull(),
+            latitude = p.getOrNull(5)?.toDoubleOrNull(), longitude = p.getOrNull(6)?.toDoubleOrNull(),
+            sure = p.getOrNull(7)?.let { it != "false" } ?: true, how = p.getOrNull(8)?.ifBlank { null } ?: "stop",
+        )
     }
 
     private fun clean(s: String?) = s.orEmpty().replace('|', '/').replace('\n', ' ')
@@ -101,39 +112,74 @@ object Fuel {
     fun money(v: Double): String = FuelRegion.current.money(v)
 }
 
-/** A stop long enough to fill up: where, from when to when. */
-data class Stop(val fromMillis: Long, val toMillis: Long, val latitude: Double, val longitude: Double)
+/**
+ * A stop long enough to fill up: where, from when to when. [guessed]: there was no GPS fix during
+ * it (a metal canopy), so the position is the last one known just before.
+ */
+data class Stop(val fromMillis: Long, val toMillis: Long, val latitude: Double, val longitude: Double, val guessed: Boolean = false)
 
 object PumpStops {
+    /** Slower than this is stopped (m/s, about 5 km/h): GPS under a canopy wobbles above walking pace. */
+    const val SLOW_MPS = 1.5
+    /** Moving this long or less doesn't end a stop (inching up in the queue, a GPS jump). */
+    const val BRIEF_MS = 10_000L
+    /** …as long as it's this far or less (m), worked out from the speed. */
+    const val BRIEF_M = 30.0
+    /** With no fix during the stop, the position from up to this long before (or after) it is used. */
+    const val NEAR_MS = 60_000L
+
     /**
-     * Stops of [minMillis]–[maxMillis] with a position: the bike below 1 m/s, staying within
-     * about 80 m. A fill-up takes a few minutes; a red light is shorter, a break longer.
+     * Stops of [minMillis]–[maxMillis]: the bike slower than walking pace, allowing a few seconds
+     * of creeping forward or GPS wobble (up to about 30 m). A fill-up takes a few minutes; a red
+     * light is shorter, a break longer.
      */
     fun find(samples: List<TelemetrySample>, minMillis: Long = 60_000L, maxMillis: Long = 15 * 60_000L): List<Stop> {
+        if (samples.isEmpty()) return emptyList()
         val out = ArrayList<Stop>()
-        var run = ArrayList<TelemetrySample>()
-        fun close() {
-            val fixes = run.filter { it.latitude != null && it.longitude != null }
-            if (run.size >= 2 && fixes.isNotEmpty()) {
-                val d = run.last().timeMillis - run.first().timeMillis
-                val lat = fixes.map { it.latitude!! }.average()
-                val lon = fixes.map { it.longitude!! }.average()
-                val spread = fixes.maxOf { metres(lat, lon, it.latitude!!, it.longitude!!) }
-                if (d in minMillis..maxMillis && spread < 80) out += Stop(run.first().timeMillis, run.last().timeMillis, lat, lon)
+        var runFrom = -1
+        var lastSlow = -1
+        var moveFrom = -1
+        var moved = 0.0
+        fun close(endIndex: Int) {
+            if (runFrom >= 0 && endIndex >= runFrom) stopOf(samples, runFrom, endIndex, minMillis, maxMillis)?.let(out::add)
+            runFrom = -1
+            moveFrom = -1
+            moved = 0.0
+        }
+        for (i in samples.indices) {
+            val s = samples[i]
+            val slow = (s.speedMps ?: 0.0) < SLOW_MPS
+            if (slow) {
+                if (runFrom < 0) runFrom = i
+                lastSlow = i
+                moveFrom = -1
+                moved = 0.0
+            } else if (runFrom >= 0) {
+                if (moveFrom < 0) moveFrom = i
+                val dt = if (i > 0) (s.timeMillis - samples[i - 1].timeMillis).coerceIn(0, 5_000) / 1000.0 else 1.0
+                moved += (s.speedMps ?: 0.0) * dt
+                // Moving on for real: the stop ended at the last slow reading.
+                if (s.timeMillis - samples[moveFrom].timeMillis > BRIEF_MS || moved > BRIEF_M) close(lastSlow)
             }
-            run = ArrayList()
         }
-        for (s in samples) {
-            if ((s.speedMps ?: 0.0) < 1.0) run += s else close()
-        }
-        close()
+        close(lastSlow)
         return out
     }
 
-    private fun metres(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val dLat = (lat2 - lat1) * 111_320.0
-        val dLon = (lon2 - lon1) * 111_320.0 * cos(Math.toRadians(lat1))
-        return sqrt(dLat * dLat + dLon * dLon)
+    private fun stopOf(samples: List<TelemetrySample>, from: Int, to: Int, minMillis: Long, maxMillis: Long): Stop? {
+        val d = samples[to].timeMillis - samples[from].timeMillis
+        if (d !in minMillis..maxMillis) return null
+        val fixes = (from..to).map { samples[it] }.filter { it.latitude != null && it.longitude != null }
+        if (fixes.isNotEmpty()) {
+            return Stop(samples[from].timeMillis, samples[to].timeMillis, fixes.map { it.latitude!! }.average(), fixes.map { it.longitude!! }.average())
+        }
+        // No fix all through (a metal canopy): where the bike was just before, else just after.
+        val start = samples[from].timeMillis
+        val end = samples[to].timeMillis
+        val near = samples.subList(0, from).lastOrNull { it.latitude != null && it.longitude != null && start - it.timeMillis <= NEAR_MS }
+            ?: samples.subList(to + 1, samples.size).firstOrNull { it.latitude != null && it.longitude != null && it.timeMillis - end <= NEAR_MS }
+            ?: return null
+        return Stop(start, end, near.latitude!!, near.longitude!!, guessed = true)
     }
 }
 

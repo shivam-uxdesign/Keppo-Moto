@@ -117,7 +117,8 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
         val last = rides.filter { it.source != DataSourceKind.DEMO }.maxByOrNull { it.startTimeMillis }
         val estimate = last?.let { r -> c.fuel.mileage(r.bikeId, fills, rides).estimate(r.stats.distanceM / 1000) }
         HomeFuel(
-            prompt = prompts.maxByOrNull { it.timeMillis },
+            // Home asks only what the app is sure is a fuel stop; the rest wait on the Fuel page.
+            prompt = prompts.filter { it.sure }.maxByOrNull { it.timeMillis },
             lastPrice = fills.sortedBy { it.timeMillis }.lastOrNull { it.pricePerLitre != null }?.pricePerLitre,
             lastRide = estimate?.let { (l, cost) -> "≈${String.format(java.util.Locale.US, "%.1f", Units.volume(l))} ${Units.volumeUnit}" + (cost?.let { " · ${Fuel.money(it)}" } ?: "") },
         )
@@ -125,11 +126,9 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
 
     /** Saves a fill-up from a pump stop prompt. */
     fun addFill(prompt: FuelPrompt, litres: Double, amount: Double?, price: Double?) {
-        viewModelScope.launch {
-            c.fuel.add(Fuel.newFill(prompt.bikeId, prompt.timeMillis, litres, amount, price, prompt.station, if (prompt.amount != null) "sms" else "typed"))
-            c.fuel.dismiss(prompt)
-        }
+        viewModelScope.launch { c.fuel.confirm(prompt, litres, amount, price) }
     }
+
 
     fun dismissFuel(prompt: FuelPrompt) {
         viewModelScope.launch { c.fuel.dismiss(prompt) }
