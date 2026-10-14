@@ -44,6 +44,8 @@ class AudioEncoder(
     twoMics: Boolean = false,
     /** The voice mic is on the right channel (the rider swapped them in the mic test). */
     private val swap: Boolean = false,
+    /** Each chunk: (wall time, samples at full scale, samples) on the voice mic, for "overloaded by wind". */
+    private val onClipping: ((Long, Int, Int) -> Unit)? = null,
     /** Each chunk with two mics: (left dBFS, right dBFS). */
     private val onChannels: ((Float, Float) -> Unit)? = null,
 ) {
@@ -146,7 +148,12 @@ class AudioEncoder(
                     val nowMicros = System.nanoTime() / 1000
                     if (read > 0) onLevel?.let { report ->
                         val samples = read / 2
-                        report((nowMicros + offsetMicros) / 1000, levelDb(inBuf, samples), samples * 1000L / SAMPLE_RATE, voice(inBuf, samples))
+                        val at = (nowMicros + offsetMicros) / 1000
+                        report(at, levelDb(inBuf, samples), samples * 1000L / SAMPLE_RATE, voice(inBuf, samples))
+                        onClipping?.let { clip ->
+                            val b = inBuf.duplicate().order(java.nio.ByteOrder.nativeOrder())
+                            clip(at, clipWatch.count({ i -> b.getShort(i * 2) }, samples), samples)
+                        }
                     }
                     // pts = when the first sample of this chunk was captured.
                     val pts = nowMicros - (read.coerceAtLeast(0) / 2) * 1_000_000L / SAMPLE_RATE
@@ -177,6 +184,7 @@ class AudioEncoder(
         }
     }
 
+    private val clipWatch = com.ridetrack.telemetry.moments.ClipWatch()
     private val pcm = ShortArray(FRAMES * 2)
     private val left = ShortArray(FRAMES)
     private val right = ShortArray(FRAMES)

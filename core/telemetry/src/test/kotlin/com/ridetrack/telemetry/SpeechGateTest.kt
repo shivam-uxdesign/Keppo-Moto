@@ -154,4 +154,29 @@ class SpeechGateTest {
         while (t < 2_000) { g.onLevel(t, 0f, 46, 9f, voice = 0.6f, liftDb = 9f); t += 46 }
         assertTrue(g.speaking)
     }
+
+    @Test
+    fun `with two mics, the helmet mic standing out counts even when the voice detector gives up in wind`() {
+        val g = SpeechGate()
+        var t = 0L
+        // Only 1 dB over the wind and a voice score of 0.1, but the helmet mic is 8 dB louder than usual.
+        while (t < 2_000) { g.onLevel(t, 1f, 46, 6f, voice = 0.1f, voiceMin = 0.35f, liftDb = 8f); t += 46 }
+        kotlin.test.assertTrue(g.speaking)
+        val noLift = SpeechGate()
+        t = 0
+        while (t < 2_000) { noLift.onLevel(t, 1f, 46, 6f, voice = 0.1f, voiceMin = 0.35f, liftDb = 1f); t += 46 }
+        kotlin.test.assertFalse(noLift.speaking)
+    }
+
+    @Test
+    fun `a mic overloaded by wind is noticed, an ordinary loud chunk isn't`() {
+        val w = com.ridetrack.telemetry.moments.ClipWatch()
+        val loud = ShortArray(2048) { if (it % 50 == 0) 32_767 else 12_000 }
+        val ok = ShortArray(2048) { 20_000 }
+        var t = 0L
+        repeat(40) { w.onChunk(t, w.count({ ok[it] }, ok.size), ok.size); t += 46 }
+        kotlin.test.assertFalse(w.overloaded)
+        repeat(40) { w.onChunk(t, w.count({ loud[it] }, loud.size), loud.size); t += 46 }
+        kotlin.test.assertTrue(w.overloaded)
+    }
 }

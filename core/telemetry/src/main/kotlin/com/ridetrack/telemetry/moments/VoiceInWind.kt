@@ -32,7 +32,7 @@ object VoiceInWind {
  * "Usual" is a low percentile of the difference over the last few seconds, so wind, engine and
  * horns, which reach both mics, cancel out; talking lifts the helmet mic alone. Pure.
  */
-class TwoMicLift(windowMillis: Long = 4_000L) {
+class TwoMicLift(windowMillis: Long = 8_000L) {
     private val usual = BackgroundLevel(windowMillis, percentile = 0.2)
 
     /** One chunk's levels (dBFS); returns the lift above usual (dB). */

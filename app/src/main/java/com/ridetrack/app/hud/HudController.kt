@@ -158,6 +158,18 @@ class HudController(
             moments.liveFailed.collect { at -> if (at != null) note.value = "Camera didn't start · it'll try on the next moment" to at }
         }
 
+        // Wind overloading the helmet mic: said once every few minutes, not on every gust.
+        scope.launch {
+            var lastSaid = 0L
+            moments.micOverloaded.collect { over ->
+                val now = System.currentTimeMillis()
+                if (over && now - lastSaid > OVERLOAD_NOTE_EVERY_MS) {
+                    lastSaid = now
+                    note.value = "Mic overloaded by wind · your voice may not start a video (tips: Settings › Moments)" to now
+                }
+            }
+        }
+
         scope.launch {
             // Riding off after a break: say so briefly under the pop-up.
             var wasOnBreak = false
@@ -229,6 +241,7 @@ class HudController(
     private fun canDrawOverlays(): Boolean = OverlayPermission.isGranted(context)
 
     companion object {
+        private const val OVERLOAD_NOTE_EVERY_MS = 5 * 60_000L
         private const val TAG = "HudController"
         private const val SAVED_NOTE_MILLIS = 2_500L
         /** The shot list shows for the ride's first 30 s, each shot for 6 s. */

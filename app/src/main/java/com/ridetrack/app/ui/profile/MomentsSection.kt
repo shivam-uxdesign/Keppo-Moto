@@ -222,6 +222,13 @@ internal fun MomentsSection(
                 Label("Voice level")
                 // Tunable during a ride: watch the pop-up's meter and adjust.
                 VoiceLevel(m.voiceSensitivity, m.mic, s.rideActive) { vm.setMoments(m.copy(voiceSensitivity = it)) }
+                // Voice at speed: wind fills the mic, so where it sits matters more than the setting.
+                Text(
+                    "Voice at speed: put the helmet mic inside the helmet near your chin, behind the padding and out of the airflow; keep the fur windscreen on; turn the receiver's gain down one step if the pop-up says the mic is overloaded; turn on DJI's noise cancelling for the helmet mic. With two mics (receiver on Stereo), the helmet mic standing out from the engine mic is enough to start a video, even in strong wind.",
+                    style = RtType.caption,
+                    color = RtColors.TextSecondary,
+                    modifier = Modifier.padding(top = 4.dp, bottom = RtDimens.xs),
+                )
             }
         }
     }

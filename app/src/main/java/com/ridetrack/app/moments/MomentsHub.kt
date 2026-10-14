@@ -223,7 +223,21 @@ class MomentsHub {
     private val _micLevel = MutableStateFlow<Float?>(null)
     /** Mic loudness in the voice range, in dB above the background noise (null while no mic is open). */
     val micLevel: StateFlow<Float?> = _micLevel.asStateFlow()
-    private val background = BackgroundLevel()
+    /** The wind/engine background: over 8 s, and not learned while you talk (a long shout would become "background"). */
+    private val background = BackgroundLevel(8_000L)
+    private val clipWatch = com.ridetrack.telemetry.moments.ClipWatch()
+    private val _micOverloaded = MutableStateFlow(false)
+    /** The mic is overloaded (clipping) by wind: a shout can't get louder than it. */
+    val micOverloaded: StateFlow<Boolean> = _micOverloaded.asStateFlow()
+
+    /** From the audio thread: how many of a chunk's samples hit full scale. */
+    fun reportClipping(timeMillis: Long, clipped: Int, samples: Int) {
+        val over = synchronized(clipWatch) { clipWatch.onChunk(timeMillis, clipped, samples) }
+        if (over != _micOverloaded.value) {
+            _micOverloaded.value = over
+            if (over) log("mic overloaded by wind: ${"%.1f".format(java.util.Locale.US, clipped * 100.0 / samples.coerceAtLeast(1))}% of samples at full scale; speech is hard to hear over it")
+        }
+    }
     private val levels = ArrayList<VoiceChunk>()
     private val engine = ArrayList<Triple<Long, Float, Long>>()
 
@@ -238,7 +252,7 @@ class MomentsHub {
     /** From the audio thread: one chunk's level. The session drains them for speech detection. */
     fun reportLevel(timeMillis: Long, levelDb: Float, chunkMillis: Long, voice: Float) {
         val chunk = synchronized(levels) {
-            val bg = background.onLevel(timeMillis, levelDb)
+            val bg = if (_speaking.value) background.current else background.onLevel(timeMillis, levelDb)
             VoiceChunk(timeMillis, levelDb, bg, chunkMillis, voice, lift).also {
                 levels += it
                 if (levels.size > MAX_LEVELS) levels.subList(0, levels.size - MAX_LEVELS).clear()

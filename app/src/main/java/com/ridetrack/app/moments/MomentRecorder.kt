@@ -495,7 +495,7 @@ class MomentRecorder(
         }
         audio = try {
             // Both channels of a USB-C receiver: its second transmitter can be the engine mic.
-            AudioEncoder(context, buffer, device, onLevel = hub::reportLevel, vad = vad, twoMics = settings.twoMics && mic.type == MicType.USB, swap = settings.swapMics,
+            AudioEncoder(context, buffer, device, onLevel = hub::reportLevel, vad = vad, onClipping = hub::reportClipping, twoMics = settings.twoMics && mic.type == MicType.USB, swap = settings.swapMics,
                 // The engine mic's level, for revs and exhaust pops (only when the two mics really differ).
                 onChannels = { l, r ->
                     val enc = audio

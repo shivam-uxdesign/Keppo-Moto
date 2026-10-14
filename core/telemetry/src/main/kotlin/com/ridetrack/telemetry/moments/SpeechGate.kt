@@ -46,8 +46,10 @@ class SpeechGate(
         voiceMin: Float = VOICE_MIN,
         liftDb: Float? = null,
     ): Boolean {
-        val heard = aboveDb >= marginDb || (liftDb != null && liftDb >= VoiceInWind.LIFT_DB)
-        val loud = heard && voice >= voiceMin
+        // Loud enough and voice-like; or, with two mics, the helmet mic standing out from the engine
+        // mic on its own (wind and traffic reach both mics; the voice detector gives up in wind).
+        val byLift = liftDb != null && liftDb >= VoiceInWind.LIFT_DB
+        val loud = (aboveDb >= marginDb && voice >= voiceMin) || byLift
         recent.addLast(Triple(timeMillis, chunkMillis, loud))
         while (recent.isNotEmpty() && timeMillis - recent.first().first >= startMillis) recent.removeFirst()
         val last = lastLoud
