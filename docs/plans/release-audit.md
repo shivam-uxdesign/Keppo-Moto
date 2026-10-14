@@ -66,12 +66,12 @@ No photo or video library permissions (the system picker is used). Good.
    - **Shrinking:** `isMinifyEnabled = false`, so the release isn't shrunk; the size and the R8 rules for Media3, MapLibre, ONNX and Firebase need testing.
    - **Format:** Play needs an app bundle (`bundleRelease`).
    - **Version:** versionCode 1, versionName 0.1.0.
-4. **Map tiles licence:** CARTO dark tiles need a commercial licence (reportedly about $20K a year as part of their platform). Options:
+4. **Map tiles licence** (decided: OpenFreeMap with our own dark style): CARTO dark tiles need a commercial licence (reportedly about $20K a year as part of their platform). Options:
    - **OpenFreeMap:** free, commercial use allowed, OpenStreetMap data.
    - **Protomaps:** a self-hosted file on cheap storage.
    - **MapTiler or Stadia:** paid plans.
    - Any choice needs a dark style and the "© OpenStreetMap contributors" credit.
-5. **Free riders cost money today:** Moments transcription and the petrol price lookup call Gemini for everyone. These need the free cap, a Gemini consent screen, and a decision on whether free riders keep automatic transcription.
+5. **Free riders cost money today** (decided: no Gemini for free riders apart from the weekly free Reel; captions manual; petrol price lookup paid): Moments transcription and the petrol price lookup call Gemini for everyone. These need the free cap, a Gemini consent screen, and a decision on whether free riders keep automatic transcription.
 6. **Restricted permissions:** the SMS and full-screen alert declarations; the crash alert modal and notification fallbacks to build.
 
 ## Already fine

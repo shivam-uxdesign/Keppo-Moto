@@ -1027,6 +1027,9 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
     - **Paywall honesty:** the price, that the trial becomes paid after 7 days unless cancelled, how to cancel, easy to close, no fake urgency.
     - **No automatic Reels for free riders:** no Reel ideas planned after a ride and no Reel made in the background (no Gemini cost). They make their weekly Reel themselves in Studio; paying riders keep the automatic Reels.
     - **No watermark** on free Reels.
+  - **No Gemini at all for free riders,** apart from the one free Reel a week:
+    - Moments captions are manual (tap to caption) for free riders.
+    - The petrol price lookup becomes paid; free riders type the price.
 - **Gemini cost cap:**
   - **35% of what each rider actually pays** (after Google's cut and tax), by their country; the server reads the subscription's country from Google.
     - For example, India about ₹75 a month (monthly) or ₹42 (yearly); Tier 1 monthly about ₹280.
@@ -1037,6 +1040,9 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
   - The rider will revisit the numbers.
 - **Crash reporting:** Firebase Crashlytics. EU and UK riders are asked first.
 - **Face and plate blur:** after launch.
+- **Map tiles:** switch from CARTO (needs a commercial licence) to OpenFreeMap (free, commercial use allowed, OpenStreetMap data), with our own dark style to match today's look.
+  - Same features; satellite only ever worked with a MapTiler key, which isn't set.
+  - If OpenFreeMap becomes unreliable, host the same data ourselves.
 - **Music:** riders add their own; nothing is bundled (checked). The Terms of Use make riders responsible for music rights.
 - **Developer account:** personal. The rider finds 12+ testers for the 14-day closed test.
 - **Release:** global, in English. Text kept ready for translation later.
