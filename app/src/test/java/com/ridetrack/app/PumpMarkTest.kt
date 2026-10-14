@@ -66,4 +66,19 @@ class PumpMarkTest {
         assertNull(com.ridetrack.app.fuel.Fuel.nudge(fills, more, snoozedKm = 290.0))
         assertEquals(370.0, com.ridetrack.app.fuel.Fuel.nudge(fills, more + (31 * day to 80_000.0), snoozedKm = 290.0)!!.sinceKm, 0.1)
     }
+
+    @Test fun `the fuel log keeps each check, newest first, and marks what explains a miss`() {
+        val dir = java.nio.file.Files.createTempDirectory("fuel-log").toFile()
+        var t = 1_000L
+        val log = com.ridetrack.app.fuel.FuelLog(java.io.File(dir, "fuel-log.txt")) { t++ }
+        log.add("r1", "stop at 10:42, 2.4 min, at HP Baner: asking")
+        log.add("r1", "stop at 10:42: no card SMS found between 10:35 and 10:57")
+        val lines = log.read()
+        assertEquals(listOf("r1", "r1"), lines.map { it.rideId })
+        assertEquals(true, com.ridetrack.app.ui.bike.missed(lines.first().message))
+        assertEquals(false, com.ridetrack.app.ui.bike.missed(lines.last().message))
+        repeat(700) { log.add("r2", "line $it") }
+        assert(log.read().size <= com.ridetrack.app.fuel.FuelLog.MAX_LINES + 100)
+        assertEquals("line 699", log.read().first().message)
+    }
 }

@@ -85,7 +85,10 @@ class FuelRepository(
         if (ride.source == DataSourceKind.DEMO) return markChecked(rideId)
         val samples = rides.track(rideId).samples
         val stops = PumpStops.find(samples).take(MAX_STOPS)
-        val readSms = settings.settings.first().fuelReadSms && canReadSms()
+        val smsOn = settings.settings.first().fuelReadSms
+        val readSms = smsOn && canReadSms()
+        if (smsOn && !readSms) rideLog(rideId, "fuel: reading card SMS is on, but SMS access isn't allowed: turn it on again on the Fuel page")
+        if (stops.isEmpty()) rideLog(rideId, "fuel: checked the ride: no stops of 1–15 min")
         val before = Fuel.decodePrompts(settings.settings.first().fuelPrompts).filter { it.rideId == rideId }
         val handled = before.map { it.timeMillis } + declined(rideId)
         var offline = false
@@ -104,6 +107,7 @@ class FuelRepository(
             val sms = if (readSms) cardPayments(stop.fromMillis - SMS_BEFORE_MILLIS, stop.toMillis + SMS_AFTER_MILLIS) else emptyList()
             if (readSms && sms.isEmpty()) reportUnread(stop)
             val pay = CardSms.pick(sms, stop.toMillis)
+            rideLog(rideId, "fuel: stop at $at: " + smsNote(readSms, sms.size, pay, stop))
             val guessed = if (stop.guessed) " (no GPS during the stop: used where the bike was just before)" else ""
             when {
                 station != null -> {
@@ -155,7 +159,12 @@ class FuelRepository(
         // Already in the log (typed, or saved before): nothing to do.
         if (all.any { it.bikeId == prompt.bikeId && kotlin.math.abs(it.timeMillis - prompt.timeMillis) < 30 * 60_000L }) return true
         val last = all.filter { it.pricePerLitre != null }.maxByOrNull { it.timeMillis }?.pricePerLitre
-        val price = prices?.let { runCatching { it.at(lat, lon, last) }.getOrNull() } ?: return false
+        val price = prices?.let { runCatching { it.at(lat, lon, last) }.getOrNull() }
+        if (price == null) {
+            rideLog(prompt.rideId, "fuel: ${Fuel.money(amount)} at ${prompt.station}: today's petrol price wasn't found, so it's asked instead of saved")
+            return false
+        }
+        rideLog(prompt.rideId, "fuel: saved automatically: ${Fuel.money(amount)} at ${prompt.station}, price ${if (price.exact) "" else "about "}${FuelRegion.current.precise(price.perLitre)}" + (price.place.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""))
         val fill = Fuel.newFill(prompt.bikeId, prompt.timeMillis, FuelPriceText.litres(amount, price.perLitre), amount, price.perLitre, prompt.station, if (price.exact) "auto" else "auto-about")
         add(fill)
         stations.remember(prompt.station, lat, lon)
@@ -258,9 +267,25 @@ class FuelRepository(
     private fun declined(rideId: String): List<Long> =
         prefs.getStringSet(DECLINED, emptySet()).orEmpty().mapNotNull { e -> e.split('@').takeIf { it.size == 2 && it[0] == rideId }?.get(1)?.toLongOrNull() }
 
-    /** A line in the ride's log (exported with the ride), so a missed fill-up can be explained. */
-    private fun rideLog(rideId: String, message: String) =
+    /** What the card SMS said about a stop, for the log. */
+    private fun smsNote(readSms: Boolean, found: Int, pay: CardPayment?, stop: Stop): String = when {
+        !readSms -> "card SMS not checked (reading SMS is off)"
+        found == 0 -> "no card SMS found between ${clock(stop.fromMillis - SMS_BEFORE_MILLIS)} and ${clock(stop.toMillis + SMS_AFTER_MILLIS)}"
+        pay == null -> "$found card SMS found then, none a payment that could be fuel"
+        else -> "card SMS: ${Fuel.money(pay.amount)} to ${pay.merchant ?: "an unknown shop"}" + if (pay.fuel) " (a fuel company)" else " (not known as fuel)"
+    }
+
+    /**
+     * A line in the ride's log (exported with the ride), and in the fuel log the Fuel page shows,
+     * so a missed fill-up can be explained.
+     */
+    private fun rideLog(rideId: String, message: String) {
         com.ridetrack.app.moments.MomentLog.append(java.io.File(java.io.File(java.io.File(context.filesDir, "moments"), rideId), com.ridetrack.app.moments.MomentLog.FILE_NAME), message)
+        log.add(rideId, message.removePrefix("fuel: "))
+    }
+
+    /** Every fuel check, newest last; the Fuel page shows it. */
+    val log = FuelLog(java.io.File(context.filesDir, "fuel-log.txt"))
 
     private fun clock(ms: Long) = java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).toLocalTime().withNano(0).toString()
 

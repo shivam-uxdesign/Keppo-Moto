@@ -169,6 +169,28 @@ fun FuelScreen(bikeId: String, onBack: () -> Unit) {
                 }
             }
         }
+        // What the app saw at each fuel check, so a missed fill-up can be explained.
+        val logChanges by (app?.container?.fuel?.log?.changes ?: kotlinx.coroutines.flow.MutableStateFlow(0)).collectAsStateWithLifecycle()
+        var logLines by remember { mutableStateOf(emptyList<com.ridetrack.app.fuel.FuelLogLine>()) }
+        androidx.compose.runtime.LaunchedEffect(logChanges) {
+            logLines = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app?.container?.fuel?.log?.read().orEmpty() }
+        }
+        var allLog by remember { mutableStateOf(false) }
+        SectionHeader("Fuel log")
+        Text(
+            "Each check after a ride and on the way: stops found, the pump matched or not, the card SMS found or not, the price looked up.",
+            style = RtType.caption, color = RtColors.TextSecondary,
+        )
+        if (logLines.isEmpty()) {
+            Text("Nothing yet. It fills in after your next ride.", style = RtType.body, color = RtColors.TextSecondary)
+        } else {
+            FuelLogCard(if (allLog) logLines else logLines.take(LOG_SHOWN))
+            if (logLines.size > LOG_SHOWN) {
+                TextButton(onClick = { allLog = !allLog }) {
+                    Text(if (allLog) "Show less" else "Show all ${logLines.size}", color = RtColors.Primary)
+                }
+            }
+        }
         Spacer(Modifier.height(RtDimens.lg))
     }
 
@@ -256,6 +278,26 @@ private fun FillRow(f: FuelFill, onClick: () -> Unit) {
 
 @Composable
 private fun Divider() = HorizontalDivider(color = RtColors.Outline.copy(alpha = 0.6f))
+
+private const val LOG_SHOWN = 8
+
+/** The fuel log, newest first; what was missed or failed stands out. */
+@Composable
+internal fun FuelLogCard(lines: List<com.ridetrack.app.fuel.FuelLogLine>) {
+    RtCard {
+        lines.forEachIndexed { i, l ->
+            if (i > 0) Divider()
+            Column(Modifier.padding(vertical = 6.dp)) {
+                Text(dateTime(l.timeMillis), style = RtType.caption, color = RtColors.TextTertiary)
+                Text(l.message, style = RtType.body, color = if (missed(l.message)) RtColors.Warning else RtColors.TextPrimary)
+            }
+        }
+    }
+}
+
+/** Lines that explain a miss: no pump, no SMS, no price, no internet. */
+internal fun missed(message: String): Boolean =
+    listOf("no card SMS", "no station", "wasn't found", "couldn't", "isn't allowed", "none a payment", "not known as fuel").any { it in message }
 
 /** How a fill-up got into the log, as the rider would say it. */
 internal fun how(source: String): String = when (source) {
