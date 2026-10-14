@@ -68,6 +68,14 @@ Log row #29, which builds on #28 (trim with the full clip). The prototype is htt
 - **Per-clip Transition**
 - **Transitions for all cuts**
 
+## UX (approved, #30)
+
+- **Snapping:** a dragged edge or block pulls onto the playhead, cuts, other blocks' edges, pauses in what was said (where talking starts or stops, not every word) and ride moments, only when you slow down near one: it pulls in from 6 px before and lets go 2 px after, so it touches and keeps moving; fast drags pass straight through. Yellow dashed guide line, a light haptic tick per new snap, "at …" in the bubble.
+- **Trim by words:** your words sit on the Mic 1 · Voice row (faded over the unused parts of a selected clip). Letting go of a clip edge inside a word glides it to the nearer side of the word. **More › Remove pauses** cuts the pauses and quiet ends out of a talking clip (runs of words with 0.15 s of air, joined when under 0.5 s apart).
+- **Ride moments:** a row above the clips with the speed line and markers for downshifts, hard braking, top speed and lean; tap one to jump there; with a clip selected, moments in its unused parts show faded.
+- **Tap the video to select:** tapping text, a sticker or the video on top in the preview selects it and flashes its block; tapping elsewhere selects the clip under the playhead. Selected text and stickers drag on the preview.
+- **Smoothness:** while dragging, at most one redraw per screen frame and only the blocks that change; no layout reads mid-drag.
+
 ## Build order
 
 1. Row names, no empty rows, ✂ by the time (with #20).
