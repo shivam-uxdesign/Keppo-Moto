@@ -205,7 +205,7 @@ fun StudioSettingsScreen(onBack: () -> Unit) {
             Group("Every new video starts with") {
                 SwitchLine("Captions", "What you said, word by word", o.captions) { v -> set { it.copy(captions = v) } }
                 SwitchLine("Stats at the end", "Distance, top speed, time", o.outro) { v -> set { it.copy(outro = v) } }
-                SwitchLine("English subtitles", "A small English line under Hinglish captions", o.english) { v -> set { it.copy(english = v) } }
+                SwitchLine("English subtitles", "A small English line under captions in other languages", o.english) { v -> set { it.copy(english = v) } }
                 SwitchLine("Jump cuts", "Long pauses, \u201cumm\u201ds and false starts cut from what you say", o.jumpCuts) { v -> set { it.copy(jumpCuts = v) } }
                 SwitchLine("Loop the ending", "Ends on the opening shot, so it plays on", o.loopEnd) { v -> set { it.copy(loopEnd = v) } }
                 if (o.vibe != Vibe.NATIVE) SwitchLine("Route opening", "A 2 s route sketch first (off is better for reach)", o.intro) { v -> set { it.copy(intro = v) } }

@@ -300,15 +300,24 @@ private const val MAX_TIMEOUT_MS = 5 * 60_000L
 
 private const val REQUEST_TIMEOUT_MS = 60_000L
 
+/**
+ * How Gemini writes what riders say, the same for transcripts and captions: in the language they
+ * spoke, never translated. Hindi and Hinglish stay in English letters, as riders text them.
+ */
+object SpeechLanguage {
+    const val RULE = "Write what the rider says in the language they speak, exactly as spoken, without translating. " +
+        "Use the script that language is normally typed in on a phone, except Hindi: Hindi, and Hindi mixed with English (Hinglish), " +
+        "is always written in English letters the way people text it (for example \"bhai ye road mast hai\"), never in Devanagari."
+}
+
 /** Prompts, and reading Gemini's replies (pure, unit-tested). */
 object StudioText {
     val CAPTIONS_PROMPT = """
         This is the sound of a motorcycle helmet camera. Transcribe what the rider says, as timed caption lines.
-        The rider speaks English and Hinglish (Hindi mixed with English). Write everything in English letters (Latin script),
-        Hindi words the way people text them (for example "bhai ye road mast hai"). Do not translate, never use Devanagari.
+        ${SpeechLanguage.RULE}
         Ignore wind, engine, horn and traffic noise. Split speech into short lines of at most 8 words, at natural pauses.
         Also write the rider's reactions and drawn-out sounds as they sound ("Tooooo", "Aaaahh", "Fhit!", "Nooo"), each as its own line.
-        When a line has Hindi words, add "en": what it means in short, natural English (for subtitles); leave "en" out for English lines and sounds.
+        When a line isn't in English, add "en": what it means in short, natural English (for subtitles); leave "en" out for English lines and sounds.
         Add "key": the one word of the line that matters most (a number, a strong word), exactly as written in "text"; leave it out when no word stands out.
         Reply with JSON only: {"lines":[{"start":1.2,"end":3.4,"text":"...","en":"...","key":"..."}]} with start and end in seconds from the
         beginning of the recording. If there is no clear speech, reply {"lines":[]}.
@@ -317,11 +326,10 @@ object StudioText {
     fun batchPrompt(n: Int): String = """
         These are $n clips of sound from a motorcycle helmet camera, labelled Clip 1 to Clip $n. For EACH clip, transcribe
         what the rider says as timed caption lines, with start and end in seconds from the beginning of THAT clip.
-        The rider speaks English and Hinglish (Hindi mixed with English). Write everything in English letters (Latin script),
-        Hindi words the way people text them (for example "bhai ye road mast hai"). Do not translate, never use Devanagari.
+        ${SpeechLanguage.RULE}
         Ignore wind, engine, horn and traffic noise. Split speech into short lines of at most 8 words, at natural pauses.
         Also write the rider's reactions and drawn-out sounds as they sound ("Tooooo", "Aaaahh", "Fhit!", "Nooo"), each as its own line.
-        When a line has Hindi words, add "en": what it means in short, natural English (for subtitles); leave "en" out for English lines and sounds.
+        When a line isn't in English, add "en": what it means in short, natural English (for subtitles); leave "en" out for English lines and sounds.
         Add "key": the one word of the line that matters most (a number, a strong word), exactly as written in "text"; leave it out when no word stands out.
         Reply with JSON only: {"clips":[{"clip":1,"lines":[{"start":1.2,"end":3.4,"text":"...","en":"...","key":"..."}]}]} with one entry per clip;
         a clip with no clear speech has "lines":[].
@@ -329,7 +337,7 @@ object StudioText {
 
     /** English for Hinglish caption lines that have none yet (clips read before subtitles), in one text request. */
     fun englishPrompt(lines: List<String>): String = buildString {
-        appendLine("These are caption lines a motorcycle rider said, in English and Hinglish (Hindi in English letters).")
+        appendLine("These are caption lines a motorcycle rider said, in their own language (Hindi is written in English letters).")
         appendLine("For each line, write what it means in short, natural English, for subtitles. A line already in English, or a sound (\"Aaaah\", \"Tooooo\"), gets \"\".")
         lines.forEachIndexed { i, l -> appendLine("${i + 1}. ${l.replace("\n", " ")}") }
         append("Reply with JSON only: {\"en\":[\"...\"]} with exactly ${lines.size} entries, in the same order.")
@@ -414,7 +422,7 @@ object StudioText {
     }.getOrNull()
 
     fun coachPrompt(summary: String): String = buildString {
-        appendLine("You are a social media manager for a motorcycle rider who posts Instagram Reels (motovlogs, often Hinglish).")
+        appendLine("You are a social media manager for a motorcycle rider who posts Instagram Reels (motovlogs, in their own language).")
         appendLine("Here is the Reel the app just made from their ride:")
         appendLine(summary)
         appendLine("What wins on Reels: a hook in the first 3 seconds; text on screen (most watch muted); one idea per Reel; finishing and")

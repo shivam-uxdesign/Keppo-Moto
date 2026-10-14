@@ -106,4 +106,15 @@ class BetterVideosTest {
         val o = ReelJson.readOptionsJson(ReelJson.writeOptionsJson(StudioOptions(english = true, jumpCuts = false)))
         assertTrue(o.english && !o.jumpCuts)
     }
+
+    @Test
+    fun speechIsWrittenInTheRidersLanguage() {
+        val rule = com.ridetrack.app.studio.SpeechLanguage.RULE
+        listOf(StudioText.CAPTIONS_PROMPT, StudioText.batchPrompt(2), com.ridetrack.app.transcribe.TranscriptText.PROMPT).forEach { p ->
+            assertTrue(rule in p)
+            // No leftover English-and-Hinglish-only wording.
+            assertTrue("speaks English and Hinglish" !in p)
+        }
+        assertTrue("without translating" in rule && "never in Devanagari" in rule)
+    }
 }

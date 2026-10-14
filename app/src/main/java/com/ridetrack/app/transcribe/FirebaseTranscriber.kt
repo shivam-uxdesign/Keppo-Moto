@@ -80,8 +80,7 @@ object TranscriptText {
 
     val PROMPT = """
         Transcribe the rider's speech in this motorcycle helmet recording, exactly as spoken.
-        The rider speaks English and Hinglish (Hindi mixed with English). Write everything in English letters (Latin script):
-        write Hindi words the way people text them, for example "bhai ye road mast hai, aage traffic hai". Do not translate, and never use Devanagari.
+        ${com.ridetrack.app.studio.SpeechLanguage.RULE}
         Ignore wind, engine, horn and traffic noise. If there is no clear speech, reply exactly: $NO_SPEECH
         Reply with only the transcript.
     """.trimIndent()

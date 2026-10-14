@@ -206,7 +206,7 @@ object ScriptWriter {
             styles.joinToString("; ") { "${it.id} = ${it.describe()}" } + ".\n"
 
     fun planPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, formats: List<PieceFormat>, styles: List<StudioStyle> = emptyList(), performance: String = "", all: Boolean = false): String = buildString {
-        appendLine("You are the editor and social media manager for a motorcycle rider who posts motovlogs (often Hinglish).")
+        appendLine("You are the editor and social media manager for a motorcycle rider who posts motovlogs (in their own language).")
         appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
         appendLine(footageText(footage))
         if (all) {
@@ -238,7 +238,7 @@ object ScriptWriter {
 
     /** Asks for one piece of [format] and about [lengthSec]; [avoid] is a script to differ from (Remix). */
     fun piecePrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, format: PieceFormat, lengthSec: Int, avoid: Script?, keys: Map<String, String>): String = buildString {
-        appendLine("You are the editor of a motorcycle rider's motovlog (often Hinglish).")
+        appendLine("You are the editor of a motorcycle rider's motovlog (in their own language).")
         appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
         appendLine(footageText(footage))
         appendLine("Write ONE ${format.hint}, at most $lengthSec s long.")
@@ -250,7 +250,7 @@ object ScriptWriter {
 
     /** Asks for one piece the rider described in their words ("a 15 s funny one about the water"). */
     fun askPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, ask: String, styles: List<StudioStyle> = emptyList()): String = buildString {
-        appendLine("You are the editor of a motorcycle rider's motovlog (often Hinglish).")
+        appendLine("You are the editor of a motorcycle rider's motovlog (in their own language).")
         appendLine("Ride: \"$ride\" ($stats). ${summary(footage).text}")
         appendLine(footageText(footage))
         appendLine("The rider asks for: \"${ask.replace("\"", "'")}\". Write ONE piece that does that, from this footage (format, length and vibe as they asked, or what suits it).")
@@ -267,7 +267,7 @@ object ScriptWriter {
      * fits the brief. [performance] is how its earlier episodes did.
      */
     fun seriesPrompt(s: Series, ride: String, stats: String, footage: List<Footage>, style: StyleContext?, performance: String = "", styles: List<StudioStyle> = emptyList()): String = buildString {
-        appendLine("You are the editor of a motorcycle rider's motovlog (often Hinglish), making episodes of their series \"${s.name.replace("\"", "'")}\".")
+        appendLine("You are the editor of a motorcycle rider's motovlog (in their own language), making episodes of their series \"${s.name.replace("\"", "'")}\".")
         appendLine("What the series is, in the rider's words: \"${s.brief.ifBlank { s.name }.replace("\"", "'")}\"")
         appendLine("Every episode is a ${s.format.name.lowercase()} (${s.format.hint}), ${s.minSec}–${s.maxSec} s.")
         if (s.notes.isNotEmpty()) appendLine("The rider told this series: ${s.notes.joinToString("; ") { "\"${it.replace("\"", "'")}\"" }}.")
@@ -289,7 +289,7 @@ object ScriptWriter {
 
     /** Asks for another take on [script]: the same moment and clips, told differently from [takes] (format · title). */
     fun variationPrompt(ride: String, stats: String, footage: List<Footage>, style: StyleContext?, script: Script, takes: List<String>, keys: Map<String, String>, styles: List<StudioStyle> = emptyList()): String = buildString {
-        appendLine("You are the editor of a motorcycle rider's motovlog (often Hinglish).")
+        appendLine("You are the editor of a motorcycle rider's motovlog (in their own language).")
         appendLine("Ride: \"$ride\" ($stats).")
         appendLine(footageText(footage))
         appendLine("This piece was suggested from the ride: ${ScriptJson.toPromptJson(script, keys)}")
@@ -305,7 +305,7 @@ object ScriptWriter {
 
     /** Asks to rewrite [script] following the rider's [note]. */
     fun revisePrompt(ride: String, footage: List<Footage>, style: StyleContext?, script: Script, note: String, keys: Map<String, String>): String = buildString {
-        appendLine("You are the editor of a motorcycle rider's motovlog (often Hinglish). Ride: \"$ride\".")
+        appendLine("You are the editor of a motorcycle rider's motovlog (in their own language). Ride: \"$ride\".")
         appendLine(footageText(footage))
         appendLine("This is the current script: ${ScriptJson.toPromptJson(script, keys)}")
         appendLine("The rider wants this changed: \"${note.replace("\"", "'")}\". Rewrite the script to do that; keep what they didn't ask to change.")

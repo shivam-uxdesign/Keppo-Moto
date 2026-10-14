@@ -118,7 +118,7 @@ fun PaywallContent(plans: List<PaywallPlan>, note: String?, onBuy: (String) -> U
             Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(vertical = RtDimens.sm)) {
                 Benefit(Icons.Rounded.Movie, "Reels any time", "Ideas, edits and styles from every ride, as many as you like.")
                 Benefit(Icons.Rounded.AutoAwesome, "Ready when you park", "Your best moments made into Reels after each ride.")
-                Benefit(Icons.Rounded.ClosedCaption, "Captions written for you", "What you say in your clips, written out (English or Hinglish).")
+                Benefit(Icons.Rounded.ClosedCaption, "Captions written for you", "What you say in your clips, written out in your language.")
                 Benefit(Icons.Rounded.LocalGasStation, "Petrol price looked up", "Fill-ups from your card SMS saved without typing the price.")
             }
             if (plans.isEmpty()) {

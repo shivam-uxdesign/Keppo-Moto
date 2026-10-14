@@ -647,7 +647,7 @@ private fun TranscribeSettings(m: MomentSettings, onChange: (MomentSettings) -> 
     }
     ToggleRow(
         "Write down what I say",
-        "After the ride, what you say in talking clips is written out in Hinglish (English letters) with Google's Gemini. " +
+        "After the ride, what you say in talking clips is written out in the language you speak (Hindi in English letters) with Google's Gemini. " +
             "The clips' sound is sent to Google for this; on the free tier Google may use it to improve its products.",
         m.transcribe,
         { on ->
