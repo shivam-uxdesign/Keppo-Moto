@@ -11,14 +11,14 @@ import kotlinx.coroutines.tasks.await
 
 /**
  * App Check: only the real Keppo Moto can use the project's Gemini allowance. Play Store builds
- * prove it with Play Integrity; test builds (installed by hand) with a debug token the rider
- * adds once in the Firebase console (Profile › Moments shows it).
+ * prove it with Play Integrity; test builds (debug and releaseTest, installed by hand) with a
+ * debug token the rider adds once in the Firebase console (Profile › Moments shows it).
  */
 object AppCheckSetup {
     fun install(context: Context) {
         if (FirebaseApp.getApps(context).isEmpty()) return
         // A fixed token for test builds: the debug provider uses it instead of making a new one per install.
-        if (BuildConfig.DEBUG && BuildConfig.APPCHECK_DEBUG_TOKEN.isNotBlank()) {
+        if (BuildConfig.APPCHECK_DEBUG && BuildConfig.APPCHECK_DEBUG_TOKEN.isNotBlank()) {
             val prefs = context.getSharedPreferences(store(), Context.MODE_PRIVATE)
             if (prefs.getString(SECRET, null) != BuildConfig.APPCHECK_DEBUG_TOKEN) {
                 prefs.edit().putString(SECRET, BuildConfig.APPCHECK_DEBUG_TOKEN).commit()
@@ -27,15 +27,15 @@ object AppCheckSetup {
             }
         }
         Firebase.appCheck.installAppCheckProviderFactory(
-            if (BuildConfig.DEBUG) DebugAppCheckProviderFactory.getInstance() else PlayIntegrityAppCheckProviderFactory.getInstance(),
+            if (BuildConfig.APPCHECK_DEBUG) DebugAppCheckProviderFactory.getInstance() else PlayIntegrityAppCheckProviderFactory.getInstance(),
         )
         // Makes the debug provider create (and store) its token now, so it can be shown.
-        if (BuildConfig.DEBUG) runCatching { Firebase.appCheck.getAppCheckToken(false) }
+        if (BuildConfig.APPCHECK_DEBUG) runCatching { Firebase.appCheck.getAppCheckToken(false) }
     }
 
     /** This install's debug token, to add in Firebase › App Check › Manage debug tokens; null on Play builds. */
     fun debugToken(context: Context): String? {
-        if (!BuildConfig.DEBUG || FirebaseApp.getApps(context).isEmpty()) return null
+        if (!BuildConfig.APPCHECK_DEBUG || FirebaseApp.getApps(context).isEmpty()) return null
         return context.getSharedPreferences(store(), Context.MODE_PRIVATE).getString(SECRET, null)
     }
 

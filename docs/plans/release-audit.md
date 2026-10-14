@@ -59,11 +59,13 @@ No photo or video library permissions (the system picker is used). Good.
 1. **Target Android version (fixed 14 Oct):** now compiles and targets Android 16 (API 36); the SDK and build tools 36 are installed here. AGP 8.7.3 builds against it with `android.suppressUnsupportedCompileSdk=36`; move to a newer AGP in the release step. Checked: no orientation lock, no edge-to-edge opt-out, no `onBackPressed` overrides (predictive back is fine). Still to see on a phone: insets on every screen, and tablets and foldables in landscape.
 2. **App ID: not a blocker (corrected 14 Oct).** The app is already built as `com.keppo.moto` (`applicationId`), and the Firebase file is registered for it. `com.ridetrack.app` is only the code's internal namespace, which riders and Play never see.
    - **Still to do at release:** the Drive backup sign-in needs an OAuth client for `com.keppo.moto` with the release key's SHA-1, and Play App Signing's SHA-1 added in Firebase and Google Cloud (the Firebase file lists no OAuth clients today).
-3. **Release build isn't set up:**
-   - **Signing:** no signing key for release; the rider creates the upload key.
-   - **Shrinking:** `isMinifyEnabled = false`, so the release isn't shrunk; the size and the R8 rules for Media3, MapLibre, ONNX and Firebase need testing.
-   - **Format:** Play needs an app bundle (`bundleRelease`).
-   - **Version:** versionCode 1, versionName 0.1.0.
+3. **Release build (set up 14 Oct):**
+   - **Release:** R8 shrinks, optimises and renames (`isMinifyEnabled`, `isShrinkResources`). Signed with the upload key from `keystore.properties` or `KEPPO_UPLOAD_*` env vars; unsigned without them. `bundleRelease` makes the Play bundle.
+   - **releaseTest:** the same build, signed with the shared debug key and carrying App Check's debug token, so the real release can be tested by hand with Gemini working. It's the same key as the debug APKs, so it installs over them and keeps data.
+   - **Security fix:** the App Check debug token was built into release too, where anyone could extract it and use the Gemini allowance. Now only debug and releaseTest carry it (checked: absent from the release bundle). The switch is `BuildConfig.APPCHECK_DEBUG`.
+   - **versionCode** = the git commit count, so every upload is newer.
+   - **Size:** releaseTest for arm64 is 24.9 MB (debug was 42 MB).
+   - **Still to do:** the rider makes the upload key; Play App Signing; a newer AGP; the R8 build needs testing on a phone.
 4. **Map tiles licence** (fixed 14 Oct: OpenFreeMap's Dark style in `assets/map/dark.json`, the credit line updated, the licence in `assets/licenses`): CARTO dark tiles need a commercial licence (reportedly about $20K a year as part of their platform). Options:
    - **OpenFreeMap:** free, commercial use allowed, OpenStreetMap data.
    - **Protomaps:** a self-hosted file on cheap storage.

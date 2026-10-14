@@ -30,6 +30,19 @@ val gitSha: String = providers.exec {
     isIgnoreExitValue = true
 }.standardOutput.asText.map { it.trim() }.getOrElse("").ifEmpty { "local" }
 val buildTag: String = "$gitSha · " + LocalDate.now().format(DateTimeFormatter.ofPattern("d MMM", Locale.US))
+// Each build's number for Play: the commit count, so every new commit uploads as a newer version.
+val commitCount: Int = providers.exec {
+    commandLine("git", "rev-list", "--count", "HEAD")
+    isIgnoreExitValue = true
+}.standardOutput.asText.map { it.trim().toIntOrNull() ?: 1 }.getOrElse(1)
+
+// The Play upload key: keystore.properties (never committed) or env vars (environment secrets).
+// Without it, release builds come out unsigned (fine for checking the build, not for Play).
+val keystoreProperties = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun signingValue(key: String): String? = (keystoreProperties.getProperty(key) ?: System.getenv("KEPPO_UPLOAD_${key.uppercase()}"))?.trim()?.takeIf { it.isNotEmpty() }
+val uploadStoreFile: String? = signingValue("storeFile")
 
 android {
     testOptions {
@@ -48,11 +61,14 @@ android {
         applicationId = "com.keppo.moto"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        versionCode = commitCount
         versionName = "0.1.0"
         buildConfigField("String", "MAPTILER_KEY", "\"$mapTilerKey\"")
         buildConfigField("String", "BUILD_TAG", "\"$buildTag\"")
-        buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"$appCheckDebugToken\"")
+        // Only test builds carry the App Check debug token (a release must never: it would let
+        // anyone use the Gemini allowance from outside the app).
+        buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"\"")
+        buildConfigField("Boolean", "APPCHECK_DEBUG", "false")
         // Optional: `-PabiFilter=arm64-v8a` builds a smaller APK for modern phones only.
         providers.gradleProperty("abiFilter").orNull?.let { abis ->
             ndk { abiFilters += abis.split(",").map(String::trim) }
@@ -68,6 +84,14 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        if (uploadStoreFile != null) {
+            create("upload") {
+                storeFile = rootProject.file(uploadStoreFile)
+                storePassword = signingValue("storePassword")
+                keyAlias = signingValue("keyAlias")
+                keyPassword = signingValue("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -79,9 +103,26 @@ android {
                 proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-debug-shrink.pro")
             }
         }
+        debug {
+            buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"$appCheckDebugToken\"")
+            buildConfigField("Boolean", "APPCHECK_DEBUG", "true")
+        }
+        // The Play build: shrunk, optimised and renamed by R8, unused resources dropped, signed
+        // with the upload key (Play App Signing re-signs it for riders).
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfigs.findByName("upload")?.let { signingConfig = it }
+        }
+        // The Play build to install by hand and test: the same shrinking as release, signed with
+        // the debug key, and App Check's debug token so Gemini works outside the Play Store.
+        create("releaseTest") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"$appCheckDebugToken\"")
+            buildConfigField("Boolean", "APPCHECK_DEBUG", "true")
         }
     }
 

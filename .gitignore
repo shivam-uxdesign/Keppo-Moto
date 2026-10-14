@@ -17,3 +17,6 @@ captures/
 keppo-moto-*.zip
 app/google-services.json
 keppo-studio-songs.zip
+
+# The Play upload key's passwords and path (the key itself is *.jks / *.keystore).
+keystore.properties

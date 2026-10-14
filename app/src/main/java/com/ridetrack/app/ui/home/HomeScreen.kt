@@ -145,7 +145,8 @@ fun HomeScreen(
             .fillMaxSize()
             .statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
+            // The same margins as every other tab.
+            .padding(horizontal = RtDimens.screenPadding),
     ) {
         Header(s, onOpenProfile)
         Spacer(Modifier.height(16.dp))
@@ -330,7 +331,7 @@ private fun greeting(): String = when (LocalTime.now().hour) {
 
 @Composable
 private fun Header(s: HomeUiState, onOpenProfile: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(top = RtDimens.sm), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             KeppoWordmark(Modifier.padding(bottom = 10.dp))
             Text(greeting(), style = RtType.title.copy(fontSize = 26.sp, lineHeight = 30.sp), color = RtColors.TextPrimary)
