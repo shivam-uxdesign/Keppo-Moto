@@ -207,14 +207,21 @@ class MomentRecorder(
         }, main)
     }
 
-    /** Auto-pause: keep filming for 20 s (an event's after-window may still be running), then idle. */
-    /** [cause]: "manual", "stop" or "break", for the log. */
+    /**
+     * Ride paused. An ordinary stop (lights, a pump, chatting on the bike) keeps the camera
+     * filming into its buffer, so talking still gets the 10 s before; it rests only after
+     * [STOP_REST_MS] stopped. Getting off the bike (a break) or pausing by hand rests it after
+     * 20 s (an event's after-window may still be running). Heat, battery and storage guards
+     * apply as always. [cause]: "manual", "stop" or "break".
+     */
     fun setRidePaused(paused: Boolean, cause: String = "stop") {
         idleJob?.cancel()
         if (paused) {
-            log.log("ride paused ($cause)")
+            val restAfter = if (cause == "stop") STOP_REST_MS else 20_000L
+            log.log("ride paused ($cause): camera keeps its buffer for ${restAfter / 1000} s")
             idleJob = scope.launch {
-                delay(20_000)
+                delay(restAfter)
+                log.log("camera resting ($cause, ${restAfter / 1000} s); the mic keeps listening")
                 setReason(PauseReason.RIDE_PAUSED, true)
             }
         } else {
@@ -983,6 +990,8 @@ class MomentRecorder(
     private fun ProcessCameraProvider.hasCameraSafe(s: CameraSelector) = runCatching { hasCamera(s) }.getOrDefault(false)
 
     companion object {
+        /** An ordinary stop keeps the camera's buffer this long before it rests. */
+        const val STOP_REST_MS = 10L * 60_000
         private const val ENCODER_LATENCY_MILLIS = 800L
         /** One stereo chunk: 2048 frames at 44.1 kHz. */
         private const val ENGINE_CHUNK_MS = 46L

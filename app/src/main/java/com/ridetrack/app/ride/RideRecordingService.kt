@@ -114,15 +114,16 @@ class RideRecordingService : LifecycleService() {
         val r = MomentRecorder(this, this, c.moments, c.momentsHub, settings, active.landscapeMount, c.appScope, active.rideId)
         recorder = r
         r.start()
+        // Again when a stop turns into a break (got off the bike): the camera then rests sooner.
         lifecycleScope.launch {
-            session.state.collectLatest { st ->
+            kotlinx.coroutines.flow.combine(session.state, session.manuallyPaused, session.frame) { st, manual, f ->
                 val cause = when {
-                    session.manuallyPaused.value -> "manual"
-                    session.frame.value?.onBreak == true -> "break"
+                    manual -> "manual"
+                    f?.onBreak == true -> "break"
                     else -> "stop"
                 }
-                r.setRidePaused(st is RideState.Paused, cause)
-            }
+                (st is RideState.Paused) to cause
+            }.distinctUntilChanged().collectLatest { (paused, cause) -> r.setRidePaused(paused, cause) }
         }
     }
 

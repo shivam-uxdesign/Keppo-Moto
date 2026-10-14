@@ -530,8 +530,9 @@ class RideSessionManager(
         if (momentsHub.live.value != null) return
         val now = frame.timeMillis
         val pending = rec.planner?.promotePending()
-        // Stopped or paused, the camera rests: it wakes on speech, with nothing to look back on.
-        val resting = _state.value is RideState.Paused
+        // The camera keeps its buffer through ordinary stops (10 min); only once it rests (a break,
+        // a manual pause, a long stop) does speech wake it with nothing to look back on.
+        val resting = momentsHub.state.value.reason == com.ridetrack.app.moments.PauseReason.RIDE_PAUSED
         val lookBack = if (resting) 0L else leadIn(rec, now, maxOf(VOICE_BEFORE_MILLIS, pending?.let { now - it.startMillis } ?: 0L))
         val ok = momentsHub.submitLive(
             MomentRequest.StartLive(
