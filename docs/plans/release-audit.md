@@ -57,10 +57,8 @@ No photo or video library permissions (the system picker is used). Good.
 
 ## Launch blockers found
 1. **Target Android version:** the app targets Android 15 (API 35). Since 31 Aug 2026, Play needs **Android 16 (API 36)** for new apps and updates. Only the API 35 platform is installed here; API 36 has to be downloaded (does this environment's network allow it?). Moving up may change behaviour: check edge-to-edge, foreground services and media.
-2. **App ID:** `com.ridetrack.app` must become `com.keppo.moto`.
-   - Also update the Firebase app registration (a new `google-services.json`, since the package name is part of it), App Check, and the Drive sign-in client.
-   - Keppo Journal looks for this app's ID, so update it there too.
-   - The "ridetrack" class names can stay.
+2. **App ID: not a blocker (corrected 14 Oct).** The app is already built as `com.keppo.moto` (`applicationId`), and the Firebase file is registered for it. `com.ridetrack.app` is only the code's internal namespace, which riders and Play never see.
+   - **Still to do at release:** the Drive backup sign-in needs an OAuth client for `com.keppo.moto` with the release key's SHA-1, and Play App Signing's SHA-1 added in Firebase and Google Cloud (the Firebase file lists no OAuth clients today).
 3. **Release build isn't set up:**
    - **Signing:** no signing key for release; the rider creates the upload key.
    - **Shrinking:** `isMinifyEnabled = false`, so the release isn't shrunk; the size and the R8 rules for Media3, MapLibre, ONNX and Firebase need testing.

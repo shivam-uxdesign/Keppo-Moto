@@ -993,7 +993,7 @@ There's one preview in the editor; it never switches. It replaces both the exact
 The rider is happy with the app. Next: a full UI, UX and code audit, then a global launch on Google Play. Plan agreed; the inventory starts when the rider says go.
 
 ### Decisions
-- **App ID:** `com.keppo.moto` (permanent once uploaded; changed before the first upload).
+- **App ID:** `com.keppo.moto`, already set (`applicationId`; the code's namespace `com.ridetrack.app` is internal and stays). Permanent once uploaded.
 - **SMS from day 1:**
   - **Crash texts (`SEND_SMS`):** declared under Play's "Physical safety/emergency alerts" exception, in the Permissions Declaration Form with a video. Safety is made prominent in onboarding and the listing so it reads as a core feature.
   - **Fuel log (`READ_SMS`):** declared under "SMS-based money management". Only payment SMS are read, on the phone, never uploaded; the audit checks this.
