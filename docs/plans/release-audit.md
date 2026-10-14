@@ -72,7 +72,13 @@ No photo or video library permissions (the system picker is used). Good.
    - **MapTiler or Stadia:** paid plans.
    - Any choice needs a dark style and the "© OpenStreetMap contributors" credit.
 5. **Free riders cost money today** (decided: no Gemini for free riders apart from the weekly free Reel; captions manual; petrol price lookup paid): Moments transcription and the petrol price lookup call Gemini for everyone. These need the free cap, a Gemini consent screen, and a decision on whether free riders keep automatic transcription.
-6. **Restricted permissions:** the SMS and full-screen alert declarations; the crash alert modal and notification fallbacks to build.
+6. **Restricted permissions:** the SMS and full-screen-alert declarations are for the Play Console.
+   - **Crash alert fallbacks (built 14 Oct):**
+     - Full screen where allowed.
+     - Otherwise, with "Display over other apps" on, the alert screen as a window over any app (`CrashAlertOverlay`, the same screen), which also lets the app open the alert screen on Android 15+.
+     - Always a notification with a live countdown and I'm OK / Send now buttons (`CrashAlertActionReceiver`), visible on the lock screen, alerting again every 10 s while it can't take over the screen.
+   - **Safety settings:** suggest allowing "Display over other apps" when full screen isn't allowed.
+   - **Debug builds:** "Simulate crash in 10 s" to try the alert in the background.
 
 ## Already fine
 - **16 KB pages:** all native libraries (MapLibre, ONNX Runtime, AndroidX) are 16 KB aligned. The APK passes `zipalign -P 16`.

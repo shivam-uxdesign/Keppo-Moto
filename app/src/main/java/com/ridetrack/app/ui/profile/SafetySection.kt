@@ -234,6 +234,17 @@ internal fun SafetySection(s: ProfileUiState, vm: ProfileViewModel, showHeader: 
                         },
                 )
             }
+            // Without full-screen alerts, "Display over other apps" lets the alert open over any app.
+            if (Build.VERSION.SDK_INT >= 34 && nm != null && !nm.canUseFullScreenIntent() && !com.ridetrack.app.hud.OverlayPermission.isGranted(context)) {
+                Text(
+                    "Or allow Display over other apps, so the alert opens over any app you're using ›",
+                    style = RtType.caption,
+                    color = RtColors.Warning,
+                    modifier = Modifier
+                        .padding(bottom = 8.dp)
+                        .clickable(role = Role.Button) { com.ridetrack.app.hud.OverlayPermission.request(context) },
+                )
+            }
         }
         ToggleRow(
             "Film when GPS is lost",
@@ -273,6 +284,7 @@ internal fun SafetySection(s: ProfileUiState, vm: ProfileViewModel, showHeader: 
         )
         if (BuildConfig.DEBUG) {
             TextButton(onClick = vm::simulateCrash) { Text("Simulate crash (debug)", color = RtColors.Warning) }
+            TextButton(onClick = vm::simulateCrashLater) { Text("Simulate crash in 10 s: lock the phone or open another app (debug)", color = RtColors.Warning) }
         }
     }
 

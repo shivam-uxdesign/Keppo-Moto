@@ -62,6 +62,8 @@ class CrashAlerts(
     private var followUp: Job? = null
     private var ringtone: Ringtone? = null
     private val sms = SmsSender(context)
+    private var nagging: Job? = null
+    private val overlay by lazy { CrashAlertOverlay(context, this) }
 
     fun start() {
         createChannel()
@@ -96,6 +98,7 @@ class CrashAlerts(
     fun cancel() {
         val s = _state.value as? CrashAlertState.Countdown ?: return
         countdown?.cancel()
+        nagging?.cancel()
         Log.i(TAG, "Crash alert cancelled by the rider (false alarm)")
         _state.value = CrashAlertState.Cancelled(s.report, s.contacts)
         stopAlarm()
@@ -104,6 +107,7 @@ class CrashAlerts(
     fun sendNow() {
         val s = _state.value as? CrashAlertState.Countdown ?: return
         countdown?.cancel()
+        nagging?.cancel()
         stopAlarm()
         val text = AlertMessage.crash(s.report)
         _state.value = CrashAlertState.Sent(s.report, s.contacts, s.contacts.associate { it.phone to SmsStatus.Sending }, text, System.currentTimeMillis())
@@ -130,7 +134,11 @@ class CrashAlerts(
     fun dismiss() {
         if (_state.value is CrashAlertState.Countdown) return
         _state.value = null
+        overlay.hide()
     }
+
+    /** The alert screen itself is showing: the window over other apps can go. */
+    fun onScreenShown() = overlay.hide()
 
     /** Profile's "Send test message": each contact with what happened to their text. */
     suspend fun sendTest(): List<Pair<EmergencyContact, SmsStatus>> {
@@ -167,25 +175,64 @@ class CrashAlerts(
         }
     }
 
+    /**
+     * Shows the alert, as strongly as the phone allows:
+     * 1. the full-screen alert (over the lock screen too) where the app may use one;
+     * 2. otherwise, with "Display over other apps" on, the same screen as a window over any app,
+     *    which also lets the app open the alert screen itself (Android 15+ needs a visible window);
+     * 3. and always a loud notification with a live countdown and I'm OK / Send now, which pops up
+     *    again every 10 s while it can't take over the screen.
+     */
     private fun showScreen() {
         val intent = Intent(context, CrashAlertActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        // Straight to the screen when allowed (app open, or the HUD's draw-over permission)…
+        val fullScreen = canUseFullScreen()
+        if (!fullScreen) overlay.show()
+        // Straight to the screen when allowed (app open, or one of its windows showing).
         runCatching { context.startActivity(intent) }
-        // …and a full-screen notification in case it wasn't (locked phone, background).
+        notifyAlert(intent, fullScreen, alertAgain = true)
+        if (!fullScreen) {
+            nagging?.cancel()
+            nagging = scope.launch(Dispatchers.Main) {
+                while (_state.value is CrashAlertState.Countdown) {
+                    delay(NAG_MILLIS)
+                    if (_state.value is CrashAlertState.Countdown) notifyAlert(intent, false, alertAgain = true)
+                }
+            }
+        }
+    }
+
+    private fun notifyAlert(intent: Intent, fullScreen: Boolean, alertAgain: Boolean) {
+        val s = _state.value as? CrashAlertState.Countdown ?: return
         val pending = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        fun action(a: String, code: Int) = PendingIntent.getBroadcast(
+            context, code, Intent(context, CrashAlertActionReceiver::class.java).setAction(a), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
         val n = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_ride)
             .setContentTitle("Possible crash: are you OK?")
-            .setContentText("Your contacts get your location in 30 s unless you cancel.")
+            .setContentText(if (s.contacts.isEmpty()) "Tap I'm OK if you're fine." else "Your contacts get your location when the timer ends, unless you're OK.")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setFullScreenIntent(pending, true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            // A live countdown to the texts going out.
+            .setWhen(s.deadlineMillis)
+            .setShowWhen(true)
+            .setUsesChronometer(true)
+            .setChronometerCountDown(true)
+            .addAction(0, "I'm OK", action(CrashAlertActionReceiver.ACTION_OK, 1))
+            .addAction(0, "Send now", action(CrashAlertActionReceiver.ACTION_SEND, 2))
             .setContentIntent(pending)
             .setOngoing(true)
-            .setTimeoutAfter(COUNTDOWN_MILLIS + 5_000)
+            .setOnlyAlertOnce(!alertAgain)
+            .setTimeoutAfter((s.deadlineMillis - System.currentTimeMillis()).coerceAtLeast(0) + 5_000)
+            .apply { if (fullScreen) setFullScreenIntent(pending, true) }
             .build()
         runCatching { context.getSystemService<NotificationManager>()?.notify(NOTIFICATION_ID, n) }
     }
+
+    /** Whether the app may take over the screen (Android 14+ asks; Play only grants it to some apps). */
+    private fun canUseFullScreen(): Boolean =
+        Build.VERSION.SDK_INT < 34 || context.getSystemService<NotificationManager>()?.canUseFullScreenIntent() == true
 
     private fun startAlarm() {
         ringtone = runCatching {
@@ -200,6 +247,7 @@ class CrashAlerts(
     }
 
     private fun stopAlarm() {
+        nagging?.cancel()
         runCatching { ringtone?.stop() }
         ringtone = null
         vibrator()?.cancel()
@@ -224,5 +272,7 @@ class CrashAlerts(
         const val COUNTDOWN_MILLIS = 30_000L
         private const val FOLLOW_UP_MILLIS = 2 * 60_000L
         private const val FOLLOW_UP_METERS = 100.0
+        /** How often the notification pops up again while the alert can't take over the screen. */
+        private const val NAG_MILLIS = 10_000L
     }
 }

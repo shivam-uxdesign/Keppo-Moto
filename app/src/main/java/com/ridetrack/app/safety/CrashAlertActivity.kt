@@ -28,6 +28,7 @@ class CrashAlertActivity : ComponentActivity() {
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val alerts = (application as RideTrackApp).container.crashAlerts
+        alerts.onScreenShown()
         setContent {
             RideDark {
                 CrashAlertScreen(alerts, onClose = { alerts.dismiss(); finish() })

@@ -91,6 +91,14 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
         )
     }
 
+    /** Debug builds: the same, 10 s from now, to try the alert with the phone locked or another app open. */
+    fun simulateCrashLater() {
+        c.appScope.launch {
+            kotlinx.coroutines.delay(10_000)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { simulateCrash() }
+        }
+    }
+
     fun canSendSms(): Boolean = c.crashAlerts.canSendSms()
 
     /** Picking a SIM (dual-SIM phones) and calling from the alert screen. */
