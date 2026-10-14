@@ -59,6 +59,36 @@ object TimelineEdits {
         return normalize(with(plan, i, s.copy(durMs = dur, lines = s.lines.filter { it.startMs < dur })))
     }
 
+    /**
+     * Cuts the pauses out of a talking clip: keeps each run of words with [airMs] around it,
+     * joins runs less than [joinMs] apart, and drops the quiet before the first and after the
+     * last. One clip becomes one per run, in order; the first keeps its transition.
+     */
+    fun removePauses(plan: StudioPlan, i: Int, airMs: Long = 150, joinMs: Long = 500): StudioPlan {
+        val s = clip(plan, i) ?: return plan
+        if (s.still != null || s.lines.isEmpty()) return plan
+        val spans = ArrayList<LongArray>()
+        s.lines.sortedBy { it.startMs }.forEach { l ->
+            val a = (l.startMs - airMs).coerceAtLeast(0)
+            val b = (l.endMs + airMs).coerceAtMost(s.durMs)
+            if (b <= a) return@forEach
+            val last = spans.lastOrNull()
+            if (last != null && a - last[1] < joinMs) last[1] = maxOf(last[1], b) else spans += longArrayOf(a, b)
+        }
+        val kept = spans.filter { it[1] - it[0] >= MIN_MS }
+        if (kept.isEmpty() || (kept.size == 1 && kept[0][0] == 0L && kept[0][1] == s.durMs)) return plan
+        val f = Speed.outPerSource(s.speed, s.ramp)
+        val parts = kept.mapIndexed { k, (a, b) ->
+            s.copy(
+                inMs = s.inMs + (a / f).toLong(),
+                durMs = b - a,
+                lines = s.lines.filter { it.endMs > a && it.startMs < b }.map { it.copy(startMs = (it.startMs - a).coerceAtLeast(0), endMs = (it.endMs - a).coerceAtMost(b - a)) },
+                transition = if (k == 0) s.transition else null,
+            )
+        }
+        return normalize(plan.copy(segments = plan.segments.toMutableList().also { it.removeAt(i); it.addAll(i, parts) }))
+    }
+
     /** Cuts the clip under [atMs] in two (each part at least [MIN_MS]). */
     fun split(plan: StudioPlan, atMs: Long): StudioPlan {
         val (i, local) = at(plan, atMs)

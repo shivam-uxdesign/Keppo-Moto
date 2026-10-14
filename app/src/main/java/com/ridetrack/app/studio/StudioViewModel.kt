@@ -162,6 +162,8 @@ data class StudioState(
     val engineFiles: Map<String, String> = emptyMap(),
     /** Horns and bumps in each engine file (by its URI), once worked out in the background. */
     val engineNoise: Map<String, List<com.ridetrack.telemetry.moments.EngineNoise.Noise>> = emptyMap(),
+    /** Each clip's speed line and ride moments over its whole recording, by moment id (the editor's ride row). */
+    val rideTraces: Map<String, RideTrace> = emptyMap(),
     /** Bumped when the timeline changes for good (not mid-drag), so the preview reloads. */
     val timelineVersion: Int = 0,
     /** Why Gemini can't help right now (no internet, its limit), shown with Try again; null when fine. */
@@ -1390,6 +1392,15 @@ class StudioViewModel(
         if (engine.isNotEmpty()) viewModelScope.launch(Dispatchers.IO) {
             val found = engine.values.associateWith { uri -> runCatching { EngineNoises.ofUri(c.appContext, uri) }.getOrDefault(emptyList()) }
             _state.update { it.copy(engineNoise = found) }
+        }
+        // The ride row: speed and moments (downshifts, braking, top speed, lean) for each clip.
+        viewModelScope.launch(Dispatchers.Default) {
+            val samples = this@StudioViewModel.samples
+            if (samples.isEmpty()) return@launch
+            val traces = (clips + borrowed.values).filter { it.kind == com.ridetrack.app.moments.MomentKind.CLIP }.associate { m ->
+                m.id to EditorRide.trace(samples, m.videoStartMillis, m.durationMillis ?: 0, runCatching { ClipDownshifts.load(m.file) }.getOrNull().orEmpty())
+            }
+            _state.update { it.copy(rideTraces = traces) }
         }
         if (draft != null) say("Carried on from your unsaved edit")
         publish(reload = true)

@@ -37,6 +37,18 @@ class TimelineTest {
     }
 
     @Test
+    fun `remove pauses keeps each run of words with a little air, and drops the quiet`() {
+        val talk = ClipSegment(bit("t"), 2_000, 4_000, listOf(CaptionLine(500, 1_500, "chalo"), CaptionLine(3_000, 3_600, "bas")), hook = true)
+        val p = TimelineEdits.removePauses(StudioPlan(listOf(talk, StatsSegment(1_500)), Vibe.HYPE), 0)
+        val parts = p.segments.filterIsInstance<ClipSegment>()
+        assertEquals(listOf(2_350L to 1_300L, 4_850L to 900L), parts.map { it.inMs to it.durMs })
+        assertEquals(listOf(150L to 1_150L), parts[0].lines.map { it.startMs to it.endMs })
+        // Lines less than half a second apart stay together: one clip, just the quiet ends cut.
+        val close = TimelineEdits.removePauses(plan(), 0).segments[0] as ClipSegment
+        assertEquals(2_350L to 3_400L, close.inMs to close.durMs)
+    }
+
+    @Test
     fun `split cuts a clip in two at the playhead, words go with their half`() {
         val p = TimelineEdits.split(plan(), 2_000)
         assertEquals(5, p.segments.size)
