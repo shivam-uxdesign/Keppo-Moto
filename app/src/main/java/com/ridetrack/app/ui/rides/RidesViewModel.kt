@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.rides
 
+import com.ridetrack.app.ui.format.Units
 import java.io.File
 import com.ridetrack.app.moments.RideMoments
 import androidx.lifecycle.ViewModel
@@ -22,11 +23,33 @@ import java.time.temporal.TemporalAdjusters
 import java.time.DayOfWeek
 
 enum class DateFilter(val label: String) { ALL("Any time"), WEEK("7 days"), MONTH("30 days"), YEAR("This year") }
-enum class DistanceFilter(val label: String, val range: ClosedFloatingPointRange<Double>) {
-    ANY("Any", 0.0..Double.MAX_VALUE),
-    SHORT("< 10 km", 0.0..9_999.999),
-    MEDIUM("10–50 km", 10_000.0..50_000.0),
-    LONG("> 50 km", 50_000.001..Double.MAX_VALUE),
+/** Short, medium, long: under 10, 10–50, over 50 km; in miles under 10, 10–30, over 30. */
+enum class DistanceFilter {
+    ANY, SHORT, MEDIUM, LONG;
+
+    private val steps: Pair<Double, Double> get() = if (Units.miles) 10.0 to 30.0 else 10.0 to 50.0
+    private val unitM: Double get() = if (Units.miles) Units.METERS_PER_MILE else 1000.0
+
+    val label: String get() {
+        val (a, b) = steps
+        val u = Units.distanceUnit
+        return when (this) {
+            ANY -> "Any"
+            SHORT -> "< ${a.toInt()} $u"
+            MEDIUM -> "${a.toInt()}–${b.toInt()} $u"
+            LONG -> "> ${b.toInt()} $u"
+        }
+    }
+
+    val range: ClosedFloatingPointRange<Double> get() {
+        val (a, b) = steps
+        return when (this) {
+            ANY -> 0.0..Double.MAX_VALUE
+            SHORT -> 0.0..(a * unitM - 0.001)
+            MEDIUM -> (a * unitM)..(b * unitM)
+            LONG -> (b * unitM + 0.001)..Double.MAX_VALUE
+        }
+    }
 }
 enum class DurationFilter(val label: String, val range: LongRange) {
     ANY("Any", 0L..Long.MAX_VALUE),

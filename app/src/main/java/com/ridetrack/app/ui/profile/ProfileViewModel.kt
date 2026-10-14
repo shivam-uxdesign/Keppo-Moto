@@ -179,6 +179,10 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
         viewModelScope.launch { c.settings.setBackupVideosCharging(v) }
     }
 
+    fun setUnits(v: com.ridetrack.app.ui.format.UnitSystem?) {
+        viewModelScope.launch { c.settings.setUnits(v) }
+    }
+
     fun setAppTheme(v: AppTheme) {
         viewModelScope.launch { c.settings.setAppTheme(v) }
     }

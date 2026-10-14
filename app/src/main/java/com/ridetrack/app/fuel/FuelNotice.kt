@@ -1,5 +1,6 @@
 package com.ridetrack.app.fuel
 
+import com.ridetrack.app.ui.format.Units
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
@@ -36,10 +37,10 @@ object FuelNotice {
         val undo = Intent(context, FuelUndoReceiver::class.java).setAction(ACTION_UNDO)
             .putExtra("fill", fill.id).putExtra("prompt", Fuel.encodePrompts(listOf(prompt))).putExtra("notification", id)
         val pi = PendingIntent.getBroadcast(context, id, undo, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val at = (if (price.exact) "" else "about ") + FuelRegion.current.precise(price.perLitre) + (price.place.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "")
+        val at = (if (price.exact) "" else "about ") + FuelRegion.current.precise(com.ridetrack.app.ui.format.Units.pricePerVolume(price.perLitre)) + (price.place.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "")
         val n = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_ride)
-            .setContentTitle("Saved fill · ${Fuel.money(fill.amount ?: 0.0)} · ${String.format(Locale.US, "%.2f", fill.litres)} L")
+            .setContentTitle("Saved fill · ${Fuel.money(fill.amount ?: 0.0)} · ${String.format(Locale.US, "%.2f", com.ridetrack.app.ui.format.Units.volume(fill.litres))} ${com.ridetrack.app.ui.format.Units.volumeUnit}")
             .setContentText("At $at, ${fill.station ?: "petrol pump"}" + if (price.exact) "" else " · today's price wasn't found")
             .addAction(0, "Undo", pi)
             .setAutoCancel(true)

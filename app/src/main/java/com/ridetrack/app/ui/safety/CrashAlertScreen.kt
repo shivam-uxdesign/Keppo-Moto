@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.safety
 
+import com.ridetrack.app.ui.format.Units
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -133,7 +134,7 @@ private fun Countdown(s: CrashAlertState.Countdown, onCancel: () -> Unit, onSend
             Text("Are you OK?", fontSize = 30.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
             Spacer(Modifier.height(8.dp))
             Text(
-                s.report.speedBeforeMps?.let { "Hard impact at ${(it * 3.6).roundToInt()} km/h, then the bike stopped." } ?: "Hard impact, then the bike stopped.",
+                s.report.speedBeforeMps?.let { "Hard impact at ${com.ridetrack.app.ui.format.Format.speedWithUnit(it)}, then the bike stopped." } ?: "Hard impact, then the bike stopped.",
                 fontSize = 14.sp, color = Color.White.copy(alpha = 0.75f), textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(22.dp))

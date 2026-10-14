@@ -180,6 +180,8 @@ data class Settings(
     val hud: HudSettings = HudSettings(),
     val mapStyle: MapStyle = MapStyle.DARK,
     val appTheme: AppTheme = AppTheme.SYSTEM,
+    /** Kilometres or miles; null = from the phone's country. */
+    val units: com.ridetrack.app.ui.format.UnitSystem? = null,
     val moments: MomentSettings = MomentSettings(),
     /** Last-used moment share graphic: which details are on, and the layout. */
     val momentShareFields: Set<MomentField> = MomentField.DEFAULT,
@@ -229,6 +231,7 @@ class SettingsRepository(private val context: Context) {
         val hudPromptDismissed = booleanPreferencesKey("hud_prompt_dismissed")
         val mapStyle = stringPreferencesKey("map_style")
         val appTheme = stringPreferencesKey("app_theme")
+        val units = stringPreferencesKey("units")
         val momentsEnabled = booleanPreferencesKey("moments_enabled")
         val momentsBraking = booleanPreferencesKey("moments_braking")
         val momentsAccel = booleanPreferencesKey("moments_accel")
@@ -303,6 +306,7 @@ class SettingsRepository(private val context: Context) {
             ),
             mapStyle = enumOf(p[Keys.mapStyle], MapStyle.DARK),
             appTheme = enumOf(p[Keys.appTheme], AppTheme.SYSTEM),
+            units = p[Keys.units]?.let { n -> com.ridetrack.app.ui.format.UnitSystem.entries.firstOrNull { it.name == n } },
             moments = MomentSettings(
                 enabled = p[Keys.momentsEnabled] ?: false,
                 braking = p[Keys.momentsBraking] ?: true,
@@ -455,6 +459,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun setHudPromptDismissed(dismissed: Boolean) = context.dataStore.edit { it[Keys.hudPromptDismissed] = dismissed }
     suspend fun setMapStyle(style: MapStyle) = context.dataStore.edit { it[Keys.mapStyle] = style.name }
     suspend fun setAppTheme(theme: AppTheme) = context.dataStore.edit { it[Keys.appTheme] = theme.name }
+
+    /** Null: follow the phone's country. */
+    suspend fun setUnits(units: com.ridetrack.app.ui.format.UnitSystem?) = context.dataStore.edit { if (units == null) it.remove(Keys.units) else it[Keys.units] = units.name }
 
     suspend fun setMomentShare(fields: Set<MomentField>, layout: MomentLayout) = context.dataStore.edit {
         it[Keys.momentShareFields] = fields.map { f -> f.name }.toSet()

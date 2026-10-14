@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.detail
 
+import com.ridetrack.app.ui.format.Units
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.shape.CircleShape
@@ -275,7 +276,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                             Format.rideDate(it.startTimeMillis),
                             Format.distance(it.stats.distanceM),
                             Format.duration(it.durationMillis?.let { d -> (d - it.stats.breakMillis).coerceAtLeast(0) }),
-                            "${Format.speedKmh(it.stats.maxSpeedMps)} km/h top",
+                            "${Format.speedValue(it.stats.maxSpeedMps)} ${Units.speedUnit} top",
                         ).joinToString(" · ")
                     },
                     onBack = onBack,

@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.detail
 
+import com.ridetrack.app.ui.format.Units
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -263,7 +264,7 @@ private fun DynamicsTrack(data: TrackData, ride: Ride, window: ChartWindow, onJu
             data.maxRightIndex?.let { DynamicsPill(it, "${s.maxRightLeanDeg?.roundToInt() ?: 0}°R", rt.right, "Most lean right") },
             data.hardestBrakeIndex?.let { DynamicsPill(it, String.format(Locale.US, "%.2fG", abs(s.maxBrakeG ?: 0.0)), rt.brake, "Hardest braking") },
             data.strongestAccelIndex?.let { DynamicsPill(it, String.format(Locale.US, "%.2fG", abs(s.maxAccelG ?: 0.0)), rt.accel, "Strongest acceleration") },
-            data.initialIndex.takeIf { data.samples.size >= 2 }?.let { DynamicsPill(it, "${Format.speedKmh(s.maxSpeedMps)} km/h", rt.gForce, "Top speed") },
+            data.initialIndex.takeIf { data.samples.size >= 2 }?.let { DynamicsPill(it, "${Format.speedValue(s.maxSpeedMps)} ${Units.speedUnit}", rt.gForce, "Top speed") },
         )
     }
     val visible = pills.map { it to data.fraction(it.index) }.filter { window.contains(it.second) }.sortedBy { it.second }

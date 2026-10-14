@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.bike
 
+import com.ridetrack.app.ui.format.Units
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -50,18 +51,18 @@ fun FuelSection(bike: Bike, fuel: BikeFuel, vm: BikesViewModel) {
     RtCard {
         val kmpl = m?.kmPerLitre
         Text(
-            if (kmpl != null) "${String.format(Locale.US, "%.1f", kmpl)} km/l" else "Mileage after two fill-ups",
+            if (kmpl != null) "${String.format(Locale.US, "%.1f", Units.economy(kmpl))} ${Units.economyUnit}" else "Mileage after two fill-ups",
             style = RtType.bodyStrong,
             color = RtColors.TextPrimary,
         )
         Text(
             when {
                 kmpl != null -> listOfNotNull(
-                    m.tanks.lastOrNull()?.let { "last tank ${String.format(Locale.US, "%.1f", it.kmPerLitre)}" },
-                    m.costPerKm?.let { "${com.ridetrack.app.fuel.FuelRegion.current.precise(it)} per km" },
+                    m.tanks.lastOrNull()?.let { "last tank ${String.format(Locale.US, "%.1f", Units.economy(it.kmPerLitre))}" },
+                    m.costPerKm?.let { "${com.ridetrack.app.fuel.FuelRegion.current.precise(Units.fromKm(1.0).let { k -> it / k })} per ${Units.distanceUnit}" },
                     "${m.tanks.size} ${if (m.tanks.size == 1) "tank" else "tanks"}",
                 ).joinToString(" · ")
-                else -> "You fill the tank each time, so km/l is the km ridden since the last fill ÷ the litres. Petrol pump stops show up on Home after a ride."
+                else -> "You fill the tank each time, so ${Units.economyUnit} is the distance ridden since the last fill ÷ the fuel. Fuel stops show up on Home after a ride."
             },
             style = RtType.caption,
             color = RtColors.TextSecondary,
@@ -71,7 +72,7 @@ fun FuelSection(bike: Bike, fuel: BikeFuel, vm: BikesViewModel) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "${String.format(Locale.US, "%.2f", f.litres)} L" + (f.amount?.let { " · ${Fuel.money(it)}" } ?: ""),
+                        "${String.format(Locale.US, "%.2f", Units.volume(f.litres))} ${Units.volumeUnit}" + (f.amount?.let { " · ${Fuel.money(it)}" } ?: ""),
                         style = RtType.body,
                         color = RtColors.TextPrimary,
                     )

@@ -11,7 +11,7 @@ import kotlin.test.assertEquals
 class FormatTest {
     @Test
     fun `unknown values are dashes, never zero`() {
-        assertEquals(Format.DASH, Format.speedKmh(null))
+        assertEquals(Format.DASH, Format.speedValue(null))
         assertEquals(Format.DASH, Format.lean(null))
         assertEquals(Format.DASH, Format.gSigned(null))
         assertEquals(Format.DASH, Format.g(null))
@@ -22,7 +22,7 @@ class FormatTest {
 
     @Test
     fun `real zero is shown as zero`() {
-        assertEquals("0", Format.speedKmh(0.0))
+        assertEquals("0", Format.speedValue(0.0))
         assertEquals("0°", Format.lean(0.3))
         assertEquals("+0.00 G", Format.gSigned(0.0))
     }
@@ -35,7 +35,7 @@ class FormatTest {
 
     @Test
     fun `speed distance and durations`() {
-        assertEquals("72", Format.speedKmh(20.0))
+        assertEquals("72", Format.speedValue(20.0))
         assertEquals("24.6 km", Format.distance(24_560.0))
         assertEquals("38:12", Format.clock(38 * 60_000L + 12_000L))
         assertEquals("1:02:45", Format.clock(3_765_000L))

@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.hud
 
+import com.ridetrack.app.ui.format.Units
 import com.ridetrack.app.ui.theme.DarkPalette
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -90,12 +91,12 @@ fun HudCard(data: HudData, settings: HudSettings, modifier: Modifier = Modifier)
         data.twoMics?.let { TwoMicMeter(it, c) }
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                Format.speedKmh(data.speedMps),
+                Format.speedValue(data.speedMps),
                 style = hudNumber.copy(fontSize = 60.sp, lineHeight = 56.sp),
                 color = if (data.speedMps == null) RtColors.TextTertiary else c.text,
             )
             Spacer(Modifier.width(4.dp))
-            Text("km/h", fontSize = 12.sp, color = c.muted, modifier = Modifier.padding(bottom = 8.dp))
+            Text(Units.speedUnit, fontSize = 12.sp, color = c.muted, modifier = Modifier.padding(bottom = 8.dp))
             if (data.gear != null) {
                 Spacer(Modifier.weight(1f))
                 Column(horizontalAlignment = Alignment.End) {
@@ -119,7 +120,7 @@ fun HudCard(data: HudData, settings: HudSettings, modifier: Modifier = Modifier)
             HudLayout.MINIMAL -> Unit
             HudLayout.TOURING -> Cells(
                 c,
-                "Distance" to (data.distanceM?.let { Format.distanceValue(it) + " km" } ?: Format.DASH),
+                "Distance" to (data.distanceM?.let { Format.distanceValue(it) + " " + Units.distanceUnit } ?: Format.DASH),
                 "Time" to (data.elapsedMillis?.let(Format::clock) ?: Format.DASH),
                 "Avg" to Format.speedWithUnit(data.avgSpeedMps),
                 "Max" to Format.speedWithUnit(data.maxSpeedMps),
@@ -356,14 +357,14 @@ fun HudBubble(data: HudData, settings: HudSettings, modifier: Modifier = Modifie
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(Format.speedKmh(data.speedMps), style = hudNumber.copy(fontSize = 30.sp, lineHeight = 30.sp), color = c.text)
+        Text(Format.speedValue(data.speedMps), style = hudNumber.copy(fontSize = 30.sp, lineHeight = 30.sp), color = c.text)
         // The camera row's right side, when it has something to say; otherwise the unit.
         val cam = HudTopRow.right(data)
         if (cam.tone == HudTopRow.Tone.REC || cam.tone == HudTopRow.Tone.ACCENT || cam.tone == HudTopRow.Tone.WARNING || cam.tone == HudTopRow.Tone.PHONE) {
             // "cam · phone" is too wide for the bubble: just "phone".
             Text(if (cam.text == "cam · phone") "phone" else cam.text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = toneColor(cam.tone, c), maxLines = 1, modifier = Modifier.offset(y = (-2).dp))
         } else {
-            Text("km/h", fontSize = 10.sp, color = c.muted, modifier = Modifier.offset(y = (-2).dp))
+            Text(Units.speedUnit, fontSize = 10.sp, color = c.muted, modifier = Modifier.offset(y = (-2).dp))
         }
     }
 }

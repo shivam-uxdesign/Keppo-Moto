@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.live
 
+import com.ridetrack.app.ui.format.Units
 import com.ridetrack.app.ui.theme.LocalRtPalette
 import android.content.Context
 import android.content.Intent
@@ -270,12 +271,12 @@ fun SpeedWithRevs(frame: TelemetryFrame, redlineRpm: Int?, modifier: Modifier = 
         RevMeter(frame.rpm, redlineRpm, Modifier.fillMaxWidth(0.94f)) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 18.dp)) {
                 Text(
-                    Format.speedKmh(speed),
+                    Format.speedValue(speed),
                     style = RtType.speedHero.copy(fontSize = 112.sp, lineHeight = 112.sp),
                     color = if (speed == null) RtColors.TextTertiary else RtColors.TextPrimary,
                     textAlign = TextAlign.Center,
                 )
-                Text("km/h", style = RtType.body, color = RtColors.TextSecondary)
+                Text(Units.speedUnit, style = RtType.body, color = RtColors.TextSecondary)
                 Spacer(Modifier.height(14.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (frame.gear != null) {

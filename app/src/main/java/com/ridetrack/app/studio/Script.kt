@@ -1,5 +1,6 @@
 package com.ridetrack.app.studio
 
+import com.ridetrack.app.ui.format.Units
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.roundToLong
@@ -166,7 +167,7 @@ object ScriptWriter {
         appendLine("FOOTAGE (each clip: key, length, look, top speed, events, then what was said with times in seconds from the clip's start)")
         footage.forEach { f ->
             append("- ${f.key} · ${"%.1f".format(java.util.Locale.US, f.durationMs / 1000.0)} s · ${f.look}")
-            if (f.kmhMax > 0) append(" · up to ${f.kmhMax} km/h")
+            if (f.kmhMax > 0) append(" · up to ${Units.kmhText(f.kmhMax.toDouble())}")
             if (f.events.isNotBlank()) append(" · ${f.events}")
             if (f.label.isNotBlank()) append(" · ${f.label}")
             appendLine()
@@ -677,7 +678,7 @@ object ScriptWriter {
             used += shot
             out += (f.startMillis + a) to Script(
                 format = PieceFormat.CAPTION,
-                title = listOfNotNull(if (f.look == "road") "The road" else "Riding", f.kmhMax.takeIf { it > 0 }?.let { "$it km/h" }, f.label.takeIf { it.isNotBlank() }).joinToString(" · "),
+                title = listOfNotNull(if (f.look == "road") "The road" else "Riding", f.kmhMax.takeIf { it > 0 }?.let { Units.kmhText(it.toDouble()) }, f.label.takeIf { it.isNotBlank() }).joinToString(" · "),
                 why = "One riding shot with something funny written on it",
                 lengthSec = ((b - a) / 1000).toInt().coerceIn(PieceFormat.CAPTION.minSec, PieceFormat.CAPTION.maxSec),
                 shape = "one_take", hookLine = null, postCaption = null,
@@ -698,7 +699,7 @@ object ScriptWriter {
     fun jokesPrompt(clips: List<Pair<String, Footage>>): String = buildString {
         appendLine("A motorcycle rider (Hinglish is fine) posts short riding clips with funny or relatable text written on them, like memes.")
         appendLine("For each riding shot below, write 1–3 short lines shown one after another (the joke, not a description): falling, loving the bike, fuel prices, mom asking where you are, traffic, the road.")
-        clips.forEach { (k, f) -> appendLine("$k: ${f.look} shot, up to ${f.kmhMax} km/h" + (if (f.events.isNotBlank()) ", ${f.events}" else "") + (if (f.label.isNotBlank()) ", at ${f.label}" else "")) }
+        clips.forEach { (k, f) -> appendLine("$k: ${f.look} shot, up to ${Units.kmhText(f.kmhMax.toDouble())}" + (if (f.events.isNotBlank()) ", ${f.events}" else "") + (if (f.label.isNotBlank()) ", at ${f.label}" else "")) }
         append("Reply with JSON only: {\"clips\":[{\"key\":\"k1\",\"lines\":[\"...\"]}]}")
     }
 

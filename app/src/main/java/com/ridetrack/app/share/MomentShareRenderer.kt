@@ -1,5 +1,6 @@
 package com.ridetrack.app.share
 
+import com.ridetrack.app.ui.format.Units
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -113,7 +114,7 @@ class MomentShareRenderer(context: Context) {
             text(c, line, chipEnd, top + 57f, regular, 30f, WHITE, alpha = 230, maxWidth = room)
         }
         val cols = buildList {
-            if (o.shows(MomentField.SPEED, on)) add(Triple("SPEED", Format.speedKmh(o.speedMps), "km/h"))
+            if (o.shows(MomentField.SPEED, on)) add(Triple("SPEED", Format.speedValue(o.speedMps), Units.speedUnit))
             if (o.shows(MomentField.LEAN, on)) add(Triple("LEAN", leanText(o.lean), ""))
             if (o.shows(MomentField.G_FORCE, on)) add(Triple(if ((o.gForce ?: 0.0) < 0) "BRAKING" else "ACCEL", gText(o.gForce), "G"))
         }
@@ -158,10 +159,10 @@ class MomentShareRenderer(context: Context) {
         val kmh = (speedMps ?: 0.0) * 3.6
         val f = (kmh / 160.0).toFloat().coerceIn(0f, 1f)
         if (f > 0f) c.drawArc(oval, 150f, 240f * f, false, stroke(14f, ACCENT).apply { setShadowLayer(12f, 0f, 0f, withAlpha(ACCENT, 160)) })
-        val v = Format.speedKmh(speedMps)
+        val v = Format.speedValue(speedMps)
         val vw = measure(v, light, 150f, -0.03f)
         text(c, v, cx - vw / 2f, cy + 40f, light, 150f, WHITE, tracking = -0.03f)
-        centered(c, "km/h", cy + 96f, regular, 30f, WHITE, x = cx, alpha = 210)
+        centered(c, Units.speedUnit, cy + 96f, regular, 30f, WHITE, x = cx, alpha = 210)
     }
 
     /** A little horizon tilted as the bike was, with the angle under it. */
@@ -247,8 +248,8 @@ class MomentShareRenderer(context: Context) {
     }
 
     private fun valueChips(o: MomentOverlay, on: Set<MomentField>): List<Triple<String, String, Int>> = buildList {
-        if (o.shows(MomentField.SPEED, on)) add(Triple(Format.speedKmh(o.speedMps), "km/h", WHITE))
-        if (o.shows(MomentField.TOP_SPEED, on)) add(Triple(Format.speedKmh(o.topSpeedMps), "top km/h", WHITE))
+        if (o.shows(MomentField.SPEED, on)) add(Triple(Format.speedValue(o.speedMps), Units.speedUnit, WHITE))
+        if (o.shows(MomentField.TOP_SPEED, on)) add(Triple(Format.speedValue(o.topSpeedMps), "top " + Units.speedUnit, WHITE))
         if (o.shows(MomentField.LEAN, on)) add(Triple(leanText(o.lean), "", if ((o.lean ?: 0.0) < 0) LEFT else RIGHT))
         if (o.shows(MomentField.G_FORCE, on)) add(Triple(gText(o.gForce), "G", if ((o.gForce ?: 0.0) < 0) BRAKE else ACCEL))
     }

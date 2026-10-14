@@ -1137,3 +1137,20 @@ The rider recorded with two mics (DJI Mic Mini, mono) and saw no sign of it anyw
    - Elsewhere, card SMS reading and the petrol price lookup are **Beta**, off by default.
    - Their failures are recorded for review (error log and Crashlytics) without any SMS text: only the kind of failure, the country and the currency.
 3. **Captions in any language:** Gemini writes what the rider says in their own language. Hindi mixed with English stays Hinglish in English letters.
+
+### Built (14 Oct)
+- **Captions:**
+  - One language rule (`SpeechLanguage.RULE`) for transcripts and every caption prompt: the rider's own language, never translated, Hindi in English letters.
+  - English subtitles are now added for any non-English line.
+- **Fuel:**
+  - `FuelRegion` gives the currency from the phone's country; amounts show as "$12.40", "€61.20", "₹1,250" (no cents for rupiah, dong and won).
+  - Outside India, card SMS reading (and the price lookup that follows it) is Beta and off by default. It understands many currencies and number styles ("1.234,56").
+  - Failures go to the error log and Crashlytics as `FuelBetaIssue`: only the kind of failure, the country, the currency, and each message's shape ("spend+currency+number"), never its words.
+  - The fill-up dialog accepts a comma as the decimal point.
+- **Units:**
+  - `Units` (Compose state) is read by `Format` and every screen, share card, Reel overlay, sticker and Gemini prompt.
+  - It's set from the phone's country (US, GB, LR, MM: miles) or by the rider in Profile › Appearance.
+  - Stored values stay metric. Odometer and reminder fields are typed in the rider's unit and saved in km.
+  - Fuel: US in gallons and US mpg; UK in litres with imperial mpg.
+  - The ride export CSV stays metric (its columns say so).
+- **Fallback Instagram caption:** "#ridersofindia" became "#motorcycle".

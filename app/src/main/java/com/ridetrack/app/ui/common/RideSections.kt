@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.common
 
+import com.ridetrack.app.ui.format.Units
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -77,7 +78,7 @@ fun RideDynamics(
         DynamicsEntry("Lean", lean, "", RtColors.Left, onLean, Modifier.weight(1.4f))
         DynamicsEntry("Braking", s.maxBrakeG?.let { AnnotatedString(String.format(Locale.US, "%.2f", kotlin.math.abs(it))) }, " G", RtColors.Brake, onBrake, Modifier.weight(1f))
         DynamicsEntry("Accel", s.maxAccelG?.let { AnnotatedString(String.format(Locale.US, "%.2f", kotlin.math.abs(it))) }, " G", RtColors.Accel, onAccel, Modifier.weight(1f))
-        DynamicsEntry("Top speed", s.maxSpeedMps?.let { AnnotatedString(Format.speedKmh(it)) }, " km/h", RtColors.GForce, onTopSpeed, Modifier.weight(1f))
+        DynamicsEntry("Top speed", s.maxSpeedMps?.let { AnnotatedString(Format.speedValue(it)) }, " " + Units.speedUnit, RtColors.GForce, onTopSpeed, Modifier.weight(1f))
     }
     Spacer(Modifier.height(RtDimens.xs))
     Text(

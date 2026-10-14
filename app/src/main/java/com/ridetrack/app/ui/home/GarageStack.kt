@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.home
 
+import com.ridetrack.app.ui.format.Units
 import com.ridetrack.app.ui.theme.RideDark
 import com.ridetrack.app.ui.theme.LocalRtPalette
 import androidx.compose.runtime.setValue
@@ -209,7 +210,7 @@ private fun PeekTab(bike: Bike, tint: Pair<Color, Color>, odometerKm: Double?, i
     ) {
         Text(bike.displayName, style = RtType.bodyStrong.copy(fontSize = 14.sp), color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         Text(
-            odometerKm?.let { "${odometerText(it)} km" } ?: "Set odometer",
+            odometerKm?.let { "${odometerText(it)} ${Units.distanceUnit}" } ?: "Set odometer",
             style = RtType.caption.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp),
             color = if (odometerKm != null) RtColors.TextPrimary.copy(alpha = 0.7f) else RtColors.Primary,
         )
@@ -459,7 +460,7 @@ private fun BikeStatsFace(bike: Bike, tint: Pair<Color, Color>, stats: BikeStats
 
 private const val FLIP_MS = 650
 
-private fun odometerText(km: Double): String = String.format(Locale.US, "%,d", km.roundToLong())
+private fun odometerText(km: Double): String = Format.odometer(km)
 
 @Composable
 private fun OdometerReadout(km: Double?, onEditBike: () -> Unit) {
@@ -480,7 +481,7 @@ private fun OdometerReadout(km: Double?, onEditBike: () -> Unit) {
                 color = RtColors.TextPrimary,
             )
             Text(
-                if (km != null) "km" else "tap to set",
+                if (km != null) Units.distanceUnit else "tap to set",
                 style = RtType.caption,
                 color = if (km != null) RtColors.TextPrimary.copy(alpha = 0.7f) else RtColors.Primary,
                 modifier = Modifier.padding(bottom = 3.dp),

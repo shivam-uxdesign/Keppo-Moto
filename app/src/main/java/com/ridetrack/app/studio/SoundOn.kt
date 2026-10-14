@@ -1,5 +1,7 @@
 package com.ridetrack.app.studio
 
+import com.ridetrack.app.ui.format.Units
+
 /**
  * "Sound on 🔊" pieces: a fast stretch with only the engine's sound (the DJI's engine channel when
  * there is one, else the clip's own) and the speed on screen, no talking. Pure, unit-tested.
@@ -22,7 +24,7 @@ object SoundOn {
         .map { (f, shot) ->
             Script(
                 format = PieceFormat.SHORT,
-                title = "Sound on · ${f.kmhMax} km/h",
+                title = "Sound on · ${Units.kmhText(f.kmhMax.toDouble())}",
                 why = "Just the engine: a fast stretch, no talking",
                 lengthSec = ((shot.durMs + 999) / 1000).toInt().coerceIn(PieceFormat.SHORT.minSec, PieceFormat.SHORT.maxSec),
                 shape = SHAPE,

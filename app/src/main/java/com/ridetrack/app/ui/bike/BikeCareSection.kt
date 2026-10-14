@@ -1,5 +1,7 @@
 package com.ridetrack.app.ui.bike
 
+import kotlin.math.roundToInt
+import com.ridetrack.app.ui.format.Units
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,7 +56,7 @@ fun BikeCareSection(
     RtCard {
         if (odometerKm == null) {
             Text(
-                "Set this bike's odometer (Edit) so km reminders can count down with your rides.",
+                "Set this bike's odometer (Edit) so ${Units.distanceUnit} reminders can count down with your rides.",
                 style = RtType.caption,
                 color = RtColors.Warning,
                 modifier = Modifier.padding(bottom = 10.dp),
@@ -79,7 +81,7 @@ fun BikeCareSection(
             initial = editing,
             onSave = { name, km, days ->
                 val e = editing
-                onSave(e?.copy(name = name, everyKm = km, everyDays = days) ?: BikeCare.new(bike.id, name, km, days, odometerKm, System.currentTimeMillis()))
+                onSave(e?.copy(name = name, everyKm = km?.let { Units.toKm(it.toDouble()).roundToInt() }, everyDays = days) ?: BikeCare.new(bike.id, name, km?.let { Units.toKm(it.toDouble()).roundToInt() }, days, odometerKm, System.currentTimeMillis()))
                 adding = false
                 editing = null
             },
@@ -98,7 +100,8 @@ private fun CareDialog(
     onDismiss: () -> Unit,
 ) {
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
-    var km by remember { mutableStateOf(initial?.everyKm?.toString().orEmpty()) }
+    // Shown and typed in the rider's unit; saved in km.
+    var km by remember { mutableStateOf(initial?.everyKm?.let { Units.fromKm(it.toDouble()).roundToInt().toString() }.orEmpty()) }
     var days by remember { mutableStateOf(initial?.everyDays?.toString().orEmpty()) }
     val kmVal = km.toIntOrNull()?.takeIf { it in 1..100_000 }
     val daysVal = days.toIntOrNull()?.takeIf { it in 1..3_650 }
@@ -115,7 +118,7 @@ private fun CareDialog(
                                 selected = name == p.name,
                                 onClick = {
                                     name = p.name
-                                    km = p.everyKm?.toString().orEmpty()
+                                    km = p.everyKm?.let { Units.fromKm(it.toDouble()).roundToInt().toString() }.orEmpty()
                                     days = p.everyDays?.toString().orEmpty()
                                 },
                                 label = { Text(p.name) },
@@ -126,7 +129,7 @@ private fun CareDialog(
                 OutlinedTextField(name, { name = it.take(40) }, label = { Text("Name") }, singleLine = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        km, { km = it.filter(Char::isDigit).take(6) }, label = { Text("Every km") }, singleLine = true,
+                        km, { km = it.filter(Char::isDigit).take(6) }, label = { Text("Every ${Units.distanceUnit}") }, singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f),
                     )
                     OutlinedTextField(

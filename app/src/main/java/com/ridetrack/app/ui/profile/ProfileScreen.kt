@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.profile
 
+import com.ridetrack.app.ui.format.Units
 import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -118,7 +119,7 @@ fun ProfileScreen(onOpenPage: (ProfilePage) -> Unit, onOpenHudSettings: () -> Un
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Total(t.rideCount.toString(), "rides", Modifier.weight(1f))
-                    Total(Format.distanceValue(t.distanceM), "km", Modifier.weight(1f))
+                    Total(Format.distanceValue(t.distanceM), Units.distanceUnit, Modifier.weight(1f))
                     Total(Format.duration(t.movingMillis), "riding", Modifier.weight(1f))
                     Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = "All statistics", tint = RtColors.TextSecondary)
                 }
@@ -145,7 +146,7 @@ fun ProfileScreen(onOpenPage: (ProfilePage) -> Unit, onOpenHudSettings: () -> Un
         }
 
         Group("App") {
-            NavRow(Icons.Outlined.Palette, "Appearance", st.appTheme.label) { onOpenPage(ProfilePage.APPEARANCE) }
+            NavRow(Icons.Outlined.Palette, "Appearance", st.appTheme.label + " · " + com.ridetrack.app.ui.format.Units.distanceUnit) { onOpenPage(ProfilePage.APPEARANCE) }
             Line()
             NavRow(Icons.Outlined.Code, "Developer", if (st.demoMode) "Demo mode on" else "Demo mode, testing") { onOpenPage(ProfilePage.DEVELOPER) }
             Line()
@@ -271,16 +272,16 @@ private fun StatisticsPage(s: ProfileUiState) {
     }
     TwoColumn(
         left = { StatTile("Total rides", t.rideCount.toString(), it) },
-        right = { StatTile("Total distance", Format.distanceValue(t.distanceM), it, unit = "km") },
+        right = { StatTile("Total distance", Format.distanceValue(t.distanceM), it, unit = Units.distanceUnit) },
     )
     Spacer(Modifier.height(RtDimens.cardSpacing))
     TwoColumn(
         left = { StatTile("Riding time", Format.duration(t.movingMillis), it) },
-        right = { StatTile("Longest ride", t.longestRideM?.let(Format::distanceValue) ?: Format.DASH, it, unit = "km") },
+        right = { StatTile("Longest ride", t.longestRideM?.let(Format::distanceValue) ?: Format.DASH, it, unit = Units.distanceUnit) },
     )
     Spacer(Modifier.height(RtDimens.cardSpacing))
     TwoColumn(
-        left = { StatTile("Max speed", Format.speedKmh(t.maxSpeedMps), it, unit = "km/h") },
+        left = { StatTile("Max speed", Format.speedValue(t.maxSpeedMps), it, unit = Units.speedUnit) },
         right = { StatTile("Total stops", t.totalStops.toString(), it) },
     )
     Spacer(Modifier.height(RtDimens.cardSpacing))
@@ -356,6 +357,28 @@ private fun AppearancePage(s: ProfileUiState, vm: ProfileViewModel) {
                     selected = s.settings.appTheme == t,
                     onClick = { vm.setAppTheme(t) },
                     label = { Text(t.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = RtColors.PrimaryContainer,
+                        selectedLabelColor = RtColors.TextPrimary,
+                        labelColor = RtColors.TextSecondary,
+                    ),
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(RtDimens.md))
+    RtCard {
+        val country = com.ridetrack.app.ui.format.Units.country
+        val auto = com.ridetrack.app.ui.format.Units.defaultFor(country)
+        Text("Units", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+        Text("Speed and distance everywhere: the pop-up, rides, share cards and Reels.", style = RtType.caption, color = RtColors.TextSecondary)
+        Spacer(Modifier.height(RtDimens.sm))
+        Row(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
+            (listOf(null) + com.ridetrack.app.ui.format.UnitSystem.entries).forEach { u ->
+                FilterChip(
+                    selected = s.settings.units == u,
+                    onClick = { vm.setUnits(u) },
+                    label = { Text(u?.label ?: "Automatic (${if (auto == com.ridetrack.app.ui.format.UnitSystem.IMPERIAL) "mi" else "km"})") },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = RtColors.PrimaryContainer,
                         selectedLabelColor = RtColors.TextPrimary,

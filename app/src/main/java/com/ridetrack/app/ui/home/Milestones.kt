@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.home
 
+import com.ridetrack.app.ui.format.Units
 import com.ridetrack.app.ui.format.Format
 import com.ridetrack.telemetry.model.DataSourceKind
 import com.ridetrack.telemetry.model.Ride
@@ -29,7 +30,7 @@ object Milestones {
         val prevTop = before.filter { it.stats.maxSpeedMps != null }.maxByOrNull { it.stats.maxSpeedMps!! }
         if (top != null && prevTop != null && top > prevTop.stats.maxSpeedMps!!) {
             out += Milestone(
-                "New top speed: ${kmh1(top)} km/h",
+                "New top speed: ${kmh1(top)} ${Units.speedUnit}",
                 "${latest.name} · was ${kmh1(prevTop.stats.maxSpeedMps!!)} on ${day(prevTop.startTimeMillis, now, zone)}",
             )
         }
@@ -42,17 +43,18 @@ object Milestones {
         if (latest.stats.distanceM > prevLongest && latest.stats.distanceM >= 1_000) {
             out += Milestone("Longest ride yet: ${Format.distance(latest.stats.distanceM)}", "${latest.name} · was ${Format.distance(prevLongest)}")
         }
-        val totalBefore = before.sumOf { it.stats.distanceM } / 1000
-        val total = totalBefore + latest.stats.distanceM / 1000
-        DISTANCES_KM.lastOrNull { it > totalBefore && it <= total }?.let { km ->
-            out += Milestone("${String.format(Locale.US, "%,d", km)} km ridden", "Across ${real.size} rides with Keppo Moto")
+        // The same round numbers in the rider's unit: 1,000 km, or 1,000 mi.
+        val totalBefore = Units.distance(before.sumOf { it.stats.distanceM })
+        val total = totalBefore + Units.distance(latest.stats.distanceM)
+        DISTANCES_KM.lastOrNull { it > totalBefore && it <= total }?.let { n ->
+            out += Milestone("${String.format(Locale.US, "%,d", n)} ${Units.distanceUnit} ridden", "Across ${real.size} rides with Keppo Moto")
         }
         return out
     }
 
     private fun maxLean(r: Ride): Double? = listOfNotNull(r.stats.maxLeftLeanDeg, r.stats.maxRightLeanDeg).maxOrNull()
 
-    private fun kmh1(mps: Double) = String.format(Locale.US, "%.1f", mps * 3.6)
+    private fun kmh1(mps: Double) = String.format(Locale.US, "%.1f", Units.speed(mps))
 
     /** "Saturday" within the week, else the date. */
     private fun day(millis: Long, now: Long, zone: ZoneId) =

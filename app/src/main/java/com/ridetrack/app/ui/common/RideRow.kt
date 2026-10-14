@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.common
 
+import com.ridetrack.app.ui.format.Units
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import java.io.File
@@ -91,7 +92,7 @@ fun RideRow(
                 }
                 Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.Bottom) {
-                    MetricValue(Format.distanceValue(ride.stats.distanceM), "km", RtType.metricM)
+                    MetricValue(Format.distanceValue(ride.stats.distanceM), Units.distanceUnit, RtType.metricM)
                     MetricValue(Format.duration(ride.durationMillis), null, RtType.metricM)
                 }
                 if (!compact) {

@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.moments
 
+import com.ridetrack.app.ui.format.Units
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -267,7 +268,7 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
             val g = point?.longitudinalG
             StatRow(
                 listOf(
-                    Stat("Speed", Format.speedKmh(point?.speedMps ?: current.speedMps.takeIf { !clip }), "km/h"),
+                    Stat("Speed", Format.speedValue(point?.speedMps ?: current.speedMps.takeIf { !clip }), Units.speedUnit),
                     Stat("Lean", Format.lean(point?.leanDeg), color = leanColor(point?.leanDeg)),
                     Stat(
                         when {

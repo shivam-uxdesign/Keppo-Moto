@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.hud
 
+import com.ridetrack.app.ui.format.Units
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -121,8 +122,8 @@ fun ViewfinderCard(data: HudData, video: HudVideo, frame: ImageBitmap?, modifier
 
         Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(12.dp)) {
             Row(verticalAlignment = Alignment.Bottom) {
-                Text(Format.speedKmh(data.speedMps), style = Mono.copy(fontSize = 38.sp, lineHeight = 38.sp, letterSpacing = (-1).sp), color = Color.White)
-                Text("km/h", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f), style = TextStyle(shadow = Shade), modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
+                Text(Format.speedValue(data.speedMps), style = Mono.copy(fontSize = 38.sp, lineHeight = 38.sp, letterSpacing = (-1).sp), color = Color.White)
+                Text(Units.speedUnit, fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f), style = TextStyle(shadow = Shade), modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
                 Spacer(Modifier.weight(1f))
                 Column(horizontalAlignment = Alignment.End) {
                     Text(Format.g(data.combinedG), style = Mono.copy(fontSize = 13.sp), color = Color(0xFFFFD166))

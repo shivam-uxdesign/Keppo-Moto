@@ -1,5 +1,6 @@
 package com.ridetrack.app.studio
 
+import com.ridetrack.app.ui.format.Units
 import android.net.Uri
 import com.ridetrack.app.AppContainer
 import com.ridetrack.app.moments.Moment
@@ -509,7 +510,7 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
 
     fun fallbackCaption(): String {
         val cd = card ?: return ""
-        return "${cd.title} 🏍️\n${cd.subtitle}\n\n#motovlog #bikelife #ridersofindia #keppomoto"
+        return "${cd.title} 🏍️\n${cd.subtitle}\n\n#motovlog #bikelife #motorcycle #keppomoto"
     }
 
     private fun rideCard(name: String, start: Long, distanceM: Double, durMs: Long, topMps: Double?, moments: Int): RideCard {
@@ -518,7 +519,7 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         // The ride's saved stats can cover only part of it (a ride that survived the app dying):
         // take whichever is bigger, the stats or what the samples show, so the card agrees with the badges.
         val fromSamples = StudioNumbers.summary(samples)
-        val km = String.format(Locale.US, "%.1f", maxOf(distanceM, fromSamples.distanceM) / 1000)
+        val km = String.format(Locale.US, "%.1f", Units.distance(maxOf(distanceM, fromSamples.distanceM)))
         val min = (maxOf(durMs, fromSamples.movingMs) / 60_000).coerceAtLeast(1)
         val topKmh = maxOf((topMps ?: 0.0) * 3.6, fromSamples.topKmh)
         val pts = samples.filter { it.latitude != null && it.longitude != null }
@@ -539,9 +540,9 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         }
         return RideCard(
             title = name,
-            subtitle = "$day · $km km · $min min",
+            subtitle = "$day · $km ${Units.distanceUnit} · $min min",
             route = norm,
-            stats = listOf(km to "km", "${topKmh.roundToInt()}" to "top km/h", "$min" to "minutes", "$moments" to "moments"),
+            stats = listOf(km to Units.distanceUnit, "${Units.fromKmh(topKmh)}" to "top ${Units.speedUnit}", "$min" to "minutes", "$moments" to "moments"),
         )
     }
 

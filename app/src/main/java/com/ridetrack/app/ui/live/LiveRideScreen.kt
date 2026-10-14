@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.live
 
+import com.ridetrack.app.ui.format.Units
 import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.runtime.ReadOnlyComposable
 import android.view.WindowManager
@@ -337,13 +338,13 @@ private fun SpeedAndLean(frame: TelemetryFrame?, chrome: LiveChrome) {
             SpeedWithRevs(frame, chrome.active?.redlineRpm)
         } else {
             Text(
-                Format.speedKmh(speed),
+                Format.speedValue(speed),
                 style = RtType.speedHero,
                 color = if (speed == null) RtColors.TextTertiary else RtColors.TextPrimary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.semantics { contentDescription = "Speed ${Format.speedWithUnit(speed)}" },
             )
-            Text("km/h", style = RtType.body, color = RtColors.TextSecondary)
+            Text(Units.speedUnit, style = RtType.body, color = RtColors.TextSecondary)
         }
         if (speed == null) {
             val msg = when (frame?.gpsQuality) {
@@ -380,8 +381,8 @@ private data class Cell(val label: String, val value: String, val unit: String?,
 private fun MetricGrid(frame: TelemetryFrame?, chrome: LiveChrome) {
     val stats = frame?.stats
     val cells = buildList {
-        add(Cell("Distance", stats?.let { Format.distanceValue(it.distanceM) } ?: Format.DASH, "km"))
-        add(Cell("Avg speed", Format.speedKmh(stats?.avgSpeedMps), "km/h"))
+        add(Cell("Distance", stats?.let { Format.distanceValue(it.distanceM) } ?: Format.DASH, Units.distanceUnit))
+        add(Cell("Avg speed", Format.speedValue(stats?.avgSpeedMps), Units.speedUnit))
         chrome.metrics.forEach { add(metricCell(it, frame)) }
     }
     Column {
@@ -420,7 +421,7 @@ private fun metricCell(metric: LiveMetric, frame: TelemetryFrame?): Cell {
             }
             Cell("Max lean", v, null)
         }
-        LiveMetric.MAX_SPEED -> Cell("Max speed", Format.speedKmh(s?.maxSpeedMps), "km/h")
+        LiveMetric.MAX_SPEED -> Cell("Max speed", Format.speedValue(s?.maxSpeedMps), Units.speedUnit)
         LiveMetric.HEADING -> Cell("Heading", Format.heading(frame?.headingDeg), null)
         LiveMetric.ALTITUDE -> Cell("Altitude", Format.altitude(frame?.altitudeM), null)
     }

@@ -1,5 +1,6 @@
 package com.ridetrack.app.safety
 
+import com.ridetrack.app.ui.format.Units
 import com.ridetrack.app.data.MedicalInfo
 import java.time.Instant
 import java.time.ZoneId
@@ -37,7 +38,7 @@ object AlertMessage {
         append(r.riderName.ifBlank { "The rider" })
         if (r.bikeName.isNotBlank()) append(" on ").append(r.bikeName)
         append(" at ").append(time.format(Instant.ofEpochMilli(r.timeMillis).atZone(zone))).append('.')
-        r.speedBeforeMps?.let { append(" Last speed ").append((it * 3.6).roundToInt()).append(" km/h.") }
+        r.speedBeforeMps?.let { append(" Last speed ").append(com.ridetrack.app.ui.format.Format.speedWithUnit(it)).append(".") }
         if (r.latitude != null && r.longitude != null) {
             val age = r.locationAgeMillis?.takeIf { it >= 60_000L }
             if (age != null) append(" Last known location (").append(ageText(age)).append(" before): ")

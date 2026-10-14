@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.bike
 
+import com.ridetrack.app.ui.format.Units
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -123,7 +124,7 @@ fun BikeEditScreen(bikeId: String?, onDone: () -> Unit) {
                 color = RtColors.TextTertiary,
                 modifier = Modifier.padding(top = 6.dp, bottom = RtDimens.xs),
             )
-            Field("Odometer (km)", f.odometerKm, "Optional", { v -> vm.update { it.copy(odometerKm = v.filter(Char::isDigit).take(7)) } }, number = true, error = f.odometerError)
+            Field("Odometer (${Units.distanceUnit})", f.odometerKm, "Optional", { v -> vm.update { it.copy(odometerKm = v.filter(Char::isDigit).take(7)) } }, number = true, error = f.odometerError)
             Text(
                 "Enter the reading on your bike's odometer. Rides you record on this bike are added to it automatically. " +
                     "Redline marks the red zone on the rev meter, which appears once an OBD adapter is connected.",

@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.home
 
+import com.ridetrack.app.ui.format.Units
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -252,9 +253,9 @@ fun LastRideCard(
         }
         val lean = listOfNotNull(r.stats.maxLeftLeanDeg, r.stats.maxRightLeanDeg).maxOfOrNull { abs(it) }
         Row(Modifier.padding(top = 14.dp)) {
-            Num(Format.distanceValue(r.stats.distanceM), "km")
+            Num(Format.distanceValue(r.stats.distanceM), Units.distanceUnit)
             Num(Format.duration(r.stats.movingMillis), "riding")
-            Num(Format.speedKmh(r.stats.maxSpeedMps), "top km/h")
+            Num(Format.speedValue(r.stats.maxSpeedMps), "top " + Units.speedUnit)
             Num(Format.leanMagnitude(lean), "max lean")
         }
         if (justRode) {

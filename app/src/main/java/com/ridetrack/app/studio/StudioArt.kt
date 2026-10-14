@@ -1173,6 +1173,9 @@ class StudioArt(
 
     /** A sticker: live speed or lean, an emoji, an arrow or a circle; fades and scales in, fades out. */
     fun drawSticker(c: Canvas, st: StickerItem, localMs: Long, kmh: Int, lean: Int?, vibe: Vibe = Vibe.HYPE) {
+        // Shown in the rider's unit; the gauge still fills by km/h.
+        val shown = com.ridetrack.app.ui.format.Units.fromKmh(kmh.toDouble())
+        val unit = com.ridetrack.app.ui.format.Units.speedUnit
         val ms = tq(vibe, localMs.toFloat())
         val dur = (st.endMs - st.startMs).toFloat()
         val q = Tok.out(Tok.prog(ms, Tok.T_BASE))
@@ -1198,9 +1201,9 @@ class StudioArt(
                 ink(acc, 1f); c.drawArc(arc, ARC_FROM, ARC_SWEEP * (kmh.coerceAtLeast(0) / ARC_TOP_KMH).coerceIn(0f, 1f), false, p)
                 p.style = Paint.Style.FILL
                 type(numFace(vibe), Tok.CAP_L, Tok.WHITE, Paint.Align.CENTER); ink(Tok.WHITE, 1f)
-                c.drawText(if (kmh >= 0) "$kmh" else "–", px, mid(py - Tok.SP_XS * s), p)
+                c.drawText(if (kmh >= 0) "$shown" else "–", px, mid(py - Tok.SP_XS * s), p)
                 type(labelFace(vibe), Tok.LABEL, Tok.WHITE, Paint.Align.CENTER, Tok.TRACK_CAPS); ink(Tok.WHITE, 1f)
-                c.drawText("KM/H", px, mid(py + r / 2), p)
+                c.drawText(unit.uppercase(), px, mid(py + r / 2), p)
             }
             StickerKind.LEAN -> {
                 val r = DISC * s
@@ -1250,6 +1253,9 @@ class StudioArt(
     /** The speed in the info slot (top-left), in the vibe's own way; [kmh] < 0 = none. */
     private fun speedBadge(c: Canvas, vibe: Vibe, kmh: Int, clock: String, rev: Float? = null) {
         if (kmh < 0) return
+        // Shown in the rider's unit; the rev bar still fills by km/h.
+        val shown = com.ridetrack.app.ui.format.Units.fromKmh(kmh.toDouble())
+        val unit = com.ridetrack.app.ui.format.Units.speedUnit
         fade = 1f
         val x = W * Tok.INFO_X
         val y = H * Tok.INFO_Y
@@ -1257,30 +1263,30 @@ class StudioArt(
             Vibe.HYPE -> {
                 // The number drawn as an outline, the unit small in yellow.
                 type(archivo, Tok.CAP_L, Tok.WHITE, track = POSTER_TRACK)
-                val n = "$kmh"
+                val n = "$shown"
                 val nb = mid(y)
                 p.style = Paint.Style.STROKE; p.strokeWidth = POSTER_OUTLINE * s
                 ink(Tok.WHITE, 1f); c.drawText(n, x, nb, p)
                 val nw = p.measureText(n)
                 type(geistMed, Tok.LABEL, Tok.YELLOW, track = Tok.TRACK_CAPS)
-                soft(); ink(accent(vibe), 1f); c.drawText("KM/H", x + nw + Tok.SP_S * s, nb, p)
+                soft(); ink(accent(vibe), 1f); c.drawText(unit.uppercase(), x + nw + Tok.SP_S * s, nb, p)
             }
             Vibe.CINE -> {
                 type(geistMed, Tok.LABEL, accent(vibe), track = Tok.TRACK_CAPS)
                 soft(); ink(accent(vibe), Tok.QUIET)
-                c.drawText("$kmh KM/H", x, mid(y), p)
+                c.drawText("$shown ${unit.uppercase()}", x, mid(y), p)
             }
             Vibe.CHILL -> {
                 val r = BADGE_DISC * s
                 c.save(); c.translate(x + r, y); c.rotate(PLAYFUL_BADGE_TILT)
                 p.reset(); p.isAntiAlias = true; p.color = accent(vibe); c.drawCircle(0f, 0f, r, p)
-                type(fredoka, Tok.BODY, inkOn(accent(vibe)), Paint.Align.CENTER); c.drawText("$kmh", 0f, mid(-Tok.SP_S * s), p)
-                type(fredoka, Tok.LABEL, inkOn(accent(vibe)), Paint.Align.CENTER); c.drawText("km/h", 0f, mid(r / 2 - Tok.SP_XS * s), p)
+                type(fredoka, Tok.BODY, inkOn(accent(vibe)), Paint.Align.CENTER); c.drawText("$shown", 0f, mid(-Tok.SP_S * s), p)
+                type(fredoka, Tok.LABEL, inkOn(accent(vibe)), Paint.Align.CENTER); c.drawText(unit, 0f, mid(r / 2 - Tok.SP_XS * s), p)
                 c.restore()
             }
             Vibe.VLOG -> {
                 type(geist, Tok.LABEL_L, Tok.WHITE)
-                val label = "$kmh km/h"
+                val label = "$shown $unit"
                 val bw = p.measureText(label) + 2 * Tok.SP_M * s
                 val bh = Tok.LABEL_L * s + 2 * Tok.SP_S * s
                 ink(Tok.INK, Tok.A_LOW); c.drawRoundRect(RectF(x, y - bh / 2, x + bw, y + bh / 2), bh / 2, bh / 2, p)
@@ -1289,11 +1295,11 @@ class StudioArt(
             Vibe.FILM -> {
                 type(mono, Tok.LABEL_L, accent(vibe))
                 soft(); ink(accent(vibe), 1f)
-                c.drawText(listOf("$kmh km/h", clock).filter { it.isNotBlank() }.joinToString(" · ").uppercase(), x, mid(y), p)
+                c.drawText(listOf("$shown $unit", clock).filter { it.isNotBlank() }.joinToString(" · ").uppercase(), x, mid(y), p)
             }
             Vibe.EDITORIAL -> {
                 type(geistMed, Tok.LABEL, Tok.INK, track = Tok.TRACK_CAPS_EDITORIAL)
-                val label = "$kmh KM/H"
+                val label = "$shown ${unit.uppercase()}"
                 val bw = p.measureText(label) + 2 * Tok.SP_S * s
                 val bh = Tok.LABEL * s + 2 * Tok.SP_S * s
                 ink(Tok.PAPER, 1f); c.drawRect(x, y - bh / 2, x + bw, y + bh / 2, p)
@@ -1302,13 +1308,13 @@ class StudioArt(
             Vibe.NATIVE -> {
                 type(sysReg, Tok.LABEL_L, Tok.WHITE)
                 soft(); ink(Tok.WHITE, 1f)
-                c.drawText("$kmh km/h", x, mid(y), p)
+                c.drawText("$shown $unit", x, mid(y), p)
             }
             Vibe.SPEEDTRAP -> {
                 // The bike's dash: the number, and beside it a rev bar (from the engine sound; else the speed) over "KM/H".
                 val bh = DASH_BADGE_H * s
                 type(orbitron, Tok.CAP, Tok.WHITE)
-                val nw = p.measureText("$kmh")
+                val nw = p.measureText("$shown")
                 val barW = DASH_SEGMENTS * (DASH_SEG_W + DASH_SEG_GAP) * s
                 val bw = nw + barW + (2 * Tok.SP_M + Tok.SP_S) * s
                 panel(c, x, y - bh / 2, x + bw, y + bh / 2, accent(vibe))
@@ -1316,9 +1322,9 @@ class StudioArt(
                 revBar(c, bx, y - bh / 2 + Tok.SP_S * s, rev ?: (kmh / ARC_TOP_KMH).coerceIn(0f, 1f), accent(vibe))
                 type(orbitron, Tok.CAP, Tok.WHITE); ink(Tok.WHITE, 1f)
                 val base = y + bh / 2 - Tok.SP_S * s
-                c.drawText("$kmh", x + Tok.SP_M * s, base, p)
+                c.drawText("$shown", x + Tok.SP_M * s, base, p)
                 type(orbitron, Tok.LABEL, Tok.WHITE, track = Tok.TRACK_CAPS); ink(Tok.WHITE, Tok.DIM)
-                c.drawText("KM/H", bx, base, p)
+                c.drawText(unit.uppercase(), bx, base, p)
             }
         }
         p.clearShadowLayer()

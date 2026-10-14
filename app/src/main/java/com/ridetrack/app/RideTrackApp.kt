@@ -36,7 +36,16 @@ class RideTrackApp : Application() {
         container.errors.report = container.crashReports::record
         container.crashAlerts.start()
         container.billing.start()
-        com.ridetrack.app.fuel.FuelRegion.current = com.ridetrack.app.fuel.FuelRegion.of(com.ridetrack.app.data.HomeCountry.of(this))
+        val country = com.ridetrack.app.data.HomeCountry.of(this)
+        com.ridetrack.app.fuel.FuelRegion.current = com.ridetrack.app.fuel.FuelRegion.of(country)
+        com.ridetrack.app.ui.format.Units.country = country
+        com.ridetrack.app.ui.format.Units.system = com.ridetrack.app.ui.format.Units.defaultFor(country)
+        // The rider's choice, now and when it changes (screens re-read it as settings change).
+        container.appScope.launch {
+            container.settings.settings.collect { s ->
+                com.ridetrack.app.ui.format.Units.system = s.units ?: com.ridetrack.app.ui.format.Units.defaultFor(country)
+            }
+        }
         PurgeWorker.schedule(this)
         container.appScope.launch { container.trash.purgeExpired() }
         // Rides saved offline get their place names now.

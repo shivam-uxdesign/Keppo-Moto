@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.summary
 
+import com.ridetrack.app.ui.format.Units
 import com.ridetrack.app.ui.theme.LocalRtPalette
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -111,8 +112,8 @@ fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Un
                     }
                 }
                 Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 12.dp)) {
-                    CountUpText(ride.stats.distanceM / 1000.0, 1, RtType.display)
-                    Text(" km", style = RtType.headline, color = RtColors.TextSecondary, modifier = Modifier.padding(bottom = 10.dp))
+                    CountUpText(Units.distance(ride.stats.distanceM), 1, RtType.display)
+                    Text(" " + Units.distanceUnit, style = RtType.headline, color = RtColors.TextSecondary, modifier = Modifier.padding(bottom = 10.dp))
                 }
             }
 
@@ -120,8 +121,8 @@ fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Un
             StatRow(
                 listOf(
                     Stat("Time", Format.duration(ride.durationMillis?.let { (it - ride.stats.breakMillis).coerceAtLeast(0) })),
-                    Stat("Avg", Format.speedKmh(ride.stats.avgSpeedMps), "km/h"),
-                    Stat("Max", Format.speedKmh(ride.stats.maxSpeedMps), "km/h"),
+                    Stat("Avg", Format.speedValue(ride.stats.avgSpeedMps), Units.speedUnit),
+                    Stat("Max", Format.speedValue(ride.stats.maxSpeedMps), Units.speedUnit),
                 ),
                 modifier = Modifier.riseIn(1),
             )

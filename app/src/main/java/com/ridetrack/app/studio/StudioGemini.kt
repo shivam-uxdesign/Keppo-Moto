@@ -1,5 +1,6 @@
 package com.ridetrack.app.studio
 
+import com.ridetrack.app.ui.format.Units
 import com.google.firebase.Firebase
 import com.google.firebase.ai.GenerativeModel
 import com.google.firebase.ai.ai
@@ -368,7 +369,7 @@ object StudioText {
         appendLine("These are the usable moments, in ride order. Each has an id, the time, the speed, and what the rider said (may be empty):")
         bits.forEach { b ->
             val said = b.lines.joinToString(" ") { it.text }.replace("\"", "'")
-            appendLine("- id ${b.id} · ${b.speedKmh.roundToLong()} km/h · ${(b.outMs - b.inMs) / 1000} s · \"$said\"")
+            appendLine("- id ${b.id} · ${Units.kmhText(b.speedKmh)} · ${(b.outMs - b.inMs) / 1000} s · \"$said\"")
         }
         appendLine("Instagram rewards Reels that hold viewers in the first 3 seconds, are watched to the end, and get sent to friends.")
         appendLine("Score every moment 0–10 for how well it would hold a viewer (funny, energetic, relatable or a good line scores high; a blooper is great).")

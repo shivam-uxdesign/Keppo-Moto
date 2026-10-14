@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.bike
 
+import com.ridetrack.app.ui.format.Units
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.Uri
@@ -198,7 +199,7 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
                 c.bikes.get(bikeId)?.let { b ->
                     existing = b
                     val reading = Odometer.readingKm(b, c.rides.observeCompleted().first())
-                    initialOdometer = reading?.let { String.format(Locale.US, "%d", it.roundToLong()) }.orEmpty()
+                    initialOdometer = reading?.let { String.format(Locale.US, "%d", Units.fromKm(it).roundToLong()) }.orEmpty()
                     _form.value = BikeForm(
                         make = b.make,
                         model = b.model,
@@ -249,7 +250,8 @@ class BikeEditViewModel(private val c: AppContainer, private val bikeId: String?
         val (odometer, odometerAt) = when {
             f.odometerKm.isBlank() -> null to null
             prev != null && f.odometerKm == initialOdometer -> prev.odometerKm to prev.odometerSetAtMillis
-            else -> f.odometerKm.toLong().toDouble() to System.currentTimeMillis()
+            // Typed in the rider's unit (km or mi); kept in km.
+            else -> Units.toKm(f.odometerKm.toLong().toDouble()) to System.currentTimeMillis()
         }
         val bike = Bike(
             id = prev?.id ?: id,

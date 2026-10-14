@@ -17,16 +17,21 @@ object Format {
 
     enum class LeanSide { LEFT, RIGHT, UPRIGHT }
 
-    fun speedKmh(mps: Double?): String = mps?.let { (it * 3.6).roundToInt().toString() } ?: DASH
+    /** A speed in the rider's unit (km/h or mph), rounded; [DASH] when unknown. */
+    fun speedValue(mps: Double?): String = mps?.let { Units.speed(it).roundToInt().toString() } ?: DASH
 
-    fun speedWithUnit(mps: Double?): String = mps?.let { "${speedKmh(it)} km/h" } ?: DASH
+    fun speedWithUnit(mps: Double?): String = mps?.let { "${speedValue(it)} ${Units.speedUnit}" } ?: DASH
 
+    /** A distance in the rider's unit (km or mi): one decimal under 100, whole above. */
     fun distanceValue(meters: Double): String {
-        val km = meters / 1000.0
-        return if (km < 100) String.format(Locale.US, "%.1f", km) else String.format(Locale.US, "%,.0f", km)
+        val v = Units.distance(meters)
+        return if (v < 100) String.format(Locale.US, "%.1f", v) else String.format(Locale.US, "%,.0f", v)
     }
 
-    fun distance(meters: Double): String = "${distanceValue(meters)} km"
+    fun distance(meters: Double): String = "${distanceValue(meters)} ${Units.distanceUnit}"
+
+    /** An odometer reading (kept in km) in the rider's unit, whole: "12,480". */
+    fun odometer(km: Double): String = String.format(Locale.US, "%,d", Units.fromKm(km).roundToInt().coerceAtLeast(0))
 
     fun distanceOrDash(meters: Double?): String = meters?.let(::distance) ?: DASH
 

@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.home
 
+import com.ridetrack.app.ui.format.Units
 import java.util.UUID
 import kotlin.math.roundToInt
 
@@ -57,7 +58,7 @@ object BikeCare {
             kmLeft != null && daysLeft != null -> "In ${km(kmLeft)} · or by ${dayText(now + (daysLeft * DAY).toLong())}"
             kmLeft != null -> "Due in ${km(kmLeft)}"
             daysLeft != null -> if (daysLeft < 1) "Due today" else "Due in ${daysLeft.toInt()} ${if (daysLeft.toInt() == 1) "day" else "days"}"
-            else -> "Set the odometer to count km"
+            else -> "Set the odometer to count ${Units.distanceUnit}"
         }
         return CareStatus(item, used, due, text)
     }
@@ -84,7 +85,7 @@ object BikeCare {
     fun sorted(items: List<CareItem>, odometerKm: Double?, now: Long): List<CareStatus> =
         items.map { status(it, odometerKm, now) }.sortedByDescending { it.used }
 
-    fun km(v: Double): String = String.format(java.util.Locale.US, "%,d km", v.roundToInt().coerceAtLeast(0))
+    fun km(v: Double): String = String.format(java.util.Locale.US, "%,d ", Units.fromKm(v).roundToInt().coerceAtLeast(0)) + Units.distanceUnit
 
     private fun dayText(millis: Long): String =
         java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault()).toLocalDate()

@@ -1,5 +1,6 @@
 package com.ridetrack.app.studio
 
+import com.ridetrack.app.ui.format.Units
 import kotlin.math.roundToInt
 
 /**
@@ -19,7 +20,7 @@ object StudioCoach {
         appendLine("Clips in order:")
         plan.clips.forEachIndexed { i, s ->
             val said = s.lines.joinToString(" ") { it.text }.ifBlank { "(no talking, riding sound)" }
-            appendLine("${i + 1}. ${sec(s.durMs)}, ${s.bit.speedKmh.roundToInt()} km/h${s.bit.fromRide?.let { ", from another ride ($it)" } ?: ""}: \"$said\"")
+            appendLine("${i + 1}. ${sec(s.durMs)}, ${Units.kmhText(s.bit.speedKmh)}${s.bit.fromRide?.let { ", from another ride ($it)" } ?: ""}: \"$said\"")
         }
         val used = plan.clips.map { it.bit.id }.toSet()
         val left = all.filter { it.id !in used && it.talking }.sortedByDescending { it.punch }.take(5)

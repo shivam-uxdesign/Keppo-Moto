@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.home
 
+import com.ridetrack.app.ui.format.Units
 import android.Manifest
 import android.content.Intent
 import android.content.IntentFilter
@@ -118,7 +119,7 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
         HomeFuel(
             prompt = prompts.maxByOrNull { it.timeMillis },
             lastPrice = fills.sortedBy { it.timeMillis }.lastOrNull { it.pricePerLitre != null }?.pricePerLitre,
-            lastRide = estimate?.let { (l, cost) -> "≈${String.format(java.util.Locale.US, "%.1f", l)} L" + (cost?.let { " · ${Fuel.money(it)}" } ?: "") },
+            lastRide = estimate?.let { (l, cost) -> "≈${String.format(java.util.Locale.US, "%.1f", Units.volume(l))} ${Units.volumeUnit}" + (cost?.let { " · ${Fuel.money(it)}" } ?: "") },
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeFuel())
 

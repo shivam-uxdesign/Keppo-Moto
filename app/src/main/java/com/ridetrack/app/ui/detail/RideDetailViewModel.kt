@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.detail
 
+import com.ridetrack.app.ui.format.Units
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ridetrack.app.AppContainer
@@ -32,7 +33,7 @@ import kotlinx.coroutines.withContext
 class TrackData(val track: RideTrack) {
     val samples: List<TelemetrySample> = track.samples
     val route: List<GeoPoint> = samples.routePoints()
-    val speed = series { s -> s.speedMps?.let { it * 3.6 } }
+    val speed = series { s -> s.speedMps?.let { Units.speed(it) } }
     val lean = series(symmetric = true) { it.leanDeg }
     val gForce = series(floorZero = true) { it.combinedG }
     val elevation = series { it.altitudeM }

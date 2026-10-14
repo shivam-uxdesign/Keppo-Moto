@@ -1,5 +1,6 @@
 package com.ridetrack.app.share
 
+import com.ridetrack.app.ui.format.Units
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BlurMaskFilter
@@ -153,15 +154,15 @@ class ShareCardRenderer(context: Context) {
         text(c, listOfNotNull(d.dateText, d.bikeName).joinToString("  ·  "), 90f, y, regular, 32f, MUTED, maxWidth = W - 180f)
 
         y += 240f
-        val km = String.format(java.util.Locale.US, "%.1f", d.distanceM / 1000.0)
+        val km = String.format(java.util.Locale.US, "%.1f", Units.distance(d.distanceM))
         val kmWidth = text(c, km, 82f, y, light, 250f, WHITE, tracking = -0.03f)
-        text(c, "km", 82f + kmWidth + 18f, y, regular, 64f, MUTED)
+        text(c, Units.distanceUnit, 82f + kmWidth + 18f, y, regular, 64f, MUTED)
 
         y += 106f
         hairline(c, 90f, y - 44f, W - 90f)
         stat(c, 90f, y, "TIME", Format.duration(d.durationMillis), null, shadow = false)
-        stat(c, 420f, y, "AVG", Format.speedKmh(d.avgSpeedMps), "km/h", shadow = false)
-        stat(c, 720f, y, "TOP", Format.speedKmh(d.maxSpeedMps), "km/h", shadow = false)
+        stat(c, 420f, y, "AVG", Format.speedValue(d.avgSpeedMps), Units.speedUnit, shadow = false)
+        stat(c, 720f, y, "TOP", Format.speedValue(d.maxSpeedMps), Units.speedUnit, shadow = false)
 
         leanGauge(c, W / 2f, 1770f, d, shadow = false)
         footer(c, d, shadow = false)
@@ -187,22 +188,22 @@ class ShareCardRenderer(context: Context) {
         drawRoute(c, d.route, RectF(190f, 330f, W - 190f, 1010f), overlay = true)
 
         var y = 1300f
-        val km = String.format(java.util.Locale.US, "%.1f", d.distanceM / 1000.0)
+        val km = String.format(java.util.Locale.US, "%.1f", Units.distance(d.distanceM))
         val kmSize = 230f
         val unitSize = 60f
         val kmW = measure(km, light, kmSize, -0.03f)
-        val unitW = measure("km", regular, unitSize)
+        val unitW = measure(Units.distanceUnit, regular, unitSize)
         val x0 = (W - (kmW + 16f + unitW)) / 2f
         text(c, km, x0, y, light, kmSize, WHITE, tracking = -0.03f, shadow = true)
-        text(c, "km", x0 + kmW + 16f, y, regular, unitSize, WHITE, shadow = true)
+        text(c, Units.distanceUnit, x0 + kmW + 16f, y, regular, unitSize, WHITE, shadow = true)
 
         y += 64f
         centered(c, d.title, y, medium, 40f, WHITE, shadow = true)
 
         y += 150f
         stat(c, 120f, y, "TIME", Format.duration(d.durationMillis), null, shadow = true)
-        stat(c, 430f, y, "AVG", Format.speedKmh(d.avgSpeedMps), "km/h", shadow = true)
-        stat(c, 730f, y, "TOP", Format.speedKmh(d.maxSpeedMps), "km/h", shadow = true)
+        stat(c, 430f, y, "AVG", Format.speedValue(d.avgSpeedMps), Units.speedUnit, shadow = true)
+        stat(c, 730f, y, "TOP", Format.speedValue(d.maxSpeedMps), Units.speedUnit, shadow = true)
 
         leanGauge(c, W / 2f, 1780f, d, shadow = true)
     }
@@ -218,8 +219,8 @@ class ShareCardRenderer(context: Context) {
         val x = sketch.right + 34f
         KeppoWordmark.draw(c, x, card.top + 70f, 24f, withAlpha(WHITE, 200), ACCENT)
         val kmW = text(c, km(d), x, card.top + 168f, medium, 88f, WHITE, tracking = -0.02f)
-        text(c, "km", x + kmW + 8f, card.top + 168f, regular, 30f, MUTED)
-        text(c, "${Format.duration(d.durationMillis)} · ${Format.speedKmh(d.avgSpeedMps)} avg", x, card.top + 218f, regular, 28f, withAlpha(WHITE, 210), maxWidth = card.right - x - 24f)
+        text(c, Units.distanceUnit, x + kmW + 8f, card.top + 168f, regular, 30f, MUTED)
+        text(c, "${Format.duration(d.durationMillis)} · ${Format.speedValue(d.avgSpeedMps)} avg", x, card.top + 218f, regular, 28f, withAlpha(WHITE, 210), maxWidth = card.right - x - 24f)
     }
 
     // ---- Bottom bar (~20%) --------------------------------------------------------------
@@ -234,10 +235,10 @@ class ShareCardRenderer(context: Context) {
         val x = 350f
         text(c, d.title.uppercase(), x, top + 70f, semibold, 24f, withAlpha(WHITE, 200), tracking = 0.18f, maxWidth = W - x - 70f)
         val kmW = text(c, km(d), x, top + 190f, light, 130f, WHITE, tracking = -0.03f)
-        text(c, "km", x + kmW + 12f, top + 190f, regular, 40f, MUTED)
+        text(c, Units.distanceUnit, x + kmW + 12f, top + 190f, regular, 40f, MUTED)
         val y = top + 262f
         var cx = x
-        listOf(Format.duration(d.durationMillis) to "time", Format.speedKmh(d.avgSpeedMps) to "avg", Format.speedKmh(d.maxSpeedMps) to "top").forEach { (v, l) ->
+        listOf(Format.duration(d.durationMillis) to "time", Format.speedValue(d.avgSpeedMps) to "avg", Format.speedValue(d.maxSpeedMps) to "top").forEach { (v, l) ->
             val vw = text(c, v, cx, y, medium, 40f, WHITE)
             val lw = text(c, " $l", cx + vw, y, regular, 26f, MUTED)
             cx += vw + lw + 34f
@@ -258,8 +259,8 @@ class ShareCardRenderer(context: Context) {
         val lean = listOfNotNull(d.maxLeftLeanDeg, d.maxRightLeanDeg).maxOfOrNull { abs(it) }
         val bits = listOfNotNull(
             Format.duration(d.durationMillis),
-            d.avgSpeedMps?.let { "${Format.speedKmh(it)} avg" },
-            d.maxSpeedMps?.let { "${Format.speedKmh(it)} top" },
+            d.avgSpeedMps?.let { "${Format.speedValue(it)} avg" },
+            d.maxSpeedMps?.let { "${Format.speedValue(it)} top" },
             lean?.let { "${it.roundToInt()}° lean" },
         )
         text(c, bits.joinToString("   ·   "), 70f, 580f, regular, 34f, withAlpha(WHITE, 225), shadow = true, maxWidth = W - 140f)
@@ -269,7 +270,7 @@ class ShareCardRenderer(context: Context) {
 
     private fun drawTrace(c: Canvas, d: ShareCardData) {
         drawRoute(c, d.route, RectF(150f, 520f, W - 150f, 1300f), RouteInk.HEAT_ON_PHOTO)
-        centered(c, "${km(d)} km  ·  ${d.title}", 1400f, medium, 38f, WHITE, shadow = true)
+        centered(c, "${km(d)} ${Units.distanceUnit}  ·  ${d.title}", 1400f, medium, 38f, WHITE, shadow = true)
         KeppoWordmark.draw(c, (W - KeppoWordmark.width(24f)) / 2f, 1456f, 24f, withAlpha(WHITE, 210), ACCENT, shadow = SHADOW)
     }
 
@@ -307,9 +308,9 @@ class ShareCardRenderer(context: Context) {
 
         val y = perfY + 90f
         val cols = listOf(
-            "DISTANCE" to "${km(d)} km",
+            "DISTANCE" to "${km(d)} ${Units.distanceUnit}",
             "TIME" to Format.duration(d.durationMillis),
-            "TOP" to "${Format.speedKmh(d.maxSpeedMps)} km/h",
+            "TOP" to "${Format.speedValue(d.maxSpeedMps)} ${Units.speedUnit}",
             "MAX LEAN" to (listOfNotNull(d.maxLeftLeanDeg, d.maxRightLeanDeg).maxOfOrNull { abs(it) }?.let { "${it.roundToInt()}°" } ?: Format.DASH),
         )
         val colW = (r - l) / cols.size
@@ -384,18 +385,18 @@ class ShareCardRenderer(context: Context) {
 
         val by = H - m - 60f
         text(c, "TOP SPEED", m + 50f, by - 110f, semibold, 22f, WHITE, tracking = 0.2f, shadow = true)
-        val sw = text(c, Format.speedKmh(d.maxSpeedMps), m + 50f, by, light, 120f, WHITE, shadow = true)
-        text(c, "km/h", m + 50f + sw + 10f, by, regular, 34f, WHITE, shadow = true)
+        val sw = text(c, Format.speedValue(d.maxSpeedMps), m + 50f, by, light, 120f, WHITE, shadow = true)
+        text(c, Units.speedUnit, m + 50f + sw + 10f, by, regular, 34f, WHITE, shadow = true)
         val dist = km(d)
         text(c, "DISTANCE", W - m - 50f - measure("DISTANCE", semibold, 22f, 0.2f), by - 110f, semibold, 22f, WHITE, tracking = 0.2f, shadow = true)
-        val uw = measure("km", regular, 34f)
+        val uw = measure(Units.distanceUnit, regular, 34f)
         val dw = measure(dist, light, 120f)
         text(c, dist, W - m - 50f - uw - 10f - dw, by, light, 120f, WHITE, shadow = true)
-        text(c, "km", W - m - 50f - uw, by, regular, 34f, WHITE, shadow = true)
+        text(c, Units.distanceUnit, W - m - 50f - uw, by, regular, 34f, WHITE, shadow = true)
         centered(c, "${Format.duration(d.durationMillis)}  ·  KEPPO MOTO", H - m - 20f, semibold, 22f, withAlpha(WHITE, 200), tracking = 0.2f, shadow = true)
     }
 
-    private fun km(d: ShareCardData) = String.format(java.util.Locale.US, "%.1f", d.distanceM / 1000.0)
+    private fun km(d: ShareCardData) = String.format(java.util.Locale.US, "%.1f", Units.distance(d.distanceM))
 
     // ---- Shared pieces ------------------------------------------------------------------
 
