@@ -12,6 +12,10 @@ class TwoMics {
     private var diff = 0.0
     private var total = 0.0
     private var heardMs = 0L
+    /** Two different mics were heard once: they stay two for the rest of the session (mics don't move). */
+    private var everDiffer = false
+    /** Sound heard in a row with both sides the same. */
+    private var sameMs = 0L
 
     /**
      * Splits [frames] interleaved 16-bit stereo frames of [pcm] into [left] and [right], and
@@ -35,13 +39,26 @@ class TwoMics {
         if (frames > 0 && maxOf(l2, r2) / frames > SILENCE) {
             diff = diff * DECAY + d2
             total = total * DECAY + (l2 + r2)
-            heardMs += frames * 1000L / sampleRate
+            val ms = frames * 1000L / sampleRate
+            heardMs += ms
+            if (heardMs >= MIN_HEARD_MS && total > 0) {
+                if (diff / total > THRESHOLD) { everDiffer = true; sameMs = 0 } else sameMs += ms
+            }
         }
         return db(l2, frames) to db(r2, frames)
     }
 
-    /** Two different mics: the sides differ, once enough sound has been heard to tell. */
-    val differ: Boolean get() = heardMs >= MIN_HEARD_MS && total > 0 && diff / total > THRESHOLD
+    /**
+     * Two different mics: the sides differed once enough sound had been heard. Kept for the
+     * session: a moment of both mics hearing the same (wind, a horn) doesn't turn them into one.
+     */
+    val differ: Boolean get() = everDiffer
+
+    /**
+     * Both sides have carried the same sound for [MONO_MS] of sound and never differed: the
+     * receiver is mixing both transmitters (its Mono setting). Not decided from a moment.
+     */
+    val mono: Boolean get() = !everDiffer && sameMs >= MONO_MS
 
     /** Enough sound has been heard to tell. */
     val known: Boolean get() = heardMs >= MIN_HEARD_MS
@@ -50,6 +67,7 @@ class TwoMics {
         /** Difference energy over both sides' energy: identical copies give 0, independent mics about 1. */
         const val THRESHOLD = 0.15
         const val MIN_HEARD_MS = 1_500L
+        const val MONO_MS = 10_000L
         private const val DECAY = 0.98
         /** Mean square below this (about -60 dBFS) is silence. */
         private const val SILENCE = 32768.0 * 32768.0 * 1e-6

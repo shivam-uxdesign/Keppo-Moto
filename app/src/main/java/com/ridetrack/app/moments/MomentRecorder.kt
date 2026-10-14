@@ -489,15 +489,17 @@ class MomentRecorder(
                     val enc = audio
                     val voiceDb = if (settings.swapMics) r else l
                     val engineDb = if (settings.swapMics) l else r
+                    // Roles are fixed by the settings (Swap); this only says whether the receiver mixes them.
                     val kind = when {
-                        enc == null || !enc.twoKnown -> TwoMicKind.LISTENING
+                        enc == null -> TwoMicKind.LISTENING
                         enc.twoDifferent -> TwoMicKind.TWO
-                        else -> TwoMicKind.SAME
+                        enc.twoMono -> TwoMicKind.MONO
+                        else -> TwoMicKind.LISTENING
                     }
                     hub.reportTwo(voiceDb, engineDb, kind)
                     if (kind != twoMicLogged && kind != TwoMicKind.LISTENING) {
                         twoMicLogged = kind
-                        log.log(if (kind == TwoMicKind.TWO) "two mics: voice and engine differ, engine sound kept with each clip" else "two mics: both channels sound the same, so no separate engine sound")
+                        log.log(if (kind == TwoMicKind.TWO) "two mics: voice and engine differ, engine sound kept with each clip" else "two mics: receiver on Mono (both sides identical for 10 s): set it to Stereo for a separate engine sound; mic 2 is still kept")
                     }
                     if (kind == TwoMicKind.TWO) hub.reportEngine(System.currentTimeMillis(), engineDb, ENGINE_CHUNK_MS)
                 },
@@ -522,17 +524,17 @@ class MomentRecorder(
         }
     }
 
-    /** With two different mics, the engine mic's sound goes next to the clip as its own file. */
+    /** With two channels, the engine mic's sound goes next to the clip as its own file (always: the roles are fixed). */
     /** What the log last said about the two mics (said again only when it changes). */
     @Volatile private var twoMicLogged: TwoMicKind? = null
 
     private fun writeEngine(clip: File, fromMicros: Long, toMicros: Long) {
         val enc = audio ?: return
-        if (!enc.twoDifferent) return
+        if (!enc.recordingTwo) return
         val format = enc.engineFormat ?: return
         runCatching {
             val out = File(clip.parentFile, clip.nameWithoutExtension + ".engine.m4a")
-            if (ClipWriter.writeAudio(out, format, buffer.extraBetween(fromMicros, toMicros), fromMicros)) log.log("engine mic kept: ${out.name}")
+            if (ClipWriter.writeAudio(out, format, buffer.extraBetween(fromMicros, toMicros), fromMicros)) log.log("engine mic kept: ${out.name}" + if (enc.twoMono) " (same as the voice: receiver on Mono)" else "")
         }.onFailure { log.error("engine mic sound couldn't be written", it) }
     }
 

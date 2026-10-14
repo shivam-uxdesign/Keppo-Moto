@@ -473,7 +473,8 @@ private fun TwoMicTest(mic: String?, swapped: Boolean, onSwap: (Boolean) -> Unit
                     !meter.recordingTwo -> "This receiver sends one channel: one mic."
                     !meter.twoKnown -> "Talk, then rev: listening…"
                     meter.twoDifferent -> "Two different mics: voice and engine are kept apart."
-                    else -> "Both sides sound the same: set the receiver to mono (two transmitters), or it's one mic."
+                    meter.twoMono -> "Both sides carry the same sound: the receiver is on Mono. Set it to Stereo so the engine mic is recorded on its own."
+                    else -> "Talk, then rev: listening…"
                 }
                 runCatching { Thread.sleep(400) }.onFailure { return@Thread }
             }
@@ -514,7 +515,7 @@ private fun RideTwoMics() {
                 when (t.kind) {
                     com.ridetrack.app.moments.TwoMicKind.LISTENING -> "Talk, then rev: listening…"
                     com.ridetrack.app.moments.TwoMicKind.TWO -> "Two different mics: the engine sound is kept with each clip."
-                    com.ridetrack.app.moments.TwoMicKind.SAME -> "Both sides sound the same, so there's no separate engine sound. Check the receiver is in mono with both transmitters on."
+                    com.ridetrack.app.moments.TwoMicKind.MONO -> "Both sides carry the same sound: the receiver is on Mono. Set it to Stereo so the engine mic is recorded on its own."
                 },
                 style = RtType.caption,
                 color = RtColors.TextSecondary,

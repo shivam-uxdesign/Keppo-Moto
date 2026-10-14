@@ -209,8 +209,8 @@ class MomentsHub {
     /** From the audio thread: each mic's loudness (dBFS) and what's known about them. */
     fun reportTwo(voiceDb: Float, engineDb: Float, kind: TwoMicKind) {
         _twoMics.value = TwoMicLevels(voiceDb, engineDb, kind)
-        // Only two really different mics say anything about who's talking.
-        lift = if (kind == TwoMicKind.TWO) twoMicLift.onLevels(System.currentTimeMillis(), voiceDb, engineDb) else null
+        // The helmet mic against the engine mic says who's talking; not when the receiver mixes them.
+        lift = if (kind != TwoMicKind.MONO) twoMicLift.onLevels(System.currentTimeMillis(), voiceDb, engineDb) else null
     }
 
     private val twoMicLift = com.ridetrack.telemetry.moments.TwoMicLift()
@@ -330,8 +330,8 @@ enum class TwoMicKind {
     LISTENING,
     /** Two different mics: the engine mic is kept as its own sound. */
     TWO,
-    /** Both sides the same: one mic (or the receiver mixes them). */
-    SAME,
+    /** Both sides carry the same mix for a while: the receiver is on Mono. Labels stay Voice and Engine. */
+    MONO,
 }
 
 /** Each mic's loudness in dBFS (-90 silent, 0 loudest), as the HUD and settings meters show it. */

@@ -43,6 +43,21 @@ class TwoMicsTest {
     }
 
     @Test
+    fun `the same sound on both sides is mono only after 10 s, and two mics stay two`() {
+        val same = TwoMics()
+        feed(same, 5, { sin(2 * PI * 220 * it / rate) }, { sin(2 * PI * 220 * it / rate) })
+        assertFalse(same.mono)
+        feed(same, 8, { sin(2 * PI * 220 * it / rate) }, { sin(2 * PI * 220 * it / rate) })
+        assertTrue(same.mono)
+        val two = TwoMics()
+        feed(two, 3, { sin(2 * PI * 300 * it / rate) }, { 0.6 * sin(2 * PI * 80 * it / rate) })
+        // A long stretch where both hear the same (wind): still two mics, never mono.
+        feed(two, 15, { sin(2 * PI * 220 * it / rate) }, { sin(2 * PI * 220 * it / rate) })
+        assertTrue(two.differ)
+        assertFalse(two.mono)
+    }
+
+    @Test
     fun `silence tells nothing`() {
         val m = TwoMics()
         feed(m, 3, { 0.0 }, { 0.0 })

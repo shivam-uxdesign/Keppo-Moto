@@ -98,6 +98,9 @@ class AudioEncoder(
     /** The two channels are really two different mics (so the engine track is worth keeping). */
     val twoDifferent: Boolean get() = stereo && twoMicCheck.differ
 
+    /** The receiver sends the same mix on both sides (its Mono setting): no separate engine sound. */
+    val twoMono: Boolean get() = stereo && twoMicCheck.mono
+
     @Volatile
     var engineFormat: MediaFormat? = null
         private set

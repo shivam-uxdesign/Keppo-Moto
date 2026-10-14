@@ -229,20 +229,22 @@ private fun VoiceMeter(data: HudData, c: HudColors) {
 }
 
 /**
- * Two mics (a two-transmitter receiver): a slim bar per mic, so the rider sees both are heard.
- * Grey while the app is still listening; "1 MIC" when both sides turned out the same.
+ * Two mics (a two-transmitter receiver): a slim bar per mic, always Voice and Engine (the mics
+ * are fixed: helmet and back seat). When the receiver mixes them (Mono), the engine bar dims and
+ * an amber line says how to fix it.
  */
 @Composable
 private fun TwoMicMeter(m: com.ridetrack.app.moments.TwoMicLevels, c: HudColors) {
-    val same = m.kind == com.ridetrack.app.moments.TwoMicKind.SAME
+    val mono = m.kind == com.ridetrack.app.moments.TwoMicKind.MONO
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier.semantics(mergeDescendants = true) {
-            contentDescription = if (same) "One mic: both channels sound the same" else "Voice mic ${m.voiceDb.toInt()} dB, engine mic ${m.engineDb.toInt()} dB"
+            contentDescription = "Voice mic ${m.voiceDb.toInt()} dB, engine mic ${m.engineDb.toInt()} dB" + if (mono) ". Receiver on Mono: set it to Stereo" else ""
         },
     ) {
-        LevelRow("VOICE", m.voiceDb, if (same) c.muted else DarkPalette.primary, c)
-        LevelRow(if (same) "1 MIC" else "ENGINE", m.engineDb, if (same) c.muted.copy(alpha = 0.45f) else ENGINE_ORANGE, c)
+        LevelRow("VOICE", m.voiceDb, DarkPalette.primary, c)
+        LevelRow("ENGINE", m.engineDb, if (mono) c.muted.copy(alpha = 0.45f) else ENGINE_ORANGE, c)
+        if (mono) Text("Receiver on Mono · set it to Stereo", style = hudLabel, color = DarkPalette.warning, maxLines = 2)
     }
 }
 

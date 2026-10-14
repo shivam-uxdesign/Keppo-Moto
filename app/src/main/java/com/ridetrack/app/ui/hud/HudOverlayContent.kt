@@ -38,6 +38,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -76,7 +78,8 @@ fun HudOverlayContent(
     onButtonsTop: (Float) -> Unit = {},
 ) {
     RideDark {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // As wide as the card: notes under it wrap to the card's width instead of widening the pop-up.
+        Column(Modifier.width(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalAlignment = Alignment.CenterHorizontally) {
             ScaledBy(settings.size.scale) {
                 val video = data.video
                 when {
@@ -172,16 +175,21 @@ private fun VideoButtons(data: HudData, actions: HudControlActions, modifier: Mo
 
 @Composable
 private fun SavedNote(text: String) {
+    // The card's width (the column is as wide as the card), wrapping onto up to three lines.
     Text(
         text,
         fontSize = 11.sp,
+        lineHeight = 14.sp,
         color = Color.White,
-        maxLines = 1,
+        maxLines = 3,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         modifier = Modifier
             .padding(top = 10.dp)
-            .clip(RoundedCornerShape(50))
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
             .background(Color(0xEB0C0C0E))
-            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(50))
+            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
             .padding(horizontal = 12.dp, vertical = 7.dp),
     )
 }
