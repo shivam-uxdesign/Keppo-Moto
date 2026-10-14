@@ -71,6 +71,9 @@ class CrashAlerts(
     private var followUp: Job? = null
     private var ringtone: Ringtone? = null
     private val sms = SmsSender(context)
+
+    /** Alert texts can be sent (SMS allowed). */
+    fun canText(): Boolean = sms.canSend()
     private var nagging: Job? = null
     /** Texts being tried again after failing (no signal at the crash site, say). */
     private val retries = ArrayList<Job>()

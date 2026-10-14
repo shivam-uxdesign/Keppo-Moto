@@ -172,6 +172,9 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
         val odometers = bikes.associate { it.id to Odometer.readingKm(it, rides) }
         val ended = last?.ride?.let { it.endTimeMillis ?: it.startTimeMillis }
         val inputs = ReadyInputs(
+            crashOn = settings.safety.crashDetection,
+            contacts = settings.safety.contacts.size,
+            smsAllowed = c.crashAlerts.canText(),
             demo = settings.demoMode,
             gps = env.gps,
             calibrated = bike?.calibration != null,

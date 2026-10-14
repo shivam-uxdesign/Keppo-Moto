@@ -214,6 +214,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onRideStarted = { nav.navigate(Routes.LIVE) { launchSingleTop = true } },
                         onReturnToRide = { nav.navigate(Routes.LIVE) { launchSingleTop = true } },
                         onOpenProfile = { nav.switchTab(Routes.PROFILE) },
+                        onOpenSafety = { nav.navigate(Routes.profilePage(com.ridetrack.app.ui.profile.ProfilePage.SAFETY)) },
                         onAddBike = { nav.navigate(Routes.bikeEdit()) },
                         onEditBike = { nav.navigate(Routes.bikeEdit(it)) },
                         onOpenRide = { nav.navigate(Routes.detail(it)) },

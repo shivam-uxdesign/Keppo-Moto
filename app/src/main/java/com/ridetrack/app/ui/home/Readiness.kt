@@ -6,7 +6,7 @@ import com.ridetrack.app.moments.Microphones
 import com.ridetrack.telemetry.processing.BatteryWarnings
 
 /** What a readiness problem's button does. */
-enum class ReadyFix { LOCATION_SETTINGS, APP_SETTINGS, OVERLAY }
+enum class ReadyFix { LOCATION_SETTINGS, APP_SETTINGS, OVERLAY, SAFETY }
 
 enum class CheckState { OK, WAIT, PROBLEM }
 
@@ -37,6 +37,10 @@ data class ReadyInputs(
     val freeBytes: Long? = null,
     /** About how long the battery lasts riding with these settings (past rides); null = not known yet. */
     val rideMinutes: Int? = null,
+    /** Crash alerts: switched on, how many contacts, and whether texts can be sent. */
+    val crashOn: Boolean = false,
+    val contacts: Int = 0,
+    val smsAllowed: Boolean = true,
 )
 
 object Readiness {
@@ -46,6 +50,7 @@ object Readiness {
     /** Problems first, then the rest, in the order riders look for them. */
     fun checks(i: ReadyInputs): List<ReadyCheck> {
         val list = ArrayList<ReadyCheck>()
+        crash(i)?.let { list += it }
         if (i.momentsOn) list += mic(i)
         list += when {
             i.demo -> ReadyCheck("GPS simulated", CheckState.OK)
@@ -108,6 +113,21 @@ object Readiness {
         Microphones.pick(mics, MicChoice.AUTO).takeIf { it.type != MicType.PHONE }
 
     /** "Ready to ride · DJI MIC · GPS · Mount" — the quiet one-liner when nothing's wrong. */
+    /**
+     * Crash alerts. Off is the rider's choice, so it isn't a problem: it shows as a quiet
+     * "Crash alerts off · Set up" ([offer]). On but unable to reach anyone is a problem.
+     */
+    internal fun crash(i: ReadyInputs): ReadyCheck? = when {
+        i.demo -> null
+        !i.crashOn -> ReadyCheck("Crash alerts off", CheckState.WAIT, fixLabel = "Set up", fix = ReadyFix.SAFETY)
+        i.contacts == 0 -> ReadyCheck("Crash alerts", CheckState.PROBLEM, "No emergency contacts", "Crash alerts are on but have no one to text.", "Add contacts", ReadyFix.SAFETY)
+        !i.smsAllowed -> ReadyCheck("Crash alerts", CheckState.PROBLEM, "Crash alerts can't send texts", "Allow SMS so your contacts hear from you after a crash.", "Allow SMS", ReadyFix.SAFETY)
+        else -> ReadyCheck("Crash alerts · ${i.contacts} contact${if (i.contacts > 1) "s" else ""}", CheckState.OK)
+    }
+
+    /** A setting the rider may want, offered quietly under "Ready to ride" (crash alerts off). */
+    fun offer(checks: List<ReadyCheck>): ReadyCheck? = checks.firstOrNull { it.state == CheckState.WAIT && it.fix == ReadyFix.SAFETY }
+
     fun summary(checks: List<ReadyCheck>): String =
-        (listOf("Ready to ride") + checks.take(3).map { it.label }).joinToString(" · ")
+        (listOf("Ready to ride") + checks.filter { it != offer(checks) }.take(3).map { it.label }).joinToString(" · ")
 }

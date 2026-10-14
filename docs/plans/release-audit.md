@@ -217,3 +217,27 @@ Where data leaves the phone:
 - **OpenStreetMap Overpass:** a petrol stop's position, to find the pump's name. This is a third party, so it counts as shared location.
 - **OpenFreeMap:** map tiles (IP address only).
 - **SMS:** alert texts go to the rider's emergency contacts.
+
+## UX audit (14 Oct)
+
+### Solid
+- **Permissions are asked in context, never upfront:** location and notifications when you first slide to ride, camera and mic when Moments is turned on, SMS in Safety. A denial explains itself and offers Settings.
+- **Ending a ride:** hold to end. Screen readers get a normal "End ride?" dialog instead.
+- **Accessibility:**
+  - Every icon-only button has a screen-reader label.
+  - Text contrast passes WCAG AA in both themes (lowest 4.9:1).
+  - Small tappable things (text links, the 18 dp close on the last-ride card) are fine: Compose stretches their touch area to 48 dp and reports that to screen readers. Play's pre-launch report will confirm.
+- **Empty states:** no bike (Add your bike, or restore a backup), no rides, ride not found.
+
+### Found and fixed
+- **Crash alerts invisible before riding (high):** they're off by default, and Home's readiness check didn't mention them. A rider could ride for weeks thinking they were protected.
+  - **Off:** a quiet "Crash alerts off · Set up" line under "Ready to ride", which opens Profile › Safety.
+  - **On with no contacts, or SMS not allowed:** a problem card with "Add contacts" or "Allow SMS".
+  - **On and working:** a "Crash alerts · 2 contacts" chip.
+- **Paywall promised "in Hinglish" to every rider:** now "written out (English or Hinglish)", which is what Gemini does today.
+
+### Decisions needed (global launch)
+1. **Units:** speed and distance are km/h and km only, in about 50 places (HUD, ride pages, share cards, Studio overlays). The UK and US use mph and miles.
+2. **Fuel outside India:** prices are in ₹, card SMS parsing looks for Rs/INR, and the petrol price lookup searches "…in <city>, India".
+3. **Captions language:** the Gemini prompt assumes English and Hinglish. Riders elsewhere speak other languages.
+4. **No welcome screens:** the app opens straight onto Home. That's fine given the in-context asks, as long as the crash alerts line above is there.

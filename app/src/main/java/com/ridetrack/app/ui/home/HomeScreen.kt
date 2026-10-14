@@ -88,6 +88,7 @@ fun HomeScreen(
     onShareRide: (String) -> Unit,
     onMakeReel: (String) -> Unit = {},
     onOpenBike: () -> Unit,
+    onOpenSafety: () -> Unit = onOpenProfile,
 ) {
     val vm = appViewModel { HomeViewModel(it) }
     val s by vm.state.collectAsStateWithLifecycle()
@@ -203,7 +204,7 @@ fun HomeScreen(
         val bike = s.bike
         if (bike != null) {
             if (!s.rideState.isActive) {
-                ReadinessCard(s.checks, onFix = { fix(context, it) }, Modifier.riseIn(0))
+                ReadinessCard(s.checks, onFix = { if (it == ReadyFix.SAFETY) onOpenSafety() else fix(context, it) }, Modifier.riseIn(0))
                 Spacer(Modifier.height(10.dp))
                 MomentsToggles(
                     moments = s.momentsOn,
@@ -326,6 +327,7 @@ private fun fix(context: Context, f: ReadyFix) {
         }
         ReadyFix.APP_SETTINGS -> Permissions.openAppSettings(context)
         ReadyFix.OVERLAY -> OverlayPermission.request(context)
+        ReadyFix.SAFETY -> Unit
     }
 }
 

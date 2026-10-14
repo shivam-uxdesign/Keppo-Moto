@@ -129,4 +129,21 @@ class NewHomeTest {
         assertEquals(listOf("Longest ride yet: 90.0 km", "100 km ridden"), Milestones.of(rides, now).map { it.title })
         assertEquals(emptyList(), Milestones.of(listOf(ride(1, 30.0, 90.0)), now))
     }
+
+    @Test
+    fun crashAlertsInReadiness() {
+        // Off: a quiet offer, not a problem, and not in the summary line.
+        val off = Readiness.checks(ReadyInputs(crashOn = false))
+        assertEquals("Crash alerts off", Readiness.offer(off)?.label)
+        assertTrue(off.none { it.state == CheckState.PROBLEM })
+        assertFalse("Crash alerts off" in Readiness.summary(off))
+        // On without contacts or without SMS: a problem that opens Safety.
+        val noOne = Readiness.checks(ReadyInputs(crashOn = true, contacts = 0)).first { it.state == CheckState.PROBLEM }
+        assertEquals(ReadyFix.SAFETY, noOne.fix)
+        assertEquals("Crash alerts can't send texts", Readiness.checks(ReadyInputs(crashOn = true, contacts = 2, smsAllowed = false)).first { it.state == CheckState.PROBLEM }.problem)
+        // On and fine: an OK chip with the count.
+        assertTrue(Readiness.checks(ReadyInputs(crashOn = true, contacts = 2)).any { it.label == "Crash alerts · 2 contacts" && it.state == CheckState.OK })
+        // Demo rides: not shown.
+        assertNull(Readiness.offer(Readiness.checks(ReadyInputs(demo = true))))
+    }
 }

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,6 +70,14 @@ fun ReadinessCard(checks: List<ReadyCheck>, onFix: (ReadyFix) -> Unit, modifier:
                 color = RtColors.TextSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Readiness.offer(checks)?.let { o ->
+            Text(
+                "${o.label} · ${o.fixLabel}",
+                style = RtType.caption,
+                color = RtColors.Primary,
+                modifier = Modifier.minimumInteractiveComponentSize().clickable(role = Role.Button) { o.fix?.let(onFix) }.padding(horizontal = 4.dp),
             )
         }
         return
