@@ -229,7 +229,7 @@ class BackupRepository(
                 val have = db.bikeDao().all().map { it.id }.toSet()
                 BackupFormat.parseBikes(drive.downloadText(id)).filter { it.id !in have }.forEach { bike ->
                     db.bikeDao().upsert(bike)
-                    bike.photoFile?.let { name -> f.garageFiles[name]?.let { download(it, File(File(context.filesDir, "bikes").apply { mkdirs() }, name)) } }
+                    bike.photoFile?.takeIf(BackupNames::safe)?.let { name -> f.garageFiles[name]?.let { download(it, File(File(context.filesDir, "bikes").apply { mkdirs() }, name)) } }
                 }
             }
 
@@ -278,13 +278,14 @@ class BackupRepository(
             val total = wanted.sumOf { it.second.size }
             var done = 0
             wanted.forEach { (rideId, names) ->
+                if (!BackupNames.safe(rideId)) return@forEach
                 val rf = rideFolders[rideId] ?: return@forEach
                 val mf = drive.children(rf.id).firstOrNull { it.folder && it.name == MOMENTS } ?: return@forEach
                 val remote = drive.children(mf.id).associateBy { it.name }
                 names.forEach { name ->
                     done++
                     _status.update { it.copy(working = "Downloading moments $done of $total…") }
-                    remote[name]?.let { download(it.id, File(momentsDir(rideId), name)) }
+                    if (BackupNames.safe(name)) remote[name]?.let { download(it.id, File(momentsDir(rideId), name)) }
                 }
             }
         }
@@ -404,4 +405,10 @@ class BackupRepository(
         private const val MOMENTS = "moments"
         private const val JSON = "application/json"
     }
+}
+
+/** A file or folder name from a backup, before it becomes a path on the phone: one plain name, nothing that climbs out. */
+internal object BackupNames {
+    fun safe(name: String): Boolean =
+        name.isNotBlank() && name.length <= 200 && name != "." && name != ".." && '/' !in name && '\\' !in name && '\u0000' !in name
 }

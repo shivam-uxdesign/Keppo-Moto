@@ -187,3 +187,33 @@ No photo or video library permissions (the system picker is used). Good.
 
 ### Noted for the store pack
 - The FGS declaration needs both types explained: "dataSync" on Android 14 and older and "mediaProcessing" on 15+, both for rendering a Reel the rider asked for. Record a short video of it.
+
+## Code audit 3: the rest of the app (14 Oct)
+
+### Solid
+- **Delete a ride (Journal):** you confirm in Keppo Moto's own dialog, and the ride goes to Recently deleted for 30 days.
+- **Ride documents provider:** read-only (any write is refused). It's gone the moment sharing is off, and it serves only files that exist in a ride's folder.
+- **Messages to Journal** are addressed to Journal only.
+- **SMS reading:** it reads only the text and time of SMS from 15 min before to 30 min after a petrol stop. They're parsed on the phone into an amount; message text is never stored or sent.
+- **Logs:** no phone numbers, places or speech in logcat. Crashlytics gets the error and its stack only (with consent); the detail notes stay on the phone.
+- **Drive backup:** uses the `drive.file` permission (only files Keppo makes, no Google verification needed), and the token isn't logged. Android's own auto-backup is off.
+
+### Found and fixed
+- **Fake Journal could connect (high):** "Share rides" and "Delete ride" trusted the caller's package name alone. When the real Keppo Journal isn't installed, any app installed outside Play can take that name. One tap on Allow would then give it every ride, video and location.
+  - Fix: `JournalSource.isGenuine` also requires that Journal was installed from the Play Store.
+  - Debug and tester builds skip this check, so a hand-installed Journal still connects while testing.
+- **A crafted "open ride" request could crash the app (low):** IDs from other apps and notifications went straight into page addresses, and a "/" or "?" made navigation throw.
+  - Fix: only plain IDs are accepted (`OPEN_RIDE_SHAPE`).
+- **Restore trusted file names from the backup (medium):** a tampered backup with "../" in a name could write outside its folder.
+  - Fix: `BackupNames.safe` checks the bike photo names, ride IDs and moment names before downloading.
+
+### For the privacy policy and Data safety form
+Where data leaves the phone:
+- **Gemini (Firebase AI):** clips' sound, frames, captions and ride titles (Pro, with consent).
+- **Crashlytics:** errors (with consent).
+- **Google Play Billing.**
+- **Google Drive:** backup, which the rider turns on.
+- **Android's geocoder (Google):** place names for rides and the petrol price city.
+- **OpenStreetMap Overpass:** a petrol stop's position, to find the pump's name. This is a third party, so it counts as shared location.
+- **OpenFreeMap:** map tiles (IP address only).
+- **SMS:** alert texts go to the rider's emergency contacts.

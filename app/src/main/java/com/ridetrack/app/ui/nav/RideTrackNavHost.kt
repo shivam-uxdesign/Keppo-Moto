@@ -144,6 +144,9 @@ private val tabs = listOf(
 /** Opens a route from deep inside a screen (e.g. Studio › Your style). */
 val LocalNavigate = androidx.compose.runtime.staticCompositionLocalOf<(String) -> Unit> { {} }
 
+/** What an "open this ride" request may look like: [prefix:]id[#reel], ids of letters, digits, '-', '_' and '.'. */
+internal val OPEN_RIDE_SHAPE = Regex("^(?:[a-z]+:)?[A-Za-z0-9._-]{0,100}(?:#[A-Za-z0-9._-]{1,100})?$")
+
 @Composable
 fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit = {}) {
     val nav = rememberNavController()
@@ -163,6 +166,8 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
     LaunchedEffect(openRideId) {
         val asked = openRideId ?: return@LaunchedEffect
         onOpenRideHandled()
+        // From other apps and notifications: only plain ids, so nothing odd ends up in a page address.
+        if (!OPEN_RIDE_SHAPE.matches(asked)) return@LaunchedEffect
         if (session.state.value.isActive) return@LaunchedEffect
         // "Today's post": ready videos full screen, at that one.
         if (asked.startsWith(com.ridetrack.app.MainActivity.REVIEW_PREFIX)) {

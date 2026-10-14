@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
 class ShareRidesActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (callingActivity?.packageName != JournalSource.JOURNAL_PACKAGE) {
+        if (!JournalSource.isGenuine(this, callingActivity?.packageName)) {
             setResult(RESULT_CANCELED)
             finish()
             return

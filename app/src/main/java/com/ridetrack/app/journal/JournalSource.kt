@@ -177,6 +177,23 @@ class JournalSource(
         const val ACTION_SHARE_RIDES = "com.keppo.action.SHARE_RIDES"
         const val EXTRA_RIDE_ID = "rideId"
 
+        /**
+         * [pkg] is the real Keppo Journal. Its name alone isn't enough: any app installed outside
+         * Play can take that name when Journal isn't on the phone. So it must also come from the
+         * Play Store (test builds trust the name, so a Journal installed by hand still connects).
+         */
+        fun isGenuine(context: Context, pkg: String?): Boolean {
+            if (pkg != JOURNAL_PACKAGE) return false
+            if (com.ridetrack.app.BuildConfig.DEBUG || com.ridetrack.app.BuildConfig.TEST_BUILD) return true
+            val installer = runCatching {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) context.packageManager.getInstallSourceInfo(pkg).installingPackageName
+                else @Suppress("DEPRECATION") context.packageManager.getInstallerPackageName(pkg)
+            }.getOrNull()
+            return installer == PLAY_STORE
+        }
+
+        private const val PLAY_STORE = "com.android.vending"
+
         fun authority(context: Context) = "${context.packageName}.rides"
     }
 }

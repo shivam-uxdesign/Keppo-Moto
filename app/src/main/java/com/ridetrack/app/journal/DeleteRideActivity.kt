@@ -26,7 +26,7 @@ class DeleteRideActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val rideId = intent.getStringExtra(JournalSource.EXTRA_RIDE_ID)
-        if (callingActivity?.packageName != JournalSource.JOURNAL_PACKAGE || rideId.isNullOrBlank()) return cancel()
+        if (!JournalSource.isGenuine(this, callingActivity?.packageName) || rideId.isNullOrBlank()) return cancel()
         val container = (application as RideTrackApp).container
         lifecycleScope.launch {
             if (container.rides.lookup(rideId) != RideLookup.LIVE) return@launch cancel()
