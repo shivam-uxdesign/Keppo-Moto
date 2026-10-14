@@ -35,6 +35,11 @@ class FuelRepository(
 
     suspend fun add(fill: FuelFill) = settings.setFuelLog(Fuel.encodeFills(Fuel.decodeFills(settings.settings.first().fuelLog) + fill))
 
+    /** A fill corrected by the rider (same id, new values). */
+    suspend fun update(fill: FuelFill) = settings.setFuelLog(
+        Fuel.encodeFills(Fuel.decodeFills(settings.settings.first().fuelLog).map { if (it.id == fill.id) fill else it }),
+    )
+
     suspend fun delete(id: String) = settings.setFuelLog(Fuel.encodeFills(Fuel.decodeFills(settings.settings.first().fuelLog).filterNot { it.id == id }))
 
 

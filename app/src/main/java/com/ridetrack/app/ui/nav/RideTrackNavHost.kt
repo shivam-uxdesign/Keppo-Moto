@@ -129,6 +129,9 @@ object Routes {
     fun detail(id: String) = "ride/$id"
     fun bikeEdit(id: String? = null) = if (id == null) "bike/edit" else "bike/edit?bikeId=$id"
     fun calibrate(bikeId: String) = "calibrate/$bikeId"
+    /** A bike's fuel: fill-ups, mileage, stops to confirm. */
+    const val FUEL = "fuel/{bikeId}"
+    fun fuel(bikeId: String) = "fuel/$bikeId"
 }
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
@@ -462,6 +465,9 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                 }
                 composable(Routes.CALIBRATE, arguments = listOf(navArgument("bikeId") { type = NavType.StringType })) { entry ->
                     CalibrationScreen(bikeId = entry.arguments?.getString("bikeId").orEmpty(), onDone = { nav.popBackStack() })
+                }
+                composable(Routes.FUEL, arguments = listOf(navArgument("bikeId") { type = NavType.StringType })) { entry ->
+                    com.ridetrack.app.ui.bike.FuelScreen(bikeId = entry.arguments?.getString("bikeId").orEmpty(), onBack = { nav.popBackStack() })
                 }
             }
             }

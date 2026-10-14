@@ -52,11 +52,14 @@ data class BikeFuel(
     val mileage: Map<String, Mileage> = emptyMap(),
     val readSms: Boolean = false,
     val lastPrice: Double? = null,
+    /** Fill-ups waiting for an answer, per bike (sure ones, and "Not sure" stops). */
+    val prompts: Map<String, List<com.ridetrack.app.fuel.FuelPrompt>> = emptyMap(),
 )
 
 class BikesViewModel(private val c: AppContainer) : ViewModel() {
     val fuel: StateFlow<BikeFuel> = combine(c.fuel.fills, c.rides.observeCompleted(), c.settings.settings, c.bikes.observeBikes()) { fills, rides, s, bikes ->
         BikeFuel(
+            prompts = Fuel.decodePrompts(s.fuelPrompts).groupBy { it.bikeId }.mapValues { (_, p) -> p.sortedByDescending { it.timeMillis } },
             fills = fills.groupBy { it.bikeId }.mapValues { (_, f) -> f.sortedByDescending { it.timeMillis } },
             mileage = bikes.associate { b -> b.id to c.fuel.mileage(b.id, fills, rides) },
             readSms = s.fuelReadSms && c.fuel.canReadSms(),
@@ -66,6 +69,18 @@ class BikesViewModel(private val c: AppContainer) : ViewModel() {
 
     fun addFill(bikeId: String, litres: Double, amount: Double?, price: Double?) {
         viewModelScope.launch { c.fuel.add(Fuel.newFill(bikeId, System.currentTimeMillis(), litres, amount, price, null, "typed")) }
+    }
+
+    fun updateFill(fill: FuelFill) {
+        viewModelScope.launch { c.fuel.update(fill) }
+    }
+
+    fun confirmPrompt(prompt: com.ridetrack.app.fuel.FuelPrompt, litres: Double, amount: Double?, price: Double?) {
+        viewModelScope.launch { c.fuel.confirm(prompt, litres, amount, price) }
+    }
+
+    fun dismissPrompt(prompt: com.ridetrack.app.fuel.FuelPrompt) {
+        viewModelScope.launch { c.fuel.dismiss(prompt) }
     }
 
     fun deleteFill(id: String) {

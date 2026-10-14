@@ -3,6 +3,7 @@ package com.ridetrack.app.fuel
 import com.ridetrack.app.ui.format.Units
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
@@ -33,11 +34,15 @@ fun FillUpDialog(
     price: Double?,
     onSave: (litres: Double, amount: Double?, price: Double?) -> Unit,
     onDismiss: () -> Unit,
+    /** Editing a fill: its fuel (litres), shown in the rider's volume. */
+    litres: Double? = null,
+    /** Editing: also a Delete. */
+    onDelete: (() -> Unit)? = null,
 ) {
     var amountText by remember { mutableStateOf(amount?.let(::plain).orEmpty()) }
     // The dialog works in the rider's volume (litres, or US gallons); saved in litres.
     var priceText by remember { mutableStateOf(price?.let { plain(Units.pricePerVolume(it)) }.orEmpty()) }
-    var litresText by remember { mutableStateOf("") }
+    var litresText by remember { mutableStateOf(litres?.let { plain(Units.volume(it)) }.orEmpty()) }
     val a = number(amountText)
     val p = number(priceText)?.takeIf { it > 0 }
     val auto = if (a != null && p != null) a / p else null
@@ -75,7 +80,12 @@ fun FillUpDialog(
                 enabled = volume != null && Units.toLitres(volume) > 0.2,
             ) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = {
+            Row {
+                onDelete?.let { del -> TextButton(onClick = del) { Text("Delete", color = RtColors.Error) } }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
         containerColor = RtColors.SurfaceRaised,
     )
 }

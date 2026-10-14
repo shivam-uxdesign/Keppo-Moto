@@ -38,6 +38,34 @@ data class FuelPrompt(
     val how: String = "stop",
 )
 
+/**
+ * The Fuel page's numbers: this month and all time (fuel, money, fill-ups), and how the last
+ * tank compares with the average ([trend]: +0.08 = 8% better). Pure.
+ */
+data class FuelSummary(
+    val monthLitres: Double,
+    val monthMoney: Double,
+    val monthFills: Int,
+    val allLitres: Double,
+    val allMoney: Double,
+    val allFills: Int,
+    val trend: Double?,
+) {
+    companion object {
+        fun of(fills: List<FuelFill>, mileage: Mileage, now: Long = System.currentTimeMillis(), zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): FuelSummary {
+            val month = java.time.Instant.ofEpochMilli(now).atZone(zone).let { it.year to it.monthValue }
+            val inMonth = fills.filter { f -> java.time.Instant.ofEpochMilli(f.timeMillis).atZone(zone).let { (it.year to it.monthValue) == month } }
+            val avg = mileage.kmPerLitre
+            val last = mileage.tanks.lastOrNull()?.kmPerLitre
+            return FuelSummary(
+                inMonth.sumOf { it.litres }, inMonth.mapNotNull { it.amount }.sum(), inMonth.size,
+                fills.sumOf { it.litres }, fills.mapNotNull { it.amount }.sum(), fills.size,
+                if (avg != null && last != null && avg > 0 && mileage.tanks.size >= 2) last / avg - 1 else null,
+            )
+        }
+    }
+}
+
 /** One tank: from the previous full fill to [fill]. */
 data class Tank(val fill: FuelFill, val km: Double, val kmPerLitre: Double, val costPerKm: Double?)
 

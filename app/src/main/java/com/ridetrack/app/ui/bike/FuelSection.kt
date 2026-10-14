@@ -85,7 +85,11 @@ fun FuelSection(bike: Bike, fuel: BikeFuel, vm: BikesViewModel) {
                 TextButton(onClick = { vm.deleteFill(f.id) }) { Text("Remove", color = RtColors.TextSecondary) }
             }
         }
-        Spacer(Modifier.height(12.dp))
+        val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
+        TextButton(onClick = { nav(com.ridetrack.app.ui.nav.Routes.fuel(bike.id)) }) {
+            Text("See all fuel" + fuel.prompts[bike.id].orEmpty().size.let { if (it > 0) " · $it to check" else "" }, color = RtColors.Primary)
+        }
+        Spacer(Modifier.height(4.dp))
         SecondaryButton("Add fill-up", { adding = true }, icon = Icons.Outlined.Add)
         HorizontalDivider(color = RtColors.Outline.copy(alpha = 0.6f), modifier = Modifier.padding(vertical = 10.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
