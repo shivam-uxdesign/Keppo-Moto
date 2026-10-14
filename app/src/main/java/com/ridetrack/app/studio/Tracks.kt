@@ -220,12 +220,28 @@ object TrackEdits {
     }
 
     /** A volume point [atMs] after the sound starts (replaces one within 100 ms). */
-    fun addVolumePoint(plan: StudioPlan, id: String, atMs: Long, level: Float) = audio(plan, id) { a ->
+    fun addVolumePoint(plan: StudioPlan, id: String, atMs: Long, level: Float, ease: Ease = Ease.LINEAR) = audio(plan, id) { a ->
         val t = atMs.coerceIn(0, a.durMs)
-        a.copy(curve = (a.curve.filter { abs(it.atMs - t) > 100 } + VolumePoint(t, level.coerceIn(0f, 1.5f))).sortedBy { it.atMs })
+        a.copy(curve = (a.curve.filter { abs(it.atMs - t) > 100 } + VolumePoint(t, level.coerceIn(0f, 1.5f), ease)).sortedBy { it.atMs })
     }
 
     fun clearCurve(plan: StudioPlan, id: String) = audio(plan, id) { it.copy(curve = emptyList()) }
+
+    /** Moves a volume point (index [k]) to [atMs] and [level], keeping the points in order. */
+    fun moveVolumePoint(plan: StudioPlan, id: String, k: Int, atMs: Long, level: Float) = audio(plan, id) { a ->
+        val p = a.curve.getOrNull(k) ?: return@audio a
+        a.copy(curve = (a.curve.filterIndexed { j, _ -> j != k } + p.copy(atMs = atMs.coerceIn(0, a.durMs), level = level.coerceIn(0f, 1.5f))).sortedBy { it.atMs })
+    }
+
+    fun deleteVolumePoint(plan: StudioPlan, id: String, k: Int) = audio(plan, id) { a -> a.copy(curve = a.curve.filterIndexed { j, _ -> j != k }) }
+
+    /** How the line goes from point [k] to the next. */
+    fun easePoint(plan: StudioPlan, id: String, k: Int, ease: Ease) = audio(plan, id) { a -> a.copy(curve = a.curve.mapIndexed { j, p -> if (j == k) p.copy(ease = ease) else p }) }
+
+    /** Every point's ease at once. */
+    fun easeAll(plan: StudioPlan, id: String, ease: Ease) = audio(plan, id) { a -> a.copy(curve = a.curve.map { it.copy(ease = ease) }) }
+
+    fun fadeShape(plan: StudioPlan, id: String, shape: FadeShape) = audio(plan, id) { it.copy(fadeShape = shape) }
 
     /** The level of [a] at [localMs]: its volume, its curve, and its fades. */
     fun levelAt(a: AudioItem, localMs: Long): Float {
@@ -238,11 +254,12 @@ object TrackEdits {
                 val b = curve.indexOfFirst { it.atMs >= localMs }
                 val p1 = curve[b - 1]
                 val p2 = curve[b]
-                p1.level + (p2.level - p1.level) * (localMs - p1.atMs).toFloat() / (p2.atMs - p1.atMs).coerceAtLeast(1)
+                // The point's ease decides how the line gets to the next one.
+                p1.level + (p2.level - p1.level) * p1.ease.of((localMs - p1.atMs).toFloat() / (p2.atMs - p1.atMs).coerceAtLeast(1))
             }
         }
-        val fadeIn = if (a.fadeInMs > 0) (localMs.toFloat() / a.fadeInMs).coerceIn(0f, 1f) else 1f
-        val fadeOut = if (a.fadeOutMs > 0) ((a.durMs - localMs).toFloat() / a.fadeOutMs).coerceIn(0f, 1f) else 1f
+        val fadeIn = if (a.fadeInMs > 0) a.fadeShape.of(localMs.toFloat() / a.fadeInMs) else 1f
+        val fadeOut = if (a.fadeOutMs > 0) a.fadeShape.of((a.durMs - localMs).toFloat() / a.fadeOutMs) else 1f
         return a.volume * c * fadeIn * fadeOut
     }
 

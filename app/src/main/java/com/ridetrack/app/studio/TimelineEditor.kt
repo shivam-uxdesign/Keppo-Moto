@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
+import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.VideoLibrary
@@ -143,6 +144,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.alpha
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.draw.clip
@@ -1271,12 +1274,31 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     val faded = (a?.fadeInMs ?: 0) > 0
                     listOf(
                         addNode(),
-                        slider(Icons.AutoMirrored.Rounded.VolumeUp, "Volume", a?.volume ?: 1f, 0f..1.5f, pct, { x -> vm.drag { TrackEdits.audioVolume(it, p.id, x) } }, { vm.endDrag("Volume") }),
-                        parent(Icons.Rounded.Gradient, "Fades", listOfNotNull(
-                            leaf(Icons.Rounded.Gradient, "Fade in, out", on = faded) { vm.change("Fades") { TrackEdits.fade(it, p.id, if (faded) 0 else 400, if (faded) 0 else 600) } },
-                            leaf(Icons.AutoMirrored.Rounded.VolumeDown, "Dip here") { vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, pos - (a?.startMs ?: 0), 0.3f) } },
-                            leaf(Icons.AutoMirrored.Rounded.VolumeUp, "Full here") { vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, pos - (a?.startMs ?: 0), 1f) } },
+                        parent(Icons.AutoMirrored.Rounded.VolumeUp, "Volume", listOfNotNull(
+                            slider(Icons.AutoMirrored.Rounded.VolumeUp, "Level", a?.volume ?: 1f, 0f..1.5f, pct, { x -> vm.drag { TrackEdits.audioVolume(it, p.id, x) } }, { vm.endDrag("Volume") }),
+                            a?.let { item -> TNode(Icons.Rounded.ShowChart, "Volume line", panel = {
+                                VolumeLinePanel(
+                                    item,
+                                    playheadMs = pos - item.startMs,
+                                    onAdd = { at, level -> vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, at, level, Ease.SMOOTH) } },
+                                    onMove = { k, at, level -> vm.drag { TrackEdits.moveVolumePoint(it, p.id, k, at, level) } },
+                                    onMoveEnd = { vm.endDrag("Volume point") },
+                                    onDelete = { k -> vm.change("Delete point") { TrackEdits.deleteVolumePoint(it, p.id, k) } },
+                                    onEase = { k, e -> vm.change("Ease: ${e.label}") { TrackEdits.easePoint(it, p.id, k, e) } },
+                                )
+                            }) },
+                            leaf(Icons.AutoMirrored.Rounded.VolumeDown, "Dip here") { vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, pos - (a?.startMs ?: 0), 0.3f, Ease.SMOOTH) } },
+                            leaf(Icons.AutoMirrored.Rounded.VolumeUp, "Full here") { vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, pos - (a?.startMs ?: 0), 1f, Ease.SMOOTH) } },
                             if (a?.curve?.isNotEmpty() == true) leaf(Icons.Rounded.ClearAll, "Clear points") { vm.change("Clear points") { TrackEdits.clearCurve(it, p.id) } } else null,
+                        )),
+                        parent(Icons.Rounded.Gradient, "Fades", listOf(
+                            slider(Icons.Rounded.Gradient, "Fade in", (a?.fadeInMs ?: 0) / 1000f, 0f..3f, { "%.1f s".format(java.util.Locale.US, it) },
+                                { x -> vm.drag { TrackEdits.fade(it, p.id, (x * 1000).toLong(), a?.fadeOutMs ?: 0) } }, { vm.endDrag("Fade in") }),
+                            slider(Icons.Rounded.Gradient, "Fade out", (a?.fadeOutMs ?: 0) / 1000f, 0f..3f, { "%.1f s".format(java.util.Locale.US, it) },
+                                { x -> vm.drag { TrackEdits.fade(it, p.id, a?.fadeInMs ?: 0, (x * 1000).toLong()) } }, { vm.endDrag("Fade out") }),
+                            parent(Icons.Rounded.ShowChart, "Shape: ${(a?.fadeShape ?: FadeShape.LINEAR).label}", FadeShape.entries.map { sh ->
+                                leaf(Icons.Rounded.ShowChart, sh.label, on = a?.fadeShape == sh) { vm.change("Fade shape") { TrackEdits.fadeShape(it, p.id, sh) } }
+                            }),
                         )),
                         parent(Icons.Rounded.Timer, "Time", listOf(
                             leaf(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier") { vm.change("Sound time") { TrackEdits.shiftAudio(it, p.id, -250) } },
@@ -2296,6 +2318,8 @@ private class TNode(
     val kids: List<TNode>? = null,
     val slider: TSlider? = null,
     val action: (() -> Unit)? = null,
+    /** A bigger control in place of the icons (the volume line). */
+    val panel: (@Composable () -> Unit)? = null,
 )
 
 private class TSlider(val value: Float, val range: ClosedFloatingPointRange<Float>, val format: (Float) -> String, val onChange: (Float) -> Unit, val onEnd: () -> Unit)
@@ -2328,7 +2352,10 @@ private fun ToolBar(top: List<TNode>, path: List<Int>, onPath: (List<Int>) -> Un
                 }
             }
             val sl = open?.slider
-            if (sl != null) {
+            val panel = open?.panel
+            if (panel != null) {
+                Box(Modifier.weight(1f).padding(end = 12.dp)) { panel() }
+            } else if (sl != null) {
                 var v by remember(open) { mutableFloatStateOf(sl.value) }
                 Column(Modifier.weight(1f).padding(end = 12.dp)) {
                     Row {
@@ -2345,7 +2372,7 @@ private fun ToolBar(top: List<TNode>, path: List<Int>, onPath: (List<Int>) -> Un
                     level.take(5).forEachIndexed { k, n ->
                         TreeTool(n, Modifier.weight(1f)) {
                             when {
-                                n.kids != null || n.slider != null -> onPath(path + k)
+                                n.kids != null || n.slider != null || n.panel != null -> onPath(path + k)
                                 else -> n.action?.invoke()
                             }
                         }
@@ -2370,11 +2397,100 @@ private fun TreeTool(n: TNode, modifier: Modifier, onClick: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(n.icon, contentDescription = null, tint = if (n.danger) RtColors.Error else RtColors.TextPrimary, modifier = Modifier.size(20.dp))
-            if (n.kids != null || n.slider != null) {
+            if (n.kids != null || n.slider != null || n.panel != null) {
                 Box(Modifier.align(Alignment.BottomEnd).padding(4.dp).size(5.dp).clip(RoundedCornerShape(1.dp)).background(RtColors.TextTertiary))
             }
         }
         Text(n.label, style = RtType.caption, color = if (n.danger) RtColors.Error else RtColors.TextPrimary, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/**
+ * The volume line of one sound, full width: tap to add a point, drag one to move it (sideways in
+ * time, up and down in level), hold one to delete it. The selected point's ease (how the line
+ * goes on to the next point) is picked below it. 100% is the dashed line.
+ */
+@Composable
+private fun VolumeLinePanel(
+    a: AudioItem,
+    playheadMs: Long,
+    onAdd: (atMs: Long, level: Float) -> Unit,
+    onMove: (k: Int, atMs: Long, level: Float) -> Unit,
+    onMoveEnd: () -> Unit,
+    onDelete: (Int) -> Unit,
+    onEase: (Int, Ease) -> Unit,
+) {
+    var picked by remember(a.id) { mutableStateOf<Int?>(null) }
+    val curve by rememberUpdatedState(a.curve)
+    val dur = a.durMs.coerceAtLeast(1)
+    val accent = RtColors.Primary
+    val faint = RtColors.TextTertiary
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        BoxWithConstraints(Modifier.fillMaxWidth().height(96.dp).clip(RoundedCornerShape(10.dp)).background(RtColors.Surface)) {
+            val wPx = constraints.maxWidth.toFloat()
+            val hPx = constraints.maxHeight.toFloat()
+            fun x(ms: Long) = ms.toFloat() / dur * wPx
+            fun y(level: Float) = hPx - 8f - (level / 1.5f) * (hPx - 16f)
+            fun level(yy: Float) = ((hPx - 8f - yy) / (hPx - 16f) * 1.5f).coerceIn(0f, 1.5f)
+            fun ms(xx: Float) = (xx / wPx * dur).toLong().coerceIn(0, dur)
+            fun hit(o: androidx.compose.ui.geometry.Offset): Int? = curve.indices.minByOrNull { k -> kotlin.math.abs(x(curve[k].atMs) - o.x) + kotlin.math.abs(y(curve[k].level) - o.y) }
+                ?.takeIf { k -> kotlin.math.abs(x(curve[k].atMs) - o.x) < 48f && kotlin.math.abs(y(curve[k].level) - o.y) < 48f }
+            androidx.compose.foundation.Canvas(
+                Modifier.fillMaxSize()
+                    .pointerInput(a.id) {
+                        detectTapGestures(
+                            onTap = { o -> val k = hit(o); if (k != null) picked = k else onAdd(ms(o.x), level(o.y)) },
+                            onLongPress = { o -> hit(o)?.let { k -> onDelete(k); picked = null } },
+                        )
+                    }
+                    .pointerInput(a.id, "drag") {
+                        var k: Int? = null
+                        detectDragGestures(
+                            onDragStart = { o -> k = hit(o); picked = k },
+                            onDragEnd = { if (k != null) onMoveEnd(); k = null },
+                            onDragCancel = { if (k != null) onMoveEnd(); k = null },
+                        ) { ch, _ ->
+                            val kk = k ?: return@detectDragGestures
+                            ch.consume()
+                            onMove(kk, ms(ch.position.x), level(ch.position.y))
+                        }
+                    },
+            ) {
+                // 100% guide, the playhead, the line and its points.
+                drawLine(faint, androidx.compose.ui.geometry.Offset(0f, y(1f)), androidx.compose.ui.geometry.Offset(size.width, y(1f)), strokeWidth = 1f,
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f, 8f)))
+                if (playheadMs in 0..dur) drawLine(Color.White, androidx.compose.ui.geometry.Offset(x(playheadMs), 0f), androidx.compose.ui.geometry.Offset(x(playheadMs), size.height), strokeWidth = 2f)
+                var prev: androidx.compose.ui.geometry.Offset? = null
+                val steps = 120
+                for (j in 0..steps) {
+                    val t = dur * j / steps
+                    val pt = androidx.compose.ui.geometry.Offset(x(t), y(TrackEdits.levelAt(a, t) / a.volume.coerceAtLeast(0.01f) * a.volume))
+                    prev?.let { drawLine(accent, it, pt, strokeWidth = 3f) }
+                    prev = pt
+                }
+                curve.forEachIndexed { k, pnt ->
+                    drawCircle(if (k == picked) Color.White else accent, radius = if (k == picked) 11f else 8f, center = androidx.compose.ui.geometry.Offset(x(pnt.atMs), y(pnt.level)))
+                }
+            }
+        }
+        val k = picked?.takeIf { it < a.curve.size }
+        if (k != null && k < a.curve.size - 1) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Ease.entries.forEach { e ->
+                    val on = a.curve[k].ease == e
+                    Text(
+                        e.label, style = RtType.caption, color = if (on) RtColors.Background else RtColors.TextPrimary,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) RtColors.Primary else RtColors.Surface)
+                            .clickable(role = Role.Button) { onEase(k, e) }.padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
+            }
+        } else {
+            Text(
+                if (a.curve.isEmpty()) "Tap the line to add a point · drag it up or down" else "Tap a point to choose how it eases into the next · hold to delete",
+                style = RtType.caption, color = RtColors.TextSecondary,
+            )
+        }
     }
 }
 

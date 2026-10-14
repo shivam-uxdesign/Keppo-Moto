@@ -232,4 +232,14 @@ class TracksTest {
         )))
         assertEquals(com.ridetrack.app.studio.NoiseChoice.MUTE, back!!.plan.audio.first { it.id == id }.noise[1_200])
     }
+
+    @Test
+    fun `volume points ease into the next one, and fades have a shape`() {
+        val linear = com.ridetrack.app.studio.Ease.LINEAR
+        assertEquals(0.5f, linear.of(0.5f), 0.001f)
+        assertEquals(0.5f, com.ridetrack.app.studio.Ease.SMOOTH.of(0.5f), 0.001f)
+        assertEquals(0.156f, com.ridetrack.app.studio.Ease.SMOOTH.of(0.25f), 0.01f)
+        assertEquals(0f, com.ridetrack.app.studio.Ease.HOLD.of(0.9f), 0.001f)
+        assertEquals(0.75f, com.ridetrack.app.studio.FadeShape.FAST.of(0.5f), 0.001f)
+    }
 }

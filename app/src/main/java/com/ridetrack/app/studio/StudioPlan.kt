@@ -362,8 +362,35 @@ enum class TrackKind(val label: String) {
     CLIPS("Clip sound"), DETACHED("Detached sound"), ENGINE("Engine"), VOICE_OVER("Voice-over"), MUSIC("Music"), LAYERS("Layer sound"),
 }
 
-/** A volume point on a sound: [atMs] from its start, [level] 0..1.5. */
-data class VolumePoint(val atMs: Long, val level: Float)
+/** A volume point on a sound: [atMs] from its start, [level] 0..1.5; [ease]: how the line reaches the next point. */
+data class VolumePoint(val atMs: Long, val level: Float, val ease: Ease = Ease.LINEAR)
+
+/** How a volume line goes from one point to the next. */
+enum class Ease(val label: String) {
+    LINEAR("Linear"), SMOOTH("Ease in-out"), IN("Ease in"), OUT("Ease out"), HOLD("Hold");
+
+    /** [u] 0..1 along the way → 0..1 of the change. */
+    fun of(u: Float): Float {
+        val x = u.coerceIn(0f, 1f)
+        return when (this) {
+            LINEAR -> x
+            SMOOTH -> x * x * (3 - 2 * x)
+            IN -> x * x
+            OUT -> 1 - (1 - x) * (1 - x)
+            HOLD -> if (x < 1f) 0f else 1f
+        }
+    }
+}
+
+/** The shape of a fade in or out. */
+enum class FadeShape(val label: String) {
+    LINEAR("Linear"), SMOOTH("Smooth"), FAST("Fast");
+
+    fun of(u: Float): Float {
+        val x = u.coerceIn(0f, 1f)
+        return when (this) { LINEAR -> x; SMOOTH -> x * x * (3 - 2 * x); FAST -> 1 - (1 - x) * (1 - x) }
+    }
+}
 
 /**
  * A sound on its own track: [inMs] into [bit]'s clip (or its engine file), played from [startMs]
@@ -379,6 +406,7 @@ data class AudioItem(
     val volume: Float = 1f,
     val fadeInMs: Long = 0,
     val fadeOutMs: Long = 0,
+    val fadeShape: FadeShape = FadeShape.LINEAR,
     /** The engine mic's file for the clip (two-mic recording); null = the clip's own sound. */
     val file: String? = null,
     val curve: List<VolumePoint> = emptyList(),
