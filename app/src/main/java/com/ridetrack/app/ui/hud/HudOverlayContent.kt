@@ -112,12 +112,19 @@ fun HudOverlayContent(
     }
 }
 
-/** Scales dp and sp together so the card's layout size changes, not just its drawing. */
+/**
+ * Scales dp and sp together so the card's layout size changes, not just its drawing. The
+ * phone's larger text makes the whole card bigger (up to 30%) rather than the text alone,
+ * which would no longer fit the card's fixed width.
+ */
 @Composable
 fun ScaledBy(scale: Float, content: @Composable () -> Unit) {
     val d = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(d.density * scale, d.fontScale), content = content)
+    val text = d.fontScale.coerceIn(1f, MAX_TEXT_GROWTH)
+    CompositionLocalProvider(LocalDensity provides Density(d.density * scale * text, 1f), content = content)
 }
+
+private const val MAX_TEXT_GROWTH = 1.3f
 
 /**
  * Under the card: a record button that films a video (saved as a moment); while filming,

@@ -120,10 +120,11 @@ fun HudCard(data: HudData, settings: HudSettings, modifier: Modifier = Modifier)
             HudLayout.MINIMAL -> Unit
             HudLayout.TOURING -> Cells(
                 c,
-                "Distance" to (data.distanceM?.let { Format.distanceValue(it) + " " + Units.distanceUnit } ?: Format.DASH),
+                // Units go in the labels, so three-digit values fit the half-width cells.
+                "Distance ${Units.distanceUnit}" to (data.distanceM?.let { Format.distanceValue(it) } ?: Format.DASH),
                 "Time" to (data.elapsedMillis?.let(Format::clock) ?: Format.DASH),
-                "Avg" to Format.speedWithUnit(data.avgSpeedMps),
-                "Max" to Format.speedWithUnit(data.maxSpeedMps),
+                "Avg ${Units.speedUnit}" to Format.speedValue(data.avgSpeedMps),
+                "Max ${Units.speedUnit}" to Format.speedValue(data.maxSpeedMps),
             )
             HudLayout.SPORT -> Cells(
                 c,

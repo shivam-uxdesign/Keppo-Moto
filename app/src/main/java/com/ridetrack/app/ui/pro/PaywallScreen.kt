@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -119,7 +120,7 @@ fun PaywallContent(plans: List<PaywallPlan>, note: String?, onBuy: (String) -> U
                 Benefit(Icons.Rounded.Movie, "Reels any time", "Ideas, edits and styles from every ride, as many as you like.")
                 Benefit(Icons.Rounded.AutoAwesome, "Ready when you park", "Your best moments made into Reels after each ride.")
                 Benefit(Icons.Rounded.ClosedCaption, "Captions written for you", "What you say in your clips, written out in your language.")
-                Benefit(Icons.Rounded.LocalGasStation, "Petrol price looked up", "Fill-ups from your card SMS saved without typing the price.")
+                Benefit(Icons.Rounded.LocalGasStation, "Fuel price looked up", "Fill-ups from your card SMS saved without typing the price.")
             }
             if (plans.isEmpty()) {
                 Text(
@@ -194,6 +195,7 @@ private fun PlanCard(p: PaywallPlan, selected: Boolean, saving: Int?, onClick: (
                 color = RtColors.TextSecondary,
             )
         }
+        Spacer(Modifier.width(12.dp))
         Box(
             Modifier.size(22.dp).border(2.dp, if (selected) RtColors.Primary else RtColors.Hairline, CircleShape),
             contentAlignment = Alignment.Center,

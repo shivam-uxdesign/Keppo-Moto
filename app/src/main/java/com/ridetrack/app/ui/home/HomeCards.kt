@@ -153,9 +153,19 @@ fun FuelPromptCard(prompt: com.ridetrack.app.fuel.FuelPrompt, onAdd: () -> Unit,
             style = RtType.caption,
             color = RtColors.TextSecondary,
         )
-        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrimaryButton("Add fill-up", onAdd, Modifier.weight(1f))
-            SecondaryButton("Not a fill-up", onDismiss, Modifier.weight(1f))
+        // Side by side; stacked on small phones or with large text, so the labels never cut off.
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(top = 12.dp)) {
+            if (maxWidth < 300.dp || androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PrimaryButton("Add fill-up", onAdd, Modifier.fillMaxWidth())
+                    SecondaryButton("Not a fill-up", onDismiss, Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PrimaryButton("Add fill-up", onAdd, Modifier.weight(1f))
+                    SecondaryButton("Not a fill-up", onDismiss, Modifier.weight(1f))
+                }
+            }
         }
     }
 }
@@ -286,13 +296,17 @@ private fun androidx.compose.foundation.layout.RowScope.Num(value: String, label
 fun BikeCareCard(bikeName: String, odometerKm: Double?, care: List<CareStatus>, onOpen: () -> Unit, modifier: Modifier = Modifier) {
     RtCard(modifier, onClick = onOpen) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Label("Bike care", Modifier.weight(1f))
+            // The label keeps its room; the bike's name and odometer shorten instead.
+            Label("Bike care")
+            Spacer(Modifier.width(12.dp))
             Text(
                 listOfNotNull(bikeName, odometerKm?.let { BikeCare.km(it) }).joinToString(" · "),
                 style = RtType.caption,
                 color = RtColors.TextTertiary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                modifier = Modifier.weight(1f),
             )
         }
         if (care.isEmpty()) {

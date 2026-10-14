@@ -241,3 +241,22 @@ Where data leaves the phone:
 2. **Fuel outside India:** prices are in ₹, card SMS parsing looks for Rs/INR, and the petrol price lookup searches "…in <city>, India".
 3. **Captions language:** the Gemini prompt assumes English and Hinglish. Riders elsewhere speak other languages.
 4. **No welcome screens:** the app opens straight onto Home. That's fine given the in-context asks, as long as the crash alerts line above is there.
+
+## UI audit, part 1: rendered parts (14 Oct)
+`UiAuditShots` draws contact sheets (build/shots/ui-*.png). Each part is shown dark, light, on a small phone (320 dp, text 130%) and with the largest text (200%). Covered: Home's cards, the crash alert (countdown and sent), the paywall, and every HUD layout and theme, plus the bubble.
+
+### Solid
+- Both themes read well.
+- The crash alert stays clear and usable at 200% text (it's always dark, by design). Its sent screen scrolls above the "I'm OK" button.
+- The paywall wraps cleanly at every size.
+- The new readiness checks and the two-mic meter fit in.
+
+### Found and fixed
+- **HUD at large text:** labels and values were cut ("VOIC", "DISTA", "1:02:") because the text grew inside a fixed-width card. Now the phone's text size scales the whole card, up to 30% (`ScaledBy`); the HUD's own Size setting still applies on top.
+- **HUD Touring:** "MAX 112 km/h" didn't fit half a card. The units moved into the labels ("MAX KM/H"), so the value is just the number.
+- **Home fuel card:** "Add fill-up" / "Not a fill-up" were cut to "Add" / "Not a" on small phones and with large text. The buttons now stack when the row is too narrow.
+- **Home Bike care header:** the bike's name pushed the label off ("BIKE CAREDuke…"). The label keeps its room; the name shortens instead.
+- **Paywall:** the radio button touched the price at 200%, so it now has a gap. "Petrol price looked up" became "Fuel price looked up".
+
+### Part 2
+The screens that need the real app (map, data) are checked from the rider's phone screenshots.
