@@ -346,7 +346,7 @@ class StudioViewModel(
 
     /** Series not yet looked for in this ride look for their episodes (one Gemini request each); they show at the top. */
     private suspend fun findEpisodes(only: String? = null) {
-        if (phoneOnly || !c.transcripts.available) return
+        if (phoneOnly || !c.proAi()) return
         if (only == null && c.series.active().all { c.series.tried(rideId, it.id) }) return
         _state.update { it.copy(planning = "Looking for series episodes") }
         try {
@@ -1457,7 +1457,7 @@ class StudioViewModel(
             plan = plan, takes = emptyList(), tips = emptyList(), durationMs = plan.totalMs,
         )
         val f = draftFile
-        viewModelScope.launch(Dispatchers.IO) { runCatching { f.writeText(ReelJson.write(p)) } }
+        viewModelScope.launch(Dispatchers.IO) { runCatching { f.writeAtomically(ReelJson.write(p)) } }
     }
 
     /** The unsaved edit of this Reel, when it's newer than the Reel itself. */

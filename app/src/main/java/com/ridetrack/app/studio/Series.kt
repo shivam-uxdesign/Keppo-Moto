@@ -162,12 +162,12 @@ class SeriesStore(private val context: Context, migrate: () -> Pair<String, Int>
         // The one series name from before series had folders becomes the first series, at its episode.
         val (old, next) = runCatching(migrate).getOrDefault("" to 1)
         return if (old.isBlank()) emptyList() else listOf(Series(newId(), old.trim(), nextEpisode = next.coerceAtLeast(1), createdAt = System.currentTimeMillis())).also { list ->
-            runCatching { file.writeText(SeriesText.write(list)) }
+            runCatching { file.writeAtomically(SeriesText.write(list)) }
         }
     }
 
     private fun write() {
-        runCatching { file.writeText(SeriesText.write(_series.value)) }
+        runCatching { file.writeAtomically(SeriesText.write(_series.value)) }
     }
 
     companion object {

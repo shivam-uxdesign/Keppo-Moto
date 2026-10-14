@@ -46,7 +46,7 @@ object ClipSeen {
      */
     suspend fun look(c: AppContainer, clips: List<Moment>, limit: Int = 60, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int = withContext(Dispatchers.IO) {
         val todo = clips.filter { it.file.isFile && load(it.file) == null }.take(limit)
-        if (todo.isEmpty() || !c.transcripts.available) return@withContext 0
+        if (todo.isEmpty() || !c.proAi()) return@withContext 0
         val g = StudioGemini(preferred = { c.transcripts.model }, onWorking = { c.transcripts.model = it })
         var done = 0
         for (batch in todo.chunked(6)) {

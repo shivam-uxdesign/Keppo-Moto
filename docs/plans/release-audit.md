@@ -164,3 +164,26 @@ No photo or video library permissions (the system picker is used). Good.
 - **Storage leak (medium):** still frames (`studio-stills`), reversed clips (`studio-reversed`) and raw voice-over recordings (`studio/voice-*.pcm`) were never deleted, even after the edit using them was gone.
   - Fix: `StudioSweeper`, once a day at app start (after the Reel purge).
   - It deletes such a file when no edit's JSON names it and it's over 3 days old.
+
+## Code audit 2: Studio (14 Oct, part 2)
+
+### Solid
+- Studio itself is gated: it's locked for free riders after the weekly Reel and asks for Gemini consent the first time.
+- Background Gemini work (after-ride ideas, transcripts, petrol prices) checks Pro and consent.
+- StudioService uses mediaProcessing on Android 15+ and dataSync before that, and stops on Android's time limit.
+- FileProvider is not exported; it shares only `shares/`, `moments/`, `reels/` and `exports/`, one file at a time with read permission.
+- Every JSON read (Reels, drafts, queue, Gemini answers) is wrapped, so a damaged file is skipped instead of crashing.
+- Forced unwraps (`!!`) were checked one by one: each has a check right before it.
+  - Send to Journal relied on its callers, so it now skips Reels without a ride itself.
+
+### Found and fixed
+- **Gemini for free riders (high, against the paywall decision):** four side screens called Gemini with no Pro or consent check. A free rider could reach them through "Your Reels".
+  - The screens: Styles › Describe it in words / Like a video I love, Search › Look now, a series' "Make next episode", and finding series episodes in a ride.
+  - Fix: one shared check, `AppContainer.proAi()` (Gemini set up, Pro, consent given).
+  - It's used in the low-level functions (`ClipSeen.look`, `SeriesWork.find` and `makeNext`), in the UI (the rows are hidden), and by the petrol price and transcript gates.
+- **Saves could be cut short (medium):** Reels, versions, drafts, ride plans, series, styles, saved clips and the making queue were written in place. If the app was killed mid-save, the file was left half-written.
+  - Series and styles keep everything in one file, so all of them would be lost.
+  - Fix: `writeAtomically` writes to a temporary file, syncs it, then renames it over the old one. The file is always either the old or the new version.
+
+### Noted for the store pack
+- The FGS declaration needs both types explained: "dataSync" on Android 14 and older and "mediaProcessing" on 15+, both for rendering a Reel the rider asked for. Record a short video of it.

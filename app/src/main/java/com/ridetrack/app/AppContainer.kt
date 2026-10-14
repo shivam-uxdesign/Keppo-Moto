@@ -96,6 +96,12 @@ class AppContainer(context: Context) {
     /** Studio's Gemini work is allowed: Pro, or the free Reel this week is still there. */
     fun studioOpen(): Boolean = entitlements.isPro || freeReels.available()
 
+    /**
+     * Gemini outside the free weekly Reel (captions, petrol prices, styles, search, series):
+     * Pro, the rider agreed to send clips to Gemini, and Gemini is set up in this build.
+     */
+    fun proAi(): Boolean = transcripts.available && entitlements.isPro && aiConsent.isGiven
+
     /** A Reel was made: a free rider's weekly Reel is used. */
     fun reelMade() {
         if (!entitlements.isPro) freeReels.markUsed()
@@ -109,7 +115,7 @@ class AppContainer(context: Context) {
         appContext, settings, rides,
         // Today's petrol price for the city, found by Gemini with Google Search (Pro; free riders type it).
         com.ridetrack.app.fuel.FuelPrices(appContext) { prompt ->
-            if (!transcripts.available || !entitlements.isPro || !aiConsent.isGiven) null
+            if (!proAi()) null
             else com.ridetrack.app.studio.StudioGemini(preferred = { transcripts.model }, onWorking = { transcripts.model = it }).searched(prompt)
         },
     )
@@ -121,7 +127,7 @@ class AppContainer(context: Context) {
     fun transcribeSoon() {
         appScope.launch {
             val m = settings.settings.first().moments
-            if (m.transcribe && entitlements.isPro && aiConsent.isGiven) transcripts.schedule(m.transcribeWifiOnly)
+            if (m.transcribe && proAi()) transcripts.schedule(m.transcribeWifiOnly)
         }
     }
 

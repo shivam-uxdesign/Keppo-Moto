@@ -105,7 +105,7 @@ class SavedClipStore(private val context: Context) {
                 thumb(id).outputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 85, it) }
                 b.recycle()
             }
-            File(dir, META).writeText(write(clip).toString())
+            File(dir, META).writeAtomically(write(clip).toString())
         }
         _clips.value = listOf(clip) + _clips.value
         return clip
@@ -119,7 +119,7 @@ class SavedClipStore(private val context: Context) {
     suspend fun setTags(id: String, tags: List<String>) = withContext(Dispatchers.IO) {
         val c = _clips.value.firstOrNull { it.id == id } ?: return@withContext
         val updated = c.copy(tags = tags.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct())
-        File(File(root, id), META).writeText(write(updated).toString())
+        File(File(root, id), META).writeAtomically(write(updated).toString())
         _clips.value = _clips.value.map { if (it.id == id) updated else it }
     }
 

@@ -317,7 +317,8 @@ internal fun NewStyleSheet(visible: Boolean, styles: List<StudioStyle>, onClose:
     }
     StudioSheet(visible, onClose, "New style") {
         Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (c.transcripts.available) {
+            // Gemini drafts styles for Pro riders who allowed it.
+            if (c.proAi()) {
                 SheetRow("Describe it in words", "“night, neon, punchy” · Gemini") { way = "words"; error = null }
                 if (way == "words") {
                     OutlinedTextField(

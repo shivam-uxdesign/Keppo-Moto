@@ -268,7 +268,7 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         val fixes = JSONArray().apply {
             all.forEach { sc -> put(JSONArray(ScriptWriter.toPlan(sc, fs, bits, sc.vibe ?: o.vibe, o).fixes)) }
         }
-        planFile.writeText(
+        planFile.writeAtomically(
             JSONObject()
                 .put("pieces", JSONArray().apply { all.forEach { put(ScriptJson.write(it)) } })
                 .put("fixes", fixes)

@@ -78,7 +78,7 @@ class StyleStore(context: Context) {
         val o = JSONObject()
             .put("rules", JSONArray(_rules.value))
             .put("log", JSONArray().apply { _log.value.forEach { put(JSONObject().put("at", it.atMillis).put("before", it.before).put("after", it.after).put("note", it.note ?: "")) } })
-        file.writeText(o.toString())
+        file.writeAtomically(o.toString())
     }
 
     private companion object {

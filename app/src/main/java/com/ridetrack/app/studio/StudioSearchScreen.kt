@@ -187,7 +187,8 @@ fun StudioSearchScreen(onBack: () -> Unit, onOpenRide: (String) -> Unit, onOpenS
                 )
             }
         }
-        if (s.unseen > 0 && kind != SearchKind.SAID) {
+        // Gemini looking at clips is a Pro feature (and needs the rider's OK).
+        if (s.unseen > 0 && kind != SearchKind.SAID && com.ridetrack.app.ui.appContainer().proAi()) {
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(RtColors.Surface).padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,

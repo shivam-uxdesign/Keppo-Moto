@@ -50,7 +50,7 @@ class ReelStore(private val context: Context) {
         }
         d.listFiles()?.filter { it.name.startsWith("voice-") && saved.none { s -> s.file == it.name } }?.forEach { it.delete() }
         val project = p.copy(takes = saved, updatedAt = System.currentTimeMillis())
-        File(d, PROJECT).writeText(ReelJson.write(project))
+        File(d, PROJECT).writeAtomically(ReelJson.write(project))
         if (!cover(p.id).isFile) frame(video(p.id), project.durationMs / 6)?.let { writeCover(p.id, it) }
         publish(project)
         project
@@ -62,7 +62,7 @@ class ReelStore(private val context: Context) {
     /** Updates the saved details only (cover settings, Journal state…). */
     suspend fun update(id: String, f: (ReelProject) -> ReelProject): ReelProject? = withContext(Dispatchers.IO) {
         val p = get(id)?.let(f) ?: return@withContext null
-        File(dir(id), PROJECT).writeText(ReelJson.write(p))
+        File(dir(id), PROJECT).writeAtomically(ReelJson.write(p))
         publish(p)
         p
     }
@@ -85,7 +85,7 @@ class ReelStore(private val context: Context) {
             val name = f.name.replace(id, copy.id)
             f.copyTo(File(dir(copy.id), name), overwrite = true)
         }
-        File(dir(copy.id), PROJECT).writeText(ReelJson.write(copy))
+        File(dir(copy.id), PROJECT).writeAtomically(ReelJson.write(copy))
         publish(copy)
         copy
     }
@@ -102,7 +102,7 @@ class ReelStore(private val context: Context) {
         val d = File(vd, "v$n").apply { mkdirs() }
         video(id).copyTo(File(d, "reel.mp4"), overwrite = true)
         cover(id).takeIf { it.isFile }?.copyTo(File(d, "cover.jpg"), overwrite = true)
-        File(d, PROJECT).writeText(ReelJson.write(p))
+        File(d, PROJECT).writeAtomically(ReelJson.write(p))
         versions(id).sortedBy { it.first }.dropLast(MAX_VERSIONS).forEach { File(vd, "v${it.first}").deleteRecursively() }
     }
 
@@ -122,7 +122,7 @@ class ReelStore(private val context: Context) {
         File(d, "reel.mp4").copyTo(video(id), overwrite = true)
         File(d, "cover.jpg").takeIf { it.isFile }?.copyTo(cover(id), overwrite = true)
         val p = old.copy(id = id, updatedAt = System.currentTimeMillis(), inJournal = get(id)?.inJournal ?: old.inJournal, journalCover = get(id)?.journalCover ?: old.journalCover)
-        File(dir(id), PROJECT).writeText(ReelJson.write(p))
+        File(dir(id), PROJECT).writeAtomically(ReelJson.write(p))
         d.deleteRecursively()
         publish(p)
         p

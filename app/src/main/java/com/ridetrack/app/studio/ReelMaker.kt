@@ -183,7 +183,7 @@ class ReelMaker(
         val all = listOfNotNull(current) + synchronized(pending) { pending.toList() }
         runCatching {
             if (all.isEmpty()) queueFile.delete()
-            else queueFile.writeText(JSONArray().apply { all.forEach { put(ReelJson.write(it.project)) } }.toString())
+            else queueFile.writeAtomically(JSONArray().apply { all.forEach { put(ReelJson.write(it.project)) } }.toString())
         }
     }
 

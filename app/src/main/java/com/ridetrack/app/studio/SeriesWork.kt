@@ -17,7 +17,7 @@ object SeriesWork {
      * Gemini's free limit or without internet (the rest are tried another time).
      */
     suspend fun find(c: AppContainer, engine: StudioEngine, rideId: String, only: String? = null): List<Found> {
-        if (!c.transcripts.available) return emptyList()
+        if (!c.proAi()) return emptyList()
         val cd = engine.card ?: return emptyList()
         val todo = c.series.active().filter { (only == null || it.id == only) && (only != null || !c.series.tried(rideId, it.id)) }
         if (todo.isEmpty()) return emptyList()
@@ -80,6 +80,8 @@ object SeriesWork {
      */
     suspend fun makeNext(c: AppContainer, s: Series): String {
         if (!c.transcripts.available) return "Gemini isn't in this build"
+        if (!c.entitlements.isPro) return "Series episodes come with Keppo Moto Pro"
+        if (!c.aiConsent.isGiven) return "Allow Gemini first (Studio asks the first time you open it)"
         val since = System.currentTimeMillis() - 21 * 86_400_000L
         val rides = c.rides.observeCompleted().first().filter { it.startTimeMillis >= since }.sortedByDescending { it.startTimeMillis }
         val todo = rides.filter { !c.series.tried(it.id, s.id) }

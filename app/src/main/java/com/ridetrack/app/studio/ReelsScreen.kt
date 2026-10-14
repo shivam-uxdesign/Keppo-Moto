@@ -559,7 +559,7 @@ private fun formatMb(b: Long): String = if (b < 1_000_000_000) "${b / 1_000_000}
 
 /** Sends Reels to Keppo Journal; for each ride, the newest one sent becomes the entry's cover. */
 internal suspend fun sendToJournal(c: com.ridetrack.app.AppContainer, list: List<ReelProject>) {
-    list.groupBy { it.rideId!! }.forEach { (ride, sent) ->
+    list.mapNotNull { p -> p.rideId?.let { it to p } }.groupBy({ it.first }, { it.second }).forEach { (ride, sent) ->
         val coverId = sent.maxBy { it.createdAt }.id
         c.reels.reels.value.filter { it.rideId == ride && (it.journalCover || it.id in sent.map { s -> s.id }) }.forEach { p ->
             c.reels.update(p.id) { it.copy(inJournal = it.inJournal || sent.any { s -> s.id == it.id }, journalCover = it.id == coverId) }

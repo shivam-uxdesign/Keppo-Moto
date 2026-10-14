@@ -168,7 +168,7 @@ class StyleLibrary(private val context: Context) {
 
     private fun write() {
         val changed = _styles.value.filter { s -> !s.builtIn || Styles.builtIns.firstOrNull { it.id == s.id } != s }
-        runCatching { file.writeText(StyleJson.writeAll(changed)) }
+        runCatching { file.writeAtomically(StyleJson.writeAll(changed)) }
     }
 
     companion object {
