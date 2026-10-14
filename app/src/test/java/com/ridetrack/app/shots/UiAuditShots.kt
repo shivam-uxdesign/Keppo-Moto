@@ -96,6 +96,7 @@ class UiAuditShots {
         ReadinessCard(Readiness.checks(ReadyInputs(crashOn = false, batteryPct = 82)), {})
         MomentsToggles(moments = true, voice = false, onMoments = {}, onVoice = {})
         FuelPromptCard(FuelPrompt("r", "b", 0L, "Indian Oil, MG Road", 500.0), {}, {})
+        com.ridetrack.app.ui.home.FuelNudgeCard(com.ridetrack.app.fuel.Nudge(290.0, 250.0), {}, {})
         MilestonesCard(listOf(Milestone("New top speed: 118.4 km/h", "Sunday ride · was 112.0 on Saturday"), Milestone("1,000 km ridden", "Across 42 rides with Keppo Moto")))
         val oil = CareItem("1", "b", "Engine oil", everyKm = 3000, doneAtMillis = 0)
         val chain = CareItem("2", "b", "Chain lube", everyKm = 500, doneAtMillis = 0)

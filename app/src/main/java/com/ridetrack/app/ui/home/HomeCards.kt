@@ -390,3 +390,30 @@ fun WeekLine(week: PeriodStats, modifier: Modifier = Modifier) {
         )
     }
 }
+
+/** After about a tank's distance with no fill-up recorded. */
+@Composable
+fun FuelNudgeCard(nudge: com.ridetrack.app.fuel.Nudge, onAdd: () -> Unit, onNotYet: () -> Unit, modifier: Modifier = Modifier) {
+    RtCard(modifier) {
+        Label("Fuel")
+        Text("Did you fill up?", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.padding(top = 4.dp))
+        Text(
+            "${Format.distance(nudge.sinceKm * 1000)} since your last fill-up; you usually fill up every ${Format.distance(nudge.usualKm * 1000)}.",
+            style = RtType.caption,
+            color = RtColors.TextSecondary,
+        )
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(top = 12.dp)) {
+            if (maxWidth < 300.dp || androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PrimaryButton("Add fill-up", onAdd, Modifier.fillMaxWidth())
+                    SecondaryButton("Not yet", onNotYet, Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PrimaryButton("Add fill-up", onAdd, Modifier.weight(1f))
+                    SecondaryButton("Not yet", onNotYet, Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}

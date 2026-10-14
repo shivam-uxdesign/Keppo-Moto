@@ -68,6 +68,18 @@ class LivePumpWatch {
     }
 }
 
+/** One tap during a ride: "Filled up", from the pop-up or the ride notification. */
+object FilledUp {
+    fun now(context: Context) {
+        val c = (context.applicationContext as RideTrackApp).container
+        val ride = c.session.active.value ?: return
+        val f = c.session.frame.value
+        c.appScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { c.fuel.filledNow(ride.rideId, ride.bikeId, f?.timeMillis ?: System.currentTimeMillis(), f?.latitude, f?.longitude) }
+        }
+    }
+}
+
 /** "Filled up at <station>?" as you ride away from it, with Yes and No. */
 object LivePumpNotice {
     const val ACTION_YES = "com.keppo.moto.FUEL_LIVE_YES"

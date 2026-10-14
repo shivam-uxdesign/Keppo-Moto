@@ -49,6 +49,26 @@ class FuelRepository(
         allRides.filter { it.bikeId == bikeId && it.source != DataSourceKind.DEMO }.map { it.startTimeMillis to it.stats.distanceM },
     )
 
+    /** "Did you fill up?" for [bikeId] after about a tank's distance with no fill; see [Fuel.nudge]. */
+    fun nudge(bikeId: String, fills: List<FuelFill>, allRides: List<com.ridetrack.telemetry.model.Ride>): Nudge? {
+        val mine = fills.filter { it.bikeId == bikeId }
+        val last = mine.maxOfOrNull { it.timeMillis }
+        // A "Not yet" counts only until the next fill-up.
+        val snoozed = prefs.getString(SNOOZE + bikeId, null)?.split('@')
+            ?.takeIf { it.size == 2 && it[0].toLongOrNull() == last }?.get(1)?.toDoubleOrNull()
+        return Fuel.nudge(mine, allRides.filter { it.bikeId == bikeId && it.source != DataSourceKind.DEMO }.map { it.startTimeMillis to it.stats.distanceM }, snoozed)
+    }
+
+    /** "Not yet": asked again after another 30% of a tank. */
+    fun snoozeNudge(bikeId: String, fills: List<FuelFill>, sinceKm: Double) {
+        val last = fills.filter { it.bikeId == bikeId }.maxOfOrNull { it.timeMillis } ?: return
+        prefs.edit().putString(SNOOZE + bikeId, "$last@$sinceKm").apply()
+        _snoozed.value++
+    }
+    private val _snoozed = kotlinx.coroutines.flow.MutableStateFlow(0)
+    /** Changes when a nudge is snoozed, so Home reads it again. */
+    val snoozed: kotlinx.coroutines.flow.StateFlow<Int> = _snoozed
+
     /** Stations: yours, kept on the phone for your areas, then OpenStreetMap online. */
     val stations = StationFinder(context)
 
@@ -150,6 +170,7 @@ class FuelRepository(
             prompt.how == "live" -> "live"
             prompt.how == "button" -> "button"
             prompt.how == "marked" -> "marked"
+            prompt.how == "nudge" -> "nudge"
             else -> "stop"
         }
         add(Fuel.newFill(prompt.bikeId, prompt.timeMillis, litres, amount, price, prompt.station.takeIf { prompt.sure }, source))
@@ -191,6 +212,16 @@ class FuelRepository(
         }
         rideLog(rideId, "fuel: rode off from ${station.name} at ${clock(stop.toMillis)}: asked on the spot")
         LivePumpNotice.ask(context, FuelPrompt(rideId, bikeId, stop.toMillis, station.name, null, stop.latitude, stop.longitude, sure = true, how = "live"))
+    }
+
+    /**
+     * "Filled up" tapped during a ride (pop-up or notification): noted where the bike is now,
+     * named after the station there when one is known, for the amount after the ride.
+     */
+    suspend fun filledNow(rideId: String, bikeId: String, timeMillis: Long, lat: Double?, lon: Double?) {
+        val station = if (lat != null && lon != null) stations.nearKept(lat, lon) else null
+        rideLog(rideId, "fuel: you tapped Filled up at ${clock(timeMillis)}" + (station?.let { " (${it.name})" } ?: ""))
+        liveYes(FuelPrompt(rideId, bikeId, timeMillis, station?.name ?: "Fuel stop", null, lat, lon, sure = true, how = "button"))
     }
 
     /** "Yes" on the spot: waits for the amount on Home and the Fuel page. */
@@ -302,6 +333,7 @@ class FuelRepository(
         const val DECLINED = "declined_stops"
         /** Two finds this close are the same fill-up. */
         const val SAME_STOP_MS = 10 * 60_000L
+        private const val SNOOZE = "nudge-snooze-"
         /** A stop this close to a pump you mark is where you filled up. */
         private const val MARK_STOP_M = 300.0
         /** A stop this long with no station known is kept under "Not sure". */

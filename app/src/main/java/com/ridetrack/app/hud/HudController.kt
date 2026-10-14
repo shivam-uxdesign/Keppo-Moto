@@ -76,6 +76,11 @@ class HudController(
             moments.reconnectMic()
             overlay.closeControls()
         }
+        override fun filledUp() {
+            com.ridetrack.app.fuel.FilledUp.now(context)
+            overlay.closeControls()
+            note.value = "Fill-up noted · add the amount after the ride" to System.currentTimeMillis()
+        }
     }
 
     private val overlay: HudOverlay = HudOverlay(

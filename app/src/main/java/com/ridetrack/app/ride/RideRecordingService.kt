@@ -57,6 +57,11 @@ class RideRecordingService : LifecycleService() {
             (application as RideTrackApp).container.session.resume()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_FILLED_UP) {
+            com.ridetrack.app.fuel.FilledUp.now(this)
+            android.widget.Toast.makeText(this, "Fill-up noted · add the amount after the ride", android.widget.Toast.LENGTH_SHORT).show()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_KEEP_BREAK) {
             NotificationManagerCompat.from(this).cancel(LONG_BREAK_ID)
             return START_NOT_STICKY
@@ -267,9 +272,19 @@ class RideRecordingService : LifecycleService() {
                     addAction(resumeAction())
                     addAction(endRideAction())
                 }
+                // One tap at the pump; the amount is asked after the ride.
+                if (frame != null) addAction(filledUpAction())
             }
             .build()
     }
+
+    private fun filledUpAction() = NotificationCompat.Action(
+        0, "Filled up",
+        PendingIntent.getService(
+            this, 4, Intent(this, RideRecordingService::class.java).setAction(ACTION_FILLED_UP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        ),
+    )
 
     /** Once per break: a heads-up, a short buzz, no sound. */
     private fun breakAlert(frame: TelemetryFrame): Notification {
@@ -352,6 +367,7 @@ class RideRecordingService : LifecycleService() {
         private const val ACTION_STOP = "com.ridetrack.app.STOP_RECORDING"
         private const val ACTION_RESUME = "com.ridetrack.app.RESUME_RIDE"
         private const val ACTION_KEEP_BREAK = "com.ridetrack.app.KEEP_BREAK"
+        private const val ACTION_FILLED_UP = "com.ridetrack.app.FILLED_UP"
         private const val BREAK_ALERT_ID = 43
         private const val LONG_BREAK_ID = 44
         private const val BATTERY_ALERT_ID = 45

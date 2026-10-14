@@ -78,6 +78,9 @@ data class Mileage(val tanks: List<Tank>, val kmPerLitre: Double?, val costPerKm
     }
 }
 
+/** A tank's distance ridden with no fill-up: [sinceKm] since the last, [usualKm] usually. */
+data class Nudge(val sinceKm: Double, val usualKm: Double)
+
 object Fuel {
     fun newFill(bikeId: String, timeMillis: Long, litres: Double, amount: Double?, price: Double?, station: String?, source: String) =
         FuelFill(UUID.randomUUID().toString(), bikeId, timeMillis, litres, amount, price, station?.takeIf { it.isNotBlank() }, true, source)
@@ -86,6 +89,25 @@ object Fuel {
      * Mileage for one bike from its fills and its rides ((start, distance m) of real rides on
      * it). The first fill only starts the count.
      */
+    /**
+     * "Did you fill up?" after about a tank's distance with no fill: [sinceKm] ridden since the
+     * last fill-up, past 1.1× the usual distance between fills (from two or more). Null when
+     * it's too early, or the rider said "Not yet" at [snoozedKm] and hasn't ridden 30% of a
+     * tank more since.
+     */
+    fun nudge(fills: List<FuelFill>, rides: List<Pair<Long, Double>>, snoozedKm: Double? = null): Nudge? {
+        val sorted = fills.sortedBy { it.timeMillis }
+        if (sorted.size < 3) return null
+        fun km(from: Long, to: Long) = rides.filter { it.first > from && it.first < to }.sumOf { it.second } / 1000
+        val gaps = sorted.zipWithNext().map { (a, b) -> km(a.timeMillis, b.timeMillis) }.filter { it > 0 }.sorted()
+        if (gaps.size < 2) return null
+        val usual = gaps[gaps.size / 2]
+        val since = km(sorted.last().timeMillis, Long.MAX_VALUE)
+        if (since < usual * 1.1) return null
+        if (snoozedKm != null && since < snoozedKm + usual * 0.3) return null
+        return Nudge(since, usual)
+    }
+
     fun mileage(fills: List<FuelFill>, rides: List<Pair<Long, Double>>): Mileage {
         val sorted = fills.sortedBy { it.timeMillis }
         val tanks = sorted.zipWithNext().mapNotNull { (prev, cur) ->

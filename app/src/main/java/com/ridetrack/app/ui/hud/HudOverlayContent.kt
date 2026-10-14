@@ -61,6 +61,8 @@ interface HudControlActions {
     fun stopVideo()
     fun flipCamera()
     fun reconnectMic()
+    /** "Filled up": noted for the amount after the ride. */
+    fun filledUp() {}
 }
 
 @Composable
@@ -106,6 +108,7 @@ fun HudOverlayContent(
                     onClose = actions::closeControls,
                     missingMic = data.micFallback,
                     onReconnectMic = actions::reconnectMic,
+                    onFilledUp = actions::filledUp,
                 )
             }
         }

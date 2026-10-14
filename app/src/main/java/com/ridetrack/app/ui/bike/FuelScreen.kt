@@ -140,8 +140,9 @@ fun FuelScreen(bikeId: String, onBack: () -> Unit) {
         // Pumps the app knows as yours: where you filled up, or marked on a ride's map.
         val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as? com.ridetrack.app.RideTrackApp
         var pumpsVersion by remember { mutableStateOf(0) }
-        val pumps by androidx.compose.runtime.produceState(emptyList<com.ridetrack.app.fuel.Station>(), pumpsVersion, fills.size) {
-            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app?.container?.fuel?.stations?.mine().orEmpty() }
+        var pumps by remember { mutableStateOf(emptyList<com.ridetrack.app.fuel.Station>()) }
+        androidx.compose.runtime.LaunchedEffect(pumpsVersion, fills.size) {
+            pumps = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app?.container?.fuel?.stations?.mine().orEmpty() }
         }
         SectionHeader("Your petrol pumps")
         Text(

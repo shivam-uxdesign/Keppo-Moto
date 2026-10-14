@@ -60,6 +60,8 @@ fun HudControls(
     /** The chosen mic that dropped out; offers "Reconnect mic" after re-plugging it. */
     missingMic: String? = null,
     onReconnectMic: () -> Unit = {},
+    /** "Filled up": the fill-up noted here and now, for the amount after the ride. */
+    onFilledUp: (() -> Unit)? = null,
 ) {
     Column(
         modifier
@@ -111,6 +113,15 @@ fun HudControls(
             steps = 7,
             colors = SliderDefaults.colors(thumbColor = RtColors.Primary, activeTrackColor = RtColors.Primary, inactiveTrackColor = RtColors.Outline),
         )
+        if (onFilledUp != null) {
+            OutlinedButton(
+                onClick = onFilledUp,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, RtColors.Outline),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = RtColors.TextPrimary),
+            ) { Text("FILLED UP", style = RtType.button) }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(
                 onClick = onHide,

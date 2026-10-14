@@ -110,10 +110,17 @@ private data class Extras(
 )
 
 /** Fuel on Home: a pump stop to confirm, the last price paid, and the last ride's fuel. */
-data class HomeFuel(val prompt: FuelPrompt? = null, val lastPrice: Double? = null, val lastRide: String? = null)
+data class HomeFuel(
+    val prompt: FuelPrompt? = null,
+    val lastPrice: Double? = null,
+    val lastRide: String? = null,
+    /** A tank's distance with no fill-up, on the last ridden bike. */
+    val nudge: com.ridetrack.app.fuel.Nudge? = null,
+    val nudgeBikeId: String? = null,
+)
 
 class HomeViewModel(private val c: AppContainer) : ViewModel() {
-    val fuel: StateFlow<HomeFuel> = combine(c.fuel.fills, c.fuel.prompts, c.rides.observeCompleted()) { fills, prompts, rides ->
+    val fuel: StateFlow<HomeFuel> = combine(c.fuel.fills, c.fuel.prompts, c.rides.observeCompleted(), c.fuel.snoozed) { fills, prompts, rides, _ ->
         val last = rides.filter { it.source != DataSourceKind.DEMO }.maxByOrNull { it.startTimeMillis }
         val estimate = last?.let { r -> c.fuel.mileage(r.bikeId, fills, rides).estimate(r.stats.distanceM / 1000) }
         HomeFuel(
@@ -121,6 +128,8 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
             prompt = prompts.filter { it.sure }.maxByOrNull { it.timeMillis },
             lastPrice = fills.sortedBy { it.timeMillis }.lastOrNull { it.pricePerLitre != null }?.pricePerLitre,
             lastRide = estimate?.let { (l, cost) -> "≈${String.format(java.util.Locale.US, "%.1f", Units.volume(l))} ${Units.volumeUnit}" + (cost?.let { " · ${Fuel.money(it)}" } ?: "") },
+            nudge = last?.let { c.fuel.nudge(it.bikeId, fills, rides) },
+            nudgeBikeId = last?.bikeId,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeFuel())
 
@@ -129,6 +138,11 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
         viewModelScope.launch { c.fuel.confirm(prompt, litres, amount, price) }
     }
 
+
+    /** "Not yet" on the distance reminder. */
+    fun snoozeNudge(bikeId: String, sinceKm: Double) {
+        viewModelScope.launch(Dispatchers.IO) { c.fuel.snoozeNudge(bikeId, c.fuel.fills.first(), sinceKm) }
+    }
 
     fun dismissFuel(prompt: FuelPrompt) {
         viewModelScope.launch { c.fuel.dismiss(prompt) }

@@ -51,4 +51,19 @@ class PumpMarkTest {
         assertEquals(18.57, stop!!.latitude, 0.0001)
         assertEquals(123_000.0, (stop.toMillis - stop.fromMillis).toDouble(), 1_000.0)
     }
+
+    @Test fun `a tank's distance with no fill-up asks on Home, Not yet waits a while`() {
+        val day = 86_400_000L
+        fun fill(d: Int) = com.ridetrack.app.fuel.Fuel.newFill("b", d * day, 10.0, 1000.0, 100.0, null, "manual")
+        val fills = listOf(fill(0), fill(10), fill(20))
+        // 250 km between fills, then 200 km since the last: too early; 290 km: ask.
+        val rides = (1..9).map { it * day to 25_000.0 } + (11..19).map { it * day to 25_000.0 } + (21..28).map { it * day to 25_000.0 }
+        assertNull(com.ridetrack.app.fuel.Fuel.nudge(fills, rides))
+        val more = rides + listOf(29 * day to 45_000.0, 30 * day to 45_000.0)
+        val n = com.ridetrack.app.fuel.Fuel.nudge(fills, more)!!
+        assertEquals(290.0, n.sinceKm, 0.1)
+        assertEquals(225.0, n.usualKm, 0.1)
+        assertNull(com.ridetrack.app.fuel.Fuel.nudge(fills, more, snoozedKm = 290.0))
+        assertEquals(370.0, com.ridetrack.app.fuel.Fuel.nudge(fills, more + (31 * day to 80_000.0), snoozedKm = 290.0)!!.sinceKm, 0.1)
+    }
 }

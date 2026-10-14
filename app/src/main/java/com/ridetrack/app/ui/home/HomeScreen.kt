@@ -164,6 +164,17 @@ fun HomeScreen(
             FuelPromptCard(p, onAdd = { fillUp = p }, onDismiss = { vm.dismissFuel(p) }, modifier = Modifier.riseIn(0))
             Spacer(Modifier.height(RtDimens.md))
         }
+        val nudge = fuel.nudge
+        val nudgeBike = fuel.nudgeBikeId
+        if (fuel.prompt == null && nudge != null && nudgeBike != null) {
+            FuelNudgeCard(
+                nudge,
+                onAdd = { fillUp = com.ridetrack.app.fuel.FuelPrompt("", nudgeBike, System.currentTimeMillis(), "Fuel stop", null, sure = true, how = "nudge") },
+                onNotYet = { vm.snoozeNudge(nudgeBike, nudge.sinceKm) },
+                modifier = Modifier.riseIn(0),
+            )
+            Spacer(Modifier.height(RtDimens.md))
+        }
         s.unfinished?.let { ride ->
             UnfinishedRideCard(
                 ride,
