@@ -76,6 +76,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -181,12 +182,24 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
     val prefs = remember { context.getSharedPreferences("moment_viewer", Context.MODE_PRIVATE) }
     var collapsed by remember { mutableStateOf(runCatching { prefs.getBoolean("collapsed", false) }.getOrDefault(false)) }
     fun setCollapsed(c: Boolean) { collapsed = c; runCatching { prefs.edit().putBoolean("collapsed", c).apply() } }
-    LaunchedEffect(muted) { player.volume = if (muted) 0f else 1f }
+    // Two-mic clips: the engine mic plays alongside, kept in step; listen to Voice, Engine or Both.
+    val enginePlayer = remember { ExoPlayer.Builder(context).build().apply { repeatMode = Player.REPEAT_MODE_ONE } }
+    DisposableEffect(enginePlayer) { onDispose { enginePlayer.release() } }
+    var hasEngine by remember { mutableStateOf(false) }
+    var listen by remember { mutableStateOf(Listen.BOTH) }
+    LaunchedEffect(muted, listen, hasEngine) {
+        player.volume = if (muted || (hasEngine && listen == Listen.ENGINE)) 0f else 1f
+        enginePlayer.volume = if (muted || !hasEngine || listen == Listen.VOICE) 0f else 1f
+    }
     LaunchedEffect(player) {
         while (true) {
             positionMs = player.currentPosition.coerceAtLeast(0)
             durationMs = player.duration.takeIf { it > 0 } ?: durationMs
             isPlaying = player.playWhenReady
+            if (hasEngine) {
+                if (enginePlayer.playWhenReady != player.playWhenReady) enginePlayer.playWhenReady = player.playWhenReady
+                if (kotlin.math.abs(enginePlayer.currentPosition - positionMs) > 120) enginePlayer.seekTo(positionMs)
+            }
             delay(POSITION_TICK_MS)
         }
     }
@@ -203,6 +216,14 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
         val clip = current.kind == MomentKind.CLIP
         // One player, loaded with whichever clip is on screen.
         LaunchedEffect(current.id) {
+            hasEngine = clip && current.engineFile.isFile
+            if (hasEngine) {
+                enginePlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(current.engineFile)))
+                enginePlayer.prepare()
+            } else {
+                enginePlayer.stop()
+                enginePlayer.clearMediaItems()
+            }
             if (clip) {
                 player.setMediaItem(MediaItem.fromUri(Uri.fromFile(current.file)))
                 player.prepare()
@@ -370,6 +391,19 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                 )
             }
             }
+            if (clip && hasEngine) {
+                // Which mic to hear: the helmet (voice), the back seat (engine), or both.
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Listen.entries.forEach { l ->
+                        val on = listen == l
+                        Text(
+                            l.label, style = RtType.caption, color = if (on) Color.Black else Color.White,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) Color.White else Color.White.copy(alpha = 0.12f))
+                                .clickable(role = Role.Button) { listen = l }.padding(horizontal = 12.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+            }
             if (clip) {
                 PlayerControls(
                     playing = isPlaying,
@@ -430,6 +464,9 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
 }
 
 private const val POSITION_TICK_MS = 100L
+
+/** Which of a two-mic clip's mics to hear. */
+private enum class Listen(val label: String) { VOICE("Voice"), ENGINE("Engine"), BOTH("Both") }
 
 /** Play/pause, a seek bar (with a tick where the event happened), time and mute. */
 @Composable

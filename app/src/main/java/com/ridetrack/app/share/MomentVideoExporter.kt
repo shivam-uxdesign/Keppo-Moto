@@ -46,6 +46,8 @@ class MomentVideoExporter(private val context: Context) {
         draw: ((canvas: Canvas, width: Int, height: Int, timeMillis: Long) -> Unit)?,
         onProgress: (Int) -> Unit,
         trim: TrimRange? = null,
+        /** The two mics' mix: the clip's own sound (voice) and the engine mic's file beside it, if any. */
+        sound: MomentSound = MomentSound(),
     ): Result<File> {
         val (w, h) = withContext(Dispatchers.IO) { displaySize(input) } ?: return Result.failure(IllegalStateException("Unreadable clip"))
         output.delete()
@@ -80,9 +82,21 @@ class MomentVideoExporter(private val context: Context) {
                 )
             }
         }.build()
+        val lengthMs = trim?.takeIf { !it.isWhole }?.let { it.endMillis - it.startMillis } ?: withContext(Dispatchers.IO) { lengthMs(input) } ?: 0L
+        fun gain(level: Float): (Long) -> Float = { us -> level * sound.fade(us / 1000, lengthMs) }
+        val mixed = sound.voice != 1f || sound.fadeInMs > 0 || sound.fadeOutMs > 0
         val item = EditedMediaItem.Builder(media).apply {
-            if (overlay != null) setEffects(Effects(emptyList(), listOf(OverlayEffect(listOf(overlay)))))
+            val audio = if (mixed) listOf<androidx.media3.common.audio.AudioProcessor>(com.ridetrack.app.studio.GainProcessor(gain(sound.voice))) else emptyList()
+            if (overlay != null || audio.isNotEmpty()) setEffects(Effects(audio, if (overlay != null) listOf(OverlayEffect(listOf(overlay))) else emptyList()))
         }.build()
+        // The engine mic as a second sound, trimmed the same, at its own level.
+        val engine = sound.engine?.takeIf { it.isFile && sound.engineLevel > 0f }?.let { f ->
+            val em = MediaItem.Builder().setUri(android.net.Uri.fromFile(f)).apply {
+                if (trim != null && !trim.isWhole) setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setStartPositionMs(trim.startMillis).setEndPositionMs(trim.endMillis).build())
+            }.build()
+            androidx.media3.transformer.EditedMediaItemSequence(listOf(EditedMediaItem.Builder(em).setEffects(Effects(listOf(com.ridetrack.app.studio.GainProcessor(gain(sound.engineLevel))), emptyList())).build()))
+        }
+        val composition = Composition.Builder(listOfNotNull(androidx.media3.transformer.EditedMediaItemSequence(listOf(item)), engine)).build()
 
         return withContext(Dispatchers.Main) {
             suspendCancellableCoroutine { cont ->
@@ -99,7 +113,7 @@ class MomentVideoExporter(private val context: Context) {
                         }
                     })
                     .build()
-                transformer.start(item, output.path)
+                transformer.start(composition, output.path)
                 val poll = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
                     val holder = ProgressHolder()
                     while (cont.isActive) {
@@ -116,6 +130,11 @@ class MomentVideoExporter(private val context: Context) {
         }
     }
 
+    private fun lengthMs(file: File): Long? {
+        val r = MediaMetadataRetriever()
+        return try { r.setDataSource(file.path); r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() } catch (e: Exception) { null } finally { runCatching { r.release() } }
+    }
+
     /** Width × height as the clip is displayed (rotation applied). */
     private fun displaySize(file: File): Pair<Int, Int>? {
         val r = MediaMetadataRetriever()
@@ -130,5 +149,24 @@ class MomentVideoExporter(private val context: Context) {
         } finally {
             runCatching { r.release() }
         }
+    }
+}
+
+/**
+ * How a moment's sound goes into the shared video: the voice (the clip's own sound) and the
+ * engine mic at their levels (0..1.5), with fades in and out.
+ */
+data class MomentSound(
+    val voice: Float = 1f,
+    val engine: File? = null,
+    val engineLevel: Float = 0f,
+    val fadeInMs: Long = 0,
+    val fadeOutMs: Long = 0,
+) {
+    /** 0..1 at [atMs] into a video [lengthMs] long. */
+    fun fade(atMs: Long, lengthMs: Long): Float {
+        val a = if (fadeInMs > 0) (atMs.toFloat() / fadeInMs).coerceIn(0f, 1f) else 1f
+        val b = if (fadeOutMs > 0 && lengthMs > 0) ((lengthMs - atMs).toFloat() / fadeOutMs).coerceIn(0f, 1f) else 1f
+        return com.ridetrack.app.studio.FadeShape.SMOOTH.of(minOf(a, b))
     }
 }

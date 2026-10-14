@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import kotlin.math.roundToInt
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Download
@@ -115,6 +116,8 @@ data class MomentShareState(
     val error: String? = null,
     /** Clips: the part to share, and frames along the clip for the trim strip. */
     val trim: TrimRange? = null,
+    /** The two mics' mix in the shared video (Voice, Engine when there's an engine track, fades). */
+    val sound: MomentSound = MomentSound(),
     val frames: List<Bitmap> = emptyList(),
     /** Cutting the plain clip for "Original": null = idle, 0..100 = running. */
     val originalProgress: Int? = null,
@@ -168,6 +171,8 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
             render()
             renderThumbs()
             if (moment.kind == MomentKind.CLIP) loadTrim(moment)
+            // Two-mic clips: the engine mic joins the shared video at 70% (voice at 100%).
+            if (moment.kind == MomentKind.CLIP && moment.engineFile.isFile) _state.update { it.copy(sound = it.sound.copy(engine = moment.engineFile, engineLevel = 0.7f)) }
         }
     }
 
@@ -221,6 +226,8 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
         }
         return result.getOrNull()
     }
+
+    fun setSound(f: (MomentSound) -> MomentSound) = _state.update { it.copy(sound = f(it.sound), exported = null) }
 
     fun toggle(field: MomentField) = change { it.copy(fields = if (field in it.fields) it.fields - field else it.fields + field) }
     fun setChoice(choice: OverlayChoice) {
@@ -363,6 +370,7 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
                 },
                 onProgress = { p -> _state.update { it.copy(exportProgress = p) } },
                 trim = s.trim,
+                sound = s.sound,
             )
             _state.update {
                 it.copy(
@@ -506,6 +514,7 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
                 modifier = Modifier.padding(top = 10.dp),
             )
         }
+        if (s.moment?.kind == MomentKind.CLIP) SoundMix(s.sound, vm::setSound)
         Text(
             "${s.choice.label} · ${s.choice.note} · swipe for more",
             style = RtType.caption,
@@ -751,3 +760,29 @@ private fun TrimHandle(x: Dp, onDrag: (Float) -> Unit, onDone: () -> Unit, label
     }
 }
 
+/**
+ * Sound for the shared video: Mic 1 · Voice and (for two-mic clips) Mic 2 · Engine at their
+ * own levels, and how it fades in and out.
+ */
+@Composable
+private fun SoundMix(sound: MomentSound, onChange: ((MomentSound) -> MomentSound) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Label("Sound")
+        MixRow("Mic 1 · Voice", sound.voice, 0f..1.5f, { "${(it * 100).roundToInt()}%" }) { v -> onChange { it.copy(voice = v) } }
+        if (sound.engine != null) MixRow("Mic 2 · Engine", sound.engineLevel, 0f..1.5f, { "${(it * 100).roundToInt()}%" }) { v -> onChange { it.copy(engineLevel = v) } }
+        MixRow("Fade in", sound.fadeInMs / 1000f, 0f..2f, { "%.1f s".format(java.util.Locale.US, it) }) { v -> onChange { it.copy(fadeInMs = (v * 1000).toLong()) } }
+        MixRow("Fade out", sound.fadeOutMs / 1000f, 0f..2f, { "%.1f s".format(java.util.Locale.US, it) }) { v -> onChange { it.copy(fadeOutMs = (v * 1000).toLong()) } }
+    }
+}
+
+@Composable
+private fun MixRow(label: String, value: Float, range: ClosedFloatingPointRange<Float>, format: (Float) -> String, onValue: (Float) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.width(110.dp))
+        androidx.compose.material3.Slider(
+            value = value, onValueChange = onValue, valueRange = range, modifier = Modifier.weight(1f),
+            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = RtColors.Primary, activeTrackColor = RtColors.Primary),
+        )
+        Text(format(value), style = RtType.caption, color = RtColors.TextPrimary, modifier = Modifier.width(52.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+    }
+}
