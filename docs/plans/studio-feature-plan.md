@@ -1128,3 +1128,12 @@ The rider recorded with two mics (DJI Mic Mini, mono) and saw no sign of it anyw
   - **Removing it:** if the rider deletes the engine sound, it stays out; Add sound › Engine brings it back.
 - **Log:** the moments log now says once whether the two channels differ ("engine sound kept with each clip") or are the same (nothing kept). That tells us why a ride has no engine sound.
 - **Still true:** the engine sound is saved only from a USB-C receiver, and only when the two sides really differ.
+
+## Global launch decisions (14 Oct, from the UX audit)
+1. **Units:** km or miles. The default comes from the phone's country (US, UK, Liberia and Myanmar get miles); it can be changed in Profile. It applies everywhere: HUD, ride pages, share cards and Reel overlays.
+2. **Fuel worldwide:**
+   - Money is shown in the currency of the phone's country.
+   - India works as today.
+   - Elsewhere, card SMS reading and the petrol price lookup are **Beta**, off by default.
+   - Their failures are recorded for review (error log and Crashlytics) without any SMS text: only the kind of failure, the country and the currency.
+3. **Captions in any language:** Gemini writes what the rider says in their own language. Hindi mixed with English stays Hinglish in English letters.
