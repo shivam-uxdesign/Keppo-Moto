@@ -91,7 +91,10 @@ object Routes {
     const val RIDES_MAP = "rides-map"
     const val SHARE = "share/{rideId}?mode={mode}&reel={reel}"
     fun share(id: String) = "share/$id"
-    /** A ride's Studio page. */
+    /** The Studio feed with this ride picked: where every "Studio" for a ride lands, as the tab does. */
+    const val STUDIO_FOR = "studio-feed/{rideId}"
+    fun studioFor(id: String) = "studio-feed/$id"
+    /** A ride's own Studio page: finding ideas, an ask, making it your own way. */
     const val RIDE_STUDIO = "studio/{rideId}?reel={reel}&idea={idea}&make={make}&edit={edit}"
     fun reel(id: String) = "studio/$id"
     /** One of a ride's ideas, straight in the editor (or made now, in the background). */
@@ -185,7 +188,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
             return@LaunchedEffect
         }
         when (container.rides.lookup(id)) {
-            RideLookup.LIVE -> nav.navigate(if (studio) Routes.reel(id) else Routes.detail(id))
+            RideLookup.LIVE -> nav.navigate(if (studio) Routes.studioFor(id) else Routes.detail(id))
             RideLookup.DELETED -> nav.navigate(Routes.recentlyDeleted(id))
             RideLookup.MISSING -> {
                 nav.navigate(Routes.RIDES) { popUpTo(Routes.HOME); launchSingleTop = true }
@@ -223,7 +226,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onEditBike = { nav.navigate(Routes.bikeEdit(it)) },
                         onOpenRide = { nav.navigate(Routes.detail(it)) },
                         onShareRide = { nav.navigate(Routes.share(it)) },
-                        onMakeReel = { nav.navigate(Routes.reel(it)) },
+                        onMakeReel = { nav.navigate(Routes.studioFor(it)) },
                         onOpenBike = { nav.switchTab(Routes.BIKE) },
                     )
                 }
@@ -245,6 +248,20 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onOpenSearch = { nav.navigate(Routes.STUDIO_SEARCH) },
                         onOpenSettings = { nav.navigate(Routes.STUDIO_SETTINGS) },
                         onOpenPaywall = { nav.navigate(Routes.PAYWALL) },
+                    ) }
+                }
+                composable(Routes.STUDIO_FOR, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
+                    DarkRoute { com.ridetrack.app.studio.StudioHomeScreen(
+                        onOpenRide = { nav.navigate(Routes.reel(it)) },
+                        onOpenIdea = { ride, title, make -> nav.navigate(Routes.idea(ride, title, make)) },
+                        onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
+                        onOpenReels = { nav.navigate(Routes.REELS) },
+                        onOpenStyles = { nav.navigate(Routes.STYLES) },
+                        onOpenSearch = { nav.navigate(Routes.STUDIO_SEARCH) },
+                        onOpenSettings = { nav.navigate(Routes.STUDIO_SETTINGS) },
+                        onOpenPaywall = { nav.navigate(Routes.PAYWALL) },
+                        startRide = entry.arguments?.getString("rideId"),
+                        onBack = { nav.popBackStack() },
                     ) }
                 }
                 composable(Routes.RIDES_MAP) {
@@ -309,7 +326,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onDone = { nav.navigate(Routes.HOME) { popUpTo(Routes.HOME) { inclusive = true } } },
                         onOpenDetail = { nav.navigate(Routes.detail(id)) { popUpTo(Routes.HOME) } },
                         onShare = { nav.navigate(Routes.share(id)) },
-                        onMakeReel = { nav.navigate(Routes.reel(id)) },
+                        onMakeReel = { nav.navigate(Routes.studioFor(id)) },
                         onOpenMoment = { nav.navigate(Routes.moments(id, it)) },
                     )
                 }
@@ -319,7 +336,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         rideId = id,
                         onBack = { nav.popBackStack() },
                         onShare = { nav.navigate(Routes.share(id)) },
-                        onStudio = { nav.navigate(Routes.reel(id)) },
+                        onStudio = { nav.navigate(Routes.studioFor(id)) },
                         onOpenMoment = { nav.navigate(Routes.moments(id, it)) },
                     )
                 }
@@ -367,7 +384,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                     }
                 }
                 composable(Routes.STUDIO_SEARCH) {
-                    DarkRoute { com.ridetrack.app.studio.StudioSearchScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) }, onOpenStudio = { nav.navigate(Routes.reel(it)) }) }
+                    DarkRoute { com.ridetrack.app.studio.StudioSearchScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) }, onOpenStudio = { nav.navigate(Routes.studioFor(it)) }) }
                 }
                 composable(
                     Routes.REVIEW,

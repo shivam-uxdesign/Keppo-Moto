@@ -54,6 +54,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -268,6 +269,8 @@ fun StudioHomeScreen(
     onOpenSettings: () -> Unit = {},
     onOpenIdea: (rideId: String, title: String, make: Boolean) -> Unit = { r, _, _ -> onOpenRide(r) },
     onOpenPaywall: () -> Unit = {},
+    startRide: String? = null,
+    onBack: (() -> Unit)? = null,
 ) {
     val c = com.ridetrack.app.ui.appContainer()
     val pro by c.entitlements.pro.collectAsStateWithLifecycle()
@@ -278,7 +281,7 @@ fun StudioHomeScreen(
     val consent by c.aiConsent.given.collectAsStateWithLifecycle()
     Box(Modifier.fillMaxSize()) {
         Box(if (locked || !consent) Modifier.fillMaxSize().blur(18.dp) else Modifier.fillMaxSize()) {
-            StudioHomeBody(onOpenRide, onOpenPhone, onOpenReels, onOpenStyles, onOpenSearch, onOpenSettings, onOpenIdea)
+            StudioHomeBody(onOpenRide, onOpenPhone, onOpenReels, onOpenStyles, onOpenSearch, onOpenSettings, onOpenIdea, startRide, onBack)
         }
         if (!consent) com.ridetrack.app.ui.pro.AiConsentCard(onNotNow = null)
         else if (locked) com.ridetrack.app.ui.pro.StudioLocked(com.ridetrack.app.pro.FreeReelRule.nextAt(usedAt, now), onOpenPaywall, onOpenReels = onOpenReels)
@@ -296,6 +299,8 @@ private fun StudioHomeBody(
     onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenIdea: (rideId: String, title: String, make: Boolean) -> Unit,
+    startRide: String?,
+    onBack: (() -> Unit)?,
 ) {
     val vm = appViewModel { StudioHomeViewModel(it) }
     val rides by vm.rides.collectAsStateWithLifecycle()
@@ -306,6 +311,8 @@ private fun StudioHomeBody(
         onOpenRide, onOpenPhone, onOpenReels, onOpenStyles, onOpenSearch, onOpenSettings, onOpenIdea,
         pill = { open -> MakingPill(Modifier.fillMaxWidth(), open) },
         makingSheet = { visible, close -> MakingSheet(visible, close) },
+        startRide = startRide,
+        onBack = onBack,
     )
 }
 
@@ -326,12 +333,16 @@ internal fun StudioHomeContent(
     onOpenIdea: (rideId: String, title: String, make: Boolean) -> Unit,
     pill: @Composable (open: () -> Unit) -> Unit = {},
     makingSheet: @Composable (visible: Boolean, close: () -> Unit) -> Unit = { _, _ -> },
+    /** The ride to show first (from a ride's page, Home, search…), the same feed as the tab. */
+    startRide: String? = null,
+    /** Set when opened from outside the tab: a back arrow in the top bar. */
+    onBack: (() -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia(20)) { uris ->
         if (uris.isNotEmpty()) vm.picked(uris, onOpenRide) { onOpenPhone(null) }
     }
-    var picked by rememberSaveable { mutableStateOf<String?>(null) }
+    var picked by rememberSaveable { mutableStateOf(startRide) }
     var newReel by remember { mutableStateOf(false) }
     // A Gemini result being reported: its title and line ("" for a general report).
     var reporting by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -350,6 +361,7 @@ internal fun StudioHomeContent(
         Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = RtDimens.screenPadding)) {
             // ---- top bar: the title, then + (a new Reel), Search, Your Reels, more
             Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                onBack?.let { RoundIcon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onClick = it) }
                 Text("Studio", style = RtType.title, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
                 RoundIcon(Icons.Outlined.Add, "New Reel from your videos", primary = true) { newReel = true }
                 RoundIcon(Icons.Outlined.Search, "Search your clips", onClick = onOpenSearch)
@@ -382,6 +394,15 @@ internal fun StudioHomeContent(
             // The ride shown: the one picked, else the newest with ideas.
             val ride = list.firstOrNull { it.id == picked } ?: list.firstOrNull { visible(it).isNotEmpty() } ?: list.first()
             val ideas = visible(ride)
+            // Asked for a ride that has fewer than 2 clips: say why another ride shows.
+            if (startRide != null && picked == startRide && list.none { it.id == startRide }) {
+                Text(
+                    "That ride needs 2 or more clips for Studio. Showing your latest ride with clips.",
+                    style = RtType.caption,
+                    color = RtColors.Warning,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
 
             // ---- the edit left off last, to carry on with
             list.flatMap { r -> visible(r).filter { it.draftAt != null }.map { r to it } }.maxByOrNull { it.second.draftAt ?: 0 }?.let { (r, idea) ->
@@ -401,8 +422,11 @@ internal fun StudioHomeContent(
             }
 
             // ---- the rides, newest first
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 8.dp)) {
-                items(list.take(12), key = { it.id }) { r ->
+            val shownRides = list.take(12).let { top -> if (top.any { it.id == ride.id }) top else top + ride }
+            val rideRow = androidx.compose.foundation.lazy.rememberLazyListState()
+            LaunchedEffect(ride.id) { shownRides.indexOfFirst { it.id == ride.id }.takeIf { it > 0 }?.let { rideRow.animateScrollToItem(it) } }
+            LazyRow(state = rideRow, horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 8.dp)) {
+                items(shownRides, key = { it.id }) { r ->
                     val on = r.id == ride.id
                     val bg by animateColorAsState(if (on) RtColors.PrimaryContainer else RtColors.Surface, label = "ride")
                     val n = visible(r).size
