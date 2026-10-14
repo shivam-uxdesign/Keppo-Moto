@@ -27,6 +27,8 @@ class FuelRepository(
     private val rides: RideRepository,
     /** Today's petrol price where the rider filled up; null = not looked up (no Gemini). */
     private val prices: FuelPrices? = null,
+    /** Outside India (Beta): card SMS near a fuel stop that couldn't be read, for review. */
+    private val onBetaIssue: (FuelBetaIssue) -> Unit = {},
 ) {
     val fills: Flow<List<FuelFill>> = settings.settings.map { Fuel.decodeFills(it.fuelLog) }
     val prompts: Flow<List<FuelPrompt>> = settings.settings.map { Fuel.decodePrompts(it.fuelPrompts) }
@@ -59,6 +61,7 @@ class FuelRepository(
         val asked = stops.mapNotNull { stop ->
             val station = runCatching { nearestPump(stop.latitude, stop.longitude) }.onFailure { offline = true }.getOrNull() ?: return@mapNotNull null
             val sms = if (readSms) cardPayments(stop.fromMillis - SMS_BEFORE_MILLIS, stop.toMillis + SMS_AFTER_MILLIS) else emptyList()
+            if (readSms && sms.isEmpty()) reportUnread(stop)
             stop to FuelPrompt(rideId, ride.bikeId, stop.toMillis, station, CardSms.pick(sms, stop.toMillis)?.amount)
         }
         // No internet: look again later (on the next launch).
@@ -126,6 +129,27 @@ class FuelRepository(
         } finally {
             c.disconnect()
         }
+    }
+
+    /**
+     * Outside India (Beta): there were messages around the stop, but no payment could be read.
+     * Only their shape goes in the report ("spend+currency+number"), never their words.
+     */
+    @SuppressLint("MissingPermission")
+    private fun reportUnread(stop: Stop) {
+        val region = FuelRegion.current
+        if (region.india) return
+        val shapes = runCatching {
+            context.contentResolver.query(
+                Telephony.Sms.Inbox.CONTENT_URI, arrayOf(Telephony.Sms.BODY),
+                "${Telephony.Sms.DATE} BETWEEN ? AND ?",
+                arrayOf((stop.fromMillis - SMS_BEFORE_MILLIS).toString(), (stop.toMillis + SMS_AFTER_MILLIS).toString()), null,
+            )?.use { cur -> buildList { while (cur.moveToNext()) add(CardSms.shape(cur.getString(0).orEmpty(), region)) } }.orEmpty()
+        }.getOrDefault(emptyList())
+        // Only messages that look like money matter (not chats, not OTPs without amounts).
+        val likely = shapes.filter { "number" in it && ("spend" in it || "currency" in it) }
+        if (likely.isEmpty()) return
+        onBetaIssue(FuelBetaIssue("Card SMS at a fuel stop not read · ${region.country} · ${region.currency} · ${likely.size} message(s): ${likely.groupingBy { it }.eachCount().entries.joinToString { "${it.key} ×${it.value}" }}"))
     }
 
     /** Card payments in SMS received between [from] and [to] (needs the rider's permission). */

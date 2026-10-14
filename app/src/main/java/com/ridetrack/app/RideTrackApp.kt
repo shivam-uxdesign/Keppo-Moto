@@ -36,6 +36,7 @@ class RideTrackApp : Application() {
         container.errors.report = container.crashReports::record
         container.crashAlerts.start()
         container.billing.start()
+        com.ridetrack.app.fuel.FuelRegion.current = com.ridetrack.app.fuel.FuelRegion.of(com.ridetrack.app.data.HomeCountry.of(this))
         PurgeWorker.schedule(this)
         container.appScope.launch { container.trash.purgeExpired() }
         // Rides saved offline get their place names now.

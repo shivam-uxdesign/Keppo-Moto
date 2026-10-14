@@ -48,12 +48,12 @@ fun FillUpDialog(
                 station?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
                 OutlinedTextField(
                     amountText, { amountText = it.filter { c -> c.isDigit() || c == '.' }.take(8) },
-                    label = { Text("Paid (₹)") }, singleLine = true,
+                    label = { Text("Paid (${FuelRegion.current.symbol})") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     priceText, { priceText = it.filter { c -> c.isDigit() || c == '.' }.take(7) },
-                    label = { Text("Price per litre (₹)") }, singleLine = true,
+                    label = { Text("Price per litre (${FuelRegion.current.symbol})") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(

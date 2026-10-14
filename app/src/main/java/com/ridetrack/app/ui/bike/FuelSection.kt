@@ -58,7 +58,7 @@ fun FuelSection(bike: Bike, fuel: BikeFuel, vm: BikesViewModel) {
             when {
                 kmpl != null -> listOfNotNull(
                     m.tanks.lastOrNull()?.let { "last tank ${String.format(Locale.US, "%.1f", it.kmPerLitre)}" },
-                    m.costPerKm?.let { "₹${String.format(Locale.US, "%.2f", it)} per km" },
+                    m.costPerKm?.let { "${com.ridetrack.app.fuel.FuelRegion.current.precise(it)} per km" },
                     "${m.tanks.size} ${if (m.tanks.size == 1) "tank" else "tanks"}",
                 ).joinToString(" · ")
                 else -> "You fill the tank each time, so km/l is the km ridden since the last fill ÷ the litres. Petrol pump stops show up on Home after a ride."
@@ -89,9 +89,11 @@ fun FuelSection(bike: Bike, fuel: BikeFuel, vm: BikesViewModel) {
         HorizontalDivider(color = RtColors.Outline.copy(alpha = 0.6f), modifier = Modifier.padding(vertical = 10.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f)) {
-                Text("Read card SMS at petrol pumps", style = RtType.body, color = RtColors.TextPrimary)
+                val region = com.ridetrack.app.fuel.FuelRegion.current
+                Text("Read card SMS at fuel stops" + if (region.india) "" else " · Beta", style = RtType.body, color = RtColors.TextPrimary)
                 Text(
-                    "Reads the amount from your bank's card message, only around a pump stop, then looks up today's petrol price for the city and saves the fill by itself (Undo in the notification). Needs SMS access; off by default.",
+                    "Reads the amount from your bank's card message, only around a fuel stop, then looks up today's petrol price for the city and saves the fill by itself (Undo in the notification). Needs SMS access; off by default." +
+                        if (region.india) "" else " Beta in your country: bank messages vary, so some may not be read. What didn't work is noted (never the message) so it can be improved.",
                     style = RtType.caption,
                     color = RtColors.TextSecondary,
                 )

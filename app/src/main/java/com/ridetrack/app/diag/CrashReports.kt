@@ -49,12 +49,7 @@ class CrashReports(private val context: Context) {
 
     private fun stored(): Boolean? = if (prefs.contains(CHOICE)) prefs.getBoolean(CHOICE, false) else null
 
-    /** The rider's country: the SIM's, else the network's, else the phone's language region. */
-    private fun country(): String {
-        val tm = context.getSystemService(TelephonyManager::class.java)
-        return listOfNotNull(tm?.simCountryIso, tm?.networkCountryIso, Locale.getDefault().country)
-            .firstOrNull { it.isNotBlank() }?.uppercase(Locale.ROOT).orEmpty()
-    }
+    private fun country(): String = com.ridetrack.app.data.HomeCountry.of(context)
 
     private companion object {
         const val CHOICE = "choice"

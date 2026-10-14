@@ -98,7 +98,7 @@ object Fuel {
 
     private fun clean(s: String?) = s.orEmpty().replace('|', '/').replace('\n', ' ')
 
-    fun money(v: Double): String = "₹" + String.format(Locale.US, "%,d", v.roundToInt())
+    fun money(v: Double): String = FuelRegion.current.money(v)
 }
 
 /** A stop long enough to fill up: where, from when to when. */
@@ -147,8 +147,16 @@ object CardSms {
     private val MERCHANT = Regex("(?i)\\b(?:at|to|towards|info:?)\\s+([A-Za-z0-9][A-Za-z0-9 &.'*/-]{2,40}?)(?=\\s+(?:on|via|avl|ref|for|at)\\b|[.,]|\\s*$)")
     private val FUEL = Regex("(?i)indian\\s*oil|iocl|\\bhpcl\\b|\\bhp\\s*(?:petrol|pump|fuel|cl)|hindustan\\s*petroleum|bpcl|bharat\\s*petroleum|\\bshell\\b|nayara|jio[-\\s]?bp|petrol|fuel|filling\\s*st|\\bpump\\b|essar")
 
+    // Outside India (Beta): banks write in many languages and currencies.
+    private val SPEND_ANY = Regex("(?iu)\\b(spent|debited|debit|used|purchase|paid|payment|txn|transaction|charged|charge|compra|cargo|pago|paiement|achat|débit|zahlung|kauf|belastung|acquisto|pagamento|addebito|aankoop|betaling|zakup|płatność|transaksi|pembelian|pembayaran|pago con|harcama|ödeme|giao dịch|thanh toán|การชำระ|ซื้อ)")
+    private val CREDIT_ANY = Regex("(?iu)\\b(credited|credit|refund|reversal|received|cashback|abono|reembolso|remboursement|gutschrift|erstattung|rimborso|terugbetaling|zwrot|pengembalian|iade)\\b")
+    private val FUEL_ANY = Regex("(?iu)\\bshell\\b|\\bbp\\b|\\besso\\b|exxon|\\bmobil\\b|chevron|texaco|total\\s*energies|\\btotal\\b|petronas|caltex|pertamina|\\bptt\\b|bangchak|repsol|cepsa|\\bgalp\\b|\\beni\\b|agip|\\baral\\b|\\bomv\\b|lukoil|ipiranga|petrobras|\\bypf\\b|pemex|\\bq8\\b|circle\\s*k|7-eleven|ampol|\\bz\\s*energy|petro|fuel|gas\\s*station|\\bgas\\b|tankstelle|gasolinera|station[-\\s]service|\\bposto\\b|benzin|carburant|combustible|spbu|petrol")
+    // No plain spaces inside: "45 12/10" must not read as 4512.
+    private val NUMBER = "([0-9][0-9.,'\\u00A0]{0,15}[0-9]|[0-9])"
+
     /** The card payment in [body], or null if it isn't one (OTPs, credits, balances…). */
-    fun parse(body: String, timeMillis: Long): CardPayment? {
+    fun parse(body: String, timeMillis: Long, region: FuelRegion = FuelRegion.current): CardPayment? {
+        if (!region.india) return parseAny(body, timeMillis, region)
         if (!SPEND.containsMatchIn(body) || CREDIT.containsMatchIn(body) && !SPEND.containsMatchIn(body.substringBefore("credited"))) return null
         if (body.contains("OTP", ignoreCase = true)) return null
         val amount = AMOUNT.find(body)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() ?: return null
@@ -156,9 +164,77 @@ object CardSms {
         return CardPayment(amount, merchant, FUEL.containsMatchIn(body), timeMillis)
     }
 
+    private fun parseAny(body: String, timeMillis: Long, region: FuelRegion): CardPayment? {
+        if (!SPEND_ANY.containsMatchIn(body) || CREDIT_ANY.containsMatchIn(body) && !SPEND_ANY.containsMatchIn(body.substringBefore(CREDIT_ANY.find(body)!!.value))) return null
+        if (Regex("(?i)\\b(otp|code|código|code de|passcode)\\b").containsMatchIn(body)) return null
+        val amount = amountIn(body, region) ?: return null
+        val merchant = MERCHANT.find(body)?.groupValues?.get(1)?.trim()
+        return CardPayment(amount, merchant, FUEL_ANY.containsMatchIn(body), timeMillis)
+    }
+
+    /** The first amount next to the region's currency (its sign or code, before or after), in any number style. */
+    internal fun amountIn(body: String, region: FuelRegion): Double? {
+        val marks = (listOf(region.symbol, region.currency) + extraMarks(region.currency)).distinct().filter { it.isNotBlank() }
+            .sortedByDescending { it.length }.joinToString("|") { Regex.escape(it) }
+        val before = Regex("(?i)(?:$marks)\\s?$NUMBER")
+        val after = Regex("(?i)$NUMBER\\s?(?:$marks)")
+        val raw = listOfNotNull(before.find(body), after.find(body)).minByOrNull { it.range.first }?.groupValues?.get(1) ?: return null
+        return number(raw)?.takeIf { it > 0 }
+    }
+
+    /** Other ways banks write a currency ("US$", "Rp", "RM"…). */
+    private fun extraMarks(code: String): List<String> = when (code) {
+        "USD" -> listOf("US$", "$", "USD")
+        "EUR" -> listOf("€", "EUR", "Eur")
+        "GBP" -> listOf("£", "GBP")
+        "IDR" -> listOf("Rp", "Rp.", "IDR")
+        "MYR" -> listOf("RM", "MYR")
+        "BRL" -> listOf("R$", "BRL")
+        "THB" -> listOf("฿", "THB", "บาท")
+        "PHP" -> listOf("₱", "PHP", "Php")
+        "VND" -> listOf("₫", "VND", "đ")
+        "AUD" -> listOf("A$", "AU$", "$")
+        "CAD" -> listOf("C$", "CA$", "$")
+        "NZD" -> listOf("NZ$", "$")
+        "SGD" -> listOf("S$", "SGD", "$")
+        "MXN" -> listOf("MX$", "$", "MXN")
+        "ZAR" -> listOf("ZAR")
+        "AED" -> listOf("AED", "Dhs", "د.إ")
+        "TRY" -> listOf("₺", "TL", "TRY")
+        "PLN" -> listOf("zł", "PLN")
+        "CHF" -> listOf("CHF", "Fr.")
+        "SEK", "NOK", "DKK" -> listOf("kr", code)
+        "JPY" -> listOf("¥", "円", "JPY")
+        "KRW" -> listOf("₩", "원", "KRW")
+        "NPR", "LKR", "PKR" -> listOf("Rs", "Rs.", code)
+        "BDT" -> listOf("৳", "Tk", "BDT")
+        else -> emptyList()
+    }
+
+    /** "1,234.56", "1.234,56", "1 234,56", "12'500" or "1,250" as a number: the last . or , with 1–2 digits after it is the decimal point. */
+    internal fun number(raw: String): Double? {
+        val t = raw.replace('\u00A0', ' ').replace(" ", "").replace("'", "")
+        val last = maxOf(t.lastIndexOf('.'), t.lastIndexOf(','))
+        val decimal = last >= 0 && t.length - last - 1 in 1..2
+        val whole = (if (decimal) t.substring(0, last) else t).replace(".", "").replace(",", "")
+        val frac = if (decimal) t.substring(last + 1) else ""
+        return (whole + if (frac.isNotEmpty()) ".$frac" else "").toDoubleOrNull()
+    }
+
     /** The payment most likely to be this fill-up: fuel merchants first, then the closest in time to [atMillis]. */
     fun pick(payments: List<CardPayment>, atMillis: Long): CardPayment? =
         payments.sortedWith(compareBy<CardPayment>({ !it.fuel }, { kotlin.math.abs(it.timeMillis - atMillis) })).firstOrNull()
+
+    /**
+     * What a message looked like, for the Beta failure report: never its words, only whether it
+     * had a spending word, the currency, a number. E.g. "spend+currency+number".
+     */
+    fun shape(body: String, region: FuelRegion): String = listOfNotNull(
+        "spend".takeIf { SPEND_ANY.containsMatchIn(body) },
+        "credit".takeIf { CREDIT_ANY.containsMatchIn(body) },
+        "currency".takeIf { listOf(region.symbol, region.currency).any { it.isNotBlank() && body.contains(it, ignoreCase = true) } },
+        "number".takeIf { Regex("[0-9]").containsMatchIn(body) },
+    ).joinToString("+").ifEmpty { "plain" }
 }
 
 /** Petrol's price per litre, looked up online for [place]; [exact] = found today, else the last known one. */
@@ -166,19 +242,33 @@ data class PetrolPrice(val perLitre: Double, val place: String, val exact: Boole
 
 /** Asking for today's petrol price and reading the answer. Pure, unit-tested. */
 object FuelPriceText {
-    fun prompt(place: String, today: String): String =
-        "What is today's ($today) retail price of regular petrol per litre in $place, India? Search the web for today's rate in that city. " +
-            "Reply with JSON only: {\"price\": 103.44, \"place\": \"the city\", \"date\": \"YYYY-MM-DD\"}, price in rupees, or null if you can't find it."
+    fun prompt(place: String, today: String, region: FuelRegion = FuelRegion.INDIA): String =
+        if (region.india) {
+            "What is today's ($today) retail price of regular petrol per litre in $place, India? Search the web for today's rate in that city. " +
+                "Reply with JSON only: {\"price\": 103.44, \"place\": \"the city\", \"date\": \"YYYY-MM-DD\"}, price in rupees, or null if you can't find it."
+        } else {
+            "What is today's ($today) retail price of regular petrol (gasoline, the most common grade) per litre in $place? Search the web for the latest price there. " +
+                "If it's quoted per gallon, convert it to per litre. Give it in ${region.currency}. " +
+                "Reply with JSON only: {\"price\": 1.89, \"place\": \"the city\", \"date\": \"YYYY-MM-DD\"}, or null if you can't find it."
+        }
 
-    /** The price in the reply, if it's a believable petrol price in rupees (₹60–200). */
-    fun parse(reply: String): Double? {
+    /**
+     * The price in the reply, if believable: ₹60–200 in India; elsewhere positive, and within
+     * half to double the last known price when there is one (a per-gallon slip is caught).
+     */
+    fun parse(reply: String, region: FuelRegion = FuelRegion.INDIA, lastKnown: Double? = null): Double? {
         val fromJson = runCatching {
             val a = reply.indexOf('{')
             val b = reply.lastIndexOf('}')
             org.json.JSONObject(reply.substring(a, b + 1)).optDouble("price", Double.NaN)
         }.getOrNull()?.takeIf { !it.isNaN() }
-        val v = fromJson ?: Regex("""(?:₹|Rs\.?|INR)\s*(\d{2,3}(?:\.\d{1,2})?)""").find(reply)?.groupValues?.get(1)?.toDoubleOrNull()
-        return v?.takeIf { it in 60.0..200.0 }
+        if (region.india) {
+            val v = fromJson ?: Regex("""(?:₹|Rs\.?|INR)\s*(\d{2,3}(?:\.\d{1,2})?)""").find(reply)?.groupValues?.get(1)?.toDoubleOrNull()
+            return v?.takeIf { it in 60.0..200.0 }
+        }
+        val v = fromJson ?: CardSms.amountIn(reply, region) ?: return null
+        if (v <= 0) return null
+        return v.takeIf { lastKnown == null || v in lastKnown / 2..lastKnown * 2 }
     }
 
     /** Litres for [amount] at [price], to two places. */

@@ -114,10 +114,15 @@ class AppContainer(context: Context) {
     val fuel = FuelRepository(
         appContext, settings, rides,
         // Today's petrol price for the city, found by Gemini with Google Search (Pro; free riders type it).
-        com.ridetrack.app.fuel.FuelPrices(appContext) { prompt ->
-            if (!proAi()) null
-            else com.ridetrack.app.studio.StudioGemini(preferred = { transcripts.model }, onWorking = { transcripts.model = it }).searched(prompt)
-        },
+        com.ridetrack.app.fuel.FuelPrices(
+            appContext,
+            lookup = { prompt ->
+                if (!proAi()) null
+                else com.ridetrack.app.studio.StudioGemini(preferred = { transcripts.model }, onWorking = { transcripts.model = it }).searched(prompt)
+            },
+            onBetaIssue = { errors.record("Fuel beta", it.message.orEmpty(), it) },
+        ),
+        onBetaIssue = { errors.record("Fuel beta", it.message.orEmpty(), it) },
     )
 
     /** "Write down what I say": Gemini transcripts of talking clips. */
