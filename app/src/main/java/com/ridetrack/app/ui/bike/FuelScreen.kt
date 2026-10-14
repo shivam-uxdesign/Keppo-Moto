@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -136,6 +137,37 @@ fun FuelScreen(bikeId: String, onBack: () -> Unit) {
                 }
             }
         }
+        // Pumps the app knows as yours: where you filled up, or marked on a ride's map.
+        val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as? com.ridetrack.app.RideTrackApp
+        var pumpsVersion by remember { mutableStateOf(0) }
+        val pumps by androidx.compose.runtime.produceState(emptyList<com.ridetrack.app.fuel.Station>(), pumpsVersion, fills.size) {
+            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app?.container?.fuel?.stations?.mine().orEmpty() }
+        }
+        SectionHeader("Your petrol pumps")
+        Text(
+            "Stopping at one of these asks if you filled up, even offline. To add one, open a ride, tap ⋮ › Mark petrol pump, and tap the place on the map.",
+            style = RtType.caption, color = RtColors.TextSecondary,
+        )
+        if (pumps.isNotEmpty()) {
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            RtCard {
+                pumps.reversed().forEachIndexed { i, p ->
+                    if (i > 0) Divider()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(p.name, style = RtType.body, color = RtColors.TextPrimary)
+                            Text("%.5f, %.5f".format(Locale.US, p.latitude, p.longitude), style = RtType.caption, color = RtColors.TextTertiary)
+                        }
+                        TextButton(onClick = {
+                            scope.launch {
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app?.container?.fuel?.stations?.forget(p.latitude, p.longitude) }
+                                pumpsVersion++
+                            }
+                        }) { Text("Forget", color = RtColors.TextSecondary) }
+                    }
+                }
+            }
+        }
         Spacer(Modifier.height(RtDimens.lg))
     }
 
@@ -232,6 +264,7 @@ internal fun how(source: String): String = when (source) {
     "stop" -> "Confirmed from a fuel stop"
     "live" -> "Confirmed on the spot"
     "button" -> "You tapped Filled up"
+    "marked" -> "You marked the pump on the map"
     else -> "Added by you"
 }
 
@@ -240,6 +273,7 @@ private fun found(how: String): String = when (how) {
     "sms" -> "found from your card SMS"
     "live" -> "asked on the spot"
     "button" -> "you tapped Filled up"
+    "marked" -> "you marked the pump on the map"
     "nudge" -> "a tank's distance since the last"
     else -> "found from the stop"
 }

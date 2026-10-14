@@ -149,6 +149,7 @@ class FuelRepository(
             prompt.how == "sms" || prompt.amount != null -> "sms"
             prompt.how == "live" -> "live"
             prompt.how == "button" -> "button"
+            prompt.how == "marked" -> "marked"
             else -> "stop"
         }
         add(Fuel.newFill(prompt.bikeId, prompt.timeMillis, litres, amount, price, prompt.station.takeIf { prompt.sure }, source))
@@ -156,6 +157,26 @@ class FuelRepository(
         val lat = prompt.latitude
         val lon = prompt.longitude
         if (lat != null && lon != null) stations.remember(prompt.station.takeIf { prompt.sure } ?: "Your fuel stop", lat, lon)
+    }
+
+    /**
+     * A petrol pump the rider marked on [rideId]'s map afterwards: remembered, so stops there are
+     * asked about from now on. With [filled], this ride's fill-up there is asked for too, at the
+     * stop nearest the pump (or the moment the ride passed closest), replacing an unsure one.
+     */
+    suspend fun markPump(rideId: String, name: String, lat: Double, lon: Double, filled: Boolean) {
+        stations.remember(name, lat, lon)
+        rideLog(rideId, "fuel: you marked a petrol pump ($name) on the map" + if (filled) ", and a fill-up here" else "")
+        if (!filled) return
+        val ride = rides.observeCompleted().first().firstOrNull { it.id == rideId } ?: return
+        val samples = rides.track(rideId).samples
+        val stop = PumpStops.find(samples).filter { Stations.metres(it.latitude, it.longitude, lat, lon) < MARK_STOP_M }
+            .minByOrNull { Stations.metres(it.latitude, it.longitude, lat, lon) }
+        val time = stop?.toMillis ?: samples.filter { it.latitude != null && it.longitude != null }
+            .minByOrNull { Stations.metres(it.latitude!!, it.longitude!!, lat, lon) }?.timeMillis ?: return
+        val now = Fuel.decodePrompts(settings.settings.first().fuelPrompts)
+        val others = now.filterNot { it.rideId == rideId && kotlin.math.abs(it.timeMillis - time) < SAME_STOP_MS }
+        settings.setFuelPrompts(Fuel.encodePrompts(others + FuelPrompt(rideId, ride.bikeId, time, name, null, lat, lon, sure = true, how = "marked")))
     }
 
     /** "Not a fill-up": the prompt goes and that stop isn't asked again. */
@@ -252,6 +273,8 @@ class FuelRepository(
         const val DECLINED = "declined_stops"
         /** Two finds this close are the same fill-up. */
         const val SAME_STOP_MS = 10 * 60_000L
+        /** A stop this close to a pump you mark is where you filled up. */
+        private const val MARK_STOP_M = 300.0
         /** A stop this long with no station known is kept under "Not sure". */
         const val UNSURE_MIN_MS = 2 * 60_000L
         const val RECENT_MILLIS = 3 * 86_400_000L

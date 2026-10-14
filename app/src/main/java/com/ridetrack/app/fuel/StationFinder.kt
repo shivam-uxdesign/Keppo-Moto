@@ -64,6 +64,19 @@ class StationFinder(private val context: Context) {
         save(s.copy(mine = others + Station(name, lat, lon, mine = true)))
     }
 
+    /** The pumps you filled up at or marked on a ride's map. */
+    fun mine(): List<Station> = load().mine
+
+    /** Forgets your pump at [lat], [lon] (the map's stations stay). */
+    @Synchronized
+    fun forget(lat: Double, lon: Double) {
+        val s = load()
+        save(s.copy(mine = s.mine.filterNot { Stations.metres(it.latitude, it.longitude, lat, lon) < 1.0 }))
+    }
+
+    /** The name the map gives a pump near [lat], [lon], from what's on the phone (for naming one you mark). */
+    fun mappedNear(lat: Double, lon: Double, radiusM: Double = RADIUS_M): Station? = Stations.nearest(load().mapped, lat, lon, radiusM)
+
     @Synchronized
     private fun fetchArea(lat: Double, lon: Double) {
         val q = "[out:json][timeout:25];nwr[\"amenity\"=\"fuel\"](around:${AREA_M.toInt()},$lat,$lon);out center;"

@@ -70,6 +70,7 @@ import com.ridetrack.app.ui.components.EmptyState
 import com.ridetrack.app.ui.components.HairlineDivider
 import com.ridetrack.app.ui.components.RouteMap
 import com.ridetrack.app.ui.components.MapPin
+import com.ridetrack.app.ui.components.GeoPoint
 import com.ridetrack.app.ui.moments.MomentsDiagnostics
 import com.ridetrack.app.ui.moments.momentColor
 import com.ridetrack.app.ui.components.Shimmer
@@ -132,6 +133,14 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    // Marking a petrol pump on the map: on while choosing the place, then naming it.
+    var marking by remember { mutableStateOf(false) }
+    var markAt by remember { mutableStateOf<GeoPoint?>(null) }
+    var markName by remember { mutableStateOf("") }
+    var myPumps by remember { mutableStateOf<List<com.ridetrack.app.fuel.Station>>(emptyList()) }
+    LaunchedEffect(marking) {
+        if (marking) myPumps = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { container.fuel.stations.mine() }
+    }
     var showTurns by remember { mutableStateOf(false) }
     var eventsOpen by remember { mutableStateOf(false) }
     // Full-screen map: the timeline floats over the bottom of it as a sheet.
@@ -215,8 +224,19 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                         route = data.route,
                         marker = samples.positionAtSmooth(time),
                         progress = data.routeCountAt.getOrNull(idx),
-                        pins = moments.mapNotNull { m -> if (m.latitude != null && m.longitude != null) MapPin(m.id, m.latitude, m.longitude, m.thumb, momentColor(m)) else null },
-                        onPinClick = onOpenMoment,
+                        pins = moments.mapNotNull { m -> if (m.latitude != null && m.longitude != null) MapPin(m.id, m.latitude, m.longitude, m.thumb, momentColor(m)) else null } +
+                            if (marking) myPumps.mapIndexed { i, p -> MapPin("pump:$i", p.latitude, p.longitude, null, PumpColor) } else emptyList(),
+                        onPinClick = { id -> if (!id.startsWith("pump:")) onOpenMoment(id) },
+                        onMapClick = if (marking) { p ->
+                            haptics.tick()
+                            markAt = p
+                            markName = "Petrol pump"
+                            scope.launch {
+                                markName = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    container.fuel.stations.mappedNear(p.latitude, p.longitude)?.name
+                                } ?: "Petrol pump"
+                            }
+                        } else null,
                         interactive = true,
                         threeD = play.threeD,
                         bearing = shownHeading.takeIf { !it.isNaN() },
@@ -228,6 +248,12 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                         bottomInset = sheetHeight,
                         modifier = Modifier.fillMaxSize(),
                     ) {
+                        if (marking) {
+                            MarkPumpBanner(
+                                onCancel = { marking = false },
+                                modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp).padding(bottom = sheetHeight + 12.dp),
+                            )
+                        }
                         ViewToggle(
                             play.threeD,
                             onChange = { haptics.tick(); vm.setThreeD(it) },
@@ -289,6 +315,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                             RoundButton(Icons.Outlined.MoreVert, "Ride options", onClick = { menuOpen = true })
                             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, containerColor = RtColors.SurfaceRaised) {
                                 DropdownMenuItem(text = { Text("Rename") }, onClick = { menuOpen = false; renaming = true })
+                                DropdownMenuItem(text = { Text("Mark petrol pump") }, onClick = { menuOpen = false; vm.pause(); marking = true })
                                 if (BuildConfig.DEBUG || BuildConfig.TEST_BUILD) {
                                     // BETA TOOL: remove together with data/export.
                                     DropdownMenuItem(
@@ -466,6 +493,22 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
             dismissButton = { TextButton(onClick = { renaming = false }) { Text("Cancel") } },
             containerColor = RtColors.SurfaceRaised,
         )
+    }
+    val at = markAt
+    if (at != null && ride != null) {
+        // Keyed by the name looked up, so the field shows it once it's found.
+        androidx.compose.runtime.key(markName) {
+            MarkPumpDialog(
+                suggested = markName,
+                onSave = { name, filled ->
+                    markAt = null
+                    marking = false
+                    container.appScope.launch { runCatching { container.fuel.markPump(ride.id, name, at.latitude, at.longitude, filled) } }
+                    android.widget.Toast.makeText(context, if (filled) "Pump saved · the fill-up is waiting on Home" else "Pump saved", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                onDismiss = { markAt = null },
+            )
+        }
     }
     if (confirmDelete) {
         AlertDialog(

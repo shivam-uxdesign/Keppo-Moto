@@ -126,6 +126,8 @@ fun RouteMap(
     /** Round thumbnails where moments happened; tapping one calls [onPinClick]. */
     pins: List<MapPin> = emptyList(),
     onPinClick: (String) -> Unit = {},
+    /** A tap on the map away from the pins (e.g. marking a place); null leaves taps to the map. */
+    onMapClick: ((GeoPoint) -> Unit)? = null,
     /** Third-person follow view: tilted, zoomed in behind a bike icon, turning with [bearing]. */
     threeD: Boolean = false,
     /** Direction of travel in degrees (0 = north) for the 3D view. */
@@ -311,6 +313,7 @@ fun RouteMap(
     }
 
     val pinClick by rememberUpdatedState(onPinClick)
+    val mapClick by rememberUpdatedState(onMapClick)
     LaunchedEffect(map) {
         val m = map ?: return@LaunchedEffect
         m.addOnMapClickListener { latLng ->
@@ -319,7 +322,9 @@ fun RouteMap(
             val hit = m.queryRenderedFeatures(android.graphics.RectF(px.x - slop, px.y - slop, px.x + slop, px.y + slop), PINS_LAYER)
                 .firstOrNull()?.getStringProperty("id")
             if (hit != null) pinClick(hit)
-            hit != null
+            val tap = mapClick
+            if (hit == null && tap != null) tap(GeoPoint(latLng.latitude, latLng.longitude))
+            hit != null || tap != null
         }
     }
 

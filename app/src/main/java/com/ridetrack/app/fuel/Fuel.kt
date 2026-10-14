@@ -34,7 +34,7 @@ data class FuelPrompt(
      * the Fuel page under "Not sure", never on Home.
      */
     val sure: Boolean = true,
-    /** How it was found: "stop", "sms" (a card payment alone), "live" (asked on the spot), "button" (you tapped Filled up), "nudge". */
+    /** How it was found: "stop", "sms" (a card payment alone), "live" (asked on the spot), "button" (you tapped Filled up), "nudge", "marked" (on a ride's map afterwards). */
     val how: String = "stop",
 )
 
