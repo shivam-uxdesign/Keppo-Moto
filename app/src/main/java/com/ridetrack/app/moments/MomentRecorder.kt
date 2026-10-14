@@ -70,6 +70,11 @@ class MomentRecorder(
     rideId: String,
 ) {
     private val buffer = RollingBuffer()
+    /** Joins a clip that starts where (or soon after) the last one ended into it, right after it's saved. */
+    private val merger = MomentMerger(context, repo)
+    private val mergeLock = kotlinx.coroutines.sync.Mutex()
+    /** The last clip saved: (start, end) on the wall clock, for continuing it live. */
+    @Volatile private var lastClip: Pair<Long, Long>? = null
     private val requests = Channel<MomentRequest>(Channel.UNLIMITED)
     private val main = ContextCompat.getMainExecutor(context)
     private val log = MomentLog(File(repo.dir(rideId), MomentLog.FILE_NAME))
@@ -756,6 +761,25 @@ class MomentRecorder(
         )
         log.log("clip saved: ${file.name} ${length / 1000}s ${file.length() / 1024}KB, ${video.size} frames, ${audioSamples.size} audio")
         hub.onSaved()
+        continueLast(r.rideId, clipStartMillis, clipStartMillis + length)
+    }
+
+    /**
+     * A clip that starts within [MomentMerge.GAP_MILLIS] of the last one's end (the look-back
+     * fills the gap, so usually right where it ended) is joined into it now, during the ride:
+     * one video, its kinds combined. The after-ride join stays as a safety net.
+     */
+    private fun continueLast(rideId: String, start: Long, end: Long) {
+        val prev = lastClip
+        lastClip = if (prev != null && start - prev.second < MomentMerge.GAP_MILLIS) prev.first to maxOf(prev.second, end) else start to end
+        if (prev == null || start - prev.second >= MomentMerge.GAP_MILLIS) return
+        scope.launch(Dispatchers.IO) {
+            mergeLock.withLock {
+                runCatching { merger.mergeRide(rideId) }
+                    .onSuccess { n -> if (n > 0) log.log("continued the last clip: joined ${n + 1} into one video") }
+                    .onFailure { log.error("couldn't join with the last clip (joined after the ride instead)", it) }
+            }
+        }
     }
 
     private suspend fun takePhoto(r: MomentRequest.Photo) {
@@ -907,8 +931,14 @@ class MomentRecorder(
             return
         }
         live = Live(recording, r)
-        // A chain of events counts from the clip's start, look-back included (the HUD's "cam 00:10").
-        val countFrom = if (r.source == MomentSource.EVENT) fromMillis else System.currentTimeMillis()
+        // A chain of events counts from the clip's start, look-back included (the HUD's "cam 00:10");
+        // one that continues the last clip counts on from that clip's start (0:23 → 0:30 …).
+        val prev = lastClip
+        val countFrom = when {
+            r.source != MomentSource.EVENT -> System.currentTimeMillis()
+            prev != null && fromMillis - prev.second < MomentMerge.GAP_MILLIS -> prev.first
+            else -> fromMillis
+        }
         hub.setLive(LiveState(r.source, segmentStartMillis = countFrom, back = boundBack))
         log.log("video filming: ${recording.file.name}")
     }
@@ -977,6 +1007,8 @@ class MomentRecorder(
         )
         log.log("video saved ($reason): ${file.name} ${length / 1000}s ${file.length() / 1024}KB")
         hub.onSaved()
+        // Your own videos stay separate; event and voice videos continue the last clip.
+        if (req.source != MomentSource.MANUAL) continueLast(req.rideId, start, start + length) else lastClip = null
         hub.onLiveSaved(LiveSaved(req.source, length, System.currentTimeMillis()))
     }
 
