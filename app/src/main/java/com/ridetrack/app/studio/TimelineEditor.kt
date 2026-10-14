@@ -228,6 +228,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var ask by remember { mutableStateOf<TextAsk?>(null) }
     var adding by remember { mutableStateOf<AddWhat?>(null) }
     var mixer by remember { mutableStateOf(false) }
+    /** A horn or bump tapped on the engine row: (sound item, where it starts in the source, horn?). */
+    var noisePick by remember { mutableStateOf<Triple<String, Long, Boolean>?>(null) }
     var historyOpen by remember { mutableStateOf(false) }
     var clipTab by remember { mutableStateOf(ClipTab.EDIT) }
     var addSticker by remember { mutableStateOf(false) }
@@ -902,6 +904,31 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                         ) { ms, _ -> vm.change("Sound time") { TrackEdits.shiftAudio(it, a.id, ms) } }
                                     }
                                 }
+                                // Horns and bumps the engine mic heard, under its row: tap one to choose.
+                                if (kind == TrackKind.ENGINE) {
+                                    val marks = items.flatMap { a ->
+                                        s.engineNoise[a.file].orEmpty()
+                                            .filter { n -> n.endMs > a.inMs && n.startMs < a.inMs + a.durMs }
+                                            .map { n -> Triple(a, n, a.noise[n.startMs] ?: NoiseChoice.REDUCE) }
+                                    }
+                                    if (marks.isNotEmpty()) Rows(1) {
+                                        marks.forEach { (a, n, choice) ->
+                                            val horn = n.kind == com.ridetrack.telemetry.moments.EngineNoise.Kind.HORN
+                                            val from = a.startMs + (n.startMs - a.inMs).coerceAtLeast(0)
+                                            val to = a.startMs + (n.endMs - a.inMs).coerceAtMost(a.durMs)
+                                            TrackBlock(
+                                                (if (horn) "Horn" else "Bump") + when (choice) {
+                                                    NoiseChoice.REDUCE -> if (horn) " · reduced" else " · softened"
+                                                    NoiseChoice.MUTE -> " · muted"
+                                                    NoiseChoice.KEEP -> " · kept"
+                                                },
+                                                from, (to - from).coerceAtLeast(250), 0, pxPerMs,
+                                                if (choice == NoiseChoice.KEEP) Color(0x33F97316) else Color(0x66FBBF24), false,
+                                                onClick = { noisePick = Triple(a.id, n.startMs, horn) },
+                                            )
+                                        }
+                                    }
+                                }
                             }
                             if (s.takes.isNotEmpty()) {
                                 Rows(1) {
@@ -1216,6 +1243,23 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             SheetRow("Volumes and the mix") { soundOpen = false; mixer = true }
         }
         CaptionsSheet(vm, plan, captionsOpen, captionTab, captionLine) { captionsOpen = false }
+        noisePick?.let { (audioId, atMs, horn) ->
+            val current = plan.audio.firstOrNull { it.id == audioId }?.noise?.get(atMs) ?: NoiseChoice.REDUCE
+            StudioSheet(true, { noisePick = null }, if (horn) "Horn in the engine sound" else "Bump in the engine sound") {
+                Text(
+                    if (horn) "Turned down by default: its own pitches are taken out, the engine stays." else "Softened by default: the thud dips for a moment, the engine carries on.",
+                    style = RtType.caption, color = RtColors.TextSecondary,
+                )
+                val options = if (horn) {
+                    listOf(NoiseChoice.REDUCE to "Reduce horn", NoiseChoice.MUTE to "Mute the engine sound here", NoiseChoice.KEEP to "Keep it")
+                } else {
+                    listOf(NoiseChoice.REDUCE to "Soften bump", NoiseChoice.KEEP to "Keep it")
+                }
+                options.forEach { (choice, label) ->
+                    SheetRow(label + if (choice == current) "  ✓" else "") { vm.noiseChoice(audioId, atMs, choice); noisePick = null }
+                }
+            }
+        }
         MixerSheet(vm, s, plan, mixer) { mixer = false }
         StickersSheet(
             addSticker,

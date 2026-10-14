@@ -251,7 +251,13 @@ class StudioRenderer(private val context: Context) {
             if (g == 0f) return@forEach
             val uri = au.file?.let(Uri::parse) ?: uriOf(input, au.bit) ?: return@forEach
             val ducked = au.kind == TrackKind.ENGINE || au.kind == TrackKind.MUSIC
-            sequences += audioSequence(au.startMs, uri, au.inMs, au.durMs, clean = mix.cleanVoice && au.kind == TrackKind.DETACHED) { local ->
+            // The engine mic's horns and bumps turned down (or as the rider chose for each).
+            val cleanEngine = if (au.kind == TrackKind.ENGINE && au.file != null) {
+                EngineNoises.ofUri(context, au.file).takeIf { it.isNotEmpty() }?.let { EngineCleanProcessor(it, au.noise, au.inMs) }
+            } else {
+                null
+            }
+            sequences += audioSequence(au.startMs, uri, au.inMs, au.durMs, clean = mix.cleanVoice && au.kind == TrackKind.DETACHED, extra = listOfNotNull(cleanEngine)) { local ->
                 TrackEdits.levelAt(au, local) * g * if (ducked) engineDuck((au.startMs + local) * 1000) else 1f
             }
         }
@@ -355,10 +361,14 @@ class StudioRenderer(private val context: Context) {
         .build()
 
     /** A sound on its own track: silence until [startMs], then [durMs] of [uri] from [inMs], at [level] (ms from its start). */
-    private fun audioSequence(startMs: Long, uri: Uri, inMs: Long, durMs: Long, clean: Boolean, level: (Long) -> Float): EditedMediaItemSequence {
+    private fun audioSequence(
+        startMs: Long, uri: Uri, inMs: Long, durMs: Long, clean: Boolean,
+        extra: List<androidx.media3.common.audio.AudioProcessor> = emptyList(),
+        level: (Long) -> Float,
+    ): EditedMediaItemSequence {
         val items = ArrayList<EditedMediaItem>()
         if (startMs > 0) items += EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(Fillers.silence(context, startMs)))).build()
-        val procs = listOfNotNull<androidx.media3.common.audio.AudioProcessor>(HighPassProcessor().takeIf { clean }, GainProcessor { us -> level(us / 1000) })
+        val procs = extra + listOfNotNull<androidx.media3.common.audio.AudioProcessor>(HighPassProcessor().takeIf { clean }, GainProcessor { us -> level(us / 1000) })
         items += EditedMediaItem.Builder(clipped(uri, inMs, inMs + durMs)).setRemoveVideo(true).setEffects(Effects(procs, emptyList())).build()
         return EditedMediaItemSequence(items)
     }

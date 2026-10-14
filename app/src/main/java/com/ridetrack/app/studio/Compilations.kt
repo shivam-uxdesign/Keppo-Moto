@@ -83,7 +83,7 @@ object Themes {
         lengthSec = ((t.lengthMs + 999) / 1000).toInt().coerceIn(PieceFormat.REEL.minSec, PieceFormat.REEL.maxSec),
         shape = "list",
         hookLine = null,
-        postCaption = "${t.title} 😅\n#motovlog #bikelife #ridersofindia",
+        postCaption = "${t.title} 😅\n#motovlog #bikelife #motorcycle",
         sections = t.hits.mapIndexed { i, h -> Section(if (i == 0) SectionKind.HOOK else SectionKind.PEAK, "moment", listOf(ScriptShot(h.momentId, h.inMs, h.outMs))) },
         vibe = Vibe.HYPE,
     )

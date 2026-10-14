@@ -476,11 +476,13 @@ internal fun StudioHomeContent(
             if (ideas.isNotEmpty()) Text("Swipe up for the next idea · left to hide · hold for options", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp))
             // ---- ask for something
             // Typed right here; sending opens this ride's Studio, which runs it straight away.
-            val studioPrefs = com.ridetrack.app.ui.appContainer().studio
+            // The app's prefs only when sending (drawing the field needs nothing from the app).
+            val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
             var ask by remember(ride.id) { mutableStateOf("") }
             val send = {
                 val t = ask.trim()
-                if (t.isNotEmpty()) {
+                val studioPrefs = (appContext as? com.ridetrack.app.RideTrackApp)?.container?.studio
+                if (t.isNotEmpty() && studioPrefs != null) {
                     studioPrefs.rememberAsk(t)
                     studioPrefs.setPendingAsk(ride.id, t)
                     ask = ""

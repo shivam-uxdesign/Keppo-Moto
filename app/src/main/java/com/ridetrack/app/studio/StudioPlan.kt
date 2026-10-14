@@ -384,9 +384,17 @@ data class AudioItem(
     val curve: List<VolumePoint> = emptyList(),
     /** A song or sound from the phone: its name, shown on its row; null for the clips' own sounds. */
     val name: String? = null,
+    /**
+     * Engine sound: what to do with each horn or bump in it (by where it starts in the source,
+     * ms). Not listed = the default, [NoiseChoice.REDUCE] (horns turned down, bumps softened).
+     */
+    val noise: Map<Long, NoiseChoice> = emptyMap(),
 ) {
     val endMs: Long get() = startMs + durMs
 }
+
+/** A horn or bump in the engine sound: turned down (the default), silenced there, or left as it is. */
+enum class NoiseChoice { REDUCE, MUTE, KEEP }
 
 /** The mixer: each track's volume, muted tracks, a soloed one, and the voice clean-up. */
 data class TrackMix(

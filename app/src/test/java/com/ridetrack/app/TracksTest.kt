@@ -215,4 +215,21 @@ class TracksTest {
         // No engine sound in the clips: nothing changes.
         assertEquals(plan(), TrackEdits.withEngine(plan(), emptyMap()) { "w" })
     }
+
+    @Test
+    fun noiseChoicesAreKeptPerHornAndSaved() {
+        var n = 0
+        val p = TrackEdits.addEngine(plan(), mapOf("a" to "file:///a.engine.m4a"), { "e${n++}" })
+        val id = p.audio.first { it.kind == TrackKind.ENGINE }.id
+        val muted = TrackEdits.noiseChoice(p, id, 1_200, com.ridetrack.app.studio.NoiseChoice.MUTE)
+        assertEquals(com.ridetrack.app.studio.NoiseChoice.MUTE, muted.audio.first { it.id == id }.noise[1_200])
+        // Back to the default: not stored.
+        assertTrue(TrackEdits.noiseChoice(muted, id, 1_200, com.ridetrack.app.studio.NoiseChoice.REDUCE).audio.first { it.id == id }.noise.isEmpty())
+        // Saved and read back.
+        val back = ReelJson.read(ReelJson.write(ReelProject(
+            id = "r", rideId = "ride", createdAt = 0, updatedAt = 0, title = "t", series = "", episode = 1, hookLine = "", postCaption = "", story = null,
+            options = StudioOptions(), musicUri = null, musicName = null, plan = muted, takes = emptyList(), tips = emptyList(), durationMs = muted.totalMs,
+        )))
+        assertEquals(com.ridetrack.app.studio.NoiseChoice.MUTE, back!!.plan.audio.first { it.id == id }.noise[1_200])
+    }
 }

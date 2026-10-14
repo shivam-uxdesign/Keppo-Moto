@@ -185,6 +185,11 @@ object TrackEdits {
         return plan.copy(audio = plan.audio + item)
     }
 
+    /** What to do with the horn or bump starting [atMs] into [id]'s engine sound. */
+    fun noiseChoice(plan: StudioPlan, id: String, atMs: Long, choice: NoiseChoice) = audio(plan, id) { a ->
+        a.copy(noise = if (choice == NoiseChoice.REDUCE) a.noise - atMs else a.noise + (atMs to choice))
+    }
+
     private fun audio(plan: StudioPlan, id: String, f: (AudioItem) -> AudioItem?): StudioPlan =
         plan.copy(audio = plan.audio.mapNotNull { if (it.id == id) f(it) else it })
 

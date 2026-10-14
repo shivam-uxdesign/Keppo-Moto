@@ -18,7 +18,8 @@ object SoundOn {
     /** Up to [n] pieces from the fastest clips, each a quiet stretch (no words) of 8–15 s. */
     fun scripts(footage: List<Footage>, n: Int = 2): List<Script> = footage
         .filter { it.kmhMax >= MIN_KMH && it.look != "phone" }
-        .sortedByDescending { it.kmhMax }
+        // Fastest first; about as fast (within 5 km/h), fewer horns first. Nothing is left out for a horn.
+        .sortedWith(compareByDescending<Footage> { it.kmhMax / 5 }.thenBy { it.horns }.thenByDescending { it.kmhMax })
         .mapNotNull { f -> quiet(f)?.let { (a, b) -> f to ScriptShot(f.momentId, a, b) } }
         .take(n)
         .map { (f, shot) ->
@@ -29,7 +30,7 @@ object SoundOn {
                 lengthSec = ((shot.durMs + 999) / 1000).toInt().coerceIn(PieceFormat.SHORT.minSec, PieceFormat.SHORT.maxSec),
                 shape = SHAPE,
                 hookLine = null,
-                postCaption = "Sound on 🔊\n#motovlog #bikelife #exhaustsound #ridersofindia",
+                postCaption = "Sound on 🔊\n#motovlog #bikelife #exhaustsound #motorcycle",
                 sections = listOf(Section(SectionKind.PEAK, "ride", listOf(shot))),
                 vibe = Vibe.HYPE,
             )

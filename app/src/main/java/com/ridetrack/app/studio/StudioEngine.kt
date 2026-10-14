@@ -100,6 +100,7 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
                     listOfNotNull(ClipDownshifts.load(m.file)?.size?.takeIf { it > 0 }?.let { n -> if (n == 1) "downshift" else "downshift ×$n" }))
                     .joinToString(),
                 label = Format.timeOfDay(m.videoStartMillis),
+                horns = m.engineFile.takeIf { it.isFile }?.let { EngineNoises.cached(it) }?.count { it.kind == com.ridetrack.telemetry.moments.EngineNoise.Kind.HORN } ?: 0,
             )
         } + phone.values.filter { it.id !in out }.map { p ->
             Footage(

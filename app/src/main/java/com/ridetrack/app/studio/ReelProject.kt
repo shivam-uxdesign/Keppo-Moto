@@ -293,12 +293,16 @@ object ReelJson {
     private fun audio(a: AudioItem) = JSONObject().put("id", a.id).put("kind", a.kind.name).put("bit", bit(a.bit)).put("in", a.inMs).put("start", a.startMs).put("dur", a.durMs)
         .put("volume", a.volume.toDouble()).put("fadeIn", a.fadeInMs).put("fadeOut", a.fadeOutMs).put("file", a.file ?: JSONObject.NULL)
         .put("name", a.name ?: JSONObject.NULL)
+        .put("noise", JSONObject().apply { a.noise.forEach { (k, v) -> put(k.toString(), v.name) } })
         .put("curve", JSONArray().apply { a.curve.forEach { p -> put(JSONObject().put("at", p.atMs).put("l", p.level.toDouble())) } })
 
     private fun readAudio(o: JSONObject) = AudioItem(
         id = o.getString("id"), kind = TrackKind.valueOf(o.getString("kind")), bit = readBit(o.getJSONObject("bit")), inMs = o.getLong("in"), startMs = o.getLong("start"), durMs = o.getLong("dur"),
         volume = o.optDouble("volume", 1.0).toFloat(), fadeInMs = o.optLong("fadeIn"), fadeOutMs = o.optLong("fadeOut"), file = o.optStringOrNull("file"), name = o.optStringOrNull("name"),
         curve = o.optJSONArray("curve")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { p -> VolumePoint(p.getLong("at"), p.getDouble("l").toFloat()) } } }.orEmpty(),
+        noise = o.optJSONObject("noise")?.let { n ->
+            n.keys().asSequence().mapNotNull { k -> k.toLongOrNull()?.let { at -> NoiseChoice.entries.firstOrNull { it.name == n.optString(k) }?.let { at to it } } }.toMap()
+        }.orEmpty(),
     )
 
     private fun mix(m: TrackMix) = JSONObject()

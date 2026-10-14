@@ -80,6 +80,8 @@ data class Footage(
     val kmhMax: Int,
     val events: String = "",
     val label: String = "",
+    /** Horns heard on its engine sound (when already worked out): fewer wins a tie for engine pieces. */
+    val horns: Int = 0,
 ) {
     val talkingMs: Long get() = lines.sumOf { it.endMs - it.startMs }
 }

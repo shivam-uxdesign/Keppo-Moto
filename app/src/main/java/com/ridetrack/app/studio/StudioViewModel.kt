@@ -160,6 +160,8 @@ data class StudioState(
     val exported: List<File>? = null,
     /** Clips that have the engine mic's sound (two-mic recording): moment id → its file. */
     val engineFiles: Map<String, String> = emptyMap(),
+    /** Horns and bumps in each engine file (by its URI), once worked out in the background. */
+    val engineNoise: Map<String, List<com.ridetrack.telemetry.moments.EngineNoise.Noise>> = emptyMap(),
     /** Bumped when the timeline changes for good (not mid-drag), so the preview reloads. */
     val timelineVersion: Int = 0,
     /** Why Gemini can't help right now (no internet, its limit), shown with Try again; null when fine. */
@@ -1384,6 +1386,11 @@ class StudioViewModel(
         history = EditHistory(TrackEdits.withEngine(draft ?: TimelineEdits.liftTexts(plan) { newTextId() }, engine) { newId("e") })
         val saved = c.savedClips.clips.value.associate { "saved:${it.id}" to c.savedClips.thumb(it.id).takeIf(File::isFile) }
         _state.update { it.copy(step = StudioStep.EDIT, pick = null, footage = footage(), thumbs = it.thumbs + saved, engineFiles = engine) }
+        // Horns and bumps on the engine mic, for the Engine row's marks (each file once, then cached).
+        if (engine.isNotEmpty()) viewModelScope.launch(Dispatchers.IO) {
+            val found = engine.values.associateWith { uri -> runCatching { EngineNoises.ofUri(c.appContext, uri) }.getOrDefault(emptyList()) }
+            _state.update { it.copy(engineNoise = found) }
+        }
         if (draft != null) say("Carried on from your unsaved edit")
         publish(reload = true)
         // The redline light needs the revs from the engine sound: work them out in the background.
@@ -1492,6 +1499,13 @@ class StudioViewModel(
     }
 
     /** The engine mic's sound under every clip that has it. */
+    /** What to do with one horn or bump in an engine item: reduce (default), mute there, or keep. */
+    fun noiseChoice(audioId: String, atMs: Long, choice: NoiseChoice) {
+        change(when (choice) { NoiseChoice.REDUCE -> "Reduce noise"; NoiseChoice.MUTE -> "Mute noise"; NoiseChoice.KEEP -> "Keep noise" }) {
+            TrackEdits.noiseChoice(it, audioId, atMs, choice)
+        }
+    }
+
     fun addEngine() {
         val engine = _state.value.engineFiles
         if (engine.isEmpty()) return say("No engine sound in these clips (record with two mics)")
