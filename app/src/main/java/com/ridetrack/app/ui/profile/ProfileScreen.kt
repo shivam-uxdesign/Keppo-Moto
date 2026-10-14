@@ -426,7 +426,9 @@ private fun AboutPage() {
         Text(
             "Your rides are stored only on this phone. Keppo Moto has no account, and recording works fully offline. " +
                 "Map backgrounds are downloaded from OpenFreeMap's servers (OpenStreetMap data) when you view a map. " +
-                "Drive backup, if you turn it on, goes to your own Google Drive.",
+                "Drive backup, if you turn it on, goes to your own Google Drive. " +
+                "Studio and Pro's captions and petrol prices use Google's Gemini, only after you agree: then the sound of talking clips, a few frames and ride details are sent to Google for the answer. " +
+                "Crash reports, if allowed (below), go to Google's Firebase Crashlytics.",
             style = RtType.body,
             color = RtColors.TextSecondary,
         )
@@ -446,6 +448,7 @@ private fun AboutPage() {
         choice ?: reports.on,
         { reports.set(it) },
     )
+    LegalSection()
 }
 
 // ---- Building blocks -----------------------------------------------------------------------

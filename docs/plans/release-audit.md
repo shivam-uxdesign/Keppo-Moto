@@ -98,6 +98,11 @@ No photo or video library permissions (the system picker is used). Good.
   - **Background jobs:** the automatic ideas, the Moments captions worker and the petrol price lookup also need it. Turning on automatic captions counts as agreeing (that switch explains it).
   - **Reporting:** `pro/AiReports`, through "Report this idea" in an idea's options and "Report a Gemini result" in Studio's menu (offensive or harmful, wrong or made up, something else, plus a note). Reports are kept on the phone and sent by the server (step 8).
 
+- **Legal (9c, 14 Oct):** About & privacy says what goes to Gemini and Crashlytics, and gains a Legal section (`LegalSection`):
+  - the privacy policy and terms links (`LegalLinks`, filled in with the store pack; hidden while empty)
+  - open-source licences (the asset licence files and a library notice)
+  - "Delete all my data": two steps (type DELETE), then `clearApplicationUserData()`; it says that Drive and Journal copies and the subscription are handled elsewhere
+
 ## Already fine
 - **16 KB pages:** all native libraries (MapLibre, ONNX Runtime, AndroidX) are 16 KB aligned. The APK passes `zipalign -P 16`.
 - **Edge-to-edge:** already on (`enableEdgeToEdge`).
