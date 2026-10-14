@@ -56,7 +56,7 @@ No photo or video library permissions (the system picker is used). Good.
 | App Check | Firebase: Play Integrity in release, a debug token in debug | Good. The debug token comes from `local.properties` and only goes into debug builds; confirm. |
 
 ## Launch blockers found
-1. **Target Android version:** the app targets Android 15 (API 35). Since 31 Aug 2026, Play needs **Android 16 (API 36)** for new apps and updates. Only the API 35 platform is installed here; API 36 has to be downloaded (does this environment's network allow it?). Moving up may change behaviour: check edge-to-edge, foreground services and media.
+1. **Target Android version (fixed 14 Oct):** now compiles and targets Android 16 (API 36); the SDK and build tools 36 are installed here. AGP 8.7.3 builds against it with `android.suppressUnsupportedCompileSdk=36`; move to a newer AGP in the release step. Checked: no orientation lock, no edge-to-edge opt-out, no `onBackPressed` overrides (predictive back is fine). Still to see on a phone: insets on every screen, and tablets and foldables in landscape.
 2. **App ID: not a blocker (corrected 14 Oct).** The app is already built as `com.keppo.moto` (`applicationId`), and the Firebase file is registered for it. `com.ridetrack.app` is only the code's internal namespace, which riders and Play never see.
    - **Still to do at release:** the Drive backup sign-in needs an OAuth client for `com.keppo.moto` with the release key's SHA-1, and Play App Signing's SHA-1 added in Firebase and Google Cloud (the Firebase file lists no OAuth clients today).
 3. **Release build isn't set up:**
