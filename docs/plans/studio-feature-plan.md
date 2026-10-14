@@ -1105,6 +1105,12 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
    - 14 days with 12+ testers
    - production
 
+### Order (changed 14 Oct)
+1. Done: maps, App ID, Android 16, release build, crash alert fallbacks, free riders without Gemini, subscription app side (7a–7c).
+2. Step 9: Crashlytics with consent; Gemini consent and AI reporting; data deletion and licences.
+3. The audits (code, UX, UI), then the store pack.
+4. **Last, just before the closed test:** the rider switches Firebase to Blaze, whose $300 Google Cloud trial credit lasts 90 days. Then step 8, the server function (purchase checks, free-Reel and cost-cap counts, access codes). The credit then covers the closed test and roughly the first 2.5 months after launch.
+
 ### What the rider does
 Create and keep the release key (walked through), click through the Play Console, record the declaration videos, find testers, test on the phone. Claude prepares every form's answers, the policy texts and the listing copy.
 
