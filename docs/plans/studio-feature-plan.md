@@ -1154,3 +1154,13 @@ The rider recorded with two mics (DJI Mic Mini, mono) and saw no sign of it anyw
   - Fuel: US in gallons and US mpg; UK in litres with imperial mpg.
   - The ride export CSV stays metric (its columns say so).
 - **Fallback Instagram caption:** "#ridersofindia" became "#motorcycle".
+
+## Questions and bugs log (from 14 Oct)
+Everything the rider reports in chat goes here: what was said, the status, and the build that has the fix.
+Statuses: Open · Fixing · To test (fixed, waiting for the rider) · Done · Later.
+
+| # | Type | What | Status | Build / notes |
+|---|---|---|---|---|
+| 1 | Bug | Recorded with 2 mics (mono): nothing showed in the HUD, settings or editor; the clip's own sound had no row of its own | To test | 6a19ba8: HUD meters, Moments › Mics page, Voice and Engine rows in the editor |
+| 2 | Question | Why no separate engine sound on that ride? | To test | Saved only from a USB-C receiver when both sides differ. The moments log now says which case it was; check after the next two-mic ride |
+| 3 | Question | Which APK has all the recent changes? | Done | 6a19ba8 |
