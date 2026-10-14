@@ -872,6 +872,20 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                     }
                                 }
                             }
+                            // Your voice: each clip's own sound (its mic), on a row of its own
+                            run {
+                                val starts = TimelineEdits.starts(plan)
+                                val voiced = plan.segments.withIndex().filter { (_, seg) -> seg is ClipSegment && !seg.tail && seg.volume > 0f }
+                                if (voiced.isNotEmpty()) {
+                                    val muted = plan.mix.gain(TrackKind.CLIPS) == 0f
+                                    val label = (if (s.engineFiles.isNotEmpty()) "Voice" else "Clip sound") + if (muted) " · muted" else ""
+                                    Rows(1) {
+                                        voiced.forEach { (i, seg) ->
+                                            TrackBlock(label, starts[i], seg.durMs, 0, pxPerMs, Color(0x5538BDF8), false, onClick = { mixer = true })
+                                        }
+                                    }
+                                }
+                            }
                             // Sound tracks (hold one and drag to move it in time)
                             listOf(TrackKind.DETACHED, TrackKind.ENGINE).forEach { kind ->
                                 val items = plan.audio.filter { it.kind == kind }

@@ -1114,3 +1114,17 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
 ### What the rider does
 Create and keep the release key (walked through), click through the Play Console, record the declaration videos, find testers, test on the phone. Claude prepares every form's answers, the policy texts and the listing copy.
 
+
+## Two mics visible everywhere (14 Oct, rider request)
+The rider recorded with two mics (DJI Mic Mini, mono) and saw no sign of it anywhere.
+- **HUD:** while a two-channel receiver records, a bar per mic ("VOICE", "ENGINE").
+  - Grey "1 MIC" when both sides sound the same.
+- **Settings:** a new Moments › **Mics** page holds the mic choice, the Bluetooth headset switch, Two mics, and the meters.
+  - Off the bike, the meters run as the mic test (with swap).
+  - During a ride, they show the ride's live levels.
+- **Editor:**
+  - **Voice row:** each clip's own sound now has its own row ("Voice" with two mics, "Clip sound" otherwise).
+  - **Engine row:** the engine sound is added automatically when the clips have it.
+  - **Removing it:** if the rider deletes the engine sound, it stays out; Add sound › Engine brings it back.
+- **Log:** the moments log now says once whether the two channels differ ("engine sound kept with each clip") or are the same (nothing kept). That tells us why a ride has no engine sound.
+- **Still true:** the engine sound is saved only from a USB-C receiver, and only when the two sides really differ.

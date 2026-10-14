@@ -76,6 +76,7 @@ enum class MomentsSub(val title: String) {
     WHAT("What to film"),
     TRANSCRIBE("Write down what I say"),
     STORAGE("Storage"),
+    MICS("Mics"),
     MORE("More settings"),
 }
 
@@ -142,7 +143,9 @@ internal fun MomentsSection(
             SubRow("Storage", "${formatBytes(s.momentsBytes)} · Manage") { onSub(MomentsSub.STORAGE) }
             if (m.enabled) {
                 Divider()
-                SubRow("More settings", "Clip length, photos, video quality, microphone, voice level") { onSub(MomentsSub.MORE) }
+                SubRow("Mics", micSummary(m)) { onSub(MomentsSub.MICS) }
+                Divider()
+                SubRow("More settings", "Clip length, photos, video quality, voice level") { onSub(MomentsSub.MORE) }
             }
             if (BuildConfig.DEBUG && s.rideActive && vm.canTestClip) {
                 // Beta: checks the whole clip path in ~15 s (camera → buffer → MP4 → ride page).
@@ -184,15 +187,7 @@ internal fun MomentsSection(
                 TextButton(onClick = { confirmDelete = true }, enabled = editable) { Text("Delete all moments", color = RtColors.Error) }
             }
         }
-        MomentsSub.MORE -> RtCard {
-            ValueMenu("Clip length", MomentSettings.CLIP_CHOICES, m.clipSeconds, { "$it s before & after" }, editable) { vm.setMoments(m.copy(clipSeconds = it)) }
-            Divider()
-            ValueMenu("Photos", PhotoInterval.entries, m.photos, { if (it == PhotoInterval.OFF) it.label else "Every ${it.label}" }, editable) { vm.setMoments(m.copy(photos = it)) }
-            Text("Plus one photo at each stop longer than a minute.", style = RtType.caption, color = RtColors.TextTertiary)
-            Divider()
-            ValueMenu("Video quality", VideoQuality.entries, m.quality, { it.label }, editable) { vm.setMoments(m.copy(quality = it)) }
-            Divider()
-            Spacer(Modifier.height(RtDimens.sm))
+        MomentsSub.MICS -> RtCard {
             MicPicker(m.mic, editable, m.headsetMic) { vm.setMoments(m.copy(mic = it)) }
             ToggleRow(
                 "Allow Bluetooth headset mic",
@@ -209,7 +204,18 @@ internal fun MomentsSection(
                 { vm.setMoments(m.copy(twoMics = it)) },
                 enabled = editable,
             )
-            if (m.twoMics && !s.rideActive) TwoMicTest(m.mic, m.swapMics) { vm.setMoments(m.copy(swapMics = it)) }
+            if (m.twoMics) {
+                // During a ride the meters come from the recording itself.
+                if (s.rideActive) RideTwoMics() else TwoMicTest(m.mic, m.swapMics) { vm.setMoments(m.copy(swapMics = it)) }
+            }
+        }
+        MomentsSub.MORE -> RtCard {
+            ValueMenu("Clip length", MomentSettings.CLIP_CHOICES, m.clipSeconds, { "$it s before & after" }, editable) { vm.setMoments(m.copy(clipSeconds = it)) }
+            Divider()
+            ValueMenu("Photos", PhotoInterval.entries, m.photos, { if (it == PhotoInterval.OFF) it.label else "Every ${it.label}" }, editable) { vm.setMoments(m.copy(photos = it)) }
+            Text("Plus one photo at each stop longer than a minute.", style = RtType.caption, color = RtColors.TextTertiary)
+            Divider()
+            ValueMenu("Video quality", VideoQuality.entries, m.quality, { it.label }, editable) { vm.setMoments(m.copy(quality = it)) }
             if (m.voice) {
                 Divider()
                 Spacer(Modifier.height(RtDimens.sm))
@@ -491,6 +497,35 @@ private fun TwoMicTest(mic: String?, swapped: Boolean, onSwap: (Boolean) -> Unit
             }
         }
     }
+}
+
+/** The two mics as the ride is recording them: a bar each, and whether they're really two. */
+@Composable
+private fun RideTwoMics() {
+    val two by com.ridetrack.app.ui.appContainer().momentsHub.twoMics.collectAsStateWithLifecycle()
+    Column(Modifier.fillMaxWidth().padding(vertical = RtDimens.xs), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val t = two
+        if (t == null) {
+            Text("Not recording from a two-channel receiver right now (phone mic, Bluetooth, or the camera is resting).", style = RtType.caption, color = RtColors.TextSecondary)
+        } else {
+            ChannelBar("Voice", "this ride", t.voiceDb)
+            ChannelBar("Engine", "this ride", t.engineDb)
+            Text(
+                when (t.kind) {
+                    com.ridetrack.app.moments.TwoMicKind.LISTENING -> "Talk, then rev: listening…"
+                    com.ridetrack.app.moments.TwoMicKind.TWO -> "Two different mics: the engine sound is kept with each clip."
+                    com.ridetrack.app.moments.TwoMicKind.SAME -> "Both sides sound the same, so there's no separate engine sound. Check the receiver is in mono with both transmitters on."
+                },
+                style = RtType.caption,
+                color = RtColors.TextSecondary,
+            )
+        }
+    }
+}
+
+private fun micSummary(m: com.ridetrack.app.data.MomentSettings): String {
+    val mic = MicChoice.decode(m.mic)
+    return (if (mic.type == MicType.AUTO) "Best mic connected" else mic.label) + if (m.twoMics) " · two mics (voice + engine)" else ""
 }
 
 @Composable

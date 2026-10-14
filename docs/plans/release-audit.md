@@ -149,3 +149,18 @@ No photo or video library permissions (the system picker is used). Good.
 5. **Low, accepted.** A pothole, then a still stop with the engine off within 15 s, may alarm; the countdown covers it.
 6. **Low, accepted.** Unsaved data stays in memory while storage is full (small).
 
+
+## Code audit 2: Studio (14 Oct, part 1)
+
+### Solid
+- Every media reader, encoder, muxer and player is released, including on errors.
+- No `GlobalScope`; `runBlocking` only in the documents provider (normal there).
+- StudioService handles Android 15's foreground-service time limit (`onTimeout`).
+- Reels keep at most 5 versions; Recently deleted is emptied after 30 days.
+- Undo history is capped at 100 steps.
+- Temporary files (caption audio, cover frames, export copies, reverse work folders) are deleted after use.
+
+### Found and fixed
+- **Storage leak (medium):** still frames (`studio-stills`), reversed clips (`studio-reversed`) and raw voice-over recordings (`studio/voice-*.pcm`) were never deleted, even after the edit using them was gone.
+  - Fix: `StudioSweeper`, once a day at app start (after the Reel purge).
+  - It deletes such a file when no edit's JSON names it and it's over 3 days old.

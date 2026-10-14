@@ -158,7 +158,17 @@ object TrackEdits {
             val f = engine[s.bit.momentId] ?: return@mapIndexedNotNull null
             AudioItem(newId(), TrackKind.ENGINE, s.bit, s.inMs, starts[i], s.durMs, volume, fadeInMs = 60, fadeOutMs = 60, file = f)
         }
-        return plan.copy(audio = plan.audio.filter { it.kind != TrackKind.ENGINE } + items)
+        // Added on purpose: it plays again even if it was taken out before.
+        return plan.copy(audio = plan.audio.filter { it.kind != TrackKind.ENGINE } + items, mix = plan.mix.copy(muted = plan.mix.muted - TrackKind.ENGINE))
+    }
+
+    /**
+     * The engine sound on its own row when the clips have it (two mics), unless the rider took
+     * it out before (no engine sound left and the track muted: see [deleteAudio]).
+     */
+    fun withEngine(plan: StudioPlan, engine: Map<String, String>, newId: () -> String): StudioPlan {
+        if (engine.isEmpty() || plan.audio.any { it.kind == TrackKind.ENGINE } || TrackKind.ENGINE in plan.mix.muted) return plan
+        return addEngine(plan, engine, newId)
     }
 
     /**
@@ -180,7 +190,12 @@ object TrackEdits {
 
     fun audioVolume(plan: StudioPlan, id: String, v: Float) = audio(plan, id) { it.copy(volume = v.coerceIn(0f, 1.5f)) }
     fun fade(plan: StudioPlan, id: String, inMs: Long, outMs: Long) = audio(plan, id) { it.copy(fadeInMs = inMs.coerceIn(0, it.durMs / 2), fadeOutMs = outMs.coerceIn(0, it.durMs / 2)) }
-    fun deleteAudio(plan: StudioPlan, id: String) = audio(plan, id) { null }
+    fun deleteAudio(plan: StudioPlan, id: String): StudioPlan {
+        val out = audio(plan, id) { null }
+        // The last of the engine sound gone: remember it was taken out, so it isn't put back.
+        val engineGone = plan.audio.any { it.id == id && it.kind == TrackKind.ENGINE } && out.audio.none { it.kind == TrackKind.ENGINE }
+        return if (engineGone) out.copy(mix = out.mix.copy(muted = out.mix.muted + TrackKind.ENGINE)) else out
+    }
 
     /** Earlier or later, keeping its length (a J or L cut). */
     fun shiftAudio(plan: StudioPlan, id: String, deltaMs: Long) = audio(plan, id) { a ->

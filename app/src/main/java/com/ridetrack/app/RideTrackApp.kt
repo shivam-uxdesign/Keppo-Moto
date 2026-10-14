@@ -49,7 +49,11 @@ class RideTrackApp : Application() {
                 changed.forEach { com.ridetrack.app.studio.AfterRideWorker.schedule(this@RideTrackApp, it) }
             }
         }
-        container.appScope.launch { container.reels.purgeExpired() }
+        container.appScope.launch {
+            container.reels.purgeExpired()
+            // After the purge, so files of Reels deleted for good go too.
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.ridetrack.app.studio.StudioSweeper.sweepDaily(this@RideTrackApp) } }
+        }
         container.transcribeSoon()
         // Reels still waiting when the app was closed are made now.
         container.reelMaker.resume()

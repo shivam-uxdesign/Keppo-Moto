@@ -485,7 +485,22 @@ class MomentRecorder(
             // Both channels of a USB-C receiver: its second transmitter can be the engine mic.
             AudioEncoder(context, buffer, device, onLevel = hub::reportLevel, vad = vad, twoMics = settings.twoMics && mic.type == MicType.USB, swap = settings.swapMics,
                 // The engine mic's level, for revs and exhaust pops (only when the two mics really differ).
-                onChannels = { l, r -> if (audio?.twoDifferent == true) hub.reportEngine(System.currentTimeMillis(), if (settings.swapMics) l else r, ENGINE_CHUNK_MS) },
+                onChannels = { l, r ->
+                    val enc = audio
+                    val voiceDb = if (settings.swapMics) r else l
+                    val engineDb = if (settings.swapMics) l else r
+                    val kind = when {
+                        enc == null || !enc.twoKnown -> TwoMicKind.LISTENING
+                        enc.twoDifferent -> TwoMicKind.TWO
+                        else -> TwoMicKind.SAME
+                    }
+                    hub.reportTwo(voiceDb, engineDb, kind)
+                    if (kind != twoMicLogged && kind != TwoMicKind.LISTENING) {
+                        twoMicLogged = kind
+                        log.log(if (kind == TwoMicKind.TWO) "two mics: voice and engine differ, engine sound kept with each clip" else "two mics: both channels sound the same, so no separate engine sound")
+                    }
+                    if (kind == TwoMicKind.TWO) hub.reportEngine(System.currentTimeMillis(), engineDb, ENGINE_CHUNK_MS)
+                },
                 onHeadsetLost = {
                 scope.launch(Dispatchers.Main) {
                     log.log("headset left call mode: released it (its music can play again); switching mic")
@@ -508,6 +523,9 @@ class MomentRecorder(
     }
 
     /** With two different mics, the engine mic's sound goes next to the clip as its own file. */
+    /** What the log last said about the two mics (said again only when it changes). */
+    @Volatile private var twoMicLogged: TwoMicKind? = null
+
     private fun writeEngine(clip: File, fromMicros: Long, toMicros: Long) {
         val enc = audio ?: return
         if (!enc.twoDifferent) return

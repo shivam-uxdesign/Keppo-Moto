@@ -196,4 +196,23 @@ class TracksTest {
         // Past the end: nothing added.
         assertEquals(p0, TrackEdits.addSound(p0, "s3", "Late", "content://x", 5_000, p0.totalMs))
     }
+
+    @Test
+    fun engineRowIsAddedOnceAndStaysOutWhenRemoved() {
+        val engine = mapOf("a" to "file:///a.engine.m4a")
+        var n = 0
+        val added = TrackEdits.withEngine(plan(), engine) { "e${n++}" }
+        val ids = added.audio.filter { it.kind == TrackKind.ENGINE }.map { it.id }
+        assertTrue(ids.isNotEmpty())
+        // Already there: left as it is.
+        assertEquals(added, TrackEdits.withEngine(added, engine) { "x" })
+        // Taken out: not put back next time, but adding it on purpose brings it back, audible.
+        val removed = ids.fold(added) { p, id -> TrackEdits.deleteAudio(p, id) }
+        assertTrue(TrackKind.ENGINE in removed.mix.muted)
+        assertEquals(removed, TrackEdits.withEngine(removed, engine) { "y" })
+        val back = TrackEdits.addEngine(removed, engine, { "z" })
+        assertTrue(back.audio.any { it.kind == TrackKind.ENGINE } && TrackKind.ENGINE !in back.mix.muted)
+        // No engine sound in the clips: nothing changes.
+        assertEquals(plan(), TrackEdits.withEngine(plan(), emptyMap()) { "w" })
+    }
 }

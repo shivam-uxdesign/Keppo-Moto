@@ -129,6 +129,11 @@ class HudController(
         }
 
         scope.launch {
+            // The two-mic meter, at the same rate.
+            moments.twoMics.sample(100).collect { refreshData() }
+        }
+
+        scope.launch {
             // The chosen mic dropping out (or coming back): say so once under the pop-up.
             var missing: String? = null
             moments.state.map { it.micFallback }.distinctUntilChanged().collect { name ->
@@ -187,6 +192,7 @@ class HudController(
             micLevelDb = moments.micLevel.value,
             voiceMarginDb = voice.value.second.marginDb,
             speaking = moments.speaking.value,
+            twoMics = moments.twoMics.value,
         )
     }
 

@@ -190,6 +190,15 @@ class MomentsHub {
         publish()
     }
 
+    private val _twoMics = MutableStateFlow<TwoMicLevels?>(null)
+    /** Both mics' loudness while a two-channel receiver records (null otherwise). */
+    val twoMics: StateFlow<TwoMicLevels?> = _twoMics.asStateFlow()
+
+    /** From the audio thread: each mic's loudness (dBFS) and what's known about them. */
+    fun reportTwo(voiceDb: Float, engineDb: Float, kind: TwoMicKind) {
+        _twoMics.value = TwoMicLevels(voiceDb, engineDb, kind)
+    }
+
     private val _micLevel = MutableStateFlow<Float?>(null)
     /** Mic loudness in the voice range, in dB above the background noise (null while no mic is open). */
     val micLevel: StateFlow<Float?> = _micLevel.asStateFlow()
@@ -221,6 +230,7 @@ class MomentsHub {
 
     fun clearLevel() {
         _micLevel.value = null
+        _twoMics.value = null
         synchronized(levels) {
             levels.clear()
             background.reset()
@@ -286,6 +296,19 @@ class MomentsHub {
         const val MAX_LEVELS = 120
     }
 }
+
+/** Whether a two-channel receiver really carries two mics. */
+enum class TwoMicKind {
+    /** Not enough sound yet to tell. */
+    LISTENING,
+    /** Two different mics: the engine mic is kept as its own sound. */
+    TWO,
+    /** Both sides the same: one mic (or the receiver mixes them). */
+    SAME,
+}
+
+/** Each mic's loudness in dBFS (-90 silent, 0 loudest), as the HUD and settings meters show it. */
+data class TwoMicLevels(val voiceDb: Float, val engineDb: Float, val kind: TwoMicKind)
 
 /** One audio chunk: its level in the voice range and the background then (dBFS), and how voice-like it is (0..1). */
 data class VoiceChunk(val timeMillis: Long, val levelDb: Float, val backgroundDb: Float, val chunkMillis: Long, val voice: Float = 1f) {

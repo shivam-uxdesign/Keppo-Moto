@@ -1373,9 +1373,10 @@ class StudioViewModel(
         val plan = _state.value.plan ?: return
         // An edit left unsaved (the app closed) carries on where it was.
         val draft = readDraft()
-        history = EditHistory(draft ?: TimelineEdits.liftTexts(plan) { newTextId() })
-        val saved = c.savedClips.clips.value.associate { "saved:${it.id}" to c.savedClips.thumb(it.id).takeIf(File::isFile) }
         val engine = (clips + borrowed.values).filter { it.engineFile.isFile }.associate { it.id to Uri.fromFile(it.engineFile).toString() }
+        // Two-mic clips: the engine sound is its own row from the start.
+        history = EditHistory(TrackEdits.withEngine(draft ?: TimelineEdits.liftTexts(plan) { newTextId() }, engine) { newId("e") })
+        val saved = c.savedClips.clips.value.associate { "saved:${it.id}" to c.savedClips.thumb(it.id).takeIf(File::isFile) }
         _state.update { it.copy(step = StudioStep.EDIT, pick = null, footage = footage(), thumbs = it.thumbs + saved, engineFiles = engine) }
         if (draft != null) say("Carried on from your unsaved edit")
         publish(reload = true)

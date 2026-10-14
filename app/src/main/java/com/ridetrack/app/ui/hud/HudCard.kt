@@ -87,6 +87,7 @@ fun HudCard(data: HudData, settings: HudSettings, modifier: Modifier = Modifier)
     ) {
         StatusRow(data, c)
         if (data.voiceOn) VoiceMeter(data, c)
+        data.twoMics?.let { TwoMicMeter(it, c) }
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 Format.speedKmh(data.speedMps),
@@ -224,6 +225,40 @@ private fun VoiceMeter(data: HudData, c: HudColors) {
         }
     }
 }
+
+/**
+ * Two mics (a two-transmitter receiver): a slim bar per mic, so the rider sees both are heard.
+ * Grey while the app is still listening; "1 MIC" when both sides turned out the same.
+ */
+@Composable
+private fun TwoMicMeter(m: com.ridetrack.app.moments.TwoMicLevels, c: HudColors) {
+    val same = m.kind == com.ridetrack.app.moments.TwoMicKind.SAME
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.semantics(mergeDescendants = true) {
+            contentDescription = if (same) "One mic: both channels sound the same" else "Voice mic ${m.voiceDb.toInt()} dB, engine mic ${m.engineDb.toInt()} dB"
+        },
+    ) {
+        LevelRow("VOICE", m.voiceDb, if (same) c.muted else DarkPalette.primary, c)
+        LevelRow(if (same) "1 MIC" else "ENGINE", m.engineDb, if (same) c.muted.copy(alpha = 0.45f) else ENGINE_ORANGE, c)
+    }
+}
+
+@Composable
+private fun LevelRow(label: String, db: Float, color: Color, c: HudColors) {
+    val fill = ((db - DBFS_MIN) / -DBFS_MIN).coerceIn(0f, 1f)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = hudLabel, color = c.muted, modifier = Modifier.width(48.dp), maxLines = 1, softWrap = false)
+        Box(Modifier.weight(1f).height(4.dp).background(c.muted.copy(alpha = 0.2f), RoundedCornerShape(2.dp))) {
+            Box(Modifier.fillMaxWidth(fill).height(4.dp).background(color, RoundedCornerShape(2.dp)))
+        }
+    }
+}
+
+/** The engine mic's colour, as on the editor's Engine row. */
+private val ENGINE_ORANGE = Color(0xFFF97316)
+/** The two-mic bars show dBFS from this (quiet) to 0 (loudest). */
+private const val DBFS_MIN = -60f
 
 /** The meter shows dB above the background noise. */
 private const val METER_MIN_DB = 0f

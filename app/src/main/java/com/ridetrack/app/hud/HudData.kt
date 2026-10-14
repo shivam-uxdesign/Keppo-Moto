@@ -78,6 +78,8 @@ data class HudData(
     val micLevelDb: Float? = null,
     val voiceMarginDb: Float = 9f,
     val speaking: Boolean = false,
+    /** Both mics' levels while a two-transmitter receiver records (a meter per mic). */
+    val twoMics: com.ridetrack.app.moments.TwoMicLevels? = null,
 ) {
     companion object {
         fun from(
