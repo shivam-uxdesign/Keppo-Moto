@@ -32,6 +32,8 @@ class RideTrackApp : Application() {
         MapLibre.getInstance(this)
         createNotificationChannel()
         container.hud.start()
+        container.crashReports.start()
+        container.errors.report = container.crashReports::record
         container.crashAlerts.start()
         container.billing.start()
         PurgeWorker.schedule(this)

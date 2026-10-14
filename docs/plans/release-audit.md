@@ -87,6 +87,12 @@ No photo or video library permissions (the system picker is used). Good.
    - **Safety settings:** suggest allowing "Display over other apps" when full screen isn't allowed.
    - **Debug builds:** "Simulate crash in 10 s" to try the alert in the background.
 
+## Built in step 9
+- **Crash reports (9a, 14 Oct):**
+  - **What:** Firebase Crashlytics, plus the error log's caught errors. It never includes rides, places, videos or messages.
+  - **Consent:** off in the manifest until `diag/CrashReports` decides. Riders in the EU, EEA, UK, Switzerland, or an unknown country are asked once on Home; elsewhere it's on. There's a switch in About & privacy.
+  - **Release builds:** the Crashlytics plugin uploads R8's mapping.
+
 ## Already fine
 - **16 KB pages:** all native libraries (MapLibre, ONNX Runtime, AndroidX) are 16 KB aligned. The APK passes `zipalign -P 16`.
 - **Edge-to-edge:** already on (`enableEdgeToEdge`).

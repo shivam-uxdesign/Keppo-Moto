@@ -437,6 +437,15 @@ private fun AboutPage() {
             color = RtColors.TextSecondary,
         )
     }
+    Spacer(Modifier.height(RtDimens.sm))
+    val reports = com.ridetrack.app.ui.appContainer().crashReports
+    val choice by reports.choice.collectAsStateWithLifecycle()
+    ToggleRow(
+        "Send crash reports",
+        "If the app crashes: what it was doing and your phone model, to Google's Firebase Crashlytics. Never your rides, places, videos or messages.",
+        choice ?: reports.on,
+        { reports.set(it) },
+    )
 }
 
 // ---- Building blocks -----------------------------------------------------------------------

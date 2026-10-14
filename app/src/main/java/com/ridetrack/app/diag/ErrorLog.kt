@@ -55,6 +55,9 @@ class ErrorLog(private val context: Context) {
     fun warn(area: String, summary: String, e: Throwable? = null, extra: String? = null): ErrorEntry = record(area, summary, e, extra, warning = true)
 
     /** Records [e] (with every cause and stack trace) under [area]; returns the entry. */
+    /** Where caught errors also go (crash reports); set at start-up. */
+    var report: ((Throwable) -> Unit)? = null
+
     fun record(area: String, summary: String, e: Throwable? = null, extra: String? = null, warning: Boolean = false): ErrorEntry {
         val details = buildString {
             extra?.let { appendLine(it) }
@@ -62,6 +65,8 @@ class ErrorLog(private val context: Context) {
         }.trim()
         val entry = ErrorEntry(System.currentTimeMillis(), area, summary.take(500), details, warning)
         Log.w("ErrorLog", "$area: $summary", e)
+        // Also to crash reports, when the rider allows them.
+        if (!warning) e?.let { report?.invoke(it) }
         synchronized(this) {
             val list = (listOf(entry) + _entries.value).take(MAX)
             _entries.value = list

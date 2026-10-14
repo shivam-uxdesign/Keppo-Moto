@@ -12,7 +12,11 @@ plugins {
 
 // Firebase (transcripts via AI Logic) needs app/google-services.json, which is kept out of git.
 // Without it the app still builds; "Write down what I say" then says it isn't available.
-if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+    // Crash reports (Crashlytics): uploads R8's mapping for release builds so stack traces read.
+    apply(plugin = "com.google.firebase.crashlytics")
+}
 
 // MapTiler key: local.properties (never committed) or the MAPTILER_KEY env var (CI secret).
 // Empty = the app falls back to a keyless basemap.
@@ -189,6 +193,8 @@ dependencies {
     implementation(libs.firebase.config)
     implementation(libs.firebase.appcheck.debug)
     implementation(libs.firebase.appcheck.playintegrity)
+    // Crash reports, sent only with the rider's consent (see CrashReports).
+    implementation(libs.firebase.crashlytics)
     // Google Play Billing: the Pro subscription.
     implementation(libs.billing.ktx)
     // Silero voice detector for "Film when I speak".

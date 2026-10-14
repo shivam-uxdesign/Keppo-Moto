@@ -151,6 +151,13 @@ fun HomeScreen(
         Header(s, onOpenProfile)
         Spacer(Modifier.height(16.dp))
 
+        // Riders in the EU, EEA, UK and Switzerland are asked once about crash reports.
+        val reports = com.ridetrack.app.ui.appContainer().crashReports
+        val reportChoice by reports.choice.collectAsStateWithLifecycle()
+        if (reportChoice == null && reports.needsAsking) {
+            CrashReportsCard(onChoose = reports::set)
+            Spacer(Modifier.height(RtDimens.md))
+        }
         fuel.prompt?.let { p ->
             FuelPromptCard(p, onAdd = { fillUp = p }, onDismiss = { vm.dismissFuel(p) }, modifier = Modifier.riseIn(0))
             Spacer(Modifier.height(RtDimens.md))
@@ -350,6 +357,25 @@ private fun Header(s: HomeUiState, onOpenProfile: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.Outlined.Person, contentDescription = null, tint = RtColors.TextSecondary, modifier = Modifier.size(19.dp))
+        }
+    }
+}
+
+/** Asks once (where the law wants consent) whether crash reports may be sent. */
+@Composable
+private fun CrashReportsCard(onChoose: (Boolean) -> Unit) {
+    com.ridetrack.app.ui.components.RtCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Help fix crashes?", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+            Text(
+                "If Keppo Moto crashes, it can send a crash report: what the app was doing and your phone model. Never your rides, places, videos or messages. You can change this in Profile › About & privacy.",
+                style = RtType.caption,
+                color = RtColors.TextSecondary,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                com.ridetrack.app.ui.components.PrimaryButton("Send reports", onClick = { onChoose(true) }, modifier = Modifier.weight(1f))
+                com.ridetrack.app.ui.components.SecondaryButton("No thanks", onClick = { onChoose(false) }, modifier = Modifier.weight(1f))
+            }
         }
     }
 }

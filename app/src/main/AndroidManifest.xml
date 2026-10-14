@@ -60,6 +60,10 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.RideTrack">
+        <!-- Crash reports start off; CrashReports turns them on once it's settled (consent where needed). -->
+        <meta-data
+            android:name="firebase_crashlytics_collection_enabled"
+            android:value="false" />
 
         <activity
             android:name=".MainActivity"

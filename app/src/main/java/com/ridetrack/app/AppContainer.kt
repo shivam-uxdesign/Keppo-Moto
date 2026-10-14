@@ -81,6 +81,9 @@ class AppContainer(context: Context) {
     /** Pro (Reels and everything that uses Gemini) or free. */
     val entitlements = com.ridetrack.app.pro.Entitlements(appContext)
 
+    /** Crash reports, with the rider's consent where it's needed. */
+    val crashReports = com.ridetrack.app.diag.CrashReports(appContext)
+
     /** The free rider's one Reel a week. */
     val freeReels = com.ridetrack.app.pro.FreeReels(appContext)
 
