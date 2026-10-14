@@ -405,6 +405,14 @@ private fun DeveloperPage(s: ProfileUiState, vm: ProfileViewModel) {
             !pro,
             { ent.actAsFree = it },
         )
+        val free = com.ridetrack.app.ui.appContainer().freeReels
+        val usedAt by free.usedAt.collectAsStateWithLifecycle()
+        ToggleRow(
+            "This week's free Reel is made (test builds)",
+            "Off gives a free rider their weekly Reel again, to try the lock and the paywall.",
+            usedAt != null && !free.available(),
+            { made -> if (made) free.markUsed() else free.reset() },
+        )
     }
 }
 

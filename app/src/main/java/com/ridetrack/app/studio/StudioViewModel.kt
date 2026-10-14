@@ -558,8 +558,16 @@ class StudioViewModel(
      * Makes a suggestion as a new Reel (whatever is on screen stays saved). It's made by the
      * background maker, so leaving the app doesn't stop it; this screen follows it and opens it.
      */
+    /** Free riders make one Reel a week; after it, Studio says so instead of making. */
+    private fun mayMake(): Boolean {
+        if (c.studioOpen()) return true
+        _state.update { it.copy(toast = "This week's free Reel is made. Pro makes Reels any time.") }
+        return false
+    }
+
     fun makePiece(key: String) {
         if (job?.isActive == true || makingId != null) return
+        if (!mayMake()) return
         val piece = _state.value.pieces.firstOrNull { it.key == key } ?: return
         val vibe = piece.script.vibe ?: _state.value.options.vibe
         _state.update {
@@ -631,6 +639,7 @@ class StudioViewModel(
 
     /** Makes every card not made yet (the take it shows), in the background (a notification shows progress). */
     fun makeAll() {
+        if (!mayMake()) return
         val waiting = c.reelMaker.state.value.let { m -> m.next.map { it.second }.toSet() + listOfNotNull(m.current) }
         val s = _state.value
         val jobs = toMake(engine.madeIdeas()).filter { it.script.title !in waiting }.mapNotNull { engine.job(it, s) }
@@ -738,6 +747,7 @@ class StudioViewModel(
         val s = _state.value
         val plan = s.plan ?: return
         val isNew = s.reelId == null
+        if (isNew) c.reelMade()
         val id = s.reelId ?: c.reels.newId()
         val old = c.reels.get(id)
         // Making it again: the Reel as it was stays as a version to go back to.
@@ -1206,6 +1216,7 @@ class StudioViewModel(
     /** Captions (Gemini) → stories and picks (Gemini director) → plan → video → tips. */
     fun make() {
         if (job?.isActive == true) return
+        if (!mayMake()) return
         val o = _state.value.options
         val gemini = c.transcripts.available
         // A suggestion's script is written already: nothing to read. Otherwise only clips not read yet.

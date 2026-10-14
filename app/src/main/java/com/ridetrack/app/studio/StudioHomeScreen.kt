@@ -57,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -261,6 +262,33 @@ fun StudioHomeScreen(
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenIdea: (rideId: String, title: String, make: Boolean) -> Unit = { r, _, _ -> onOpenRide(r) },
+    onOpenPaywall: () -> Unit = {},
+) {
+    val c = com.ridetrack.app.ui.appContainer()
+    val pro by c.entitlements.pro.collectAsStateWithLifecycle()
+    val usedAt by c.freeReels.usedAt.collectAsStateWithLifecycle()
+    val now = System.currentTimeMillis()
+    // A free rider whose weekly Reel is made: Studio shows through, blurred, under the lock.
+    val locked = !pro && !com.ridetrack.app.pro.FreeReelRule.available(usedAt, now)
+    Box(Modifier.fillMaxSize()) {
+        Box(if (locked) Modifier.fillMaxSize().blur(18.dp) else Modifier.fillMaxSize()) {
+            StudioHomeBody(onOpenRide, onOpenPhone, onOpenReels, onOpenStyles, onOpenSearch, onOpenSettings, onOpenIdea)
+        }
+        if (locked) com.ridetrack.app.ui.pro.StudioLocked(com.ridetrack.app.pro.FreeReelRule.nextAt(usedAt, now), onOpenPaywall, onOpenReels = onOpenReels)
+        else if (!pro) com.ridetrack.app.ui.pro.FreeReelChip(onOpenPaywall, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun StudioHomeBody(
+    onOpenRide: (String) -> Unit,
+    onOpenPhone: (reelId: String?) -> Unit,
+    onOpenReels: () -> Unit,
+    onOpenStyles: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenIdea: (rideId: String, title: String, make: Boolean) -> Unit,
 ) {
     val vm = appViewModel { StudioHomeViewModel(it) }
     val rides by vm.rides.collectAsStateWithLifecycle()

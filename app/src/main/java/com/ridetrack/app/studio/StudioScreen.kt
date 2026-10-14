@@ -138,8 +138,15 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
 /** Studio for gallery videos only (from the Studio tab, when they aren't from a recorded ride). */
 /** A ride's own Studio page (from the Studio tab, the ride, or the after-ride notification). */
 @Composable
-fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: String? = null, makeNow: Boolean = false, editNow: Boolean = false) {
+fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: String? = null, makeNow: Boolean = false, editNow: Boolean = false, onUnlock: () -> Unit = {}) {
     val c = com.ridetrack.app.ui.appContainer()
+    // A new Reel needs the free rider's weekly one (Reels already made still open). Decided on the
+    // way in, so the Reel being made isn't taken away when it's saved.
+    val locked = remember(rideId, reelId) { reelId == null && !c.studioOpen() }
+    if (locked) {
+        StudioLockedPage("Studio", onBack, onUnlock)
+        return
+    }
     var name by remember(rideId) { mutableStateOf("Studio") }
     LaunchedEffect(rideId) { name = c.rides.get(rideId)?.name?.let { "Studio · $it" } ?: "Studio" }
     // The editor has its own top bar: the page's title goes while it's open.
@@ -156,7 +163,13 @@ fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: 
 }
 
 @Composable
-fun PhoneStudioScreen(reelId: String?, onBack: () -> Unit, editNow: Boolean = false) {
+fun PhoneStudioScreen(reelId: String?, onBack: () -> Unit, editNow: Boolean = false, onUnlock: () -> Unit = {}) {
+    val c = com.ridetrack.app.ui.appContainer()
+    val locked = remember(reelId) { reelId == null && !c.studioOpen() }
+    if (locked) {
+        StudioLockedPage("Reel from your videos", onBack, onUnlock)
+        return
+    }
     var step by remember { mutableStateOf(if (editNow) StudioStep.EDIT else StudioStep.SETUP) }
     Column(
         Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = com.ridetrack.app.ui.theme.RtDimens.screenPadding),
@@ -166,6 +179,18 @@ fun PhoneStudioScreen(reelId: String?, onBack: () -> Unit, editNow: Boolean = fa
             Spacer(Modifier.height(12.dp))
         }
         StudioPanel(PHONE_STUDIO, Modifier.weight(1f), reelId, editNow = editNow, onStep = { step = it })
+    }
+}
+
+/** A Studio page a free rider can't open this week: its title and back, under the lock. */
+@Composable
+private fun StudioLockedPage(title: String, onBack: () -> Unit, onUnlock: () -> Unit) {
+    val c = com.ridetrack.app.ui.appContainer()
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = com.ridetrack.app.ui.theme.RtDimens.screenPadding)) {
+            com.ridetrack.app.ui.components.ScreenHeader(title, onBack = onBack)
+        }
+        com.ridetrack.app.ui.pro.StudioLocked(c.freeReels.nextAt(), onUnlock, Modifier.padding(top = 72.dp))
     }
 }
 

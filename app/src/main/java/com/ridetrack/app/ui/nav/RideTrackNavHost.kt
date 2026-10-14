@@ -234,6 +234,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onOpenStyles = { nav.navigate(Routes.STYLES) },
                         onOpenSearch = { nav.navigate(Routes.STUDIO_SEARCH) },
                         onOpenSettings = { nav.navigate(Routes.STUDIO_SETTINGS) },
+                        onOpenPaywall = { nav.navigate(Routes.PAYWALL) },
                     ) }
                 }
                 composable(Routes.RIDES_MAP) {
@@ -401,7 +402,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                     ),
                 ) { entry ->
                     DarkRoute {
-                        com.ridetrack.app.studio.PhoneStudioScreen(reelId = entry.arguments?.getString("reel"), onBack = { nav.popBackStack() }, editNow = entry.arguments?.getString("edit") == "true")
+                        com.ridetrack.app.studio.PhoneStudioScreen(reelId = entry.arguments?.getString("reel"), onBack = { nav.popBackStack() }, editNow = entry.arguments?.getString("edit") == "true", onUnlock = { nav.navigate(Routes.PAYWALL) })
                     }
                 }
                 composable(
@@ -438,6 +439,7 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                             makeNow = entry.arguments?.getString("make") == "true",
                             editNow = entry.arguments?.getString("edit") == "true",
                             onBack = { nav.popBackStack() },
+                            onUnlock = { nav.navigate(Routes.PAYWALL) },
                         )
                     }
                 }

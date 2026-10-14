@@ -81,6 +81,17 @@ class AppContainer(context: Context) {
     /** Pro (Reels and everything that uses Gemini) or free. */
     val entitlements = com.ridetrack.app.pro.Entitlements(appContext)
 
+    /** The free rider's one Reel a week. */
+    val freeReels = com.ridetrack.app.pro.FreeReels(appContext)
+
+    /** Studio's Gemini work is allowed: Pro, or the free Reel this week is still there. */
+    fun studioOpen(): Boolean = entitlements.isPro || freeReels.available()
+
+    /** A Reel was made: a free rider's weekly Reel is used. */
+    fun reelMade() {
+        if (!entitlements.isPro) freeReels.markUsed()
+    }
+
     /** The Pro subscription through Google Play. */
     val billing = com.ridetrack.app.pro.Billing(appContext, appScope) { entitlements.setSubscribed(it) }
 
@@ -123,7 +134,7 @@ class AppContainer(context: Context) {
             appContext, reels, errors,
             rebuild = { p -> com.ridetrack.app.studio.StudioEngine(this, p.rideId ?: com.ridetrack.app.studio.PHONE_STUDIO).inputFor(p) },
             alsoToGallery = { studio.alsoSaveToGallery },
-        ) { reelsChanged(it) }
+        ) { reelMade(); reelsChanged(it) }
     }
 
     /** Studio's styles (built-in and the rider's), favourites and the brand kit. */

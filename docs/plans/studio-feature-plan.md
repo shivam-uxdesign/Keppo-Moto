@@ -1014,6 +1014,11 @@ The rider is happy with the app. Next: a full UI, UX and code audit, then a glob
     - Contents: four benefits; Yearly (chosen by default, "Save N%" worked out from Play's prices) and Monthly.
     - Buttons and terms: "Start your free week" (or Subscribe without a trial); plain terms under it (price, auto-renewal, cancel in Google Play); Restore purchase; close.
     - Without Play's prices it says to install from the Play Store. Screenshot test: `PaywallShots`.
+  - **Built (7c, 14 Oct):**
+    - **Counting:** `pro/FreeReels` keeps the free Reel on the phone (the server will count it too); it's used when a Reel is made (a new save, or a background make), and is back 7 days later.
+    - **The lock:** a locked free rider sees Studio blurred under a card (when the next one comes, Unlock Studio · 1 week free, Restore purchase, Your Reels). With the free Reel still there, a "1 free Reel this week · Go Pro" chip.
+    - **New Reels:** opening a new Reel's Studio is locked; Reels already made still open. The lock is decided on the way in, so the Reel being made isn't taken away. Make, make one and make all check too.
+    - **Test builds:** "This week's free Reel is made" in Profile, to try the lock.
   - **Play Console set-up:** subscription `keppo_pro`; base plans `monthly` and `yearly` (auto-renewing); on each, an offer `free-week` (7-day free trial, new customers only).
   - **Access codes (beta testers, influencers):** codes made on the server that give full access for a set time and a set number of uses, redeemed in Settings → Redeem code. No payment, so allowed by Play; their Gemini use still counts against a cap. Until the paywall ships, everything is free anyway.
   - **Discount codes (campaigns):** Play subscription offers with developer-chosen eligibility (for example 3 months at 90% off), shown only after the server accepts a code. Play's minimum price per country rules out 99% off; use an access code for "almost free". Play's own promo codes (extra free months) are a simpler option, limited per quarter.
