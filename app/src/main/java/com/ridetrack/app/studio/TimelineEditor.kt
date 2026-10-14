@@ -22,6 +22,12 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
+import androidx.compose.material.icons.rounded.RecordVoiceOver
+import androidx.compose.material.icons.rounded.Campaign
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.TwoWheeler
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.BorderOuter
 import androidx.compose.material.icons.rounded.ClearAll
 import androidx.compose.material.icons.rounded.Edit
@@ -200,6 +206,8 @@ private const val MAX_LAYER_VIDEOS = 3
 private const val LAYER_DRIFT_MS = 250L
 /** A timeline row's height. */
 private val ROW = 34.dp
+/** The column of row names on the timeline's left. */
+private val ROW_NAME_W = 34.dp
 /** The timeline's height to start with, and its least; the rider drags the handle above it. */
 private const val TIMELINE_DP = 230f
 private const val TIMELINE_MIN_DP = 120f
@@ -723,8 +731,10 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     val starts = TimelineEdits.starts(plan)
                     fun w(ms: Long) = with(density) { (ms * pxPerMs).toDp() }
                     val many = (s.pick as? TimelinePick.Clips)?.indices
+                    val halfPx = with(density) { half.roundToPx() }
                     Row(Modifier.horizontalScroll(scroll)) {
                         Spacer(Modifier.width(half))
+                        androidx.compose.runtime.CompositionLocalProvider(LocalRowLeft provides { scroll.value - halfPx }) {
                         Column(Modifier.width(w(plan.totalMs) + 52.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             // Markers, and the redline tags as red bars (tap one to remove it)
                             Box(Modifier.fillMaxWidth().height(10.dp)) {
@@ -746,6 +756,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             }
                             // Clips, with a mark on each cut that plays a transition
                             Box(Modifier.fillMaxWidth().height(52.dp)) {
+                            RowName("Video", Icons.Rounded.Movie)
                             Row(Modifier.height(52.dp)) {
                                 plan.segments.forEachIndexed { i, seg ->
                                     val selected = (s.pick as? TimelinePick.Clip)?.index == i || many?.contains(i) == true
@@ -813,7 +824,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             if (plan.layers.isNotEmpty()) {
                                 val top = plan.layers.asReversed()
                                 val rows = Lanes.pack(top.map { Lanes.Span(it.startMs, it.endMs) })
-                                Rows(Lanes.count(rows)) {
+                                Rows(Lanes.count(rows), "Video on top", Icons.Rounded.Layers) {
                                     top.forEachIndexed { n, l ->
                                         val selected = (s.pick as? TimelinePick.Layer)?.id == l.id
                                         androidx.compose.runtime.key(l.id) {
@@ -833,7 +844,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 }
                             }
                             val capRows = remember(caps) { Lanes.pack(caps.map { it.third }) }
-                            Rows(Lanes.count(capRows)) {
+                            Rows(Lanes.count(capRows), "Captions", Icons.Rounded.ClosedCaption) {
                                 caps.forEachIndexed { n, (i, j, sp) ->
                                     val line = (plan.segments[i] as ClipSegment).lines[j]
                                     val selected = s.pick == TimelinePick.Caption(i, j)
@@ -847,7 +858,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             run {
                                 val top = plan.texts.asReversed()
                                 val rows = Lanes.pack(top.map { Lanes.Span(it.startMs, it.endMs) })
-                                Rows(Lanes.count(rows)) {
+                                Rows(Lanes.count(rows), "Text", Icons.Rounded.TextFields) {
                                     top.forEachIndexed { n, t ->
                                         val selected = (s.pick as? TimelinePick.Text)?.id == t.id
                                         androidx.compose.runtime.key(t.id) {
@@ -863,7 +874,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             if (plan.stickers.isNotEmpty()) {
                                 val top = plan.stickers.asReversed()
                                 val rows = Lanes.pack(top.map { Lanes.Span(it.startMs, it.endMs) })
-                                Rows(Lanes.count(rows)) {
+                                Rows(Lanes.count(rows), "Stickers", Icons.Rounded.EmojiEmotions) {
                                     top.forEachIndexed { n, st ->
                                         val selected = (s.pick as? TimelinePick.Sticker)?.id == st.id
                                         androidx.compose.runtime.key(st.id) {
@@ -882,7 +893,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 if (voiced.isNotEmpty()) {
                                     val muted = plan.mix.gain(TrackKind.CLIPS) == 0f
                                     val label = (if (s.engineFiles.isNotEmpty()) "Voice" else "Clip sound") + if (muted) " · muted" else ""
-                                    Rows(1) {
+                                    Rows(1, "Mic 1 · Voice", Icons.Rounded.Mic) {
                                         voiced.forEach { (i, seg) ->
                                             TrackBlock(label, starts[i], seg.durMs, 0, pxPerMs, Color(0x5538BDF8), false, onClick = { mixer = true })
                                         }
@@ -893,7 +904,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             listOf(TrackKind.DETACHED, TrackKind.ENGINE).forEach { kind ->
                                 val items = plan.audio.filter { it.kind == kind }
                                 if (items.isEmpty()) return@forEach
-                                Rows(1) {
+                                Rows(1, if (kind == TrackKind.ENGINE) "Mic 2 · Engine" else "Sound", if (kind == TrackKind.ENGINE) Icons.Rounded.TwoWheeler else Icons.Rounded.GraphicEq) {
                                     items.forEach { a ->
                                         val selected = (s.pick as? TimelinePick.Audio)?.id == a.id
                                         val muted = plan.mix.gain(kind) == 0f
@@ -911,7 +922,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                             .filter { n -> n.endMs > a.inMs && n.startMs < a.inMs + a.durMs }
                                             .map { n -> Triple(a, n, a.noise[n.startMs] ?: NoiseChoice.REDUCE) }
                                     }
-                                    if (marks.isNotEmpty()) Rows(1) {
+                                    if (marks.isNotEmpty()) Rows(1, "Horns and bumps", Icons.Rounded.Campaign) {
                                         marks.forEach { (a, n, choice) ->
                                             val horn = n.kind == com.ridetrack.telemetry.moments.EngineNoise.Kind.HORN
                                             val from = a.startMs + (n.startMs - a.inMs).coerceAtLeast(0)
@@ -931,18 +942,18 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 }
                             }
                             if (s.takes.isNotEmpty()) {
-                                Rows(1) {
+                                Rows(1, "Voice-over", Icons.Rounded.RecordVoiceOver) {
                                     s.takes.forEach { t -> TrackBlock("Voice-over", t.startMs, t.durMs, 0, pxPerMs, Color(0x5560A5FA), false, onClick = { mixer = true }) }
                                 }
                             }
                             if (s.musicUri != null) {
-                                Rows(1) {
+                                Rows(1, "Music", Icons.Rounded.MusicNote) {
                                     TrackBlock("♫ ${s.musicName ?: "Music"}", 0, plan.totalMs, 0, pxPerMs, Color(0x5534D399), false, onClick = { mixer = true })
                                 }
                             }
                             plan.audio.filter { it.kind == TrackKind.MUSIC }.forEach { a ->
                                 val selected = (s.pick as? TimelinePick.Audio)?.id == a.id
-                                Rows(1) {
+                                Rows(1, "Music", Icons.Rounded.MusicNote) {
                                     TrackBlock(
                                         "♫ ${a.name ?: "Sound"}" + if (plan.mix.gain(TrackKind.MUSIC) == 0f) " · muted" else "", a.startMs, a.durMs, 0, pxPerMs, Color(0x5534D399), selected,
                                         onClick = { vm.pick(if (selected) null else TimelinePick.Audio(a.id)) },
@@ -956,6 +967,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 modifier = Modifier.padding(top = 2.dp).clip(RoundedCornerShape(12.dp)).border(1.dp, RtColors.Outline, RoundedCornerShape(12.dp))
                                     .clickable(role = Role.Button, onClickLabel = "Add sound") { soundOpen = true }.padding(horizontal = 10.dp, vertical = 3.dp),
                             )
+                        }
                         }
                         Spacer(Modifier.width(half))
                     }
@@ -1651,10 +1663,36 @@ private fun RecordingPill(pos: () -> Long, from: Long, modifier: Modifier) {
     Pill("● Recording · ${clock((pos() - from).coerceAtLeast(0))}", modifier)
 }
 
-/** A group of timeline rows, [count] high. */
+/** A group of timeline rows, [count] high, named on the left. Nothing at all when empty. */
 @Composable
-private fun Rows(count: Int, content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit) {
-    Box(Modifier.fillMaxWidth().height(ROW * count.coerceAtLeast(1)), content = content)
+private fun Rows(count: Int, name: String, icon: ImageVector, content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit) {
+    if (count <= 0) return
+    Box(Modifier.fillMaxWidth().height(ROW * count)) {
+        content()
+        RowName(name, icon)
+    }
+}
+
+/**
+ * The timeline's left edge, in the rows' own coordinates (it moves as the timeline scrolls):
+ * row names stay pinned there, and block labels slide along so they're never off screen.
+ */
+private val LocalRowLeft = androidx.compose.runtime.staticCompositionLocalOf<() -> Int> { { 0 } }
+
+/** The fixed column of row names: an icon over the row's left edge, named for TalkBack. */
+@Composable
+private fun RowName(name: String, icon: ImageVector) {
+    val left = LocalRowLeft.current
+    Box(
+        Modifier
+            .offset { IntOffset(left(), 0) }
+            .zIndex(4f)
+            .width(ROW_NAME_W)
+            .fillMaxHeight()
+            .background(RtColors.Background.copy(alpha = 0.94f))
+            .semantics { contentDescription = name },
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, contentDescription = null, tint = RtColors.TextSecondary, modifier = Modifier.size(16.dp)) }
 }
 
 /**
@@ -1711,7 +1749,17 @@ private fun TrackBlock(
             .padding(horizontal = 6.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        // The label slides along the block to stay just right of the row names while the block's
+        // start is scrolled off screen.
+        val left = LocalRowLeft.current
+        val nameW = with(density) { (ROW_NAME_W + 4.dp).roundToPx() }
+        val blockX = (startMs * pxPerMs).roundToInt()
+        val room = ((durMs.coerceAtLeast(200) * pxPerMs) - with(density) { 60.dp.toPx() }).roundToInt().coerceAtLeast(0)
+        Row(
+            Modifier.offset { IntOffset((left() + nameW - blockX).coerceIn(0, room), 0) },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             if (hidden) Icon(Icons.Rounded.VisibilityOff, contentDescription = "Hidden", tint = RtColors.TextPrimary, modifier = Modifier.size(12.dp))
             Text(label, style = RtType.caption, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
