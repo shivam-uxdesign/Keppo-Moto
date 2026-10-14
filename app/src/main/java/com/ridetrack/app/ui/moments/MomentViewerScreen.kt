@@ -1,5 +1,10 @@
 package com.ridetrack.app.ui.moments
 
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.animation.animateContentSize
 import com.ridetrack.app.ui.format.Units
 import android.content.ContentValues
 import android.content.Context
@@ -172,6 +177,10 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
     var durationMs by remember { mutableLongStateOf(0L) }
     var isPlaying by remember { mutableStateOf(false) }
     var muted by remember { mutableStateOf(false) }
+    // The info panel: collapsed to one line (remembered for the next moments) so the video shows.
+    val prefs = remember { context.getSharedPreferences("moment_viewer", Context.MODE_PRIVATE) }
+    var collapsed by remember { mutableStateOf(runCatching { prefs.getBoolean("collapsed", false) }.getOrDefault(false)) }
+    fun setCollapsed(c: Boolean) { collapsed = c; runCatching { prefs.edit().putBoolean("collapsed", c).apply() } }
     LaunchedEffect(muted) { player.volume = if (muted) 0f else 1f }
     LaunchedEffect(player) {
         while (true) {
@@ -250,20 +259,53 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                 .fillMaxWidth()
                 .background(Color.Black.copy(alpha = 0.55f))
                 .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 14.dp),
+                .animateContentSize()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(10.dp).background(momentColor(current), CircleShape))
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(momentTitle(current), style = RtType.bodyStrong, color = Color.White)
-                    Text(Format.timeOfDay(current.timeMillis), style = RtType.caption, color = Color.White.copy(alpha = 0.7f))
-                }
+            // Handle: tap, or swipe down to collapse and up to open.
+            var dragY by remember { mutableFloatStateOf(0f) }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(22.dp)
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragEnd = { if (dragY > 24f) setCollapsed(true) else if (dragY < -24f) setCollapsed(false); dragY = 0f },
+                            onDragCancel = { dragY = 0f },
+                        ) { _, dy -> dragY += dy }
+                    }
+                    .clickable(onClickLabel = if (collapsed) "Show details" else "Hide details", indication = null, interactionSource = null) { setCollapsed(!collapsed) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.size(36.dp, 4.dp).background(Color.White.copy(alpha = 0.45f), RoundedCornerShape(2.dp)))
             }
             // Numbers follow the video: the ride at the frame on screen.
             val at = if (clip) current.videoStartMillis + positionMs else current.timeMillis
             val point = telemetryAt(s.samples, at)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(10.dp).background(momentColor(current), CircleShape))
+                Spacer(Modifier.width(10.dp))
+                if (collapsed) {
+                    // One line: what, when, how fast.
+                    Text(
+                        listOfNotNull(
+                            momentTitle(current),
+                            Format.timeOfDay(current.timeMillis),
+                            (point?.speedMps ?: current.speedMps)?.let { "${Format.speedValue(it)} ${Units.speedUnit}" },
+                        ).joinToString(" · "),
+                        style = RtType.bodyStrong, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    Column(Modifier.weight(1f)) {
+                        Text(momentTitle(current), style = RtType.bodyStrong, color = Color.White)
+                        Text(Format.timeOfDay(current.timeMillis), style = RtType.caption, color = Color.White.copy(alpha = 0.7f))
+                    }
+                }
+            }
+            if (!collapsed) {
             val elevation = s.samples.sampleAt(at)?.altitudeM
             val g = point?.longitudinalG
             StatRow(
@@ -287,13 +329,25 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
             if (clip) {
                 var writing by remember(current.id) { mutableStateOf(false) }
                 val said = current.transcript?.takeIf { it.isNotBlank() }
+                var all by remember(current.id) { mutableStateOf(false) }
+                var long by remember(current.id) { mutableStateOf(false) }
                 Text(
                     if (said != null) "“$said”" else "Write what you said ›",
                     style = if (said != null) RtType.body else RtType.caption,
                     color = if (said != null) RtColors.TextPrimary else RtColors.Primary,
+                    maxLines = if (all) Int.MAX_VALUE else 3,
+                    overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { if (!all) long = it.hasVisualOverflow },
                     modifier = Modifier.padding(top = 8.dp)
                         .clickable(role = Role.Button, onClickLabel = if (said != null) "Edit what you said" else "Write what you said") { writing = true },
                 )
+                if (said != null && (long || all)) {
+                    Text(
+                        if (all) "Less" else "More",
+                        style = RtType.caption, color = RtColors.Primary,
+                        modifier = Modifier.clickable(role = Role.Button) { all = !all }.padding(vertical = 2.dp),
+                    )
+                }
                 if (writing) {
                     var text by remember { mutableStateOf(said.orEmpty()) }
                     AlertDialog(
@@ -315,6 +369,7 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
+            }
             if (clip) {
                 PlayerControls(
                     playing = isPlaying,
@@ -328,7 +383,7 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                     onMute = { muted = !muted },
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!collapsed) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 // Share = the styled graphic with details; Original = the plain file.
                 Action(Icons.Outlined.IosShare, "Share") { onShareMoment(current.id) }
                 Action(Icons.Outlined.Share, "Original") { share(context, current) }
@@ -340,7 +395,8 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                 }
                 if (current.kind == MomentKind.CLIP) Action(Icons.Outlined.BookmarkAdd, "Keep") { vm.saveClip(current) { toast = it } }
                 Spacer(Modifier.weight(1f))
-                Action(Icons.Outlined.Delete, "Delete") { confirmDelete = current }
+                // An icon on its own: a label here had no room and wrapped a letter per line.
+                RoundIcon(Icons.Outlined.Delete, "Delete", tint = Color.White) { confirmDelete = current }
             }
         }
         toast?.let {
