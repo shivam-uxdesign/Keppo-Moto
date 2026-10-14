@@ -598,6 +598,7 @@ private fun TranscribeSettings(m: MomentSettings, onChange: (MomentSettings) -> 
     val t = com.ridetrack.app.ui.appContainer().transcripts
     val status by t.status.collectAsStateWithLifecycle()
     val pro by com.ridetrack.app.ui.appContainer().entitlements.pro.collectAsStateWithLifecycle()
+    val consent = com.ridetrack.app.ui.appContainer().aiConsent
     if (!pro) {
         // Free riders: no Gemini. They type what they said on each moment (in the moment viewer).
         ToggleRow(
@@ -615,6 +616,8 @@ private fun TranscribeSettings(m: MomentSettings, onChange: (MomentSettings) -> 
             "The clips' sound is sent to Google for this; on the free tier Google may use it to improve its products.",
         m.transcribe,
         { on ->
+            // This switch says what's sent to Gemini: turning it on is agreeing to that.
+            if (on) consent.set(true)
             onChange(m.copy(transcribe = on))
             if (on) t.schedule(m.transcribeWifiOnly)
         },

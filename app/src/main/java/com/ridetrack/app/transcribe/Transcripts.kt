@@ -83,7 +83,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val c = (applicationContext as RideTrackApp).container
         val t = c.transcripts
         // Gemini captions are Pro; free riders type theirs in the moment viewer.
-        if (!t.available || !c.entitlements.isPro || !c.settings.settings.first().moments.transcribe) return@withContext Result.success()
+        if (!t.available || !c.entitlements.isPro || !c.aiConsent.isGiven || !c.settings.settings.first().moments.transcribe) return@withContext Result.success()
         val waiting = c.moments.untranscribed().filter { it.timeMillis >= t.since }
         t.setWaiting(waiting.size)
         if (waiting.isEmpty()) return@withContext Result.success()

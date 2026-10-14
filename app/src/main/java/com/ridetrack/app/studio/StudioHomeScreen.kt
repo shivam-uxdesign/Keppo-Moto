@@ -270,11 +270,13 @@ fun StudioHomeScreen(
     val now = System.currentTimeMillis()
     // A free rider whose weekly Reel is made: Studio shows through, blurred, under the lock.
     val locked = !pro && !com.ridetrack.app.pro.FreeReelRule.available(usedAt, now)
+    val consent by c.aiConsent.given.collectAsStateWithLifecycle()
     Box(Modifier.fillMaxSize()) {
-        Box(if (locked) Modifier.fillMaxSize().blur(18.dp) else Modifier.fillMaxSize()) {
+        Box(if (locked || !consent) Modifier.fillMaxSize().blur(18.dp) else Modifier.fillMaxSize()) {
             StudioHomeBody(onOpenRide, onOpenPhone, onOpenReels, onOpenStyles, onOpenSearch, onOpenSettings, onOpenIdea)
         }
-        if (locked) com.ridetrack.app.ui.pro.StudioLocked(com.ridetrack.app.pro.FreeReelRule.nextAt(usedAt, now), onOpenPaywall, onOpenReels = onOpenReels)
+        if (!consent) com.ridetrack.app.ui.pro.AiConsentCard(onNotNow = null)
+        else if (locked) com.ridetrack.app.ui.pro.StudioLocked(com.ridetrack.app.pro.FreeReelRule.nextAt(usedAt, now), onOpenPaywall, onOpenReels = onOpenReels)
         else if (!pro) com.ridetrack.app.ui.pro.FreeReelChip(onOpenPaywall, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
     }
 }
@@ -326,6 +328,8 @@ internal fun StudioHomeContent(
     }
     var picked by rememberSaveable { mutableStateOf<String?>(null) }
     var newReel by remember { mutableStateOf(false) }
+    // A Gemini result being reported: its title and line ("" for a general report).
+    var reporting by remember { mutableStateOf<Pair<String, String>?>(null) }
     var more by remember { mutableStateOf(false) }
     var making by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
@@ -521,8 +525,15 @@ internal fun StudioHomeContent(
             }
             SheetRow("In the background", "What's being made, and Gemini's allowance") { more = false; making = true }
             SheetRow("Settings", "After each ride, what new videos start with, saving") { more = false; onOpenSettings() }
+            SheetRow("Report a Gemini result", "Something it wrote was offensive, harmful or made up") { more = false; reporting = "" to "" }
         }
         makingSheet(making) { making = false }
+        reporting?.let { (title, line) ->
+            com.ridetrack.app.ui.pro.AiReportDialog(if (title.isBlank()) "Gemini result" else "idea", listOf(title, line).filter { it.isNotBlank() }.joinToString(": ")) { sent ->
+                reporting = null
+                if (sent) note = "Thanks: reported. It helps make Studio better."
+            }
+        }
         StudioSheet(quick != null, { quick = null }, title = quick?.title) {
             val r = list?.firstOrNull { it.id == picked } ?: list?.firstOrNull { it.ideas.any { i -> i.title == quick?.title } }
             quick?.let { idea ->
@@ -531,6 +542,7 @@ internal fun StudioHomeContent(
                 SheetRow("Open in the editor") { quick = null; r?.let { onOpenIdea(it.id, idea.title, false) } }
                 SheetRow("Make it now, ready to share", "In the background; it'll be in Your Reels") { quick = null; r?.let { onOpenIdea(it.id, idea.title, true) } }
                 SheetRow("Hide this idea", danger = true) { quick = null; r?.let { vm.hide(it.id, idea.title); undo = it.id to idea.title } }
+                SheetRow("Report this idea", "Offensive, harmful or made up: Gemini wrote it") { quick = null; reporting = idea.title to (idea.why ?: "") }
             }
         }
         StudioSheet(allRides, { allRides = false }, title = "All rides") {

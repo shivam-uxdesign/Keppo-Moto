@@ -84,6 +84,12 @@ class AppContainer(context: Context) {
     /** Crash reports, with the rider's consent where it's needed. */
     val crashReports = com.ridetrack.app.diag.CrashReports(appContext)
 
+    /** The rider agreed to Gemini; nothing goes to it without this. */
+    val aiConsent = com.ridetrack.app.pro.AiConsent(appContext)
+
+    /** Gemini results the rider reported. */
+    val aiReports = com.ridetrack.app.pro.AiReports(appContext)
+
     /** The free rider's one Reel a week. */
     val freeReels = com.ridetrack.app.pro.FreeReels(appContext)
 
@@ -103,7 +109,7 @@ class AppContainer(context: Context) {
         appContext, settings, rides,
         // Today's petrol price for the city, found by Gemini with Google Search (Pro; free riders type it).
         com.ridetrack.app.fuel.FuelPrices(appContext) { prompt ->
-            if (!transcripts.available || !entitlements.isPro) null
+            if (!transcripts.available || !entitlements.isPro || !aiConsent.isGiven) null
             else com.ridetrack.app.studio.StudioGemini(preferred = { transcripts.model }, onWorking = { transcripts.model = it }).searched(prompt)
         },
     )
@@ -115,7 +121,7 @@ class AppContainer(context: Context) {
     fun transcribeSoon() {
         appScope.launch {
             val m = settings.settings.first().moments
-            if (m.transcribe && entitlements.isPro) transcripts.schedule(m.transcribeWifiOnly)
+            if (m.transcribe && entitlements.isPro && aiConsent.isGiven) transcripts.schedule(m.transcribeWifiOnly)
         }
     }
 

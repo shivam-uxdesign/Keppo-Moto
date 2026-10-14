@@ -142,6 +142,11 @@ fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: 
     val c = com.ridetrack.app.ui.appContainer()
     // A new Reel needs the free rider's weekly one (Reels already made still open). Decided on the
     // way in, so the Reel being made isn't taken away when it's saved.
+    val consent by c.aiConsent.given.collectAsStateWithLifecycle()
+    if (!consent) {
+        StudioConsentPage("Studio", onBack)
+        return
+    }
     val locked = remember(rideId, reelId) { reelId == null && !c.studioOpen() }
     if (locked) {
         StudioLockedPage("Studio", onBack, onUnlock)
@@ -165,6 +170,11 @@ fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: 
 @Composable
 fun PhoneStudioScreen(reelId: String?, onBack: () -> Unit, editNow: Boolean = false, onUnlock: () -> Unit = {}) {
     val c = com.ridetrack.app.ui.appContainer()
+    val consent by c.aiConsent.given.collectAsStateWithLifecycle()
+    if (!consent) {
+        StudioConsentPage("Reel from your videos", onBack)
+        return
+    }
     val locked = remember(reelId) { reelId == null && !c.studioOpen() }
     if (locked) {
         StudioLockedPage("Reel from your videos", onBack, onUnlock)
@@ -179,6 +189,17 @@ fun PhoneStudioScreen(reelId: String?, onBack: () -> Unit, editNow: Boolean = fa
             Spacer(Modifier.height(12.dp))
         }
         StudioPanel(PHONE_STUDIO, Modifier.weight(1f), reelId, editNow = editNow, onStep = { step = it })
+    }
+}
+
+/** A Studio page before the rider has agreed to Gemini: its title and back, under the consent card. */
+@Composable
+private fun StudioConsentPage(title: String, onBack: () -> Unit) {
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = com.ridetrack.app.ui.theme.RtDimens.screenPadding)) {
+            com.ridetrack.app.ui.components.ScreenHeader(title, onBack = onBack)
+        }
+        com.ridetrack.app.ui.pro.AiConsentCard(onNotNow = onBack, modifier = Modifier.padding(top = 72.dp))
     }
 }
 
