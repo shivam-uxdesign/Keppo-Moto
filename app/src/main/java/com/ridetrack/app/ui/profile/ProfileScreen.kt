@@ -25,6 +25,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CloudSync
@@ -78,6 +79,7 @@ import com.ridetrack.app.ui.theme.RtType
 /** The pages behind Profile's rows. */
 enum class ProfilePage(val route: String, val title: String) {
     STATISTICS("statistics", "Statistics"),
+    ACHIEVEMENTS("achievements", "Achievements"),
     RIDING("riding", "Riding"),
     MOMENTS("moments", "Moments"),
     SAFETY("safety", "Safety"),
@@ -124,6 +126,11 @@ fun ProfileScreen(onOpenPage: (ProfilePage) -> Unit, onOpenHudSettings: () -> Un
                     Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = "All statistics", tint = RtColors.TextSecondary)
                 }
             }
+        }
+
+        Spacer(Modifier.height(RtDimens.sm))
+        RtCard {
+            NavRow(Icons.Rounded.EmojiEvents, "Achievements", achievementsSummary(rememberAchievements())) { onOpenPage(ProfilePage.ACHIEVEMENTS) }
         }
 
         Spacer(Modifier.height(RtDimens.md))
@@ -197,6 +204,7 @@ fun ProfilePageScreen(page: ProfilePage, onBack: () -> Unit) {
         )
         when (page) {
             ProfilePage.STATISTICS -> StatisticsPage(s)
+            ProfilePage.ACHIEVEMENTS -> AchievementsPage()
             ProfilePage.RIDING -> RidingPage(s, vm)
             ProfilePage.MOMENTS -> MomentsSection(s, vm, showHeader = false, sub = momentsSub, onSub = { momentsSub = it }, showHow = how, onHowDismiss = { how = false })
             ProfilePage.SAFETY -> SafetySection(s, vm, showHeader = false)

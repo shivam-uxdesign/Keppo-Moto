@@ -89,6 +89,7 @@ fun HomeScreen(
     onMakeReel: (String) -> Unit = {},
     onOpenBike: () -> Unit,
     onOpenSafety: () -> Unit = onOpenProfile,
+    onOpenAchievements: () -> Unit = onOpenProfile,
 ) {
     val vm = appViewModel { HomeViewModel(it) }
     val s by vm.state.collectAsStateWithLifecycle()
@@ -196,7 +197,7 @@ fun HomeScreen(
         if (s.justRode) {
             lastCard(0)
             if (s.milestones.isNotEmpty()) {
-                MilestonesCard(s.milestones, Modifier.riseIn(0))
+                MilestonesCard(s.milestones, Modifier.riseIn(0), onOpen = onOpenAchievements)
                 Spacer(Modifier.height(14.dp))
             }
         }
@@ -257,7 +258,7 @@ fun HomeScreen(
                 Spacer(Modifier.height(14.dp))
             }
             if (!s.justRode && s.milestones.isNotEmpty()) {
-                MilestonesCard(s.milestones, Modifier.riseIn(3))
+                MilestonesCard(s.milestones, Modifier.riseIn(3), onOpen = onOpenAchievements)
                 Spacer(Modifier.height(14.dp))
             }
             val week = s.week

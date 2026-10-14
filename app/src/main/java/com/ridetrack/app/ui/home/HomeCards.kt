@@ -356,9 +356,9 @@ fun CareRow(st: CareStatus, trailing: @Composable () -> Unit = {}) {
 }
 
 @Composable
-fun MilestonesCard(milestones: List<Milestone>, modifier: Modifier = Modifier) {
+fun MilestonesCard(milestones: List<Milestone>, modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
     if (milestones.isEmpty()) return
-    RtCard(modifier) {
+    RtCard(modifier, onClick = onOpen) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             milestones.forEach { m ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
