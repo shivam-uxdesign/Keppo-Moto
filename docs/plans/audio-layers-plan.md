@@ -43,6 +43,7 @@ Each bar's name is drawn at its left edge. When the timeline scrolls past the st
 
 ### A. Recording: always two layers, and say when the receiver is on Mono
 
+- **A0. Roles are fixed, never guessed.** The rider's mics don't move: one is in the helmet (voice) and one is by the back seat (engine). With Two mics on, which side is Voice and which is Engine comes only from Settings (the mic test and Swap), and stays that way for every ride. The app never switches to "1 MIC" by itself. The HUD always shows VOICE and ENGINE; when the two sides sound the same, it only adds the amber Mono hint (A2).
 - **A1. Keep mic 2 whenever two channels are recorded**, even when it sounds the same as mic 1.
   - It's marked `same` in the clip's sidecar file.
   - So two-mic clips always have two layers.
