@@ -4,6 +4,29 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.media.MediaMetadataRetriever
 import androidx.compose.foundation.Image
+import android.net.Uri
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.rememberUpdatedState
@@ -25,8 +48,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,7 +61,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.IosShare
-import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -74,7 +94,6 @@ import com.ridetrack.app.moments.ClipWriter
 import com.ridetrack.app.moments.Moment
 import com.ridetrack.app.moments.MomentKind
 import com.ridetrack.app.ui.appViewModel
-import com.ridetrack.app.ui.components.Label
 import com.ridetrack.app.ui.components.ScreenHeader
 import com.ridetrack.app.ui.format.Format
 import com.ridetrack.app.ui.theme.RtColors
@@ -121,6 +140,8 @@ data class MomentShareState(
     val frames: List<Bitmap> = emptyList(),
     /** Cutting the plain clip for "Original": null = idle, 0..100 = running. */
     val originalProgress: Int? = null,
+    /** Clips: the video's width ÷ height, upright (for the playing preview). */
+    val aspect: Float? = null,
 )
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -157,6 +178,7 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
             route = samples.mapNotNull { s -> s.latitude?.let { la -> s.longitude?.let { lo -> la to lo } } }
                 .let { pts -> if (pts.size <= 400) pts else pts.filterIndexed { i, _ -> i % (pts.size / 400 + 1) == 0 } }
             background = withContext(Dispatchers.IO) { loadBackground(moment) }
+            val aspect = background?.takeIf { moment.kind == MomentKind.CLIP && it.height > 0 }?.let { it.width.toFloat() / it.height }
             val prefs = c.settings.settings.first()
             val probe = overlayAt(moment, moment.timeMillis)
             _state.update {
@@ -166,6 +188,7 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
                     fields = prefs.momentShareFields,
                     choice = OverlayChoice.Moment(prefs.momentShareLayout),
                     available = MomentField.entries.filter { f -> probe.shows(f, MomentField.DEFAULT) }.toSet(),
+                    aspect = aspect,
                 )
             }
             render()
@@ -349,6 +372,25 @@ class MomentShareViewModel(private val c: AppContainer, private val rideId: Stri
         return withContext(Dispatchers.Default) { build(m, s) }
     }
 
+    /**
+     * The chosen graphic over the playing preview, at [wallMillis] (the clock time of the frame
+     * shown), drawn the way the export draws it on each frame.
+     */
+    fun drawOverlay(canvas: android.graphics.Canvas, w: Int, h: Int, wallMillis: Long) {
+        val s = _state.value
+        val m = s.moment ?: return
+        when (val choice = s.choice) {
+            is OverlayChoice.Moment -> renderer.draw(canvas, w, h, overlayAt(m, wallMillis), s.fields, choice.layout)
+            // Ride layouts are drawn once in the background; until then, nothing on top.
+            is OverlayChoice.Ride -> synchronized(rideGraphics) { rideGraphics[choice.style] }?.let { drawFrameGraphic(canvas, w, h, it) }
+        }
+    }
+
+    fun cancelExport() {
+        exportJob?.cancel()
+        _state.update { it.copy(exportProgress = null) }
+    }
+
     /** Burns the overlay into the clip. */
     fun exportVideo() {
         val s = _state.value
@@ -419,7 +461,17 @@ private fun stripFrames(file: File, lengthMillis: Long, count: Int = 8): List<Bi
     }
 }
 
-/** Share a moment with its details burned in: photo or video, with each detail on or off. */
+/** The three panels under the preview, one at a time. */
+private enum class ShareTab(val label: String) { LOOK("Look"), DETAILS("Details"), SOUND("Sound") }
+
+/** What to do once the video is made. */
+private enum class AfterMake { SHARE, SAVE }
+
+/**
+ * Share a moment with its details burned in. Clips play right here, with the chosen graphic
+ * moving on top and the sound mix as set, so what you see and hear is what gets shared. Under
+ * the preview: the trim strip with the playhead, then Look / Details / Sound, then Share and Save.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
@@ -438,6 +490,82 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
     }
     val m = s.moment
     val isClip = m?.kind == MomentKind.CLIP
+    var tab by rememberSaveable { mutableStateOf(ShareTab.LOOK) }
+    var menu by remember { mutableStateOf(false) }
+    var after by remember { mutableStateOf<AfterMake?>(null) }
+    val name = "ridetrack-moment-${m?.timeMillis ?: 0}"
+
+    fun saved(ok: Boolean, where: String) {
+        if (ok) haptics.confirm()
+        toast = if (ok) "Saved to $where/Keppo Moto" else "Couldn't save here. Use Share instead."
+    }
+    fun shareVideo(file: File) = ShareImages.share(context, ShareImages.uriFor(context, file), "video/mp4")
+    fun saveVideo(file: File) = scope.launch { saved(ShareImages.saveVideo(context, file, name), "Movies") }
+
+    // The video is made with the settings as they are; then it's shared or saved. Made already
+    // with these settings: straight away.
+    fun make(what: AfterMake) {
+        val ready = s.exported
+        when {
+            ready != null -> if (what == AfterMake.SHARE) shareVideo(ready) else saveVideo(ready)
+            else -> { after = what; vm.exportVideo() }
+        }
+    }
+    LaunchedEffect(s.exported) {
+        val file = s.exported ?: return@LaunchedEffect
+        when (after) {
+            AfterMake.SHARE -> shareVideo(file)
+            AfterMake.SAVE -> saveVideo(file)
+            null -> Unit
+        }
+        after = null
+    }
+    LaunchedEffect(s.exportProgress, s.error) { if (s.exportProgress == null && s.exported == null) after = null }
+
+    // ---- the player (clips): the clip itself, plus the engine mic beside it, kept in step
+    val player = remember { ExoPlayer.Builder(context).build() }
+    val enginePlayer = remember { ExoPlayer.Builder(context).build() }
+    DisposableEffect(Unit) { onDispose { player.release(); enginePlayer.release() } }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { player.playWhenReady = false }
+    var positionMs by remember { mutableLongStateOf(0L) }
+    var playing by remember { mutableStateOf(false) }
+    var muted by remember { mutableStateOf(false) }
+    LaunchedEffect(m?.id) {
+        val clip = m?.takeIf { it.kind == MomentKind.CLIP } ?: return@LaunchedEffect
+        player.setMediaItem(MediaItem.fromUri(Uri.fromFile(clip.file)))
+        player.prepare()
+        if (clip.engineFile.isFile) {
+            enginePlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(clip.engineFile)))
+            enginePlayer.prepare()
+        }
+    }
+    val trimNow by rememberUpdatedState(s.trim)
+    val soundNow by rememberUpdatedState(s.sound)
+    val mutedNow by rememberUpdatedState(muted)
+    LaunchedEffect(player) {
+        // Plays only the kept part, round and round, at the levels and fades that will be shared.
+        while (true) {
+            val t = trimNow
+            var pos = player.currentPosition.coerceAtLeast(0)
+            if (t != null && (pos >= t.endMillis || pos < t.startMillis - 250)) {
+                player.seekTo(t.startMillis)
+                pos = t.startMillis
+            }
+            positionMs = pos
+            playing = player.playWhenReady
+            val into = pos - (t?.startMillis ?: 0)
+            val fade = soundNow.fade(into, t?.durationMillis ?: player.duration.coerceAtLeast(0))
+            player.volume = if (mutedNow) 0f else (soundNow.voice * fade).coerceIn(0f, 1f)
+            if (soundNow.engine != null) {
+                enginePlayer.volume = if (mutedNow) 0f else (soundNow.engineLevel * fade).coerceIn(0f, 1f)
+                if (enginePlayer.playWhenReady != player.playWhenReady) enginePlayer.playWhenReady = player.playWhenReady
+                if (kotlin.math.abs(enginePlayer.currentPosition - pos) > 120) enginePlayer.seekTo(pos)
+            } else {
+                enginePlayer.volume = 0f
+            }
+            delay(33)
+        }
+    }
 
     Column(
         Modifier
@@ -447,44 +575,78 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
             .padding(horizontal = RtDimens.screenPadding),
     ) {
         ScreenHeader(if (isClip) "Share clip" else "Share photo", onBack = onBack)
-        val choices = OverlayChoice.all
-        val pager = rememberPagerState(initialPage = choices.indexOf(s.choice).coerceAtLeast(0)) { choices.size }
-        LaunchedEffect(pager.settledPage) { vm.setChoice(choices[pager.settledPage]) }
-        LaunchedEffect(s.loading) { if (!s.loading) pager.scrollToPage(choices.indexOf(s.choice).coerceAtLeast(0)) }
+
+        // ---- the preview
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             when {
                 !s.loading && m == null -> Text("Moment not found", style = RtType.body, color = RtColors.TextSecondary)
                 s.loading -> CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp)
-                // Swipe left or right to change the graphic.
-                else -> HorizontalPager(pager, Modifier.fillMaxSize(), key = { choices[it].key }) { page ->
-                    val choice = choices[page]
-                    val p = s.previews[choice.key] ?: s.thumbs[choice.key]
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        if (p == null) {
-                            CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp)
-                        } else {
+                isClip -> {
+                    val shape = RoundedCornerShape(16.dp)
+                    Box(
+                        Modifier
+                            .fillMaxHeight()
+                            .aspectRatio(s.aspect ?: (9f / 16f), matchHeightConstraintsFirst = true)
+                            .clip(shape)
+                            .background(Color.Black)
+                            .clickable(onClickLabel = "Play or pause", role = Role.Button) { player.playWhenReady = !player.playWhenReady },
+                    ) {
+                        AndroidView(
+                            factory = { ctx -> PlayerView(ctx).apply { useController = false } },
+                            update = { it.player = player },
+                            onRelease = { it.player = null },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        // The graphic, drawn at the time of the frame showing (as the export does).
+                        val wall = m!!.videoStartMillis + positionMs
+                        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                            drawIntoCanvas { vm.drawOverlay(it.nativeCanvas, size.width.toInt(), size.height.toInt(), wall) }
+                        }
+                        if (!playing) {
                             Box(
-                                Modifier
-                                    .fillMaxHeight()
-                                    .aspectRatio(p.width.toFloat() / p.height)
-                                    .clip(RoundedCornerShape(18.dp))
-                                    .border(1.dp, RtColors.Hairline, RoundedCornerShape(18.dp)),
-                            ) {
-                                if (s.overlayOnly && !isClip && choice.transparent) SamplePhoto(Modifier.fillMaxSize())
-                                Image(p.asImageBitmap(), "${choice.label} preview", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-                                if (isClip && choice is OverlayChoice.Moment) {
-                                    Text(
-                                        "Numbers move with the video",
-                                        style = RtType.caption,
-                                        color = Color.White,
-                                        modifier = Modifier
-                                            .align(Alignment.TopCenter)
-                                            .padding(top = 10.dp)
-                                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))
-                                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                                    )
-                                }
+                                Modifier.align(Alignment.Center).size(56.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.5f)),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp)) }
+                        }
+                        val t = s.trim
+                        if (t != null) {
+                            Text(
+                                "${Format.clock((positionMs - t.startMillis).coerceAtLeast(0))} / ${Format.clock(t.durationMillis)}",
+                                style = RtType.caption,
+                                color = Color.White,
+                                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)
+                                    .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(8.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                        IconButton(
+                            onClick = { muted = !muted },
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).size(40.dp),
+                        ) {
+                            Box(Modifier.size(30.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.55f)), contentAlignment = Alignment.Center) {
+                                Icon(
+                                    if (muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
+                                    contentDescription = if (muted) "Sound on" else "Sound off",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp),
+                                )
                             }
+                        }
+                    }
+                }
+                else -> {
+                    val p = s.previews[s.choice.key] ?: s.thumbs[s.choice.key]
+                    if (p == null) {
+                        CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp)
+                    } else {
+                        Box(
+                            Modifier
+                                .fillMaxHeight()
+                                .aspectRatio(p.width.toFloat() / p.height, matchHeightConstraintsFirst = true)
+                                .clip(RoundedCornerShape(16.dp))
+                                .border(1.dp, RtColors.Hairline, RoundedCornerShape(16.dp)),
+                        ) {
+                            if (s.overlayOnly && s.choice.transparent) SamplePhoto(Modifier.fillMaxSize())
+                            Image(p.asImageBitmap(), "${s.choice.label} preview", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
                         }
                     }
                 }
@@ -503,97 +665,142 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
             }
         }
 
+        // ---- the trim strip, with the playhead
         s.trim?.let { t ->
             TrimBar(
                 trim = t,
                 frames = s.frames,
-                onStart = vm::setTrimStart,
-                onEnd = vm::setTrimEnd,
+                playheadMs = positionMs,
+                onSeek = { ms -> player.seekTo(ms.coerceIn(t.startMillis, t.endMillis)); positionMs = ms },
+                onStart = { ms -> vm.setTrimStart(ms); player.seekTo(ms.coerceAtLeast(0)) },
+                onEnd = { ms -> vm.setTrimEnd(ms); player.seekTo((ms - 1_500).coerceAtLeast(t.startMillis)) },
                 onDone = vm::saveTrim,
                 onReset = vm::resetTrim,
                 modifier = Modifier.padding(top = 10.dp),
             )
         }
-        if (s.moment?.kind == MomentKind.CLIP) SoundMix(s.sound, vm::setSound)
-        Text(
-            "${s.choice.label} · ${s.choice.note} · swipe for more",
-            style = RtType.caption,
-            color = RtColors.TextSecondary,
-            modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
-        )
-        LayoutPicker(s.thumbs, s.choice, onSelect = { ch -> scope.launch { pager.animateScrollToPage(choices.indexOf(ch)) } }, sampleBehind = false)
-        Spacer(Modifier.height(10.dp))
-        val momentLayout = s.choice is OverlayChoice.Moment
-        Label(if (momentLayout) "Show" else "Show (moment layouts only; ride layouts show the whole ride)")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            MomentField.entries.forEach { f ->
-                val has = f in s.available && momentLayout
-                FilterChip(
-                    selected = f in s.fields && has,
-                    onClick = { vm.toggle(f) },
-                    enabled = has,
-                    label = { Text(f.label) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = RtColors.Primary.copy(alpha = 0.18f),
-                        selectedLabelColor = RtColors.Primary,
-                        labelColor = RtColors.TextSecondary,
-                    ),
-                )
-            }
-        }
-        if (!isClip && m != null) {
+
+        // ---- Look / Details / Sound
+        if (m != null) {
+            val tabs = if (isClip) ShareTab.entries else listOf(ShareTab.LOOK, ShareTab.DETAILS)
             Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable(role = Role.Switch) { vm.setOverlayOnly(!s.overlayOnly) }
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                Modifier.fillMaxWidth().padding(top = 12.dp).clip(RoundedCornerShape(12.dp)).background(RtColors.Surface).padding(3.dp),
             ) {
-                Text("Overlay only (transparent, for your own photo)", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = s.overlayOnly,
-                    onCheckedChange = null,
-                    colors = SwitchDefaults.colors(checkedTrackColor = RtColors.Primary, checkedThumbColor = RtColors.OnPrimary),
-                )
+                tabs.forEach { t ->
+                    val on = t == tab
+                    Text(
+                        t.label,
+                        style = RtType.button,
+                        color = if (on) RtColors.TextPrimary else RtColors.TextSecondary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(if (on) RtColors.SurfaceRaised else Color.Transparent)
+                            .clickable(role = Role.Tab) { tab = t }
+                            .padding(vertical = 8.dp),
+                    )
+                }
+            }
+            Column(
+                Modifier.fillMaxWidth().height(156.dp).padding(top = 10.dp).verticalScroll(rememberScrollState()),
+            ) {
+                when (tab) {
+                    ShareTab.LOOK -> {
+                        LayoutPicker(s.thumbs, s.choice, onSelect = vm::setChoice, sampleBehind = false)
+                        Text(
+                            "${s.choice.label} · ${s.choice.note}",
+                            style = RtType.caption,
+                            color = RtColors.TextSecondary,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                        if (!isClip) {
+                            Row(
+                                Modifier.fillMaxWidth().clickable(role = Role.Switch) { vm.setOverlayOnly(!s.overlayOnly) }.padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("Overlay only (transparent, for your own photo)", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
+                                Switch(
+                                    checked = s.overlayOnly,
+                                    onCheckedChange = null,
+                                    colors = SwitchDefaults.colors(checkedTrackColor = RtColors.Primary, checkedThumbColor = RtColors.OnPrimary),
+                                )
+                            }
+                        }
+                    }
+                    ShareTab.DETAILS -> {
+                        val momentLayout = s.choice is OverlayChoice.Moment
+                        Text(
+                            if (momentLayout) "Shown on the ${if (isClip) "video. The numbers move as it plays" else "photo"}."
+                            else "Whole-ride layouts show the ride's totals. Pick a moment layout in Look to choose numbers.",
+                            style = RtType.caption,
+                            color = RtColors.TextSecondary,
+                            modifier = Modifier.padding(bottom = 6.dp),
+                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            MomentField.entries.forEach { f ->
+                                val has = f in s.available && momentLayout
+                                FilterChip(
+                                    selected = f in s.fields && has,
+                                    onClick = { vm.toggle(f) },
+                                    enabled = has,
+                                    label = { Text(f.label) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = RtColors.Primary.copy(alpha = 0.18f),
+                                        selectedLabelColor = RtColors.Primary,
+                                        labelColor = RtColors.TextSecondary,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                    ShareTab.SOUND -> SoundMix(s.sound, vm::setSound)
+                }
             }
         }
         s.error?.let { Text(it, style = RtType.caption, color = RtColors.Error, modifier = Modifier.padding(top = 6.dp)) }
 
+        // ---- Share · Save · ⋮
         Row(Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            val name = "ridetrack-moment-${m?.timeMillis ?: 0}"
+            val busy = s.exportProgress?.let { "Creating video" to it } ?: s.originalProgress?.let { "Cutting the clip" to it }
             when {
                 m == null -> Unit
-                isClip && s.exportProgress != null -> Column(Modifier.weight(1f)) {
-                    Text("Creating video… ${s.exportProgress}%", style = RtType.caption, color = RtColors.TextSecondary)
-                    Spacer(Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { (s.exportProgress ?: 0) / 100f },
-                        color = RtColors.Primary,
-                        trackColor = RtColors.Surface,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                isClip && s.originalProgress != null -> Column(Modifier.weight(1f)) {
-                    Text("Cutting the clip… ${s.originalProgress}%", style = RtType.caption, color = RtColors.TextSecondary)
-                    Spacer(Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { (s.originalProgress ?: 0) / 100f },
-                        color = RtColors.Primary,
-                        trackColor = RtColors.Surface,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                isClip && s.exported == null -> Action("Create video", Icons.Outlined.Movie, primary = true, modifier = Modifier.weight(1f)) { vm.exportVideo() }
-                isClip -> {
-                    val file = s.exported!!
-                    Action("Share", Icons.Outlined.IosShare, primary = true, modifier = Modifier.weight(1f)) {
-                        ShareImages.share(context, ShareImages.uriFor(context, file), "video/mp4")
+                busy != null -> {
+                    Column(Modifier.weight(1f)) {
+                        Text("${busy.first}… ${busy.second}%", style = RtType.caption, color = RtColors.TextSecondary)
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { busy.second / 100f },
+                            color = RtColors.Primary,
+                            trackColor = RtColors.Surface,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
-                    Action("Save", Icons.Outlined.Download) {
-                        scope.launch {
-                            val ok = ShareImages.saveVideo(context, file, name)
-                            if (ok) haptics.confirm()
-                            toast = if (ok) "Saved to Movies/Keppo Moto" else "Couldn't save here. Use Share instead."
+                    if (s.exportProgress != null) Action("Cancel", Icons.Outlined.Close) { after = null; vm.cancelExport() }
+                }
+                isClip -> {
+                    Action("Share", Icons.Outlined.IosShare, primary = true, modifier = Modifier.weight(1f)) { player.playWhenReady = false; make(AfterMake.SHARE) }
+                    Action("Save", Icons.Outlined.Download) { player.playWhenReady = false; make(AfterMake.SAVE) }
+                    Box {
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = RtColors.TextPrimary) }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            Text(
+                                "The clip as filmed, without numbers",
+                                style = RtType.caption,
+                                color = RtColors.TextSecondary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            )
+                            DropdownMenuItem(text = { Text("Share original") }, onClick = {
+                                menu = false
+                                scope.launch { vm.original()?.let(::shareVideo) }
+                            })
+                            DropdownMenuItem(text = { Text("Save original") }, onClick = {
+                                menu = false
+                                scope.launch {
+                                    val f = vm.original() ?: return@launch
+                                    saved(ShareImages.saveVideo(context, f, "keppo-clip-${m.timeMillis}"), "Movies")
+                                }
+                            })
                         }
                     }
                 }
@@ -608,30 +815,8 @@ fun MomentShareScreen(rideId: String, momentId: String, onBack: () -> Unit) {
                     Action("Save", Icons.Outlined.Download) {
                         scope.launch {
                             val img = vm.photoImage() ?: return@launch
-                            val ok = ShareImages.saveToPhotos(context, img, name, jpeg)
-                            if (ok) haptics.confirm()
-                            toast = if (ok) "Saved to Pictures/Keppo Moto" else "Couldn't save here. Use Share instead."
+                            saved(ShareImages.saveToPhotos(context, img, name, jpeg), "Pictures")
                         }
-                    }
-                }
-            }
-        }
-        if (isClip && m != null && s.exportProgress == null && s.originalProgress == null) {
-            // The clip as filmed: no numbers on it (just the trim, if any).
-            Row(Modifier.padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Original", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
-                Action("Share", Icons.Outlined.IosShare) {
-                    scope.launch {
-                        val f = vm.original() ?: return@launch
-                        ShareImages.share(context, ShareImages.uriFor(context, f), "video/mp4")
-                    }
-                }
-                Action("Save", Icons.Outlined.Download) {
-                    scope.launch {
-                        val f = vm.original() ?: return@launch
-                        val ok = ShareImages.saveVideo(context, f, "keppo-clip-${m.timeMillis}")
-                        if (ok) haptics.confirm()
-                        toast = if (ok) "Saved to Movies/Keppo Moto" else "Couldn't save here. Use Share instead."
                     }
                 }
             }
@@ -667,6 +852,8 @@ private fun Action(label: String, icon: androidx.compose.ui.graphics.vector.Imag
 private fun TrimBar(
     trim: TrimRange,
     frames: List<Bitmap>,
+    playheadMs: Long,
+    onSeek: (Long) -> Unit,
     onStart: (Long) -> Unit,
     onEnd: (Long) -> Unit,
     onDone: () -> Unit,
@@ -701,7 +888,15 @@ private fun TrimBar(
             val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
             val length = trim.lengthMillis.coerceAtLeast(1)
             fun toMs(x: Float) = (x / widthPx * length).toLong()
-            Row(Modifier.fillMaxSize()) {
+            val seek = rememberUpdatedState(onSeek)
+            Row(
+                Modifier.fillMaxSize().pointerInput(widthPx, length) {
+                    // Tap or drag on the frames (not the handles) moves the playhead.
+                    detectTapGestures { o -> seek.value(toMs(o.x)) }
+                }.pointerInput(widthPx, length) {
+                    detectHorizontalDragGestures { change, _ -> change.consume(); seek.value(toMs(change.position.x)) }
+                },
+            ) {
                 frames.forEach { f ->
                     Image(f.asImageBitmap(), null, contentScale = ContentScale.Crop, modifier = Modifier.weight(1f).fillMaxHeight())
                 }
@@ -721,6 +916,9 @@ private fun TrimBar(
                     .fillMaxHeight()
                     .border(2.dp, RtColors.Primary, RoundedCornerShape(10.dp)),
             )
+            // The playhead: where the preview is.
+            val headDp = with(density) { (playheadMs.toFloat() / length * widthPx).toDp() }
+            Box(Modifier.offset(x = headDp - 1.5.dp).width(3.dp).fillMaxHeight().background(Color.White, RoundedCornerShape(2.dp)))
             TrimHandle(
                 x = startDp,
                 onDrag = { dx -> onStart(trim.startMillis + toMs(dx)) },
@@ -761,28 +959,65 @@ private fun TrimHandle(x: Dp, onDrag: (Float) -> Unit, onDone: () -> Unit, label
 }
 
 /**
- * Sound for the shared video: Mic 1 · Voice and (for two-mic clips) Mic 2 · Engine at their
- * own levels, and how it fades in and out.
+ * Sound for the shared video: Mic 1 · Voice and (for two-mic clips) Mic 2 · Engine at their own
+ * levels with a mute each, and how it fades in and out. The preview plays it as set.
  */
 @Composable
 private fun SoundMix(sound: MomentSound, onChange: ((MomentSound) -> MomentSound) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Label("Sound")
-        MixRow("Mic 1 · Voice", sound.voice, 0f..1.5f, { "${(it * 100).roundToInt()}%" }) { v -> onChange { it.copy(voice = v) } }
-        if (sound.engine != null) MixRow("Mic 2 · Engine", sound.engineLevel, 0f..1.5f, { "${(it * 100).roundToInt()}%" }) { v -> onChange { it.copy(engineLevel = v) } }
-        MixRow("Fade in", sound.fadeInMs / 1000f, 0f..2f, { "%.1f s".format(java.util.Locale.US, it) }) { v -> onChange { it.copy(fadeInMs = (v * 1000).toLong()) } }
-        MixRow("Fade out", sound.fadeOutMs / 1000f, 0f..2f, { "%.1f s".format(java.util.Locale.US, it) }) { v -> onChange { it.copy(fadeOutMs = (v * 1000).toLong()) } }
+    // The level before muting, to come back to.
+    var voiceWas by remember { mutableStateOf(1f) }
+    var engineWas by remember { mutableStateOf(0.7f) }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        MixLane("Voice", "Mic 1", sound.voice, RtColors.Primary, onValue = { v -> onChange { it.copy(voice = v) } }) {
+            if (sound.voice > 0f) { voiceWas = sound.voice; onChange { it.copy(voice = 0f) } } else onChange { it.copy(voice = voiceWas) }
+        }
+        if (sound.engine != null) {
+            MixLane("Engine", "Mic 2", sound.engineLevel, RtColors.Warning, onValue = { v -> onChange { it.copy(engineLevel = v) } }) {
+                if (sound.engineLevel > 0f) { engineWas = sound.engineLevel; onChange { it.copy(engineLevel = 0f) } } else onChange { it.copy(engineLevel = engineWas) }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FadeSlider("Fade in", sound.fadeInMs, Modifier.weight(1f)) { ms -> onChange { it.copy(fadeInMs = ms) } }
+            FadeSlider("Fade out", sound.fadeOutMs, Modifier.weight(1f)) { ms -> onChange { it.copy(fadeOutMs = ms) } }
+        }
     }
 }
 
 @Composable
-private fun MixRow(label: String, value: Float, range: ClosedFloatingPointRange<Float>, format: (Float) -> String, onValue: (Float) -> Unit) {
+private fun MixLane(name: String, mic: String, value: Float, tint: Color, onValue: (Float) -> Unit, onMute: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.width(110.dp))
+        Column(Modifier.width(64.dp)) {
+            Text(name, style = RtType.body, color = RtColors.TextPrimary)
+            Text(mic, style = RtType.caption, color = RtColors.TextTertiary)
+        }
         androidx.compose.material3.Slider(
-            value = value, onValueChange = onValue, valueRange = range, modifier = Modifier.weight(1f),
+            value = value, onValueChange = onValue, valueRange = 0f..1.5f, modifier = Modifier.weight(1f),
+            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = tint, activeTrackColor = tint),
+        )
+        Text(
+            "${(value * 100).roundToInt()}%",
+            style = RtType.caption,
+            color = RtColors.TextSecondary,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.width(44.dp),
+        )
+        IconButton(onClick = onMute) {
+            Icon(
+                if (value > 0f) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff,
+                contentDescription = if (value > 0f) "Mute $name" else "Unmute $name",
+                tint = if (value > 0f) RtColors.TextSecondary else RtColors.Warning,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FadeSlider(label: String, ms: Long, modifier: Modifier, onValue: (Long) -> Unit) {
+    Column(modifier) {
+        Text("$label · ${"%.1f s".format(java.util.Locale.US, ms / 1000f)}", style = RtType.caption, color = RtColors.TextSecondary)
+        androidx.compose.material3.Slider(
+            value = ms / 1000f, onValueChange = { onValue((it * 10).roundToInt() * 100L) }, valueRange = 0f..3f,
             colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = RtColors.Primary, activeTrackColor = RtColors.Primary),
         )
-        Text(format(value), style = RtType.caption, color = RtColors.TextPrimary, modifier = Modifier.width(52.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
     }
 }
