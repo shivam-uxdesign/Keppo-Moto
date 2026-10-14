@@ -58,6 +58,12 @@ class RideTrackApp : Application() {
                 val changed = container.momentMerger.catchUp(recent) { id -> container.reels.reels.value.any { it.rideId == id } }
                 changed.forEach { com.ridetrack.app.studio.AfterRideWorker.schedule(this@RideTrackApp, it) }
             }
+            // Downshifts on the last month's rides (each clip once; after the joins above).
+            runCatching {
+                val since = System.currentTimeMillis() - 30 * 86_400_000L
+                container.rides.observeCompleted().first().filter { it.startTimeMillis >= since }
+                    .forEach { r -> runCatching { com.ridetrack.app.studio.ClipDownshifts.tagRide(container, r.id) } }
+            }
         }
         container.appScope.launch {
             container.reels.purgeExpired()

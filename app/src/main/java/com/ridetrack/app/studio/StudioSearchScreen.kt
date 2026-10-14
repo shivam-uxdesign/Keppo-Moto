@@ -74,6 +74,7 @@ class StudioSearchViewModel(private val c: AppContainer) : ViewModel() {
     private var rideNames: Map<String, String> = emptyMap()
     private var lines: Map<String, List<CaptionLine>> = emptyMap()
     private var seen: Map<String, List<String>> = emptyMap()
+    private var tags: Map<String, List<String>> = emptyMap()
 
     init { reload() }
 
@@ -88,6 +89,8 @@ class StudioSearchViewModel(private val c: AppContainer) : ViewModel() {
                     m.id to (StudioText.load(m.file) ?: m.transcript?.takeIf { it.isNotBlank() }?.let { listOf(CaptionLine(0, m.durationMillis ?: 0, it)) }.orEmpty())
                 }
                 seen = all.mapNotNull { m -> ClipSeen.load(m.file)?.let { m.id to it } }.toMap()
+                // Tags the app worked out itself ("downshift"), searchable like what Gemini saw.
+                tags = all.mapNotNull { m -> ClipDownshifts.load(m.file)?.takeIf { it.isNotEmpty() }?.let { m.id to listOf("downshift", "downshifting") } }.toMap()
             }
             _state.update { s ->
                 s.copy(
@@ -104,7 +107,8 @@ class StudioSearchViewModel(private val c: AppContainer) : ViewModel() {
     fun search(q: String) {
         _state.update { it.copy(query = q) }
         if (q.isBlank()) { _state.update { it.copy(hits = emptyList()) }; return }
-        val hits = ClipSearch.search(q, lines, seen) { id -> clips[id]?.let { m -> Triple(m.rideId, rideNames[m.rideId] ?: "A ride", m.videoStartMillis) } }
+        val seenAndTags = (seen.keys + tags.keys).associateWith { id -> seen[id].orEmpty() + tags[id].orEmpty() }
+        val hits = ClipSearch.search(q, lines, seenAndTags) { id -> clips[id]?.let { m -> Triple(m.rideId, rideNames[m.rideId] ?: "A ride", m.videoStartMillis) } }
         _state.update { it.copy(hits = hits.take(100)) }
     }
 

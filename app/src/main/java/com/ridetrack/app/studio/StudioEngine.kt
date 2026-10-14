@@ -96,7 +96,9 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
                 look = if (m.camera == "back") "road" else "selfie",
                 lines = StudioText.load(m.file).orEmpty(),
                 kmhMax = (0..(dur / 1000).toInt()).maxOfOrNull { s -> speedAt(m.videoStartMillis + s * 1000L) }?.coerceAtLeast(0) ?: 0,
-                events = m.types.filter { it != RideEventType.VOICE }.joinToString { it.name.lowercase().replace('_', ' ') },
+                events = (m.types.filter { it != RideEventType.VOICE }.map { it.name.lowercase().replace('_', ' ') } +
+                    listOfNotNull(ClipDownshifts.load(m.file)?.size?.takeIf { it > 0 }?.let { n -> if (n == 1) "downshift" else "downshift ×$n" }))
+                    .joinToString(),
                 label = Format.timeOfDay(m.videoStartMillis),
             )
         } + phone.values.filter { it.id !in out }.map { p ->

@@ -67,6 +67,9 @@ class AppContainer(context: Context) {
                 // Clips that overlap or are under 5 s apart become one, before anything reads them.
                 runCatching { momentMerger.mergeRide(id) }
                     .onFailure { errors.record("Moments", "Couldn't join neighbouring clips", it) }
+                // Downshifts tagged from the joined clips' engine sound and the ride's speed.
+                runCatching { com.ridetrack.app.studio.ClipDownshifts.tagRide(this@AppContainer, id) }
+                    .onFailure { errors.warn("Moments", "Couldn't tag downshifts", it) }
                 transcribeSoon()
                 // Named by place (when the phone can look it up), so the Journal gets the name.
                 runCatching { places.nameRide(id) }
