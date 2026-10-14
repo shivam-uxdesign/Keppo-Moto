@@ -22,6 +22,9 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.GraphicEq
@@ -140,6 +143,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.material3.IconButton
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
@@ -264,6 +269,9 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var captionTab by remember { mutableStateOf(CaptionTab.LOOK) }
     var captionLine by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var voiceOn by remember { mutableStateOf(false) }
+    // Which parents are open in the tool bar (indices down the tree); back to the top on a new selection.
+    var toolPath by remember { mutableStateOf(emptyList<Int>()) }
+    LaunchedEffect(s.pick) { toolPath = emptyList() }
     var micAllowed by remember {
         mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED)
     }
@@ -758,6 +766,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             Text("‹", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "One frame back") { seekTo(pos - FRAME_MS) }.padding(horizontal = 8.dp))
             Text("›", style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.clickable(role = Role.Button, onClickLabel = "One frame on") { seekTo(pos + FRAME_MS) }.padding(horizontal = 8.dp))
             TimeLabel({ pos }, plan.totalMs, Modifier.weight(1f))
+            // Split, by the time: cuts the clip under the playhead.
+            SmallIcon(Icons.Rounded.ContentCut, "Split at the playhead") { vm.change("Split") { TimelineEdits.split(it, pos) } }
             SmallIcon(Icons.AutoMirrored.Rounded.Undo, "Undo", enabled = s.canUndo) { undoBanner(vm.undo(), false) }
             SmallIcon(Icons.AutoMirrored.Rounded.Redo, "Redo", enabled = s.canRedo) { undoBanner(vm.redo(), true) }
             SmallIcon(Icons.Rounded.History, "History", enabled = s.steps.isNotEmpty()) { historyOpen = true }
@@ -1114,7 +1124,242 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 }
             }
 
-            // ---- tools: they change with what's selected (a back arrow returns to all of them)
+            // ---- tools: a tree of at most 5 icons per level (see docs/plans/editor-toolbar-plan.md)
+            fun pickLabel(p: TimelinePick?): String = when (p) {
+                null -> "Your video"
+                is TimelinePick.Clip -> "Clip ${p.index + 1}"
+                is TimelinePick.Clips -> "${p.indices.size} clips"
+                is TimelinePick.Layer -> "Video on top"
+                is TimelinePick.Audio -> when (plan.audio.firstOrNull { it.id == p.id }?.kind) { TrackKind.ENGINE -> "Mic 2 · Engine"; TrackKind.MUSIC -> "Music"; else -> "Sound" }
+                is TimelinePick.Caption -> "Caption"
+                is TimelinePick.Text -> "Text"
+                is TimelinePick.Sticker -> "Sticker"
+                is TimelinePick.Marker -> "Marker"
+                else -> "Selected"
+            }
+            fun leaf(icon: ImageVector, label: String, danger: Boolean = false, on: Boolean = false, enabled: Boolean = true, action: () -> Unit) = TNode(icon, label, danger, on, enabled, action = action)
+            fun parent(icon: ImageVector, label: String, kids: List<TNode>) = TNode(icon, label, kids = kids)
+            fun slider(icon: ImageVector, label: String, value: Float, range: ClosedFloatingPointRange<Float>, format: (Float) -> String, onChange: (Float) -> Unit, onEnd: () -> Unit) =
+                TNode(icon, label, slider = TSlider(value, range, format, onChange, onEnd))
+            val pct: (Float) -> String = { "${(it * 100).roundToInt()}%" }
+            fun addNode() = parent(Icons.Rounded.Add, "Add", listOf(
+                parent(Icons.Rounded.Movie, "Video", listOf(
+                    leaf(Icons.Rounded.PictureInPicture, "Video on top") { adding = AddWhat.LAYER },
+                    leaf(Icons.Rounded.VideoLibrary, "Clip") { adding = AddWhat.CLIP },
+                    leaf(Icons.Rounded.AcUnit, "Freeze frame") { vm.freeze() },
+                )),
+                leaf(Icons.Rounded.TextFields, "Text") { active.pause(); typingId = null; typing = true },
+                leaf(Icons.Rounded.EmojiEmotions, "Sticker") { addSticker = true },
+                parent(Icons.Rounded.MusicNote, "Sound", listOf(
+                    leaf(Icons.Rounded.MusicNote, "Music, sound") { soundOpen = true },
+                    leaf(Icons.Rounded.Mic, "Voice-over") { voiceOn = true },
+                )),
+                leaf(Icons.Rounded.Gradient, if (s.options.filter == RideFilter.NONE) "Filter" else "Filter: ${s.options.filter.label}", on = s.options.filter != RideFilter.NONE) { filterOpen = true },
+            ))
+            fun timeKids(earlier: () -> Unit, later: () -> Unit, shorter: () -> Unit, longer: () -> Unit) = listOf(
+                leaf(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier", action = earlier),
+                leaf(Icons.Rounded.KeyboardDoubleArrowRight, "Later", action = later),
+                leaf(Icons.Rounded.UnfoldLess, "Shorter", action = shorter),
+                leaf(Icons.Rounded.UnfoldMore, "Longer", action = longer),
+            )
+            fun toolTree(picked: TimelinePick?, seg: ClipSegment?): List<TNode> = when (val p = picked) {
+                null -> listOf(
+                    addNode(),
+                    parent(Icons.Rounded.Palette, "Style", listOf(
+                        leaf(Icons.Rounded.Palette, "Styles") { styleOpen = true },
+                        leaf(Icons.Rounded.Animation, "Transitions", enabled = plan.segments.size > 1) { cutAt = 1; loopAt = plan.startOf(1) },
+                        leaf(Icons.Rounded.Gradient, "Filter", on = s.options.filter != RideFilter.NONE) { filterOpen = true },
+                    )),
+                    parent(Icons.Rounded.ClosedCaption, "Captions", listOf(
+                        leaf(Icons.Rounded.Palette, "Look") { captionTab = CaptionTab.LOOK; captionLine = null; captionsOpen = true },
+                        leaf(Icons.Rounded.Subtitles, "Add caption") { ask = TextAsk.NewCaption },
+                        leaf(if (s.options.captions) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, if (s.options.captions) "Hide" else "Show", on = !s.options.captions) { vm.setOptions { o -> o.copy(captions = !o.captions) } },
+                    )),
+                    parent(Icons.Rounded.Tune, "Sound", listOf(
+                        leaf(Icons.Rounded.Tune, "Mixer") { mixer = true },
+                        leaf(Icons.Rounded.Mic, "Voice-over") { voiceOn = true },
+                        leaf(Icons.Rounded.MusicNote, "Music") { soundOpen = true },
+                    )),
+                    parent(Icons.Rounded.MoreVert, "More", listOfNotNull(
+                        leaf(Icons.Rounded.Flag, "Marker") { vm.addMarker() },
+                        if (plan.vibe.spec.redline) leaf(Icons.Rounded.Speed, "Tag redline") { vm.tagRedline() } else null,
+                        leaf(Icons.Rounded.CropFree, "Safe zones", on = safe) { safe = !safe },
+                    )),
+                )
+                is TimelinePick.Clip -> {
+                    val i = p.index
+                    val v = seg?.volume ?: 1f
+                    listOf(
+                        addNode(),
+                        parent(Icons.Rounded.ContentCut, "Edit", listOfNotNull(
+                            if (seg?.still == null) leaf(Icons.Rounded.Speed, "Speed") { clipTab = ClipTab.SPEED } else null,
+                            leaf(Icons.Rounded.Crop, "Crop") { clipTab = ClipTab.FRAME },
+                            if (seg?.still == null) leaf(Icons.Rounded.FastRewind, "Reverse", on = seg?.reverse != null) { vm.reverse(i) } else null,
+                            if (seg?.lines?.isNotEmpty() == true && seg.still == null) leaf(Icons.Rounded.Compress, "Remove pauses") { vm.change("Remove pauses") { TimelineEdits.removePauses(it, i) }; flash = "Pauses removed" } else null,
+                            leaf(Icons.Rounded.AcUnit, "Freeze") { vm.freeze() },
+                        )),
+                        leaf(Icons.Rounded.Contrast, "Colour") { clipTab = ClipTab.LOOK },
+                        leaf(Icons.Rounded.Animation, "Transition") { if (i == 0) flash = "The first clip has no cut before it" else { cutAt = i; vm.pick(null); loopAt = plan.startOf(i) } },
+                        parent(Icons.Rounded.MoreVert, "More", listOf(
+                            leaf(Icons.Rounded.UnfoldMore, "Use all", enabled = seg != null && seg.still == null && (seg.inMs > 0 || seg.inMs + seg.sourceMs < seg.bit.clipDurationMs - 20)) { vm.change("Use all") { TimelineEdits.useAll(it, i) } },
+                            parent(Icons.Rounded.SwapHoriz, "Arrange", listOfNotNull(
+                                leaf(Icons.AutoMirrored.Rounded.ArrowBack, "Move left") { vm.change("Move") { TimelineEdits.move(it, i, -1) }; vm.pick(TimelinePick.Clip(i - 1)) },
+                                leaf(Icons.AutoMirrored.Rounded.ArrowForward, "Move right") { vm.change("Move") { TimelineEdits.move(it, i, 1) }; vm.pick(TimelinePick.Clip(i + 1)) },
+                                if (seg?.still == null) leaf(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier part") { vm.change("Other part") { ClipTools.slip(it, i, -500) } } else null,
+                                if (seg?.still == null) leaf(Icons.Rounded.KeyboardDoubleArrowRight, "Later part") { vm.change("Other part") { ClipTools.slip(it, i, 500) } } else null,
+                                leaf(Icons.Rounded.LibraryAddCheck, "Select more") { vm.pick(TimelinePick.Clips(setOf(i))) },
+                            )),
+                            parent(Icons.Rounded.ContentCopy, "Copy", listOfNotNull(
+                                leaf(Icons.Rounded.ContentCopy, "Duplicate") { vm.change("Duplicate") { ClipTools.duplicate(it, i) } },
+                                leaf(Icons.Rounded.FormatPaint, "Copy look") { vm.copySettings(i) },
+                                if (s.copied != null) leaf(Icons.Rounded.ContentPaste, "Paste look") { vm.pasteSettings(setOf(i)) } else null,
+                                leaf(Icons.Rounded.SwapHoriz, "Replace") { adding = AddWhat.REPLACE },
+                                leaf(Icons.Rounded.BookmarkAdd, "Save clip") { vm.saveSegment(i) },
+                            )),
+                            parent(if (v == 0f) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, "Sound", listOf(
+                                slider(Icons.AutoMirrored.Rounded.VolumeUp, "Volume", v, 0f..1.5f, pct, { x -> vm.drag { TimelineEdits.volume(it, i, x) } }, { vm.endDrag("Sound") }),
+                                leaf(Icons.AutoMirrored.Rounded.CallSplit, "Detach") { vm.detach(i) },
+                            )),
+                            leaf(Icons.Rounded.Delete, "Delete", danger = true) { vm.change("Delete") { TimelineEdits.delete(it, i) }; vm.pick(null) },
+                        )),
+                    )
+                }
+                is TimelinePick.Clips -> listOfNotNull(
+                    leaf(Icons.AutoMirrored.Rounded.ArrowBack, "Move left") { var moved = p.indices; vm.change("Move clips") { pl -> TrackEdits.moveClips(pl, p.indices, -1).also { moved = it.second }.first }; vm.pick(TimelinePick.Clips(moved)) },
+                    leaf(Icons.AutoMirrored.Rounded.ArrowForward, "Move right") { var moved = p.indices; vm.change("Move clips") { pl -> TrackEdits.moveClips(pl, p.indices, 1).also { moved = it.second }.first }; vm.pick(TimelinePick.Clips(moved)) },
+                    if (s.copied != null) leaf(Icons.Rounded.ContentPaste, "Paste look") { vm.pasteSettings(p.indices) } else null,
+                    leaf(Icons.Rounded.Delete, "Delete ${p.indices.size}", danger = true) { vm.change("Delete clips") { TrackEdits.deleteClips(it, p.indices) }; vm.pick(null) },
+                )
+                is TimelinePick.Layer -> {
+                    val l = plan.layers.firstOrNull { it.id == p.id }
+                    val shape = l?.shape ?: LayerShape.ROUNDED
+                    val nextShape = LayerShape.entries[(shape.ordinal + 1) % LayerShape.entries.size]
+                    val loud = (l?.volume ?: 0f) > 0f
+                    val hid = l?.hidden == true
+                    listOf(
+                        addNode(),
+                        parent(Icons.Rounded.Crop, "Edit", listOf(
+                            parent(Icons.Rounded.PictureInPicture, "Place", LayerPreset.entries.take(5).map { pr -> leaf(LAYER_ICON[pr] ?: Icons.Rounded.PictureInPicture, pr.label) { vm.change("Layer: ${pr.label}") { TrackEdits.preset(it, p.id, pr) } } }),
+                            parent(Icons.Rounded.ZoomIn, "Size", listOf(
+                                leaf(Icons.Rounded.ZoomOut, "Smaller") { vm.change("Layer size") { TrackEdits.resizeLayer(it, p.id, 0.85f, pos) } },
+                                leaf(Icons.Rounded.ZoomIn, "Bigger") { vm.change("Layer size") { TrackEdits.resizeLayer(it, p.id, 1.18f, pos) } },
+                                leaf(Icons.Rounded.RotateRight, "Rotate") { vm.change("Rotate layer") { TrackEdits.rotateLayer(it, p.id, 90f) } },
+                            )),
+                            leaf(Icons.Rounded.RoundedCorner, shape.label) { vm.change("Layer shape") { TrackEdits.shape(it, p.id, nextShape) } },
+                            parent(Icons.Rounded.Moving, "Motion", listOfNotNull(
+                                leaf(Icons.Rounded.Moving, "Move here", on = l?.keys?.isNotEmpty() == true) { vm.change("Layer move point") { TrackEdits.addKey(it, p.id, pos) } },
+                                if (l?.keys?.isNotEmpty() == true) leaf(Icons.Rounded.LayersClear, "Clear moves") { vm.change("Clear moves") { TrackEdits.clearKeys(it, p.id) } } else null,
+                            )),
+                            parent(Icons.Rounded.Timer, "Time", timeKids(
+                                { vm.change("Layer time") { TrackEdits.shiftLayer(it, p.id, -500) } }, { vm.change("Layer time") { TrackEdits.shiftLayer(it, p.id, 500) } },
+                                { vm.change("Layer length") { TrackEdits.resizeLayerTime(it, p.id, -500) } }, { vm.change("Layer length") { TrackEdits.resizeLayerTime(it, p.id, 500) } },
+                            )),
+                        )),
+                        parent(Icons.Rounded.Contrast, "Look", listOf(
+                            slider(Icons.Rounded.Opacity, "Opacity", l?.opacity ?: 1f, 0.1f..1f, pct, { x -> vm.drag { TrackEdits.opacity(it, p.id, x) } }, { vm.endDrag("Layer opacity") }),
+                            leaf(Icons.Rounded.BorderOuter, "Frame", on = l?.border == true) { vm.change("Layer frame") { TrackEdits.border(it, p.id, l?.border != true) } },
+                            leaf(if (hid) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, if (hid) "Show" else "Hide", on = hid) { vm.change(if (hid) "Show layer" else "Hide layer") { TrackEdits.hideLayer(it, p.id, !hid) } },
+                        )),
+                        slider(if (loud) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff, "Volume", l?.volume ?: 0f, 0f..1.5f, pct, { x -> vm.drag { TrackEdits.layerVolume(it, p.id, x) } }, { vm.endDrag("Layer sound") }),
+                        parent(Icons.Rounded.MoreVert, "More", listOf(
+                            leaf(Icons.Rounded.Delete, "Delete", danger = true) { vm.change("Delete layer") { TrackEdits.deleteLayer(it, p.id) }; vm.pick(null) },
+                        )),
+                    )
+                }
+                is TimelinePick.Audio -> {
+                    val a = plan.audio.firstOrNull { it.id == p.id }
+                    val faded = (a?.fadeInMs ?: 0) > 0
+                    listOf(
+                        addNode(),
+                        slider(Icons.AutoMirrored.Rounded.VolumeUp, "Volume", a?.volume ?: 1f, 0f..1.5f, pct, { x -> vm.drag { TrackEdits.audioVolume(it, p.id, x) } }, { vm.endDrag("Volume") }),
+                        parent(Icons.Rounded.Gradient, "Fades", listOfNotNull(
+                            leaf(Icons.Rounded.Gradient, "Fade in, out", on = faded) { vm.change("Fades") { TrackEdits.fade(it, p.id, if (faded) 0 else 400, if (faded) 0 else 600) } },
+                            leaf(Icons.AutoMirrored.Rounded.VolumeDown, "Dip here") { vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, pos - (a?.startMs ?: 0), 0.3f) } },
+                            leaf(Icons.AutoMirrored.Rounded.VolumeUp, "Full here") { vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, pos - (a?.startMs ?: 0), 1f) } },
+                            if (a?.curve?.isNotEmpty() == true) leaf(Icons.Rounded.ClearAll, "Clear points") { vm.change("Clear points") { TrackEdits.clearCurve(it, p.id) } } else null,
+                        )),
+                        parent(Icons.Rounded.Timer, "Time", listOf(
+                            leaf(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier") { vm.change("Sound time") { TrackEdits.shiftAudio(it, p.id, -250) } },
+                            leaf(Icons.Rounded.KeyboardDoubleArrowRight, "Later") { vm.change("Sound time") { TrackEdits.shiftAudio(it, p.id, 250) } },
+                            leaf(Icons.Rounded.FastRewind, "Start sooner") { vm.change("Sound start") { TrackEdits.trimAudioStart(it, p.id, -250) } },
+                            leaf(Icons.Rounded.FastForward, "Start later") { vm.change("Sound start") { TrackEdits.trimAudioStart(it, p.id, 250) } },
+                            parent(Icons.Rounded.UnfoldMore, "Length", listOf(
+                                leaf(Icons.Rounded.UnfoldLess, "Shorter") { vm.change("Sound length") { TrackEdits.resizeAudio(it, p.id, -250) } },
+                                leaf(Icons.Rounded.UnfoldMore, "Longer") { vm.change("Sound length") { TrackEdits.resizeAudio(it, p.id, 250) } },
+                            )),
+                        )),
+                        parent(Icons.Rounded.MoreVert, "More", listOf(
+                            leaf(Icons.Rounded.Delete, "Delete", danger = true) { vm.change("Delete sound") { TrackEdits.deleteAudio(it, p.id) }; vm.pick(null) },
+                        )),
+                    )
+                }
+                is TimelinePick.Marker -> listOf(
+                    leaf(Icons.Rounded.Delete, "Delete mark", danger = true) { vm.change("Delete marker") { TrackEdits.deleteMarker(it, p.id) }; vm.pick(null) },
+                )
+                is TimelinePick.Caption -> {
+                    val off = !s.options.captions
+                    listOf(
+                        addNode(),
+                        leaf(Icons.Rounded.Edit, "Fix words") { captionTab = CaptionTab.WORDS; captionLine = p.index to p.line; captionsOpen = true },
+                        leaf(Icons.Rounded.Palette, "Look") { captionTab = CaptionTab.LOOK; captionLine = null; captionsOpen = true },
+                        parent(Icons.Rounded.Timer, "Time", listOf(
+                            leaf(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier") { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, -200) } },
+                            leaf(Icons.Rounded.KeyboardDoubleArrowRight, "Later") { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, 200) } },
+                        )),
+                        parent(Icons.Rounded.MoreVert, "More", listOfNotNull(
+                            (plan.segments.getOrNull(p.index) as? ClipSegment)?.let { cs -> leaf(Icons.Rounded.Hearing, "Read again") { vm.readAgain(cs.bit.momentId) } },
+                            leaf(if (off) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, if (off) "Show all" else "Hide all", on = off) { vm.setOptions { o -> o.copy(captions = !o.captions) } },
+                            leaf(Icons.Rounded.Delete, "Delete", danger = true) { vm.change("Delete caption") { TimelineEdits.caption(it, p.index, p.line, "") }; vm.pick(null) },
+                        )),
+                    )
+                }
+                is TimelinePick.Text -> {
+                    val t = plan.texts.firstOrNull { it.id == p.id }
+                    val hid = t?.hidden == true
+                    val ai = t?.animIn ?: TextAnim.FADE
+                    val ao = t?.animOut ?: TextAnim.FADE
+                    listOf(
+                        addNode(),
+                        leaf(Icons.Rounded.Edit, "Edit text") { active.pause(); typingId = p.id; typing = true },
+                        parent(Icons.Rounded.Animation, "Animate", listOf(
+                            leaf(Icons.Rounded.Animation, "In: ${ai.label}") { vm.change("Text in") { TextTools.anim(it, p.id, animIn = TextAnim.entries[(ai.ordinal + 1) % TextAnim.entries.size]) } },
+                            leaf(Icons.Rounded.Animation, "Out: ${ao.label}") { vm.change("Text out") { TextTools.anim(it, p.id, animOut = TextAnim.entries[(ao.ordinal + 1) % TextAnim.entries.size]) } },
+                        )),
+                        parent(Icons.Rounded.Timer, "Time", timeKids(
+                            { vm.change("Text time") { TimelineEdits.moveText(it, p.id, -500) } }, { vm.change("Text time") { TimelineEdits.moveText(it, p.id, 500) } },
+                            { vm.change("Text length") { TimelineEdits.resizeText(it, p.id, -500) } }, { vm.change("Text length") { TimelineEdits.resizeText(it, p.id, 500) } },
+                        )),
+                        parent(Icons.Rounded.MoreVert, "More", listOf(
+                            leaf(if (hid) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, if (hid) "Show" else "Hide", on = hid) { vm.change(if (hid) "Show text" else "Hide text") { TrackEdits.hideText(it, p.id, !hid) } },
+                            leaf(Icons.Rounded.Delete, "Delete", danger = true) { vm.change("Delete text") { TimelineEdits.deleteText(it, p.id) }; vm.pick(null) },
+                        )),
+                    )
+                }
+                is TimelinePick.Sticker -> {
+                    val st = plan.stickers.firstOrNull { it.id == p.id }
+                    val hid = st?.hidden == true
+                    listOfNotNull(
+                        addNode(),
+                        if (st?.kind == StickerKind.EMOJI) leaf(Icons.Rounded.EmojiEmotions, "Change") { addSticker = true } else null,
+                        parent(Icons.Rounded.ZoomIn, "Size", listOf(
+                            leaf(Icons.Rounded.ZoomOut, "Smaller") { vm.change("Sticker size") { TextTools.scaleSticker(it, p.id, 0.85f) } },
+                            leaf(Icons.Rounded.ZoomIn, "Bigger") { vm.change("Sticker size") { TextTools.scaleSticker(it, p.id, 1.18f) } },
+                            leaf(Icons.Rounded.RotateRight, "Turn") { vm.change("Turn sticker") { TextTools.rotateSticker(it, p.id, 15f) } },
+                        )),
+                        parent(Icons.Rounded.Timer, "Time", timeKids(
+                            { vm.change("Sticker time") { TextTools.shiftSticker(it, p.id, -500) } }, { vm.change("Sticker time") { TextTools.shiftSticker(it, p.id, 500) } },
+                            { vm.change("Sticker length") { TextTools.resizeStickerTime(it, p.id, -500) } }, { vm.change("Sticker length") { TextTools.resizeStickerTime(it, p.id, 500) } },
+                        )),
+                        parent(Icons.Rounded.MoreVert, "More", listOf(
+                            leaf(Icons.Rounded.ContentCopy, "Duplicate") { st?.let { vm.addSticker(it.kind, it.text) } },
+                            leaf(if (hid) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, if (hid) "Show" else "Hide", on = hid) { vm.change(if (hid) "Show sticker" else "Hide sticker") { TrackEdits.hideSticker(it, p.id, !hid) } },
+                            leaf(Icons.Rounded.Delete, "Delete", danger = true) { vm.change("Delete sticker") { TextTools.deleteSticker(it, p.id) }; vm.pick(null) },
+                        )),
+                    )
+                }
+                else -> listOf(addNode())
+            }
+
             val seg = (s.pick as? TimelinePick.Clip)?.let { plan.segments.getOrNull(it.index) as? ClipSegment }
             val barKey = if (cutAt != null) "cut" else if (voiceOn) "voice" else if (filterOpen) "filter" else "${s.pick?.javaClass?.simpleName}:${(s.pick as? TimelinePick.Clip)?.index}:$clipTab"
             androidx.compose.runtime.key(barKey) {
@@ -1138,59 +1383,10 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 } else if (filterOpen) {
                     // Filters right under the video, so each one shows on it as it's tapped.
                     FilterPanel(vm, s.options, onPicked = { f -> tick(); flash = f.label }) { filterOpen = false }
-                } else if (!voiceOn && (picked == null || (picked is TimelinePick.Clip && clipTab == ClipTab.EDIT))) {
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        var n = 0
-                        if (picked is TimelinePick.Clip) {
-                            val i = picked.index
-                            BackTool("All tools") { vm.pick(null) }
-                            Tool(Icons.Rounded.ContentCut, "Split", n++) { vm.change("Split") { TimelineEdits.split(it, pos) } }
-                            if (seg?.lines?.isNotEmpty() == true && seg.still == null) Tool(Icons.Rounded.Compress, "Remove pauses", n++) {
-                                vm.change("Remove pauses") { TimelineEdits.removePauses(it, i) }
-                                flash = "Pauses removed"
-                            }
-                            if (seg?.still == null) Tool(Icons.Rounded.Speed, "Speed", n++) { clipTab = ClipTab.SPEED }
-                            Tool(Icons.Rounded.Contrast, "Look", n++) { clipTab = ClipTab.LOOK }
-                            Tool(Icons.Rounded.Crop, "Crop", n++) { clipTab = ClipTab.FRAME }
-                            Tool(Icons.Rounded.Animation, "Transition", n++) {
-                                if (i == 0) flash = "The first clip has no cut before it" else { cutAt = i; vm.pick(null); loopAt = plan.startOf(i) }
-                            }
-                            Tool(Icons.Rounded.SwapHoriz, "Replace", n++) { adding = AddWhat.REPLACE }
-                            Tool(Icons.Rounded.ContentCopy, "Duplicate", n++) { vm.change("Duplicate") { ClipTools.duplicate(it, i) } }
-                            if (seg?.still == null) Tool(Icons.Rounded.FastRewind, "Reverse", n++, on = seg?.reverse != null) { vm.reverse(i) }
-                            val v = seg?.volume ?: 1f
-                            val next = when { v >= 1.5f -> 0f; v == 0f -> 0.5f; v < 1f -> 1f; else -> 1.5f }
-                            Tool(if (v == 0f) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, "Sound ${(v * 100).roundToInt()}%", n++) { vm.change("Sound") { TimelineEdits.volume(it, i, next) } }
-                            Tool(Icons.AutoMirrored.Rounded.CallSplit, "Detach sound", n++) { vm.detach(i) }
-                            if (seg?.still == null) {
-                                Tool(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier part", n++) { vm.change("Other part") { ClipTools.slip(it, i, -500) } }
-                                Tool(Icons.Rounded.KeyboardDoubleArrowRight, "Later part", n++) { vm.change("Other part") { ClipTools.slip(it, i, 500) } }
-                            }
-                            Tool(Icons.AutoMirrored.Rounded.ArrowBack, "Move left", n++) { vm.change("Move") { TimelineEdits.move(it, i, -1) }; vm.pick(TimelinePick.Clip(i - 1)) }
-                            Tool(Icons.AutoMirrored.Rounded.ArrowForward, "Move right", n++) { vm.change("Move") { TimelineEdits.move(it, i, 1) }; vm.pick(TimelinePick.Clip(i + 1)) }
-                            Tool(Icons.Rounded.FormatPaint, "Copy look", n++) { vm.copySettings(i) }
-                            if (s.copied != null) Tool(Icons.Rounded.ContentPaste, "Paste look", n++) { vm.pasteSettings(setOf(i)) }
-                            Tool(Icons.Rounded.LibraryAddCheck, "Select more", n++) { vm.pick(TimelinePick.Clips(setOf(i))) }
-                            Tool(Icons.Rounded.BookmarkAdd, "Save clip", n++) { vm.saveSegment(i) }
-                            Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete") { TimelineEdits.delete(it, i) }; vm.pick(null) }
-                        } else {
-                            Tool(Icons.Rounded.Palette, "Style", n++) { styleOpen = true }
-                            Tool(Icons.Rounded.Gradient, if (s.options.filter == RideFilter.NONE) "Filter" else "Filter: ${s.options.filter.label}", n++, on = s.options.filter != RideFilter.NONE) { filterOpen = true }
-                            Tool(Icons.Rounded.TextFields, "Text", n++) { active.pause(); typingId = null; typing = true }
-                            Tool(Icons.Rounded.ClosedCaption, "Captions", n++) { captionTab = CaptionTab.LOOK; captionLine = null; captionsOpen = true }
-                            Tool(Icons.Rounded.Subtitles, "Add caption", n++) { ask = TextAsk.NewCaption }
-                            Tool(Icons.Rounded.EmojiEmotions, "Stickers", n++) { addSticker = true }
-                            Tool(Icons.Rounded.MusicNote, "Sound", n++) { soundOpen = true }
-                            Tool(Icons.Rounded.Mic, "Voice-over", n++) { voiceOn = true }
-                            Tool(Icons.Rounded.Tune, "Mix", n++) { mixer = true }
-                            Tool(Icons.Rounded.PictureInPicture, "Over video", n++) { adding = AddWhat.LAYER }
-                            Tool(Icons.Rounded.AcUnit, "Freeze", n++) { vm.freeze() }
-                            Tool(Icons.Rounded.ContentCut, "Split", n++) { vm.change("Split") { TimelineEdits.split(it, pos) } }
-                            Tool(Icons.Rounded.Flag, "Marker", n++) { vm.addMarker() }
-                            if (plan.vibe.spec.redline) Tool(Icons.Rounded.Speed, "Tag redline", n++) { vm.tagRedline() }
-                            Tool(Icons.Rounded.CropFree, "Safe zones", n++, on = safe) { safe = !safe }
-                        }
-                    }
+                } else if (!voiceOn && !(picked is TimelinePick.Clip && seg != null && clipTab != ClipTab.EDIT)) {
+                    // At most 5 icons, never scrolling: a parent opens its own set, ‹ goes back up.
+                    val levels = toolTree(picked, seg)
+                    ToolBar(levels, toolPath, onPath = { toolPath = it }, label = pickLabel(picked))
                 } else if (!voiceOn && picked is TimelinePick.Clip && seg != null) {
                     val i = picked.index
                     val back = { clipTab = ClipTab.EDIT }
@@ -1240,119 +1436,6 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         onDelete = { vm.deleteTake(it) },
                         onBack = { if (s.recordingAt != null) { vm.stopTake(); active.pause(); preview.setLevel(1f) }; voiceOn = false },
                     )
-                } else {
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        BackTool("All tools") { vm.pick(null) }
-                        var n = 0
-                        when (val p = picked) {
-                            is TimelinePick.Clips -> {
-                                Tool(Icons.AutoMirrored.Rounded.ArrowBack, "Move left", n++) {
-                                    var moved = p.indices
-                                    vm.change("Move clips") { pl -> TrackEdits.moveClips(pl, p.indices, -1).also { moved = it.second }.first }
-                                    vm.pick(TimelinePick.Clips(moved))
-                                }
-                                Tool(Icons.AutoMirrored.Rounded.ArrowForward, "Move right", n++) {
-                                    var moved = p.indices
-                                    vm.change("Move clips") { pl -> TrackEdits.moveClips(pl, p.indices, 1).also { moved = it.second }.first }
-                                    vm.pick(TimelinePick.Clips(moved))
-                                }
-                                if (s.copied != null) Tool(Icons.Rounded.ContentPaste, "Paste look", n++) { vm.pasteSettings(p.indices) }
-                                Tool(Icons.Rounded.Delete, "Delete ${p.indices.size}", n++, danger = true) { vm.change("Delete clips") { TrackEdits.deleteClips(it, p.indices) }; vm.pick(null) }
-                            }
-                            is TimelinePick.Layer -> {
-                                val l = plan.layers.firstOrNull { it.id == p.id }
-                                LayerPreset.entries.forEach { pr -> Tool(LAYER_ICON[pr] ?: Icons.Rounded.PictureInPicture, pr.label, n++) { vm.change("Layer: ${pr.label}") { TrackEdits.preset(it, p.id, pr) } } }
-                                Tool(Icons.Rounded.ZoomOut, "Smaller", n++) { vm.change("Layer size") { TrackEdits.resizeLayer(it, p.id, 0.85f, pos) } }
-                                Tool(Icons.Rounded.ZoomIn, "Bigger", n++) { vm.change("Layer size") { TrackEdits.resizeLayer(it, p.id, 1.18f, pos) } }
-                                val shape = l?.shape ?: LayerShape.ROUNDED
-                                val nextShape = LayerShape.entries[(shape.ordinal + 1) % LayerShape.entries.size]
-                                Tool(Icons.Rounded.RoundedCorner, shape.label, n++) { vm.change("Layer shape") { TrackEdits.shape(it, p.id, nextShape) } }
-                                Tool(Icons.Rounded.BorderOuter, "Frame", n++, on = l?.border == true) { vm.change("Layer frame") { TrackEdits.border(it, p.id, l?.border != true) } }
-                                val o = l?.opacity ?: 1f
-                                Tool(Icons.Rounded.Opacity, "See-through ${(o * 100).roundToInt()}%", n++) { vm.change("Layer opacity") { TrackEdits.opacity(it, p.id, if (o <= 0.4f) 1f else o - 0.25f) } }
-                                Tool(Icons.Rounded.RotateRight, "Rotate", n++) { vm.change("Rotate layer") { TrackEdits.rotateLayer(it, p.id, 90f) } }
-                                Tool(Icons.Rounded.Moving, "Move here", n++, on = l?.keys?.isNotEmpty() == true) { vm.change("Layer move point") { TrackEdits.addKey(it, p.id, pos) } }
-                                if (l?.keys?.isNotEmpty() == true) Tool(Icons.Rounded.LayersClear, "Clear moves", n++) { vm.change("Clear moves") { TrackEdits.clearKeys(it, p.id) } }
-                                Tool(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier", n++) { vm.change("Layer time") { TrackEdits.shiftLayer(it, p.id, -500) } }
-                                Tool(Icons.Rounded.KeyboardDoubleArrowRight, "Later", n++) { vm.change("Layer time") { TrackEdits.shiftLayer(it, p.id, 500) } }
-                                Tool(Icons.Rounded.UnfoldLess, "Shorter", n++) { vm.change("Layer length") { TrackEdits.resizeLayerTime(it, p.id, -500) } }
-                                Tool(Icons.Rounded.UnfoldMore, "Longer", n++) { vm.change("Layer length") { TrackEdits.resizeLayerTime(it, p.id, 500) } }
-                                val loud = (l?.volume ?: 0f) > 0f
-                                Tool(if (loud) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff, if (loud) "Its sound on" else "Its sound off", n++, on = loud) {
-                                    vm.change("Layer sound") { TrackEdits.layerVolume(it, p.id, if (loud) 0f else 1f) }
-                                }
-                                val hid = l?.hidden == true
-                                Tool(if (hid) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, if (hid) "Show" else "Hide", n++, on = hid) { vm.change(if (hid) "Show layer" else "Hide layer") { TrackEdits.hideLayer(it, p.id, !hid) } }
-                                Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete layer") { TrackEdits.deleteLayer(it, p.id) }; vm.pick(null) }
-                            }
-                            is TimelinePick.Audio -> {
-                                val a = plan.audio.firstOrNull { it.id == p.id }
-                                val v = a?.volume ?: 1f
-                                val nextV = when { v >= 1.5f -> 0.25f; v < 0.5f -> 0.5f; v < 1f -> 1f; else -> 1.5f }
-                                Tool(Icons.AutoMirrored.Rounded.VolumeUp, "Volume ${(v * 100).roundToInt()}%", n++) { vm.change("Volume") { TrackEdits.audioVolume(it, p.id, nextV) } }
-                                val faded = (a?.fadeInMs ?: 0) > 0
-                                Tool(Icons.Rounded.Gradient, "Fade in, out", n++, on = faded) { vm.change("Fades") { TrackEdits.fade(it, p.id, if (faded) 0 else 400, if (faded) 0 else 600) } }
-                                Tool(Icons.AutoMirrored.Rounded.VolumeDown, "Dip here", n++) { vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, pos - (a?.startMs ?: 0), 0.3f) } }
-                                Tool(Icons.AutoMirrored.Rounded.VolumeUp, "Full here", n++) { vm.change("Volume point") { TrackEdits.addVolumePoint(it, p.id, pos - (a?.startMs ?: 0), 1f) } }
-                                if (a?.curve?.isNotEmpty() == true) Tool(Icons.Rounded.ClearAll, "Clear points", n++) { vm.change("Clear points") { TrackEdits.clearCurve(it, p.id) } }
-                                Tool(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier", n++) { vm.change("Sound time") { TrackEdits.shiftAudio(it, p.id, -250) } }
-                                Tool(Icons.Rounded.KeyboardDoubleArrowRight, "Later", n++) { vm.change("Sound time") { TrackEdits.shiftAudio(it, p.id, 250) } }
-                                Tool(Icons.Rounded.FastRewind, "Start sooner", n++) { vm.change("Sound start") { TrackEdits.trimAudioStart(it, p.id, -250) } }
-                                Tool(Icons.Rounded.FastForward, "Start later", n++) { vm.change("Sound start") { TrackEdits.trimAudioStart(it, p.id, 250) } }
-                                Tool(Icons.Rounded.UnfoldLess, "Shorter", n++) { vm.change("Sound length") { TrackEdits.resizeAudio(it, p.id, -250) } }
-                                Tool(Icons.Rounded.UnfoldMore, "Longer", n++) { vm.change("Sound length") { TrackEdits.resizeAudio(it, p.id, 250) } }
-                                Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete sound") { TrackEdits.deleteAudio(it, p.id) }; vm.pick(null) }
-                            }
-                            is TimelinePick.Marker -> {
-                                Tool(Icons.Rounded.Delete, "Delete mark", n++, danger = true) { vm.change("Delete marker") { TrackEdits.deleteMarker(it, p.id) }; vm.pick(null) }
-                            }
-                            is TimelinePick.Caption -> {
-                                Tool(Icons.Rounded.Edit, "Fix words", n++) { captionTab = CaptionTab.WORDS; captionLine = p.index to p.line; captionsOpen = true }
-                                Tool(Icons.Rounded.Palette, "Look", n++) { captionTab = CaptionTab.LOOK; captionLine = null; captionsOpen = true }
-                                Tool(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier", n++) { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, -200) } }
-                                Tool(Icons.Rounded.KeyboardDoubleArrowRight, "Later", n++) { vm.change("Caption time") { TimelineEdits.nudgeCaption(it, p.index, p.line, 200) } }
-                                (plan.segments.getOrNull(p.index) as? ClipSegment)?.let { seg -> Tool(Icons.Rounded.Hearing, "Read again", n++) { vm.readAgain(seg.bit.momentId) } }
-                                val off = !s.options.captions
-                                Tool(if (off) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, if (off) "Show captions" else "Hide captions", n++, on = off) { vm.setOptions { o -> o.copy(captions = off) } }
-                                Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete caption") { TimelineEdits.caption(it, p.index, p.line, "") }; vm.pick(null) }
-                            }
-                            is TimelinePick.Text -> {
-                                val t = plan.texts.firstOrNull { it.id == p.id }
-                                Tool(Icons.Rounded.Edit, "Edit", n++) { active.pause(); typingId = p.id; typing = true }
-                                Tool(Icons.Rounded.Animation, "In: ${(t?.animIn ?: TextAnim.FADE).label}", n++) {
-                                    val ai = t?.animIn ?: TextAnim.FADE
-                                    vm.change("Text in") { TextTools.anim(it, p.id, animIn = TextAnim.entries[(ai.ordinal + 1) % TextAnim.entries.size]) }
-                                }
-                                Tool(Icons.Rounded.Animation, "Out: ${(t?.animOut ?: TextAnim.FADE).label}", n++) {
-                                    val ao = t?.animOut ?: TextAnim.FADE
-                                    vm.change("Text out") { TextTools.anim(it, p.id, animOut = TextAnim.entries[(ao.ordinal + 1) % TextAnim.entries.size]) }
-                                }
-                                Tool(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier", n++) { vm.change("Text time") { TimelineEdits.moveText(it, p.id, -500) } }
-                                Tool(Icons.Rounded.KeyboardDoubleArrowRight, "Later", n++) { vm.change("Text time") { TimelineEdits.moveText(it, p.id, 500) } }
-                                Tool(Icons.Rounded.UnfoldLess, "Shorter", n++) { vm.change("Text length") { TimelineEdits.resizeText(it, p.id, -500) } }
-                                Tool(Icons.Rounded.UnfoldMore, "Longer", n++) { vm.change("Text length") { TimelineEdits.resizeText(it, p.id, 500) } }
-                                val hid = t?.hidden == true
-                                Tool(if (hid) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, if (hid) "Show" else "Hide", n++, on = hid) { vm.change(if (hid) "Show text" else "Hide text") { TrackEdits.hideText(it, p.id, !hid) } }
-                                Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete text") { TimelineEdits.deleteText(it, p.id) }; vm.pick(null) }
-                            }
-                            is TimelinePick.Sticker -> {
-                                val st = plan.stickers.firstOrNull { it.id == p.id }
-                                if (st?.kind == StickerKind.EMOJI) Tool(Icons.Rounded.EmojiEmotions, "Change", n++) { addSticker = true }
-                                Tool(Icons.Rounded.ZoomOut, "Smaller", n++) { vm.change("Sticker size") { TextTools.scaleSticker(it, p.id, 0.85f) } }
-                                Tool(Icons.Rounded.ZoomIn, "Bigger", n++) { vm.change("Sticker size") { TextTools.scaleSticker(it, p.id, 1.18f) } }
-                                Tool(Icons.Rounded.RotateRight, "Turn", n++) { vm.change("Turn sticker") { TextTools.rotateSticker(it, p.id, 15f) } }
-                                Tool(Icons.Rounded.ContentCopy, "Duplicate", n++) { st?.let { vm.addSticker(it.kind, it.text) } }
-                                Tool(Icons.Rounded.KeyboardDoubleArrowLeft, "Earlier", n++) { vm.change("Sticker time") { TextTools.shiftSticker(it, p.id, -500) } }
-                                Tool(Icons.Rounded.KeyboardDoubleArrowRight, "Later", n++) { vm.change("Sticker time") { TextTools.shiftSticker(it, p.id, 500) } }
-                                Tool(Icons.Rounded.UnfoldLess, "Shorter", n++) { vm.change("Sticker length") { TextTools.resizeStickerTime(it, p.id, -500) } }
-                                Tool(Icons.Rounded.UnfoldMore, "Longer", n++) { vm.change("Sticker length") { TextTools.resizeStickerTime(it, p.id, 500) } }
-                                val hid = st?.hidden == true
-                                Tool(if (hid) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, if (hid) "Show" else "Hide", n++, on = hid) { vm.change(if (hid) "Show sticker" else "Hide sticker") { TrackEdits.hideSticker(it, p.id, !hid) } }
-                                Tool(Icons.Rounded.Delete, "Delete", n++, danger = true) { vm.change("Delete sticker") { TextTools.deleteSticker(it, p.id) }; vm.pick(null) }
-                            }
-                            else -> Unit
-                        }
-                    }
                 }
             }
             Text(
@@ -2203,6 +2286,98 @@ private fun pickerOrder(vibe: Vibe): List<TransitionKind> {
 }
 
 /** A mark for each transition, on the timeline and in the picker. */
+/** One tool bar icon: an action, a parent with its own set ([kids]), or a value ([slider]). */
+private class TNode(
+    val icon: ImageVector,
+    val label: String,
+    val danger: Boolean = false,
+    val on: Boolean = false,
+    val enabled: Boolean = true,
+    val kids: List<TNode>? = null,
+    val slider: TSlider? = null,
+    val action: (() -> Unit)? = null,
+)
+
+private class TSlider(val value: Float, val range: ClosedFloatingPointRange<Float>, val format: (Float) -> String, val onChange: (Float) -> Unit, val onEnd: () -> Unit)
+
+/**
+ * The tool bar: where you are ("Add › Sticker"), ‹ fixed on the left to go back, and at most 5
+ * icons spread across the width (never scrolling). A parent (small corner mark) opens its set; a
+ * value opens a slider in place of the icons.
+ */
+@Composable
+private fun ToolBar(top: List<TNode>, path: List<Int>, onPath: (List<Int>) -> Unit, label: String) {
+    var level = top
+    val names = ArrayList<String>()
+    var open: TNode? = null
+    for (k in path) {
+        val n = level.getOrNull(k) ?: break
+        names += n.label
+        if (n.kids != null) level = n.kids else { open = n; break }
+    }
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp)) {
+        Text(
+            if (names.isEmpty()) label else names.joinToString(" › "),
+            style = RtType.caption, color = RtColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 44.dp, bottom = 4.dp),
+        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(40.dp).height(48.dp), contentAlignment = Alignment.Center) {
+                if (path.isNotEmpty()) {
+                    IconButton(onClick = { onPath(path.dropLast(1)) }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = RtColors.TextPrimary) }
+                }
+            }
+            val sl = open?.slider
+            if (sl != null) {
+                var v by remember(open) { mutableFloatStateOf(sl.value) }
+                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                    Row {
+                        Text(open.label, style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
+                        Text(sl.format(v), style = RtType.caption, color = RtColors.TextPrimary)
+                    }
+                    androidx.compose.material3.Slider(
+                        value = v, onValueChange = { v = it; sl.onChange(it) }, onValueChangeFinished = sl.onEnd, valueRange = sl.range,
+                        colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = RtColors.Primary, activeTrackColor = RtColors.Primary),
+                    )
+                }
+            } else {
+                Row(Modifier.weight(1f)) {
+                    level.take(5).forEachIndexed { k, n ->
+                        TreeTool(n, Modifier.weight(1f)) {
+                            when {
+                                n.kids != null || n.slider != null -> onPath(path + k)
+                                else -> n.action?.invoke()
+                            }
+                        }
+                    }
+                    repeat((5 - level.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TreeTool(n: TNode, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.alpha(if (n.enabled) 1f else 0.35f).clickable(enabled = n.enabled, role = Role.Button, onClickLabel = if (n.kids != null) "Open" else null, onClick = onClick).padding(vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box(
+            Modifier.size(48.dp, 40.dp).clip(RoundedCornerShape(12.dp))
+                .background(if (n.on) RtColors.Primary.copy(alpha = 0.25f) else RtColors.Surface),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(n.icon, contentDescription = null, tint = if (n.danger) RtColors.Error else RtColors.TextPrimary, modifier = Modifier.size(20.dp))
+            if (n.kids != null || n.slider != null) {
+                Box(Modifier.align(Alignment.BottomEnd).padding(4.dp).size(5.dp).clip(RoundedCornerShape(1.dp)).background(RtColors.TextTertiary))
+            }
+        }
+        Text(n.label, style = RtType.caption, color = if (n.danger) RtColors.Error else RtColors.TextPrimary, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center, overflow = TextOverflow.Ellipsis)
+    }
+}
+
 /** Ride moments on the timeline: a glyph and a colour each. */
 private val MARK_LOOK = mapOf(
     RideMark.Kind.DOWNSHIFT to ("⬇" to Color(0xFFE7792B)),

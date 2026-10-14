@@ -89,6 +89,16 @@ object TimelineEdits {
         return normalize(plan.copy(segments = plan.segments.toMutableList().also { it.removeAt(i); it.addAll(i, parts) }))
     }
 
+    /** The whole recording back in the clip ("Use all"): from its first frame to its last. */
+    fun useAll(plan: StudioPlan, i: Int): StudioPlan {
+        val s = clip(plan, i) ?: return plan
+        if (s.still != null) return plan
+        val f = Speed.outPerSource(s.speed, s.ramp)
+        val dur = (s.bit.clipDurationMs * f).toLong().coerceAtLeast(MIN_MS)
+        val lines = s.bit.lines.map { it.copy(startMs = (it.startMs * f).toLong(), endMs = (it.endMs * f).toLong()) }.filter { it.startMs < dur }
+        return normalize(with(plan, i, s.copy(inMs = 0, durMs = dur, lines = lines)))
+    }
+
     /** Cuts the clip under [atMs] in two (each part at least [MIN_MS]). */
     fun split(plan: StudioPlan, atMs: Long): StudioPlan {
         val (i, local) = at(plan, atMs)
