@@ -115,6 +115,8 @@ object Routes {
     fun series(id: String) = "studio-series/$id"
     /** Studio › Search: what was said or seen in every clip. */
     const val STUDIO_SEARCH = "studio-search"
+    /** Keppo Moto Pro: the paywall. */
+    const val PAYWALL = "pro"
     /** Studio with videos from the phone only (no ride). */
     const val STUDIO_PHONE = "studio-phone?reel={reel}&edit={edit}"
     fun studioPhone(reelId: String?, edit: Boolean = false) = "studio-phone" + (reelId?.let { "?reel=$it" + if (edit) "&edit=true" else "" } ?: "")
@@ -249,7 +251,11 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
                         onOpenPage = { nav.navigate(Routes.profilePage(it)) },
                         onOpenHudSettings = { nav.navigate(Routes.HUD_SETTINGS) },
                         onOpenRecentlyDeleted = { nav.navigate(Routes.recentlyDeleted()) },
+                        onOpenPaywall = { nav.navigate(Routes.PAYWALL) },
                     )
+                }
+                composable(Routes.PAYWALL) {
+                    DarkRoute { com.ridetrack.app.ui.pro.PaywallScreen(onClose = { nav.popBackStack() }) }
                 }
                 composable(
                     Routes.RECENTLY_DELETED,
