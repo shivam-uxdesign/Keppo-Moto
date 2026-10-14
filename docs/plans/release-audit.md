@@ -142,10 +142,10 @@ No photo or video library permissions (the system picker is used). Good.
 - **Warnings shown:** storage problem; no contacts.
 
 **Findings:**
-1. **High.** Failed crash texts (no signal) are never retried. Fix: retry every 30 s for up to 15 min, show it on the alert screen, and the same for location updates.
-2. **Medium.** With no GPS fix yet, the text says "Location unknown". Fix: the last known location from any provider, with its age.
-3. **Medium.** Phone numbers in the system log on SMS failure (`SmsSender`). Fix: drop them.
-4. **Medium, rider's call.** The phone flying off the mount while riding looks like a crash; contacts are texted while the rider rides on. Suggestion: free-fall before the impact gives a 60 s countdown and "the phone may have fallen off the bike" in the text.
+1. **High, fixed 14 Oct.** Failed crash texts (no signal) are never retried. Fix: retry every 30 s for up to 15 min, show it on the alert screen, and the same for location updates.
+2. **Medium, fixed 14 Oct.** With no GPS fix yet, the text says "Location unknown". Fix: the last known location from any provider, with its age.
+3. **Medium, fixed 14 Oct.** Phone numbers in the system log on SMS failure (`SmsSender`). Fix: drop them.
+4. **Dropped by the rider.** The phone flying off the mount while riding looks like a crash; contacts are texted while the rider rides on. Suggestion: free-fall before the impact gives a 60 s countdown and "the phone may have fallen off the bike" in the text.
 5. **Low, accepted.** A pothole, then a still stop with the engine off within 15 s, may alarm; the countdown covers it.
 6. **Low, accepted.** Unsaved data stays in memory while storage is full (small).
 

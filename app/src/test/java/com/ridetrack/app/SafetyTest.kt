@@ -82,4 +82,16 @@ class SafetyTest {
         val text = AlertMessage.crash(report.copy(medical = MedicalInfo(bloodGroup = "B−")), ZoneOffset.UTC)
         assertEquals(true, text.all { it.code < 128 }, text)
     }
+
+    @Test
+    fun `with no GPS fix, the phone's last known place is sent with its age`() {
+        val old = report.copy(locationAgeMillis = 4 * 60_000L, accuracyM = null)
+        assertEquals(
+            "Keppo Moto: possible crash. Shivam on Pulsar NS200 at 9:21 AM, 1 Oct. Last speed 54 km/h. " +
+                "Last known location (4 min before): https://maps.google.com/?q=12.97164,77.59456. Battery 62%. Blood group B+, allergies: penicillin.",
+            AlertMessage.crash(old, ZoneOffset.UTC),
+        )
+        // Under a minute old reads as current.
+        assertEquals(true, " Location: " in AlertMessage.crash(report.copy(locationAgeMillis = 20_000L), ZoneOffset.UTC))
+    }
 }

@@ -18,6 +18,8 @@ data class CrashReport(
     val riderName: String,
     val batteryPercent: Int?,
     val medical: MedicalInfo,
+    /** How old the location is when it's the phone's last known place (no GPS fix yet); null = current. */
+    val locationAgeMillis: Long? = null,
 )
 
 /**
@@ -37,7 +39,10 @@ object AlertMessage {
         append(" at ").append(time.format(Instant.ofEpochMilli(r.timeMillis).atZone(zone))).append('.')
         r.speedBeforeMps?.let { append(" Last speed ").append((it * 3.6).roundToInt()).append(" km/h.") }
         if (r.latitude != null && r.longitude != null) {
-            append(" Location: ").append(mapsLink(r.latitude, r.longitude))
+            val age = r.locationAgeMillis?.takeIf { it >= 60_000L }
+            if (age != null) append(" Last known location (").append(ageText(age)).append(" before): ")
+            else append(" Location: ")
+            append(mapsLink(r.latitude, r.longitude))
             r.accuracyM?.let { append(" (within ").append(it.roundToInt()).append(" m)") }
             append('.')
         } else {
@@ -51,6 +56,12 @@ object AlertMessage {
         "Keppo Moto: updated location at ${time.format(Instant.ofEpochMilli(timeMillis).atZone(zone))}: ${mapsLink(lat, lon)}"
 
     fun allClear(riderName: String): String = "Keppo Moto: ${riderName.ifBlank { "The rider" }} says they're OK. Sorry for the scare."
+
+    /** "4 min", "2 h". */
+    private fun ageText(ms: Long): String {
+        val min = (ms / 60_000L).coerceAtLeast(1)
+        return if (min < 120) "$min min" else "${min / 60} h"
+    }
 
     private fun medical(m: MedicalInfo): String? {
         val parts = listOfNotNull(

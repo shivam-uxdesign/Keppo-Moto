@@ -247,12 +247,17 @@ private fun Sent(s: CrashAlertState.Sent, onAllClear: () -> Unit, onClose: () ->
                         when {
                             statuses.any { it is SmsStatus.Sending } -> "Sending alert…"
                             statuses.any { it is SmsStatus.Sent } -> "Alert sent"
+                            s.retrying -> "No signal yet · trying again"
                             else -> "Alert not sent"
                         },
                         fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Color.White,
                     )
                     Text(
-                        if (s.allClearSent) "You told them you're OK" else "They'll get one update if you're moved",
+                        when {
+                            s.allClearSent -> "You told them you're OK"
+                            s.retrying -> "Texts that didn't go are tried every 30 s for 15 minutes"
+                            else -> "They'll get one update if you're moved"
+                        },
                         fontSize = 12.sp, color = RtColors.TextSecondary,
                     )
                 }

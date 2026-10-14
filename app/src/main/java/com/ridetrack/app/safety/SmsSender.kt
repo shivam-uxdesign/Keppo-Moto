@@ -72,7 +72,8 @@ class SmsSender(private val context: Context) {
             }
             manager.sendMultipartTextMessage(phone, null, parts, sent, null)
         } catch (e: Exception) {
-            Log.e(TAG, "SMS to $phone failed", e)
+            // No number in the log: it's the rider's contact's.
+            Log.e(TAG, "SMS failed", e)
             onResult(SmsStatus.Failed(e.message ?: "Couldn't send"))
         }
     }

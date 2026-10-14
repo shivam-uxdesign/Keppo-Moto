@@ -39,7 +39,16 @@ sealed interface CrashAlertState {
     val contacts: List<EmergencyContact>
 
     data class Countdown(override val report: CrashReport, override val contacts: List<EmergencyContact>, val deadlineMillis: Long) : CrashAlertState
-    data class Sent(override val report: CrashReport, override val contacts: List<EmergencyContact>, val delivered: Map<String, SmsStatus>, val message: String, val sentAtMillis: Long, val allClearSent: Boolean = false) : CrashAlertState
+    data class Sent(
+        override val report: CrashReport,
+        override val contacts: List<EmergencyContact>,
+        val delivered: Map<String, SmsStatus>,
+        val message: String,
+        val sentAtMillis: Long,
+        val allClearSent: Boolean = false,
+        /** Some texts haven't gone yet (no signal): they're tried again every 30 s. */
+        val retrying: Boolean = false,
+    ) : CrashAlertState
     data class Cancelled(override val report: CrashReport, override val contacts: List<EmergencyContact>) : CrashAlertState
 }
 
@@ -63,6 +72,8 @@ class CrashAlerts(
     private var ringtone: Ringtone? = null
     private val sms = SmsSender(context)
     private var nagging: Job? = null
+    /** Texts being tried again after failing (no signal at the crash site, say). */
+    private val retries = ArrayList<Job>()
     private val overlay by lazy { CrashAlertOverlay(context, this) }
 
     fun start() {
@@ -77,8 +88,14 @@ class CrashAlerts(
         scope.launch {
             val safety = settings.settings.first().safety
             val contacts = safety.contacts
+            // No fix yet (just started, a tunnel): the phone's last known place, with its age.
+            val place = if (report.latitude == null || report.longitude == null) LastKnownPlace.of(context) else null
             val withBattery = report.copy(
                 batteryPercent = report.batteryPercent ?: battery.current()?.percent,
+                latitude = place?.latitude ?: report.latitude,
+                longitude = place?.longitude ?: report.longitude,
+                accuracyM = place?.accuracyM ?: report.accuracyM,
+                locationAgeMillis = place?.ageMillis ?: report.locationAgeMillis,
                 riderName = report.riderName.ifBlank { safety.riderName },
                 medical = if (report.medical.isEmpty) safety.medical else report.medical,
             )
@@ -111,9 +128,10 @@ class CrashAlerts(
         stopAlarm()
         val text = AlertMessage.crash(s.report)
         _state.value = CrashAlertState.Sent(s.report, s.contacts, s.contacts.associate { it.phone to SmsStatus.Sending }, text, System.currentTimeMillis())
+        cancelRetries()
         s.contacts.forEach { c ->
-            sms.send(c.phone, text) { status ->
-                if (status is SmsStatus.Failed) Log.w(TAG, "Alert to ${c.name} not sent: ${status.reason}")
+            sendRetrying(c.phone, text) { status ->
+                if (status is SmsStatus.Failed) Log.w(TAG, "An alert text wasn't sent: ${status.reason}")
                 _state.update { st -> if (st is CrashAlertState.Sent) st.copy(delivered = st.delivered + (c.phone to status)) else st }
             }
         }
@@ -125,9 +143,46 @@ class CrashAlerts(
     fun allClear() {
         val s = _state.value as? CrashAlertState.Sent ?: return
         followUp?.cancel()
+        // An alert still waiting for signal no longer needs to go; tell those it reached.
+        cancelRetries()
         val name = s.report.riderName
-        s.contacts.forEach { sms.send(it.phone, AlertMessage.allClear(name)) }
-        _state.value = s.copy(allClearSent = true)
+        val reached = s.contacts.filter { s.delivered[it.phone] == SmsStatus.Sent }
+        reached.forEach { sendRetrying(it.phone, AlertMessage.allClear(name)) }
+        _state.value = s.copy(allClearSent = true, retrying = false)
+    }
+
+    /**
+     * Sends [text] to [phone], and if it fails (no signal, network busy) tries again every 30 s
+     * for up to 15 minutes: a crash site often has no signal for a while. [onStatus] gets every
+     * attempt's outcome.
+     */
+    private fun sendRetrying(phone: String, text: String, onStatus: (SmsStatus) -> Unit = {}) {
+        val job = scope.launch {
+            val until = System.currentTimeMillis() + RETRY_FOR_MILLIS
+            while (true) {
+                val status = sms.sendAndWait(phone, text)
+                val again = status is SmsStatus.Failed && sms.canSend() && System.currentTimeMillis() + RETRY_EVERY_MILLIS < until
+                onStatus(if (again) SmsStatus.Failed((status as SmsStatus.Failed).reason + " · trying again") else status)
+                if (!again) break
+                markRetrying()
+                delay(RETRY_EVERY_MILLIS)
+            }
+        }
+        synchronized(retries) { retries += job }
+        job.invokeOnCompletion {
+            synchronized(retries) { retries -= job }
+            markRetrying()
+        }
+    }
+
+    private fun markRetrying() {
+        val any = synchronized(retries) { retries.any { it.isActive } }
+        _state.update { st -> if (st is CrashAlertState.Sent && st.retrying != any) st.copy(retrying = any) else st }
+    }
+
+    private fun cancelRetries() {
+        val jobs = synchronized(retries) { retries.toList().also { retries.clear() } }
+        jobs.forEach { it.cancel() }
     }
 
     /** The screen was closed. */
@@ -169,7 +224,7 @@ class CrashAlerts(
             val moved = lat0 == null || lon0 == null || Geo.distanceM(lat0, lon0, lat, lon) > FOLLOW_UP_METERS
             if (moved) {
                 val text = AlertMessage.update(lat, lon, System.currentTimeMillis())
-                s.contacts.forEach { sms.send(it.phone, text) }
+                s.contacts.forEach { sendRetrying(it.phone, text) }
                 return
             }
         }
@@ -274,5 +329,8 @@ class CrashAlerts(
         private const val FOLLOW_UP_METERS = 100.0
         /** How often the notification pops up again while the alert can't take over the screen. */
         private const val NAG_MILLIS = 10_000L
+        /** A text that didn't go is tried again this often, for this long. */
+        private const val RETRY_EVERY_MILLIS = 30_000L
+        private const val RETRY_FOR_MILLIS = 15 * 60_000L
     }
 }
