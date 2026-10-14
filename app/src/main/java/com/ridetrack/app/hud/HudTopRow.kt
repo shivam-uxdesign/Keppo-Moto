@@ -35,6 +35,8 @@ object HudTopRow {
         val photoTaken = data.photoTakenAtMillis
         val filming = if (data.phoneMic) Tone.PHONE else Tone.REC
         return when {
+            // Waking the camera (from rest, or the first moments of a video): never a silent grey.
+            video != null && video.starting -> Label("cam · starting", filming)
             video != null -> Label("cam " + clock(video.elapsedMillis) + if (video.back) " · back" else "", if (video.paused) Tone.WARNING else filming)
             clipStart != null -> Label("cam " + clock(now - clipStart), filming)
             photoAt != null && now < photoAt -> Label(((photoAt - now + 999) / 1000).coerceIn(1, 3).toString(), Tone.ACCENT)

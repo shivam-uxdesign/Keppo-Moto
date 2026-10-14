@@ -113,6 +113,8 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
     val s by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(s.leave) { if (s.leave) onLeave() }
     LaunchedEffect(s.step) { onStep(s.step) }
+    // Asked for on the Studio tab: it runs as soon as this ride's Studio has loaded.
+    LaunchedEffect(s.loading) { if (!s.loading) vm.runPendingAsk() }
     // Making a video takes a while: keep the screen on so the phone doesn't sleep through it.
     val view = LocalView.current
     DisposableEffect(s.step) {

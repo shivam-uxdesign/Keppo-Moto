@@ -50,6 +50,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -470,14 +475,49 @@ internal fun StudioHomeContent(
             }
             if (ideas.isNotEmpty()) Text("Swipe up for the next idea · left to hide · hold for options", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp))
             // ---- ask for something
+            // Typed right here; sending opens this ride's Studio, which runs it straight away.
+            val studioPrefs = com.ridetrack.app.ui.appContainer().studio
+            var ask by remember(ride.id) { mutableStateOf("") }
+            val send = {
+                val t = ask.trim()
+                if (t.isNotEmpty()) {
+                    studioPrefs.rememberAsk(t)
+                    studioPrefs.setPendingAsk(ride.id, t)
+                    ask = ""
+                    onOpenRide(ride.id)
+                }
+            }
             Row(
-                Modifier.fillMaxWidth().padding(vertical = 10.dp).height(48.dp).clip(RoundedCornerShape(24.dp)).background(RtColors.Surface)
-                    .border(1.dp, RtColors.Outline, RoundedCornerShape(24.dp)).clickable(role = Role.Button) { onOpenRide(ride.id) }.padding(horizontal = 16.dp),
+                Modifier.fillMaxWidth().padding(vertical = 10.dp).heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(RtColors.Surface)
+                    .border(1.dp, RtColors.Outline, RoundedCornerShape(24.dp)).padding(start = 16.dp, end = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = RtColors.Primary, modifier = Modifier.size(18.dp))
-                Text("Ask for something, e.g. \"15 s, funny, the water\"", style = RtType.body, color = RtColors.TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                androidx.compose.foundation.text.BasicTextField(
+                    value = ask,
+                    onValueChange = { ask = it.take(300) },
+                    textStyle = RtType.body.copy(color = RtColors.TextPrimary),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(RtColors.Primary),
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Send,
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { send() }),
+                    modifier = Modifier.weight(1f).padding(vertical = 12.dp).semantics { contentDescription = "Ask for something for this ride" },
+                    decorationBox = { field ->
+                        Box {
+                            if (ask.isEmpty()) Text("Ask for something, e.g. \"15 s, funny, the water\"", style = RtType.body, color = RtColors.TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            field()
+                        }
+                    },
+                )
+                if (ask.isNotBlank()) {
+                    IconButton(onClick = { send() }) {
+                        Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Make it", tint = RtColors.Primary)
+                    }
+                }
             }
         }
 

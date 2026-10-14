@@ -494,7 +494,16 @@ class RideSessionManager(
         }
         val margin = sensitivity.marginDb
         val wasSpeaking = rec.speech.speaking
-        levels.forEach { c -> rec.speech.onLevel(c.timeMillis, c.aboveDb, c.chunkMillis, margin, c.voice) }
+        // In wind the margin and the voice bar come down (VoiceInWind); with two mics the helmet
+        // mic standing out from the engine mic counts as loud too.
+        levels.forEach { c ->
+            val wind = com.ridetrack.telemetry.moments.VoiceInWind.wind(c.backgroundDb)
+            rec.speech.onLevel(
+                c.timeMillis, c.aboveDb, c.chunkMillis,
+                com.ridetrack.telemetry.moments.VoiceInWind.margin(margin, wind), c.voice,
+                com.ridetrack.telemetry.moments.VoiceInWind.voiceMin(wind), c.liftDb,
+            )
+        }
         momentsHub.setSpeaking(rec.speech.speaking)
         logVoice(rec, frame, levels, wasSpeaking, margin)
         val last = rec.speech.lastSpeechMillis ?: return
@@ -568,7 +577,10 @@ class RideSessionManager(
             val peak = levels.maxOf { it.aboveDb }
             momentsHub.log(
                 "mic: level ${db(latest.levelDb)} · background ${db(latest.backgroundDb)} (+${db(latest.aboveDb, false)}, peak +${db(peak, false)}) · " +
-                    "voice ${"%.2f".format(Locale.US, levels.maxOf { it.voice })} · margin +${margin.roundToInt()} dB · ${if (speaking) "speaking" else "quiet"} · $speed",
+                    "voice ${"%.2f".format(Locale.US, levels.maxOf { it.voice })} · margin +${margin.roundToInt()} dB · " +
+                    "wind ${"%.2f".format(Locale.US, com.ridetrack.telemetry.moments.VoiceInWind.wind(latest.backgroundDb))}" +
+                    (levels.mapNotNull { it.liftDb }.maxOrNull()?.let { " · lift +${it.roundToInt()} dB" } ?: "") +
+                    " · ${if (speaking) "speaking" else "quiet"} · $speed",
             )
         }
     }

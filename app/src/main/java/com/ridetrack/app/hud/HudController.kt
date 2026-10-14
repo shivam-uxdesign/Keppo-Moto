@@ -1,5 +1,6 @@
 package com.ridetrack.app.hud
 
+import com.ridetrack.telemetry.moments.VoiceInWind
 import android.content.Context
 import androidx.compose.ui.graphics.asImageBitmap
 import com.ridetrack.app.moments.MomentSource
@@ -147,6 +148,12 @@ class HudController(
         }
 
         scope.launch {
+            // A video was asked for (your voice, an event) but the camera didn't start: say so,
+            // so a grey badge never leaves you guessing.
+            moments.liveFailed.collect { at -> if (at != null) note.value = "Camera didn't start · it'll try on the next moment" to at }
+        }
+
+        scope.launch {
             // Riding off after a break: say so briefly under the pop-up.
             var wasOnBreak = false
             session.frame.map { it?.onBreak == true }.distinctUntilChanged().collect { onBreak ->
@@ -189,8 +196,14 @@ class HudController(
             d.copy(savedNote = d.savedNote ?: shot)
         }.copy(
             voiceOn = voice.value.first && session.active.value?.moments != null,
-            micLevelDb = moments.micLevel.value,
-            voiceMarginDb = voice.value.second.marginDb,
+            // The meter shows what the speech check uses: the mark comes down in wind, and with
+            // two mics the helmet mic standing out from the engine mic fills the bar too.
+            micLevelDb = run {
+                val margin = VoiceInWind.margin(voice.value.second.marginDb, moments.wind.value)
+                val fromLift = moments.micLift.value?.let { it / VoiceInWind.LIFT_DB * margin }
+                listOfNotNull(moments.micLevel.value, fromLift).maxOrNull()
+            },
+            voiceMarginDb = VoiceInWind.margin(voice.value.second.marginDb, moments.wind.value),
             speaking = moments.speaking.value,
             twoMics = moments.twoMics.value,
         )

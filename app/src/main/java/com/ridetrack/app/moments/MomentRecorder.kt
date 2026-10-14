@@ -889,6 +889,7 @@ class MomentRecorder(
         val recording = rec
         if (!started || recording == null) {
             log.error("video not started: camera not ready (encoder=${encoderInfo()}, reasons=$reasons)")
+            hub.reportLiveFailed()
             recording?.finish()
             viewfinderWanted = false
             wantBack = false

@@ -511,6 +511,12 @@ class StudioViewModel(
     /** Whether Gemini can be asked for a new idea here (a ride's Studio, not phone videos only). */
     val canAsk: Boolean get() = card != null
 
+    /** An ask typed on the Studio tab for this ride: run once the ride's Studio is ready. */
+    fun runPendingAsk() {
+        if (_state.value.loading || card == null || job?.isActive == true) return
+        c.studio.takePendingAsk(rideId)?.let { ask(it) }
+    }
+
     /** Asks Gemini for [text]; the new idea is made, or with [open] opened in the editor instead. */
     fun ask(text: String, open: Boolean = false) {
         val t = text.trim()

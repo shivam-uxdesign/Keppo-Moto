@@ -417,7 +417,7 @@ private fun DeveloperPage(s: ProfileUiState, vm: ProfileViewModel) {
             vm::setJournalShareDemo,
         )
     }
-    if (BuildConfig.DEBUG) BetaExportSection()
+    if (BuildConfig.DEBUG || BuildConfig.TEST_BUILD) BetaExportSection()
     if (BuildConfig.TEST_BUILD) {
         // Try the app as a free rider would see it (no Gemini, no automatic Reels).
         val ent = com.ridetrack.app.ui.appContainer().entitlements

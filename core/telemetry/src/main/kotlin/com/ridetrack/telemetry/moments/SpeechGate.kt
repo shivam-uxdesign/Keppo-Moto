@@ -11,7 +11,7 @@ package com.ridetrack.telemetry.moments
  * Pure; fed with each chunk's level above background, and its length.
  */
 class SpeechGate(
-    private val startMillis: Long = 1_500L,
+    private val startMillis: Long = 1_000L,
     private val startFraction: Double = 0.6,
     private val maxGapMillis: Long = 250L,
     private val keepFraction: Double = 0.15,
@@ -31,9 +31,23 @@ class SpeechGate(
     var sustainedMillis: Long = 0
         private set
 
-    /** [voice]: how voice-like the chunk is (0..1, from Silero); 1 when there's no detector. */
-    fun onLevel(timeMillis: Long, aboveDb: Float, chunkMillis: Long, marginDb: Float, voice: Float = 1f): Boolean {
-        val loud = aboveDb >= marginDb && voice >= VOICE_MIN
+    /**
+     * [voice]: how voice-like the chunk is (0..1, from Silero); 1 when there's no detector.
+     * [voiceMin]: how voice-like it must be (lower in wind, see [VoiceInWind]).
+     * [liftDb]: with two mics, how much louder the helmet mic is than usual next to the engine
+     * mic; wind and traffic reach both, a voice mostly the helmet one ([TwoMicLift]).
+     */
+    fun onLevel(
+        timeMillis: Long,
+        aboveDb: Float,
+        chunkMillis: Long,
+        marginDb: Float,
+        voice: Float = 1f,
+        voiceMin: Float = VOICE_MIN,
+        liftDb: Float? = null,
+    ): Boolean {
+        val heard = aboveDb >= marginDb || (liftDb != null && liftDb >= VoiceInWind.LIFT_DB)
+        val loud = heard && voice >= voiceMin
         recent.addLast(Triple(timeMillis, chunkMillis, loud))
         while (recent.isNotEmpty() && timeMillis - recent.first().first >= startMillis) recent.removeFirst()
         val last = lastLoud
@@ -49,7 +63,8 @@ class SpeechGate(
         speaking = if (wasSpeaking) {
             loudMillis >= keepFraction * startMillis
         } else {
-            start != null && timeMillis - start >= startMillis && loudMillis >= startFraction * startMillis
+            // Measured to the last loud chunk: the short pause after a sound doesn't make it longer.
+            start != null && (lastLoud ?: timeMillis) - start >= startMillis && loudMillis >= startFraction * startMillis
         }
         if (speaking && !wasSpeaking && start != null) sustainedMillis = timeMillis - start
         // The silence timer runs from the last loud chunk, not from when the window empties.

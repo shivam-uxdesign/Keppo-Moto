@@ -80,4 +80,12 @@ class HudTopRowTest {
         assertEquals(HudTopRow.Label("cam 00:12", Tone.REC), HudTopRow.right(data(video = v)))
         assertEquals(Tone.PHONE, HudTopRow.right(data(clipStart = 90_000).copy(phoneMic = true)).tone)
     }
+
+    @Test
+    fun `a video waking the camera says so in red, not grey`() {
+        val v = HudVideo(MomentSource.EVENT, starting = true, paused = false, elapsedMillis = 0)
+        val r = HudTopRow.right(data().copy(video = v, camera = CameraIndicator.OFF))
+        assertEquals("cam · starting", r.text)
+        assertEquals(HudTopRow.Tone.REC, r.tone)
+    }
 }

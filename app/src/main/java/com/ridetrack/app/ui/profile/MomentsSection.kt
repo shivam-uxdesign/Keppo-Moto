@@ -587,9 +587,9 @@ private fun VoiceLevel(sensitivity: VoiceSensitivity, mic: String?, rideActive: 
         Text(
             when {
                 !canListen -> "Allow the microphone to see the level."
-                level == null -> "Films at +${sensitivity.marginDb.roundToInt()} dB over the background, held about 1.5 s"
+                level == null -> "Films at +${sensitivity.marginDb.roundToInt()} dB over the background, held about 1 s"
                 speaking -> "Films now · +${level.roundToInt()} dB over the background"
-                else -> "+${level.roundToInt()} dB over the background · films at +${sensitivity.marginDb.roundToInt()} dB, held about 1.5 s"
+                else -> "+${level.roundToInt()} dB over the background · films at +${sensitivity.marginDb.roundToInt()} dB, held about 1 s"
             },
             style = RtType.caption,
             color = if (speaking) RtColors.Primary else RtColors.TextSecondary,

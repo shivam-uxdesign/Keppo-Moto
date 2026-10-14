@@ -138,6 +138,14 @@ class MomentsHub {
         return true
     }
 
+    private val _liveFailed = MutableStateFlow<Long?>(null)
+    /** When a video was asked for but the camera didn't start (for a note on the HUD). */
+    val liveFailed: StateFlow<Long?> = _liveFailed.asStateFlow()
+
+    fun reportLiveFailed() {
+        _liveFailed.value = System.currentTimeMillis()
+    }
+
     fun setLive(state: LiveState?) {
         _live.value = state
     }
@@ -190,6 +198,10 @@ class MomentsHub {
         publish()
     }
 
+    private val _micLift = MutableStateFlow<Float?>(null)
+    /** With two mics: how much the helmet mic stands out from the engine mic now (dB); null with one mic. */
+    val micLift: StateFlow<Float?> = _micLift.asStateFlow()
+
     private val _twoMics = MutableStateFlow<TwoMicLevels?>(null)
     /** Both mics' loudness while a two-channel receiver records (null otherwise). */
     val twoMics: StateFlow<TwoMicLevels?> = _twoMics.asStateFlow()
@@ -197,7 +209,16 @@ class MomentsHub {
     /** From the audio thread: each mic's loudness (dBFS) and what's known about them. */
     fun reportTwo(voiceDb: Float, engineDb: Float, kind: TwoMicKind) {
         _twoMics.value = TwoMicLevels(voiceDb, engineDb, kind)
+        // Only two really different mics say anything about who's talking.
+        lift = if (kind == TwoMicKind.TWO) twoMicLift.onLevels(System.currentTimeMillis(), voiceDb, engineDb) else null
     }
+
+    private val twoMicLift = com.ridetrack.telemetry.moments.TwoMicLift()
+    @Volatile private var lift: Float? = null
+
+    private val _wind = MutableStateFlow(0f)
+    /** How windy the mic is now: 0 calm .. 1 heavy wind (from the background level), for the HUD's mark. */
+    val wind: StateFlow<Float> = _wind.asStateFlow()
 
     private val _micLevel = MutableStateFlow<Float?>(null)
     /** Mic loudness in the voice range, in dB above the background noise (null while no mic is open). */
@@ -218,11 +239,13 @@ class MomentsHub {
     fun reportLevel(timeMillis: Long, levelDb: Float, chunkMillis: Long, voice: Float) {
         val chunk = synchronized(levels) {
             val bg = background.onLevel(timeMillis, levelDb)
-            VoiceChunk(timeMillis, levelDb, bg, chunkMillis, voice).also {
+            VoiceChunk(timeMillis, levelDb, bg, chunkMillis, voice, lift).also {
                 levels += it
                 if (levels.size > MAX_LEVELS) levels.subList(0, levels.size - MAX_LEVELS).clear()
             }
         }
+        _wind.value = com.ridetrack.telemetry.moments.VoiceInWind.wind(chunk.backgroundDb)
+        _micLift.value = chunk.liftDb
         _micLevel.value = chunk.aboveDb
     }
 
@@ -230,6 +253,10 @@ class MomentsHub {
 
     fun clearLevel() {
         _micLevel.value = null
+        _micLift.value = null
+        _wind.value = 0f
+        lift = null
+        twoMicLift.reset()
         _twoMics.value = null
         synchronized(levels) {
             levels.clear()
@@ -311,6 +338,10 @@ enum class TwoMicKind {
 data class TwoMicLevels(val voiceDb: Float, val engineDb: Float, val kind: TwoMicKind)
 
 /** One audio chunk: its level in the voice range and the background then (dBFS), and how voice-like it is (0..1). */
-data class VoiceChunk(val timeMillis: Long, val levelDb: Float, val backgroundDb: Float, val chunkMillis: Long, val voice: Float = 1f) {
+/**
+ * One audio chunk: its level in the voice range and the background then (dBFS), how voice-like
+ * it is (0..1), and with two mics how much the helmet mic stands out from the engine mic ([liftDb]).
+ */
+data class VoiceChunk(val timeMillis: Long, val levelDb: Float, val backgroundDb: Float, val chunkMillis: Long, val voice: Float = 1f, val liftDb: Float? = null) {
     val aboveDb: Float get() = levelDb - backgroundDb
 }

@@ -289,7 +289,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                             RoundButton(Icons.Outlined.MoreVert, "Ride options", onClick = { menuOpen = true })
                             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, containerColor = RtColors.SurfaceRaised) {
                                 DropdownMenuItem(text = { Text("Rename") }, onClick = { menuOpen = false; renaming = true })
-                                if (BuildConfig.DEBUG) {
+                                if (BuildConfig.DEBUG || BuildConfig.TEST_BUILD) {
                                     // BETA TOOL: remove together with data/export.
                                     DropdownMenuItem(
                                         text = { Text("Export ride (beta)") },
@@ -417,7 +417,7 @@ fun RideDetailScreen(rideId: String, onBack: () -> Unit, onShare: () -> Unit, on
                         }
                     }
                 }
-                if (BuildConfig.DEBUG) MomentsDiagnostics(rideId)
+                if (BuildConfig.DEBUG || BuildConfig.TEST_BUILD) MomentsDiagnostics(rideId)
                 Spacer(Modifier.height(RtDimens.lg))
             }
         }

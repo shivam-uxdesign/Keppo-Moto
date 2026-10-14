@@ -54,6 +54,20 @@ class StudioPrefs(context: Context) {
         prefs.edit().putString(ASKS, JSONArray(list).toString()).apply()
     }
 
+    /** What the rider typed into "Ask for something" on the Studio tab, for that ride's page to run when it opens. */
+    fun setPendingAsk(rideId: String, text: String) {
+        prefs.edit().putString(PENDING_ASK, rideId + "\n" + text.trim().take(300)).apply()
+    }
+
+    /** The ask waiting for [rideId], once (it's cleared); null when there's none. */
+    fun takePendingAsk(rideId: String): String? {
+        val v = prefs.getString(PENDING_ASK, null) ?: return null
+        val (ride, text) = v.split('\n', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } ?: return null
+        if (ride != rideId) return null
+        prefs.edit().remove(PENDING_ASK).apply()
+        return text.takeIf { it.isNotBlank() }
+    }
+
     /** After each ride, Gemini suggests what to make (in the background, with a notification). */
     var autoSuggest: Boolean
         get() = prefs.getBoolean(AUTO_SUGGEST, true)
@@ -122,6 +136,7 @@ class StudioPrefs(context: Context) {
         const val GALLERY = "also_gallery"
         const val AUTO_SUGGEST = "auto_suggest"
         const val ASKS = "recent_asks"
+        const val PENDING_ASK = "pending_ask"
         const val AUTO_MAKE = "auto_make_top"
         const val AUTO_MOBILE = "auto_mobile_data"
         const val OVERNIGHT = "make_overnight"

@@ -2,6 +2,8 @@ package com.ridetrack.telemetry
 
 import com.ridetrack.telemetry.moments.BackgroundLevel
 import com.ridetrack.telemetry.moments.SpeechGate
+import com.ridetrack.telemetry.moments.TwoMicLift
+import com.ridetrack.telemetry.moments.VoiceInWind
 import com.ridetrack.telemetry.moments.VoiceBand
 import kotlin.math.PI
 import kotlin.math.sin
@@ -38,13 +40,13 @@ class SpeechGateTest {
     }
 
     @Test
-    fun `talking for 1_5 s starts it, and short gaps between words are fine`() {
+    fun `talking for 1 s starts it, and short gaps between words are fine`() {
         val g = SpeechGate()
         // Words of 300 ms with 150 ms gaps, from 1 s.
         val words = { t: Long -> if (t >= 1_000 && (t - 1_000) % 450 < 300) 14f else 0f }
-        assertFalse(g.feed(0, 2_300, above = words))
-        assertTrue(g.feed(2_300, 4_000, above = words))
-        assertTrue(g.sustainedMillis in 1_500..2_000)
+        assertFalse(g.feed(0, 1_850, above = words))
+        assertTrue(g.feed(1_850, 3_000, above = words))
+        assertTrue(g.sustainedMillis in 1_000..1_500)
     }
 
     @Test
@@ -109,5 +111,47 @@ class SpeechGateTest {
         assertTrue(voice > -10f, "1 kHz kept: $voice")
         assertTrue(level(80.0) < voice - 15f, "80 Hz rumble cut: ${level(80.0)}")
         assertTrue(level(8_000.0) < voice - 10f, "8 kHz hiss cut: ${level(8_000.0)}")
+    }
+
+    @Test
+    fun `in wind a shout counts though it's only a little above the background, wind alone doesn't`() {
+        val windy = VoiceInWind.wind(-24f)
+        assertEquals(1f, windy)
+        assertEquals(0f, VoiceInWind.wind(-60f))
+        val margin = VoiceInWind.margin(9f, windy)
+        assertTrue(margin in 3f..3.5f)
+        // A shout 5 dB over the wind, voice-like enough for wind (0.4): speaking.
+        val shout = SpeechGate()
+        var t = 0L
+        while (t < 2_000) { shout.onLevel(t, 5f, 46, margin, voice = 0.4f, voiceMin = VoiceInWind.voiceMin(windy)); t += 46 }
+        assertTrue(shout.speaking)
+        // Calm settings would have missed it.
+        val calm = SpeechGate()
+        t = 0L
+        while (t < 2_000) { calm.onLevel(t, 5f, 46, 9f, voice = 0.4f); t += 46 }
+        assertFalse(calm.speaking)
+        // Wind gusts, as loud, not voice-like: never.
+        val gusts = SpeechGate()
+        t = 0L
+        while (t < 4_000) { gusts.onLevel(t, 6f, 46, margin, voice = 0.1f, voiceMin = VoiceInWind.voiceMin(windy)); t += 46 }
+        assertFalse(gusts.speaking)
+    }
+
+    @Test
+    fun `with two mics the helmet mic standing out is a voice, wind on both is not`() {
+        val lift = TwoMicLift()
+        var t = 0L
+        // Riding: wind on both mics, the helmet mic usually 4 dB under the engine mic.
+        while (t < 4_000) { lift.onLevels(t, -24f, -20f); t += 46 }
+        // A gust on both: no lift.
+        assertTrue(lift.onLevels(t, -14f, -10f) < 1f)
+        // Talking: the helmet mic up 10 dB, the engine mic as before.
+        t += 46
+        assertTrue(lift.onLevels(t, -14f, -20f) >= VoiceInWind.LIFT_DB)
+        // That counts as loud even with nothing above the background.
+        val g = SpeechGate()
+        t = 0L
+        while (t < 2_000) { g.onLevel(t, 0f, 46, 9f, voice = 0.6f, liftDb = 9f); t += 46 }
+        assertTrue(g.speaking)
     }
 }
