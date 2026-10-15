@@ -163,4 +163,22 @@ object ClipTools {
     fun transitionAll(plan: StudioPlan, t: Transition?): StudioPlan = plan.copy(
         segments = plan.segments.mapIndexed { k, seg -> if (k > 0 && seg is ClipSegment && !seg.tail && seg.still == null) seg.copy(transition = t) else seg },
     )
+
+    /** Clip [from]'s speed and curve on every clip that can take it (not stills). */
+    fun speedAll(plan: StudioPlan, from: Int): StudioPlan {
+        val src = plan.segments.getOrNull(from) as? ClipSegment ?: return plan
+        var p = plan
+        plan.segments.forEachIndexed { k, seg ->
+            if (k != from && seg is ClipSegment && seg.still == null && !seg.tail) p = ramp(speed(p, k, src.speed), k, src.ramp)
+        }
+        return p
+    }
+
+    /** Clip [from]'s look on every clip. */
+    fun colorAll(plan: StudioPlan, from: Int): StudioPlan {
+        val src = plan.segments.getOrNull(from) as? ClipSegment ?: return plan
+        var p = plan
+        plan.segments.forEachIndexed { k, seg -> if (k != from && seg is ClipSegment && !seg.tail) p = color(p, k) { src.color } }
+        return p
+    }
 }

@@ -133,6 +133,8 @@ internal fun speedLabel(v: Float): String = if (v == v.toInt().toFloat()) "${v.t
 @Composable
 internal fun SpeedPanel(
     seg: ClipSegment,
+    /** The clip's length when the panel opened: the head shows "0:09 → 0:04". */
+    fromMs: Long? = null,
     onSpeed: (Float) -> Unit,
     onSpeedEnd: () -> Unit,
     onRamp: (SpeedRamp) -> Unit,
@@ -143,7 +145,11 @@ internal fun SpeedPanel(
 ) {
     val n = Speed.CHOICES.size
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        PanelHead("Speed", speedLabel(seg.speed), onBack)
+        PanelHead(
+            "Speed",
+            speedLabel(seg.speed) + (fromMs?.takeIf { kotlin.math.abs(it - seg.durMs) > 50 }?.let { " · ${com.ridetrack.app.ui.format.Format.clock(it)} → ${com.ridetrack.app.ui.format.Format.clock(seg.durMs)}" } ?: " · ${com.ridetrack.app.ui.format.Format.clock(seg.durMs)}"),
+            onBack,
+        )
         Slider(
             value = Speed.CHOICES.indexOf(seg.speed).coerceAtLeast(0).toFloat(),
             onValueChange = { onSpeed(Speed.CHOICES[it.roundToInt().coerceIn(0, n - 1)]) },

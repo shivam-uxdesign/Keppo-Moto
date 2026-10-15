@@ -84,6 +84,8 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Compress
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.runtime.mutableIntStateOf
@@ -149,6 +151,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.alpha
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -252,6 +255,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var clipTab by remember { mutableStateOf(ClipTab.EDIT) }
     /** A tab's tool that picks the clip under the playhead and opens straight onto its panel. */
     var pendingTab by remember { mutableStateOf<ClipTab?>(null) }
+    /** Where the edit history stood when a clip panel opened (✕ goes back to it), and the clip's length then. */
+    var panelFrom by remember { mutableStateOf<Pair<Int, Long>?>(null) }
     var addSticker by remember { mutableStateOf(false) }
     var captionsOpen by remember { mutableStateOf(false) }
     var discard by remember { mutableStateOf(false) }
@@ -415,6 +420,26 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         loopAt = null
     }
     LaunchedEffect(dragged) { if (dragged) loopAt = null }
+    // A clip panel open: remember where to go back to on ✕, and play the clip round and round so
+    // each change is seen (and heard) at once.
+    val panelClip = (s.pick as? TimelinePick.Clip)?.index?.takeIf { clipTab != ClipTab.EDIT }
+    LaunchedEffect(panelClip, clipTab) {
+        panelFrom = panelClip?.let { k -> s.steps.size to (s.timeline?.segments?.getOrNull(k)?.durMs ?: 0L) }
+    }
+    LaunchedEffect(panelClip, clipTab, s.timelineVersion) {
+        val k = panelClip ?: return@LaunchedEffect
+        if (clipTab == ClipTab.FRAME) return@LaunchedEffect
+        delay(300)
+        while (true) {
+            val plan0 = s.timeline ?: break
+            val from = plan0.startOf(k)
+            val len = plan0.segments.getOrNull(k)?.durMs ?: break
+            pos = from
+            preview.seek(from)
+            active.play()
+            delay(len.coerceIn(500, 20_000))
+        }
+    }
     LaunchedEffect(flash) { if (flash != null) { delay(1_300); flash = null } }
     // A different selection closes the transition picker.
     LaunchedEffect(s.pick) { if (s.pick != null) { cutAt = null; voiceOn = false; filterOpen = false }; clipTab = pendingTab ?: ClipTab.EDIT; pendingTab = null }
@@ -1061,6 +1086,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                             if (kind == TrackKind.ENGINE) Color(0x55F97316) else Color(0x55A78BFA), selected,
                                             onClick = { vm.pick(if (selected) null else TimelinePick.Audio(a.id)) },
                                         snap = { r, d, dir -> blockSnap(r, d, dir) },
+                                        envelope = { f -> TrackEdits.levelAt(a, (f * a.durMs).toLong()) },
                                     ) { ms, _ -> vm.change("Sound time") { TrackEdits.shiftAudio(it, a.id, ms) } }
                                     }
                                     // Clips whose engine mic wasn't recorded: say so where its sound would be.
@@ -1491,10 +1517,22 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     }
                 } else if (!voiceOn && picked is TimelinePick.Clip && seg != null) {
                     val i = picked.index
-                    val back = { clipTab = ClipTab.EDIT }
+                    val back = { clipTab = ClipTab.EDIT; active.pause() }
+                    val cancel = {
+                        panelFrom?.let { (n, _) -> if (s.steps.size > n) { vm.undoTo(n); vm.pick(TimelinePick.Clip(i)) } }
+                        clipTab = ClipTab.EDIT
+                        active.pause()
+                    }
+                    val applyAll: (() -> Unit)? = when (clipTab) {
+                        ClipTab.SPEED -> { -> vm.change("Speed on every clip") { p -> ClipTools.speedAll(p, i) }; flash = "Speed on every clip" }
+                        ClipTab.LOOK -> { -> vm.change("Look on every clip") { p -> ClipTools.colorAll(p, i) }; flash = "Look on every clip" }
+                        else -> null
+                    }
+                    Column {
                     when (clipTab) {
                         ClipTab.SPEED -> SpeedPanel(
                             seg,
+                            fromMs = panelFrom?.second,
                             onSpeed = { v -> vm.drag { ClipTools.speed(it, i, v) } },
                             onSpeedEnd = { vm.endDrag("Speed") },
                             onRamp = { r -> vm.change("Speed curve") { ClipTools.ramp(it, i, r) } },
@@ -1520,6 +1558,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             onBack = back,
                         )
                         ClipTab.EDIT -> Unit
+                    }
+                    PanelActions(onCancel = cancel, onApplyAll = applyAll, onDone = back)
                     }
                 } else if (voiceOn) {
                     VoicePanel(
@@ -2044,6 +2084,8 @@ private fun TrackBlock(
     onClick: () -> Unit,
     /** While moving: (start it would have, its length, direction) → the start to snap to and where the guide goes. */
     snap: ((Long, Long, Int) -> Pair<Long, Long>?)? = null,
+    /** A sound's level along the block (0..1 of its length → 0..1.5), drawn as a shape: fades and points show as you change them. */
+    envelope: ((Float) -> Float)? = null,
     onDrop: ((deltaMs: Long, rows: Int) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
@@ -2071,6 +2113,22 @@ private fun TrackBlock(
                 if (held) { scaleY = 1.08f; shadowElevation = 8.dp.toPx() }
             }
             .clip(RoundedCornerShape(6.dp)).background(color)
+            .then(
+                if (envelope == null) Modifier else Modifier.drawBehind {
+                    // The level as a filled shape from the bottom; 100% sits at two thirds of the height.
+                    val n = 48
+                    val path = androidx.compose.ui.graphics.Path()
+                    path.moveTo(0f, size.height)
+                    for (k in 0..n) {
+                        val f = k / n.toFloat()
+                        val lv = envelope(f).coerceIn(0f, 1.5f) / 1.5f
+                        path.lineTo(f * size.width, size.height * (1f - lv))
+                    }
+                    path.lineTo(size.width, size.height)
+                    path.close()
+                    drawPath(path, Color.White.copy(alpha = 0.22f))
+                },
+            )
             .then(if (selected || held) Modifier.border(2.dp, RtColors.Primary, RoundedCornerShape(6.dp)) else Modifier)
             .clickable(role = Role.Button, onClick = onClick)
             .then(
@@ -2469,6 +2527,29 @@ private fun ToolBar(top: List<TNode>, path: List<Int>, onPath: (List<Int>) -> Un
                 }
             }
         }
+    }
+}
+
+/** Under a tool's panel: ✕ takes back everything since it opened, ✓ keeps it, Apply to all where it fits. */
+@Composable
+private fun PanelActions(onCancel: () -> Unit, onApplyAll: (() -> Unit)?, onDone: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(56.dp, 40.dp).clip(RoundedCornerShape(12.dp)).background(RtColors.Surface).clickable(role = Role.Button, onClickLabel = "Cancel", onClick = onCancel),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Rounded.Close, contentDescription = "Cancel", tint = RtColors.TextPrimary) }
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            if (onApplyAll != null) {
+                Text(
+                    "Apply to all", style = RtType.button, color = RtColors.TextPrimary,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(RtColors.Surface).clickable(role = Role.Button, onClick = onApplyAll).padding(horizontal = 16.dp, vertical = 9.dp),
+                )
+            }
+        }
+        Box(
+            Modifier.size(56.dp, 40.dp).clip(RoundedCornerShape(12.dp)).background(RtColors.Primary).clickable(role = Role.Button, onClickLabel = "Done", onClick = onDone),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Rounded.Check, contentDescription = "Done", tint = RtColors.OnPrimary) }
     }
 }
 
