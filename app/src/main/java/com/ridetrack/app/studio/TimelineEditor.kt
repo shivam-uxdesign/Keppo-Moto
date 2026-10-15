@@ -250,6 +250,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var noisePick by remember { mutableStateOf<Triple<String, Long, Boolean>?>(null) }
     var historyOpen by remember { mutableStateOf(false) }
     var clipTab by remember { mutableStateOf(ClipTab.EDIT) }
+    /** A tab's tool that picks the clip under the playhead and opens straight onto its panel. */
+    var pendingTab by remember { mutableStateOf<ClipTab?>(null) }
     var addSticker by remember { mutableStateOf(false) }
     var captionsOpen by remember { mutableStateOf(false) }
     var discard by remember { mutableStateOf(false) }
@@ -275,6 +277,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     // Which parents are open in the tool bar (indices down the tree); back to the top on a new selection.
     var toolPath by remember { mutableStateOf(emptyList<Int>()) }
     LaunchedEffect(s.pick) { toolPath = emptyList() }
+    // With nothing selected: the tab shown at the bottom (Edit · Sound · Text · Look · Add).
+    var toolTab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(ToolTab.EDIT) }
     var micAllowed by remember {
         mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED)
     }
@@ -413,7 +417,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     LaunchedEffect(dragged) { if (dragged) loopAt = null }
     LaunchedEffect(flash) { if (flash != null) { delay(1_300); flash = null } }
     // A different selection closes the transition picker.
-    LaunchedEffect(s.pick) { if (s.pick != null) { cutAt = null; voiceOn = false; filterOpen = false }; clipTab = ClipTab.EDIT }
+    LaunchedEffect(s.pick) { if (s.pick != null) { cutAt = null; voiceOn = false; filterOpen = false }; clipTab = pendingTab ?: ClipTab.EDIT; pendingTab = null }
     // A take stops at the end of the Reel.
     // (Watched without reading the playhead here, so the whole editor isn't redrawn 30 times a second.)
     LaunchedEffect(s.recordingAt) {
@@ -1141,7 +1145,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             // ---- tools: a tree of at most 5 icons per level (see docs/plans/editor-toolbar-plan.md)
             fun pickLabel(p: TimelinePick?): String = when (p) {
                 null -> "Your video"
-                is TimelinePick.Clip -> "Clip ${p.index + 1}"
+                is TimelinePick.Clip -> "Clip ${p.index + 1}" + (plan.segments.getOrNull(p.index)?.let { " · " + com.ridetrack.app.ui.format.Format.clock(it.durMs) } ?: "")
                 is TimelinePick.Clips -> "${p.indices.size} clips"
                 is TimelinePick.Layer -> "Video on top"
                 is TimelinePick.Audio -> when (plan.audio.firstOrNull { it.id == p.id }?.kind) { TrackKind.ENGINE -> "Mic 2 · Engine"; TrackKind.MUSIC -> "Music"; else -> "Sound" }
@@ -1176,6 +1180,67 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 leaf(Icons.Rounded.UnfoldLess, "Shorter", action = shorter),
                 leaf(Icons.Rounded.UnfoldMore, "Longer", action = longer),
             )
+            // The clip under the playhead: tab tools work on it without selecting it first.
+            fun clipHere(): Int? {
+                val starts = TimelineEdits.starts(plan)
+                return plan.segments.indices.lastOrNull { k -> plan.segments[k] is ClipSegment && !(plan.segments[k] as ClipSegment).tail && starts[k] <= pos }
+            }
+            fun openOnClip(tab: ClipTab) {
+                val k = clipHere() ?: return run { flash = "Move the playhead onto a clip" }
+                pendingTab = tab
+                vm.pick(TimelinePick.Clip(k))
+            }
+            fun tabTree(tab: ToolTab): List<TNode> = when (tab) {
+                ToolTab.EDIT -> listOf(
+                    leaf(Icons.Rounded.ContentCut, "Split") { vm.change("Split") { TimelineEdits.split(it, pos) } },
+                    leaf(Icons.Rounded.Speed, "Speed") { openOnClip(ClipTab.SPEED) },
+                    leaf(Icons.Rounded.Crop, "Crop") { openOnClip(ClipTab.FRAME) },
+                    leaf(Icons.Rounded.Animation, "Transition", enabled = plan.segments.size > 1) {
+                        val k = (clipHere() ?: 1).coerceAtLeast(1).coerceAtMost(plan.segments.size - 1)
+                        cutAt = k; loopAt = plan.startOf(k)
+                    },
+                    parent(Icons.Rounded.MoreVert, "More", listOfNotNull(
+                        clipHere()?.let { k -> (plan.segments[k] as? ClipSegment)?.takeIf { it.lines.isNotEmpty() && it.still == null }?.let { leaf(Icons.Rounded.Compress, "Remove pauses") { vm.change("Remove pauses") { TimelineEdits.removePauses(it, k) }; flash = "Pauses removed" } } },
+                        leaf(Icons.Rounded.Flag, "Marker") { vm.addMarker() },
+                        if (plan.vibe.spec.redline) leaf(Icons.Rounded.Speed, "Tag redline") { vm.tagRedline() } else null,
+                        leaf(Icons.Rounded.CropFree, "Safe zones", on = safe) { safe = !safe },
+                    )),
+                )
+                ToolTab.SOUND -> listOf(
+                    leaf(Icons.Rounded.Tune, "Mixer") { mixer = true },
+                    leaf(Icons.Rounded.Mic, "Voice-over") { voiceOn = true },
+                    leaf(Icons.AutoMirrored.Rounded.VolumeDown, "Duck", on = plan.mix.duck) {
+                        val on = !plan.mix.duck
+                        vm.change(if (on) "Dip under voice" else "No dip under voice") { TrackEdits.duck(it, on) }
+                        flash = if (on) "Engine and music dip while you talk" else "No dip while you talk"
+                    },
+                    leaf(Icons.Rounded.MusicNote, "Sound") { soundOpen = true },
+                    parent(Icons.Rounded.MoreVert, "More", listOfNotNull(
+                        clipHere()?.let { k -> leaf(Icons.AutoMirrored.Rounded.CallSplit, "Detach clip sound") { vm.detach(k) } },
+                    )),
+                )
+                ToolTab.TEXT -> listOf(
+                    leaf(Icons.Rounded.TextFields, "Text") { active.pause(); typingId = null; typing = true },
+                    leaf(Icons.Rounded.Subtitles, "Caption") { ask = TextAsk.NewCaption },
+                    leaf(Icons.Rounded.ClosedCaption, "Caption look") { captionTab = CaptionTab.LOOK; captionLine = null; captionsOpen = true },
+                    leaf(if (s.options.captions) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, if (s.options.captions) "Hide captions" else "Show captions", on = !s.options.captions) { vm.setOptions { o -> o.copy(captions = !o.captions) } },
+                    leaf(Icons.Rounded.EmojiEmotions, "Sticker") { addSticker = true },
+                )
+                ToolTab.LOOK -> listOf(
+                    leaf(Icons.Rounded.Palette, "Styles") { styleOpen = true },
+                    leaf(Icons.Rounded.Gradient, if (s.options.filter == RideFilter.NONE) "Filter" else s.options.filter.label, on = s.options.filter != RideFilter.NONE) { filterOpen = true },
+                    leaf(Icons.Rounded.Contrast, "Colour") { openOnClip(ClipTab.LOOK) },
+                    leaf(Icons.Rounded.Animation, "Transitions", enabled = plan.segments.size > 1) { cutAt = 1; loopAt = plan.startOf(1) },
+                    leaf(Icons.Rounded.CropFree, "Safe zones", on = safe) { safe = !safe },
+                )
+                ToolTab.ADD -> listOf(
+                    leaf(Icons.Rounded.VideoLibrary, "Clip") { adding = AddWhat.CLIP },
+                    leaf(Icons.Rounded.PictureInPicture, "Video on top") { adding = AddWhat.LAYER },
+                    leaf(Icons.Rounded.AcUnit, "Freeze frame") { vm.freeze() },
+                    leaf(Icons.Rounded.MusicNote, "Sound") { soundOpen = true },
+                    leaf(Icons.Rounded.Mic, "Voice-over") { voiceOn = true },
+                )
+            }
             fun toolTree(picked: TimelinePick?, seg: ClipSegment?): List<TNode> = when (val p = picked) {
                 null -> listOf(
                     addNode(),
@@ -1204,17 +1269,24 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     val i = p.index
                     val v = seg?.volume ?: 1f
                     listOf(
-                        addNode(),
-                        parent(Icons.Rounded.ContentCut, "Edit", listOfNotNull(
-                            if (seg?.still == null) leaf(Icons.Rounded.Speed, "Speed") { clipTab = ClipTab.SPEED } else null,
+                        leaf(Icons.Rounded.ContentCut, "Split") { vm.change("Split") { TimelineEdits.split(it, pos) } },
+                        if (seg?.still == null) leaf(Icons.Rounded.Speed, "Speed") { clipTab = ClipTab.SPEED } else leaf(Icons.Rounded.AcUnit, "Freeze") { vm.freeze() },
+                        parent(if (v == 0f) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, "Sound", listOf(
+                            slider(Icons.AutoMirrored.Rounded.VolumeUp, "Volume", v, 0f..1.5f, pct, { x -> vm.drag { TimelineEdits.volume(it, i, x) } }, { vm.endDrag("Sound") }),
+                            leaf(if (v == 0f) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff, if (v == 0f) "Unmute" else "Mute", on = v == 0f) { vm.change(if (v == 0f) "Unmute" else "Mute") { TimelineEdits.volume(it, i, if (v == 0f) 1f else 0f) } },
+                            leaf(Icons.AutoMirrored.Rounded.CallSplit, "Detach") { vm.detach(i) },
+                        )),
+                        parent(Icons.Rounded.Contrast, "Look", listOf(
+                            leaf(Icons.Rounded.Contrast, "Colour") { clipTab = ClipTab.LOOK },
                             leaf(Icons.Rounded.Crop, "Crop") { clipTab = ClipTab.FRAME },
+                            leaf(Icons.Rounded.Animation, "Transition") { if (i == 0) flash = "The first clip has no cut before it" else { cutAt = i; vm.pick(null); loopAt = plan.startOf(i) } },
+                        )),
+                        parent(Icons.Rounded.MoreVert, "More", listOf(
+                            parent(Icons.Rounded.ContentCut, "Edit", listOfNotNull(
                             if (seg?.still == null) leaf(Icons.Rounded.FastRewind, "Reverse", on = seg?.reverse != null) { vm.reverse(i) } else null,
                             if (seg?.lines?.isNotEmpty() == true && seg.still == null) leaf(Icons.Rounded.Compress, "Remove pauses") { vm.change("Remove pauses") { TimelineEdits.removePauses(it, i) }; flash = "Pauses removed" } else null,
-                            leaf(Icons.Rounded.AcUnit, "Freeze") { vm.freeze() },
-                        )),
-                        leaf(Icons.Rounded.Contrast, "Colour") { clipTab = ClipTab.LOOK },
-                        leaf(Icons.Rounded.Animation, "Transition") { if (i == 0) flash = "The first clip has no cut before it" else { cutAt = i; vm.pick(null); loopAt = plan.startOf(i) } },
-                        parent(Icons.Rounded.MoreVert, "More", listOf(
+                                leaf(Icons.Rounded.AcUnit, "Freeze") { vm.freeze() },
+                            )),
                             leaf(Icons.Rounded.UnfoldMore, "Use all", enabled = seg != null && seg.still == null && (seg.inMs > 0 || seg.inMs + seg.sourceMs < seg.bit.clipDurationMs - 20)) { vm.change("Use all") { TimelineEdits.useAll(it, i) } },
                             parent(Icons.Rounded.SwapHoriz, "Arrange", listOfNotNull(
                                 leaf(Icons.AutoMirrored.Rounded.ArrowBack, "Move left") { vm.change("Move") { TimelineEdits.move(it, i, -1) }; vm.pick(TimelinePick.Clip(i - 1)) },
@@ -1229,10 +1301,6 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 if (s.copied != null) leaf(Icons.Rounded.ContentPaste, "Paste look") { vm.pasteSettings(setOf(i)) } else null,
                                 leaf(Icons.Rounded.SwapHoriz, "Replace") { adding = AddWhat.REPLACE },
                                 leaf(Icons.Rounded.BookmarkAdd, "Save clip") { vm.saveSegment(i) },
-                            )),
-                            parent(if (v == 0f) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, "Sound", listOf(
-                                slider(Icons.AutoMirrored.Rounded.VolumeUp, "Volume", v, 0f..1.5f, pct, { x -> vm.drag { TimelineEdits.volume(it, i, x) } }, { vm.endDrag("Sound") }),
-                                leaf(Icons.AutoMirrored.Rounded.CallSplit, "Detach") { vm.detach(i) },
                             )),
                             leaf(Icons.Rounded.Delete, "Delete", danger = true) { vm.change("Delete") { TimelineEdits.delete(it, i) }; vm.pick(null) },
                         )),
@@ -1251,7 +1319,6 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     val loud = (l?.volume ?: 0f) > 0f
                     val hid = l?.hidden == true
                     listOf(
-                        addNode(),
                         parent(Icons.Rounded.Crop, "Edit", listOf(
                             parent(Icons.Rounded.PictureInPicture, "Place", LayerPreset.entries.take(5).map { pr -> leaf(LAYER_ICON[pr] ?: Icons.Rounded.PictureInPicture, pr.label) { vm.change("Layer: ${pr.label}") { TrackEdits.preset(it, p.id, pr) } } }),
                             parent(Icons.Rounded.ZoomIn, "Size", listOf(
@@ -1284,7 +1351,6 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     val a = plan.audio.firstOrNull { it.id == p.id }
                     val faded = (a?.fadeInMs ?: 0) > 0
                     listOf(
-                        addNode(),
                         parent(Icons.AutoMirrored.Rounded.VolumeUp, "Volume", listOfNotNull(
                             slider(Icons.AutoMirrored.Rounded.VolumeUp, "Level", a?.volume ?: 1f, 0f..1.5f, pct, { x -> vm.drag { TrackEdits.audioVolume(it, p.id, x) } }, { vm.endDrag("Volume") }),
                             a?.let { item -> TNode(Icons.Rounded.ShowChart, "Volume line", panel = {
@@ -1332,7 +1398,6 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 is TimelinePick.Caption -> {
                     val off = !s.options.captions
                     listOf(
-                        addNode(),
                         leaf(Icons.Rounded.Edit, "Fix words") { captionTab = CaptionTab.WORDS; captionLine = p.index to p.line; captionsOpen = true },
                         leaf(Icons.Rounded.Palette, "Look") { captionTab = CaptionTab.LOOK; captionLine = null; captionsOpen = true },
                         parent(Icons.Rounded.Timer, "Time", listOf(
@@ -1352,7 +1417,6 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     val ai = t?.animIn ?: TextAnim.FADE
                     val ao = t?.animOut ?: TextAnim.FADE
                     listOf(
-                        addNode(),
                         leaf(Icons.Rounded.Edit, "Edit text") { active.pause(); typingId = p.id; typing = true },
                         parent(Icons.Rounded.Animation, "Animate", listOf(
                             leaf(Icons.Rounded.Animation, "In: ${ai.label}") { vm.change("Text in") { TextTools.anim(it, p.id, animIn = TextAnim.entries[(ai.ordinal + 1) % TextAnim.entries.size]) } },
@@ -1372,7 +1436,6 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     val st = plan.stickers.firstOrNull { it.id == p.id }
                     val hid = st?.hidden == true
                     listOfNotNull(
-                        addNode(),
                         if (st?.kind == StickerKind.EMOJI) leaf(Icons.Rounded.EmojiEmotions, "Change") { addSticker = true } else null,
                         parent(Icons.Rounded.ZoomIn, "Size", listOf(
                             leaf(Icons.Rounded.ZoomOut, "Smaller") { vm.change("Sticker size") { TextTools.scaleSticker(it, p.id, 0.85f) } },
@@ -1418,8 +1481,14 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     FilterPanel(vm, s.options, onPicked = { f -> tick(); flash = f.label }) { filterOpen = false }
                 } else if (!voiceOn && !(picked is TimelinePick.Clip && seg != null && clipTab != ClipTab.EDIT)) {
                     // At most 5 icons, never scrolling: a parent opens its own set, ‹ goes back up.
-                    val levels = toolTree(picked, seg)
-                    ToolBar(levels, toolPath, onPath = { toolPath = it }, label = pickLabel(picked))
+                    if (picked == null) {
+                        // Nothing selected: the tab's tools over five fixed tabs, one tap between them.
+                        ToolBar(tabTree(toolTab), toolPath, onPath = { toolPath = it }, label = toolTab.label)
+                        ToolTabs(toolTab) { t -> toolTab = t; toolPath = emptyList() }
+                    } else {
+                        // Something selected: only its tools, its name on the left, ✕ back to the tabs.
+                        ToolBar(toolTree(picked, seg), toolPath, onPath = { toolPath = it }, label = pickLabel(picked), onClose = { vm.pick(null) })
+                    }
                 } else if (!voiceOn && picked is TimelinePick.Clip && seg != null) {
                     val i = picked.index
                     val back = { clipTab = ClipTab.EDIT }
@@ -2341,7 +2410,7 @@ private class TSlider(val value: Float, val range: ClosedFloatingPointRange<Floa
  * value opens a slider in place of the icons.
  */
 @Composable
-private fun ToolBar(top: List<TNode>, path: List<Int>, onPath: (List<Int>) -> Unit, label: String) {
+private fun ToolBar(top: List<TNode>, path: List<Int>, onPath: (List<Int>) -> Unit, label: String, onClose: (() -> Unit)? = null) {
     var level = top
     val names = ArrayList<String>()
     var open: TNode? = null
@@ -2351,11 +2420,19 @@ private fun ToolBar(top: List<TNode>, path: List<Int>, onPath: (List<Int>) -> Un
         if (n.kids != null) level = n.kids else { open = n; break }
     }
     Column(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp)) {
-        Text(
-            if (names.isEmpty()) label else names.joinToString(" › "),
-            style = RtType.caption, color = RtColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 44.dp, bottom = 4.dp),
-        )
+        Row(Modifier.fillMaxWidth().padding(start = 44.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (names.isEmpty()) label else (listOf(label) + names).joinToString(" › "),
+                style = RtType.caption, color = if (onClose != null) RtColors.TextPrimary else RtColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (onClose != null) {
+                Text(
+                    "✕ Done", style = RtType.caption, color = RtColors.TextSecondary,
+                    modifier = Modifier.padding(end = 12.dp).clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button, onClickLabel = "Deselect", onClick = onClose).padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+        }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(40.dp).height(48.dp), contentAlignment = Alignment.Center) {
                 if (path.isNotEmpty()) {
@@ -2390,6 +2467,34 @@ private fun ToolBar(top: List<TNode>, path: List<Int>, onPath: (List<Int>) -> Un
                     }
                     repeat((5 - level.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
                 }
+            }
+        }
+    }
+}
+
+/** The five areas of the editor, always at the bottom while nothing is selected. */
+private enum class ToolTab(val label: String, val icon: ImageVector) {
+    EDIT("Edit", Icons.Rounded.ContentCut),
+    SOUND("Sound", Icons.Rounded.Tune),
+    TEXT("Text", Icons.Rounded.TextFields),
+    LOOK("Look", Icons.Rounded.Palette),
+    ADD("Add", Icons.Rounded.Add),
+}
+
+@Composable
+private fun ToolTabs(selected: ToolTab, onSelect: (ToolTab) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 4.dp).border(width = 0.5.dp, color = RtColors.Hairline, shape = RoundedCornerShape(0.dp)).padding(vertical = 4.dp),
+    ) {
+        ToolTab.entries.forEach { t ->
+            val on = t == selected
+            Column(
+                Modifier.weight(1f).clickable(role = Role.Tab, onClickLabel = t.label) { onSelect(t) }.padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Icon(t.icon, contentDescription = null, tint = if (on) RtColors.Primary else RtColors.TextTertiary, modifier = Modifier.size(22.dp))
+                Text(t.label, style = RtType.caption, color = if (on) RtColors.TextPrimary else RtColors.TextTertiary)
             }
         }
     }
