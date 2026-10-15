@@ -13,8 +13,26 @@ enum class ExportPreset(val label: String, val blurb: String, val spec: OutputSp
     WHATSAPP("WhatsApp", "720p, a small file", OutputSpec(720, 1280, 30, 3_000_000)),
 }
 
+/**
+ * The quality picked in the editor's top bar: [height] 1280 (720p), 1920 (1080p) or 3840 (4K),
+ * 60 fps or 30, and [level] 0 smaller, 1 recommended, 2 best (the bitrate).
+ */
+data class Quality(val height: Int = 1920, val fps60: Boolean = false, val level: Int = 1) {
+    val label: String get() = when { height >= 3840 -> "4K"; height <= 1280 -> "720p"; else -> "1080p" } + if (fps60) " 60" else ""
+}
+
 /** Export maths. Pure, unit-tested. */
 object Exports {
+    /** [base] at [q]'s size, frame rate and quality (bitrate scaled with the picture). */
+    fun withQuality(base: OutputSpec, q: Quality): OutputSpec {
+        val h = q.height
+        val w = h * 9 / 16
+        val pixels = (w.toDouble() * h) / (base.width.toDouble() * base.height)
+        val levelK = when (q.level) { 0 -> 0.6; 2 -> 1.6; else -> 1.0 }
+        val fpsK = if (q.fps60) 1.5 else 1.0
+        return base.copy(width = w, height = h, fps = if (q.fps60) 60 else 30, bitrate = (base.bitrate * pixels.coerceAtMost(3.0).coerceAtLeast(0.45) * levelK * fpsK).toInt())
+    }
+
     /** About how big the file will be, in bytes (video and sound). */
     fun sizeBytes(spec: OutputSpec, durationMs: Long): Long = (spec.bitrate.toLong() + 128_000L) * durationMs / 8_000L
 

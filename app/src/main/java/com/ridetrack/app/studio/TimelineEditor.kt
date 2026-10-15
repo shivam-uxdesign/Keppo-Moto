@@ -85,6 +85,7 @@ import androidx.compose.material.icons.rounded.Compress
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Tune
@@ -152,6 +153,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -255,6 +257,10 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var clipTab by remember { mutableStateOf(ClipTab.EDIT) }
     /** A tab's tool that picks the clip under the playhead and opens straight onto its panel. */
     var pendingTab by remember { mutableStateOf<ClipTab?>(null) }
+    var qualityOpen by remember { mutableStateOf(false) }
+    // 4K and 60 fps only when every clip allows them (asked once, when the sheet first opens).
+    var qualityChoices by remember { mutableStateOf(false to false) }
+    LaunchedEffect(qualityOpen) { if (qualityOpen) qualityChoices = vm.exportChoices() }
     /** Where the edit history stood when a clip panel opened (✕ goes back to it), and the clip's length then. */
     var panelFrom by remember { mutableStateOf<Pair<Int, Long>?>(null) }
     var addSticker by remember { mutableStateOf(false) }
@@ -491,6 +497,16 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 Text("Ideas", style = RtType.button, color = RtColors.TextPrimary)
             }
             Spacer(Modifier.weight(1f))
+            // The quality, in sight: tap for size, frame rate and quality, with how big the file will be.
+            Row(
+                Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(RtColors.SurfaceRaised)
+                    .clickable(role = Role.Button, onClickLabel = "Video quality") { qualityOpen = true }.padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(s.quality.label, style = RtType.button, color = RtColors.TextPrimary)
+                Icon(Icons.Rounded.ArrowDropDown, contentDescription = null, tint = RtColors.TextSecondary, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(8.dp))
             RoundIcon(Icons.AutoMirrored.Rounded.ArrowForward, "Next: make and share", primary = true) { active.pause(); vm.saveEdit() }
         }
 
@@ -831,6 +847,38 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         Spacer(Modifier.width(half))
                         androidx.compose.runtime.CompositionLocalProvider(LocalRowLeft provides { scroll.value - halfPx0 }, LocalGuide provides guide) {
                         Column(Modifier.width(span(0, plan.totalMs) + 52.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            // The ruler: seconds, and frames ("3 f") once zoomed in far enough to step by frame.
+                            val rulerInk = RtColors.TextTertiary
+                            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(14.dp)) {
+                                val perSec = pxPerMs * 1000
+                                val paint = android.graphics.Paint().apply { color = android.graphics.Color.argb(170, 255, 255, 255); textSize = 9.dp.toPx(); isAntiAlias = true }
+                                val frames = perSec >= 360
+                                val h = size.height
+                                if (frames) {
+                                    var f = 0L
+                                    while (f * FRAME_MS <= plan.totalMs) {
+                                        val ms = f * 1000 / 30
+                                        val x = map.x(ms)
+                                        val n = (f % 30).toInt()
+                                        drawLine(rulerInk, Offset(x, h - if (n == 0) 7.dp.toPx() else 3.dp.toPx()), Offset(x, h), strokeWidth = 1f)
+                                        if (n == 0) drawContext.canvas.nativeCanvas.drawText(com.ridetrack.app.ui.format.Format.clock(ms), x + 2, 9.dp.toPx(), paint)
+                                        else if (n % 3 == 0 && perSec >= 600) drawContext.canvas.nativeCanvas.drawText("$n f", x + 2, 9.dp.toPx(), paint)
+                                        f++
+                                    }
+                                } else {
+                                    // Labels at least ~56 dp apart: 1, 2, 5, 10 or 30 s.
+                                    val step = listOf(1, 2, 5, 10, 30, 60).first { it * perSec >= 56.dp.toPx() } * 1000L
+                                    var t = 0L
+                                    while (t <= plan.totalMs) {
+                                        val x = map.x(t)
+                                        drawLine(rulerInk, Offset(x, h - 7.dp.toPx()), Offset(x, h), strokeWidth = 1f)
+                                        drawContext.canvas.nativeCanvas.drawText(com.ridetrack.app.ui.format.Format.clock(t), x + 2, 9.dp.toPx(), paint)
+                                        val mid = map.x(t + step / 2)
+                                        if (t + step / 2 <= plan.totalMs) drawLine(rulerInk, Offset(mid, h - 3.dp.toPx()), Offset(mid, h), strokeWidth = 1f)
+                                        t += step
+                                    }
+                                }
+                            }
                             // Markers, and the redline tags as red bars (tap one to remove it)
                             Box(Modifier.fillMaxWidth().height(10.dp)) {
                                 plan.redlines.forEach { r ->
@@ -1688,6 +1736,9 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                 }
             }
         }
+        StudioSheet(qualityOpen, { qualityOpen = false }, "Quality") {
+            QualityPicker(s.quality, plan.totalMs, choices = qualityChoices, onPick = vm::setQuality)
+        }
         StudioSheet(ideasOpen, { ideasOpen = false }, "Ideas") {
             var changeThis by remember { mutableStateOf(true) }
             var wish by remember { mutableStateOf("") }
@@ -2543,6 +2594,48 @@ private fun ToolBar(top: List<TNode>, path: List<Int>, onPath: (List<Int>) -> Un
                 }
             }
         }
+    }
+}
+
+/** Size, frame rate and quality of the made video, with how big the file will be. */
+@Composable
+private fun QualityPicker(q: Quality, totalMs: Long, choices: Pair<Boolean, Boolean>, onPick: (Quality) -> Unit) {
+    @Composable
+    fun Group(title: String, note: String?, content: @Composable () -> Unit) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row { Text(title, style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.weight(1f)); note?.let { Text(it, style = RtType.caption, color = RtColors.TextTertiary) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { content() }
+        }
+    }
+    @Composable
+    fun Pick(label: String, on: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+        Text(
+            label, style = RtType.button,
+            color = if (!enabled) RtColors.TextTertiary else if (on) RtColors.OnPrimary else RtColors.TextPrimary,
+            modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) RtColors.Primary else RtColors.Surface)
+                .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp),
+        )
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+        Group("Size", if (!choices.first) "4K needs every clip filmed in 4K" else null) {
+            Pick("720p", q.height == 1280) { onPick(q.copy(height = 1280)) }
+            Pick("1080p", q.height == 1920) { onPick(q.copy(height = 1920)) }
+            Pick("4K", q.height == 3840, enabled = choices.first) { onPick(q.copy(height = 3840)) }
+        }
+        Group("Frame rate", if (!choices.second) "60 needs every clip filmed at 60" else null) {
+            Pick("30 fps", !q.fps60) { onPick(q.copy(fps60 = false)) }
+            Pick("60 fps", q.fps60, enabled = choices.second) { onPick(q.copy(fps60 = true)) }
+        }
+        Group("Quality", null) {
+            Pick("Smaller", q.level == 0) { onPick(q.copy(level = 0)) }
+            Pick("Recommended", q.level == 1) { onPick(q.copy(level = 1)) }
+            Pick("Best", q.level == 2) { onPick(q.copy(level = 2)) }
+        }
+        val spec = Exports.withQuality(OutputSpec(), q)
+        Text(
+            "${Exports.sizeLabel(Exports.sizeBytes(spec, totalMs))} for ${com.ridetrack.app.ui.format.Format.clock(totalMs)} · 9:16 for Reels, Shorts and Stories",
+            style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
+        )
     }
 }
 

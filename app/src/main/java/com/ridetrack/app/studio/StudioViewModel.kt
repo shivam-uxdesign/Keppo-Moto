@@ -52,6 +52,8 @@ data class WorkStep(val label: String, val state: Int /* 0 waiting, 1 running, 2
 
 data class StudioState(
     val loading: Boolean = true,
+    /** The quality picked in the editor's top bar, used when the video is made and shared. */
+    val quality: Quality = Quality(),
     /** Why there's nothing to make (no clips, ride missing); null when ready. */
     val blocked: String? = null,
     val clipCount: Int = 0,
@@ -2012,6 +2014,12 @@ class StudioViewModel(
     }
 
     private fun renderInput(plan: StudioPlan, s: StudioState, baseCard: RideCard, voice: File?) = engine.renderInput(plan, s, baseCard, voice)
+        .let { if (s.quality != Quality()) it.copy(output = Exports.withQuality(OutputSpec(), s.quality)) else it }
+
+    fun setQuality(q: Quality) = _state.update { it.copy(quality = q) }
+
+    /** [preset]'s settings at the quality picked in the editor. */
+    fun specFor(preset: ExportPreset): OutputSpec = Exports.withQuality(preset.spec, _state.value.quality)
 
     /** Tips for this video: Gemini's when it can, the app's own otherwise. "Film next time" ones go on Home. */
     private fun coach() {

@@ -26,4 +26,20 @@ class ExportsTest {
         assertEquals(false to false, Exports.choices(listOf(Triple(1080, 1920, 30f), Triple(2160, 3840, 60f))))
         assertEquals(true to true, Exports.choices(listOf(Triple(2160, 3840, 60f), Triple(3840, 2160, 59.94f))))
     }
+
+    @Test
+    fun `quality changes the size, frame rate and file size`() {
+        val base = com.ridetrack.app.studio.OutputSpec()
+        val q = com.ridetrack.app.studio.Quality()
+        // Recommended 1080p 30 is the base itself.
+        assertEquals(base, Exports.withQuality(base, q))
+        val small = Exports.withQuality(base, q.copy(height = 1280, level = 0))
+        assertEquals(720, small.width)
+        assertEquals(1280, small.height)
+        kotlin.test.assertTrue(small.bitrate < base.bitrate / 2)
+        val best60 = Exports.withQuality(base, q.copy(level = 2, fps60 = true))
+        assertEquals(60, best60.fps)
+        kotlin.test.assertTrue(best60.bitrate > base.bitrate * 2)
+        assertEquals("4K 60", q.copy(height = 3840, fps60 = true).label)
+    }
 }

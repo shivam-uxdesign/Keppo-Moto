@@ -877,11 +877,11 @@ private fun Ready(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
                         vm.posted()
                         ShareImages.share(context, ShareImages.uriFor(context, video), "video/mp4")
                     } else {
-                        vm.export(place, place.spec, share = true)
+                        vm.export(place, vm.specFor(place), share = true)
                     }
                 }
                 Button("Save", primary = false, icon = Icons.Outlined.Download, modifier = Modifier.weight(1f)) {
-                    if (place != ExportPreset.INSTAGRAM) { vm.export(place, place.spec); return@Button }
+                    if (place != ExportPreset.INSTAGRAM) { vm.export(place, vm.specFor(place)); return@Button }
                     scope.launch {
                         val ok = ShareImages.saveVideo(context, video, "Keppo Reel ${System.currentTimeMillis() / 1000}")
                         if (ok) { haptics.confirm(); vm.posted() }
