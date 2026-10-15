@@ -545,10 +545,24 @@ class MomentRecorder(
     /** What the log last said about the two mics (said again only when it changes). */
     @Volatile private var twoMicLogged: TwoMicKind? = null
 
+    /** Why a clip has (or hasn't) the engine mic's sound, for the log. */
+    private fun engineNote(kept: Boolean): String {
+        val enc = audio
+        return when {
+            kept -> "engine sound kept" + if (enc?.twoMono == true) " (same as the voice: receiver on Mono)" else ""
+            !settings.twoMics -> "no engine sound: Two mics is off"
+            enc == null -> "no engine sound: no mic open"
+            audioMic?.type != MicType.USB -> "no engine sound: recording with ${audioMic?.type?.label ?: "the phone mic"}, not the receiver"
+            !enc.recordingTwo -> "no engine sound: the receiver sends one channel"
+            enc.engineFormat == null -> "no engine sound: the engine mic wasn't ready"
+            else -> "no engine sound: couldn't be written"
+        }
+    }
+
     private fun writeEngine(clip: File, fromMicros: Long, toMicros: Long) {
-        val enc = audio ?: return
-        if (!enc.recordingTwo) return
-        val format = enc.engineFormat ?: return
+        val enc = audio ?: return log.log(engineNote(false))
+        if (!enc.recordingTwo) return log.log(engineNote(false))
+        val format = enc.engineFormat ?: return log.log(engineNote(false))
         runCatching {
             val out = File(clip.parentFile, clip.nameWithoutExtension + ".engine.m4a")
             if (ClipWriter.writeAudio(out, format, buffer.extraBetween(fromMicros, toMicros), fromMicros)) log.log("engine mic kept: ${out.name}" + if (enc.twoMono) " (same as the voice: receiver on Mono)" else "")
@@ -915,9 +929,11 @@ class MomentRecorder(
                     val candidate = rec ?: LiveRecording(
                         File(repo.dir(r.rideId), "video-${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(6)}.mp4"),
                         fmt, audio?.format, rotationDegrees,
+                        // Both mics, always: the engine mic records everything the voice mic does.
+                        engineFormat = audio?.takeIf { it.recordingTwo }?.engineFormat,
                     ).also { rec = it }
                     val from = if (restart) 0L else fromMillis * 1000
-                    if (buffer.startTap(from, seed = candidate::seed, onSample = candidate::write)) return@withTimeoutOrNull true
+                    if (buffer.startTap(from, seed = candidate::seed, onSample = candidate::write, onExtra = candidate::writeEngine.takeIf { candidate.recordsEngine })) return@withTimeoutOrNull true
                 }
                 delay(150)
             }
@@ -1010,7 +1026,7 @@ class MomentRecorder(
                 camera = camera,
             ),
         )
-        log.log("video saved ($reason): ${file.name} ${length / 1000}s ${file.length() / 1024}KB")
+        log.log("video saved ($reason): ${file.name} ${length / 1000}s ${file.length() / 1024}KB · " + engineNote(l.rec.engineFile.isFile))
         hub.onSaved()
         // Your own videos stay separate; event and voice videos continue the last clip.
         if (req.source != MomentSource.MANUAL) continueLast(req.rideId, start, start + length) else lastClip = null

@@ -14,7 +14,14 @@ import java.nio.ByteBuffer
  * only holds ~45 s). Fed the buffered lead-in first, then every new encoded sample.
  * Pausing leaves no gap in the file. Thread-safe: encoders write from their own threads.
  */
-class LiveRecording(val file: File, videoFormat: MediaFormat, audioFormat: MediaFormat?, rotationDegrees: Int) {
+class LiveRecording(
+    val file: File,
+    videoFormat: MediaFormat,
+    audioFormat: MediaFormat?,
+    rotationDegrees: Int,
+    /** The engine mic's format (two mics): its sound goes beside the video as `<clip>.engine.m4a`, in step. */
+    engineFormat: MediaFormat? = null,
+) {
     private val muxer = MediaMuxer(file.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
     private val timeline = LiveTimeline()
     private val info = MediaCodec.BufferInfo()
@@ -22,6 +29,17 @@ class LiveRecording(val file: File, videoFormat: MediaFormat, audioFormat: Media
     private val audioTrack: Int
     private var closed = false
     private var wroteVideo = false
+
+    /** The engine mic's own file, written alongside on the same timeline. */
+    val engineFile: File = File(file.parentFile, file.nameWithoutExtension + ".engine.m4a")
+    private val engineMuxer: MediaMuxer? = engineFormat?.let { f ->
+        runCatching { MediaMuxer(engineFile.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4).also { it.addTrack(f); it.start() } }.getOrNull()
+    }
+    private var wroteEngine = false
+    private val engineInfo = MediaCodec.BufferInfo()
+
+    /** Whether the engine mic is being recorded with this video. */
+    val recordsEngine: Boolean get() = engineMuxer != null
 
     /** Wall time of the first frame in the file. */
     @Volatile var firstFrameMillis: Long? = null
@@ -58,6 +76,16 @@ class LiveRecording(val file: File, videoFormat: MediaFormat, audioFormat: Media
         }
     }
 
+    /** One engine-mic sample (from the buffer's lead-in, then live). */
+    @Synchronized
+    fun writeEngine(s: EncodedSample) {
+        val m = engineMuxer ?: return
+        if (closed) return
+        val pts = timeline.extra(s.wallMicros) ?: return
+        engineInfo.set(0, s.data.size, pts, MediaCodec.BUFFER_FLAG_KEY_FRAME)
+        runCatching { m.writeSampleData(0, ByteBuffer.wrap(s.data), engineInfo); wroteEngine = true }
+    }
+
     @Synchronized fun pause() = timeline.pause()
 
     @Synchronized fun resume() = timeline.resume()
@@ -69,6 +97,11 @@ class LiveRecording(val file: File, videoFormat: MediaFormat, audioFormat: Media
         closed = true
         val ok = wroteVideo && runCatching { muxer.stop() }.isSuccess
         runCatching { muxer.release() }
+        engineMuxer?.let { m ->
+            val engineOk = ok && wroteEngine && runCatching { m.stop() }.isSuccess
+            runCatching { m.release() }
+            if (!engineOk) engineFile.delete()
+        }
         if (!ok) {
             file.delete()
             return null

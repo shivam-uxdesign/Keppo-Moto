@@ -119,12 +119,16 @@ object ClipMedia {
      * Joins [parts] (a file, from and to ms into it) end to end into [out]; [audioOnly] for sound
      * files (the engine mic's track).
      */
-    suspend fun join(context: Context, parts: List<Triple<File, Long, Long>>, out: File, audioOnly: Boolean = false) {
-        val items = parts.map { (f, from, to) ->
+    suspend fun join(context: Context, parts: List<Triple<File, Long, Long>>, out: File, audioOnly: Boolean = false, silent: Set<Int> = emptySet()) {
+        val items = parts.mapIndexed { i, (f, from, to) ->
             val item = MediaItem.Builder().setUri(Uri.fromFile(f))
                 .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setStartPositionMs(from).setEndPositionMs(to).build())
                 .build()
-            EditedMediaItem.Builder(item).apply { if (audioOnly) setRemoveVideo(true) }.build()
+            EditedMediaItem.Builder(item).apply {
+                if (audioOnly) setRemoveVideo(true)
+                // A stand-in of the right length, played at zero: silence that keeps the rest in step.
+                if (i in silent) setEffects(androidx.media3.transformer.Effects(listOf(GainProcessor { 0f }), emptyList()))
+            }.build()
         }
         export(context, Composition.Builder(EditedMediaItemSequence(items)).build(), out)
     }

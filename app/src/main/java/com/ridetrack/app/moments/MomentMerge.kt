@@ -84,11 +84,19 @@ class MomentMerger(private val context: Context, private val moments: MomentRepo
         val dir = first.file.parentFile ?: return
         val outVideo = File(dir, first.file.nameWithoutExtension + ".joining.mp4")
         ClipMedia.join(context, pieces.map { (p, m) -> Triple(m.file, p.fromMillis, p.toMillis) }, outVideo)
-        // The engine mic's track joins too when every clip has one; otherwise it's dropped (it must line up).
+        // The engine mic's track joins too; a piece without one gets silence of its length (its own
+        // sound, played at zero), so the rest still lines up with the picture.
         val engines = pieces.map { (_, m) -> m.engineFile }
         val outEngine = File(dir, first.file.nameWithoutExtension + ".joining.m4a")
-        val engineOk = engines.all { it.isFile } && runCatching {
-            ClipMedia.join(context, pieces.map { (p, m) -> Triple(m.engineFile, p.fromMillis, p.toMillis) }, outEngine, audioOnly = true)
+        val missing = engines.indices.filter { !engines[it].isFile }.toSet()
+        val engineOk = missing.size < engines.size && runCatching {
+            ClipMedia.join(
+                context,
+                pieces.mapIndexed { i, (p, m) -> Triple(if (i in missing) m.file else m.engineFile, p.fromMillis, p.toMillis) },
+                outEngine,
+                audioOnly = true,
+                silent = missing,
+            )
         }.isSuccess
         withContext(Dispatchers.IO) {
             val length = ClipMedia.lengthMs(outVideo) ?: error("joined clip unreadable")

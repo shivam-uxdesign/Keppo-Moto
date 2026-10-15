@@ -23,6 +23,8 @@ class RollingBuffer(private val capacityMicros: Long = 45_000_000L) {
     private val extra = ArrayDeque<EncodedSample>()
     /** Gets every new sample (true = video) while a long recording streams out of the buffer. */
     private var tap: ((Boolean, EncodedSample) -> Unit)? = null
+    /** Gets every new second-track sample while streaming (the engine mic). */
+    private var extraTap: ((EncodedSample) -> Unit)? = null
 
     @get:Synchronized
     val bytes: Long get() = video.sumOf { it.data.size.toLong() } + audio.sumOf { it.data.size.toLong() }
@@ -47,6 +49,7 @@ class RollingBuffer(private val capacityMicros: Long = 45_000_000L) {
         extra.addLast(s)
         val cutoff = s.wallMicros - capacityMicros
         while (extra.isNotEmpty() && extra.first().wallMicros < cutoff) extra.removeFirst()
+        extraTap?.invoke(s)
     }
 
     /** The second sound track between [fromMicros] and [toMicros]. */
@@ -59,17 +62,29 @@ class RollingBuffer(private val capacityMicros: Long = 45_000_000L) {
      * the buffer has no usable video yet (nothing is tapped then).
      */
     @Synchronized
-    fun startTap(fromMicros: Long, seed: (List<EncodedSample>, List<EncodedSample>) -> Unit, onSample: (Boolean, EncodedSample) -> Unit): Boolean {
+    fun startTap(
+        fromMicros: Long,
+        seed: (List<EncodedSample>, List<EncodedSample>) -> Unit,
+        onSample: (Boolean, EncodedSample) -> Unit,
+        /** The second sound track too: what's buffered from the first frame on, then each new sample. */
+        onExtra: ((EncodedSample) -> Unit)? = null,
+    ): Boolean {
         val (v, a) = extract(fromMicros, Long.MAX_VALUE)
         if (v.isEmpty()) return false
         seed(v, a)
+        if (onExtra != null) {
+            val first = v.first().wallMicros
+            extra.filter { it.wallMicros >= first }.forEach(onExtra)
+        }
         tap = onSample
+        extraTap = onExtra
         return true
     }
 
     @Synchronized
     fun stopTap() {
         tap = null
+        extraTap = null
     }
 
     /** Drops GOPs that end before [cutoff]: keep from the last keyframe at or before it. */

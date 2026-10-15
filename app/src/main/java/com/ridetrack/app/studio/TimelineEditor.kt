@@ -1059,6 +1059,17 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                         snap = { r, d, dir -> blockSnap(r, d, dir) },
                                     ) { ms, _ -> vm.change("Sound time") { TrackEdits.shiftAudio(it, a.id, ms) } }
                                     }
+                                    // Clips whose engine mic wasn't recorded: say so where its sound would be.
+                                    if (kind == TrackKind.ENGINE) {
+                                        val starts = TimelineEdits.starts(plan)
+                                        plan.segments.withIndex().filter { (_, seg) -> seg is ClipSegment && !seg.tail }.forEach { (i, seg) ->
+                                            val from = starts[i]
+                                            val to = from + seg.durMs
+                                            if (items.none { it.startMs < to && it.startMs + it.durMs > from }) {
+                                                TrackBlock("No engine sound for this clip", from, seg.durMs, 0, map, Color(0x1AFFFFFF), false, onClick = { mixer = true })
+                                            }
+                                        }
+                                    }
                                 }
                                 // Horns and bumps the engine mic heard, under its row: tap one to choose.
                                 if (kind == TrackKind.ENGINE) {

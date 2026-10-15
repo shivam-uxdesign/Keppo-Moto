@@ -16,6 +16,7 @@ class LiveTimeline {
     private var audioFrom = Long.MIN_VALUE
     private var lastVideo = -1L
     private var lastAudio = -1L
+    private var lastExtra = -1L
     private var lastWall = -1L
 
     val paused: Boolean get() = pausedAt >= 0
@@ -54,6 +55,14 @@ class LiveTimeline {
         if (base < 0 || pausedAt >= 0 || wallMicros < audioFrom) return null
         val pts = maxOf(wallMicros - base - shift, lastAudio + 1)
         lastAudio = pts
+        return pts
+    }
+
+    /** The second sound track (the engine mic): on the same timeline as [audio], so the two line up. */
+    fun extra(wallMicros: Long): Long? {
+        if (base < 0 || pausedAt >= 0 || wallMicros < audioFrom) return null
+        val pts = maxOf(wallMicros - base - shift, lastExtra + 1)
+        lastExtra = pts
         return pts
     }
 }
