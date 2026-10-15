@@ -83,6 +83,8 @@ data class ClipSegment(
     /** Playback speed (0.25–4) and how it changes across the clip. */
     val speed: Float = 1f,
     val ramp: SpeedRamp = SpeedRamp.NONE,
+    /** A drawn speed curve (overrides [speed] and [ramp] when it has points); see [SpeedPoints]. */
+    val speedPoints: List<SpeedPoint> = emptyList(),
     /** The part played backwards: a file made once when Reverse was tapped; null = forwards. */
     val reverse: String? = null,
     /** A freeze frame: this picture held for [durMs]; null = the moving clip. */
@@ -97,7 +99,13 @@ data class ClipSegment(
     val transition: Transition? = null,
 ) : Segment {
     /** How much of the clip this plays, in its own ms (more than [durMs] when sped up). */
-    val sourceMs: Long get() = if (still != null) 0 else Speed.sourceMs(durMs, speed, ramp)
+    val sourceMs: Long get() = if (still != null) 0 else Speed.sourceMs(durMs, speed, steps)
+
+    /** How the speed changes across the part, as (end fraction, multiplier) steps. */
+    val steps: List<Pair<Float, Float>> get() = if (speedPoints.size >= 2) SpeedPoints.steps(speedPoints) else ramp.steps
+
+    /** Played at another speed than as filmed (steady or a curve). */
+    val sped: Boolean get() = speed != 1f || steps.any { it.second != 1f }
 }
 
 /** How the speed changes across a clip: (end as a fraction of the clip's part, speed multiplier) steps. */
@@ -113,25 +121,34 @@ object Speed {
     val CHOICES = listOf(0.25f, 0.5f, 0.75f, 1f, 1.5f, 2f, 3f, 4f)
 
     /** Output ms per ms of the clip. */
-    fun outPerSource(speed: Float, ramp: SpeedRamp): Double {
+    fun outPerSource(speed: Float, ramp: SpeedRamp): Double = outPerSource(speed, ramp.steps)
+
+    fun outPerSource(speed: Float, steps: List<Pair<Float, Float>>): Double {
         var prev = 0f
         var sum = 0.0
-        ramp.steps.forEach { (end, mult) ->
+        steps.forEach { (end, mult) ->
             sum += (end - prev) / (speed * mult).toDouble()
             prev = end
         }
         return sum
     }
 
-    fun sourceMs(outMs: Long, speed: Float, ramp: SpeedRamp): Long =
-        if (speed == 1f && ramp == SpeedRamp.NONE) outMs else (outMs / outPerSource(speed, ramp)).toLong()
+    fun sourceMs(outMs: Long, speed: Float, ramp: SpeedRamp): Long = sourceMs(outMs, speed, ramp.steps)
+    fun outMs(sourceMs: Long, speed: Float, ramp: SpeedRamp): Long = outMs(sourceMs, speed, ramp.steps)
 
-    fun outMs(sourceMs: Long, speed: Float, ramp: SpeedRamp): Long =
-        if (speed == 1f && ramp == SpeedRamp.NONE) sourceMs else (sourceMs * outPerSource(speed, ramp)).toLong()
+    private fun even(speed: Float, steps: List<Pair<Float, Float>>) = speed == 1f && steps.all { it.second == 1f }
+
+    fun sourceMs(outMs: Long, speed: Float, steps: List<Pair<Float, Float>>): Long =
+        if (even(speed, steps)) outMs else (outMs / outPerSource(speed, steps)).toLong()
+
+    fun outMs(sourceMs: Long, speed: Float, steps: List<Pair<Float, Float>>): Long =
+        if (even(speed, steps)) sourceMs else (sourceMs * outPerSource(speed, steps)).toLong()
 
     /** The speed at [fraction] (0..1) through the clip's part. */
-    fun at(speed: Float, ramp: SpeedRamp, fraction: Float): Float =
-        speed * (ramp.steps.firstOrNull { fraction < it.first }?.second ?: ramp.steps.last().second)
+    fun at(speed: Float, ramp: SpeedRamp, fraction: Float): Float = at(speed, ramp.steps, fraction)
+
+    fun at(speed: Float, steps: List<Pair<Float, Float>>, fraction: Float): Float =
+        speed * (steps.firstOrNull { fraction < it.first }?.second ?: steps.last().second)
 }
 
 /** Zoom ([zoom] ≥ 1) and pan ([x], [y] in -1..1 of the room the zoom gives) at [atMs] into the segment. */

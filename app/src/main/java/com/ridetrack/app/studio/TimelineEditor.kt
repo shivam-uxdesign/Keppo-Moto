@@ -310,7 +310,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
             plan.segments.forEachIndexed { i, sg ->
                 val cs = sg as? ClipSegment ?: return@forEachIndexed
                 if (cs.tail || cs.still != null) return@forEachIndexed
-                val f = Speed.outPerSource(cs.speed, cs.ramp)
+                val f = Speed.outPerSource(cs.speed, cs.steps)
                 val range = cs.inMs..cs.inMs + cs.sourceMs
                 fun at(c: Long) = st[i] + ((c - cs.inMs) * f).toLong()
                 cs.bit.lines.forEach { l -> if (l.startMs in range) add(at(l.startMs)); if (l.endMs in range) add(at(l.endMs)) }
@@ -336,7 +336,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     fun trimSnapped(p: StudioPlan, i: Int, ms: Long, start: Boolean, dir: Int, fast: Boolean): Long {
         val cs = p.segments.getOrNull(i) as? ClipSegment
         if (fast || dir == 0 || cs == null) { trimSnap = null; guide.value = null; return ms }
-        val f = Speed.outPerSource(cs.speed, cs.ramp)
+        val f = Speed.outPerSource(cs.speed, cs.steps)
         val air = 150L
         val clipTargets = cs.bit.lines.map { if (start) it.startMs - air else it.endMs + air } + (s.rideTraces[cs.bit.momentId]?.marks?.map { it.clipMs } ?: emptyList())
         val cands = clipTargets.map { c -> if (start) ((c - cs.inMs) * f).toLong() else ((c - cs.inMs - cs.sourceMs) * f).toLong() }
@@ -861,7 +861,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                         segs.forEach { (i, sg) ->
                                             val cs = sg as ClipSegment
                                             val tr = s.rideTraces[cs.bit.momentId] ?: return@forEach
-                                            val f = Speed.outPerSource(cs.speed, cs.ramp)
+                                            val f = Speed.outPerSource(cs.speed, cs.steps)
                                             val whole = i == selIdx
                                             val from = if (whole) 0L else cs.inMs
                                             val to = if (whole) cs.bit.clipDurationMs else cs.inMs + cs.sourceMs
@@ -877,7 +877,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                     }
                                     segs.forEach { (i, sg) ->
                                         val cs = sg as ClipSegment
-                                        val f = Speed.outPerSource(cs.speed, cs.ramp)
+                                        val f = Speed.outPerSource(cs.speed, cs.steps)
                                         val whole = i == selIdx
                                         s.rideTraces[cs.bit.momentId]?.marks?.forEach { m ->
                                             val inUse = m.clipMs >= cs.inMs && m.clipMs <= cs.inMs + cs.sourceMs
@@ -905,7 +905,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             Row(Modifier.height(52.dp)) {
                                 plan.segments.forEachIndexed { i, seg ->
                                     val showsRest = (s.pick as? TimelinePick.Clip)?.index == i && seg is ClipSegment
-                                    if (showsRest && map.leftPx > 0f) Unused(s.thumbs[(seg as ClipSegment).bit.momentId], map.leftPx, (seg.inMs * Speed.outPerSource(seg.speed, seg.ramp)).toLong(), before = true)
+                                    if (showsRest && map.leftPx > 0f) Unused(s.thumbs[(seg as ClipSegment).bit.momentId], map.leftPx, (seg.inMs * Speed.outPerSource(seg.speed, seg.steps)).toLong(), before = true)
                                     val selected = (s.pick as? TimelinePick.Clip)?.index == i || many?.contains(i) == true
                                     val isClip = seg is ClipSegment && !seg.tail
                                     val cut = cutAt
@@ -1057,7 +1057,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                         val selIdx = (s.pick as? TimelinePick.Clip)?.index
                                         voiced.forEach { (i, seg) ->
                                             val cs = seg as ClipSegment
-                                            val f = Speed.outPerSource(cs.speed, cs.ramp)
+                                            val f = Speed.outPerSource(cs.speed, cs.steps)
                                             cs.bit.lines.forEach { l ->
                                                 val inUse = l.endMs > cs.inMs && l.startMs < cs.inMs + cs.sourceMs
                                                 if (!inUse && i != selIdx) return@forEach
@@ -1540,6 +1540,22 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             onFreeze = { vm.freeze() },
                             onMute = { vm.change(if (seg.volume == 0f) "Unmute" else "Mute") { TimelineEdits.volume(it, i, if (seg.volume == 0f) 1f else 0f) } },
                             onBack = back,
+                            marks = s.rideTraces[seg.bit.momentId]?.marks.orEmpty(),
+                            onPoints = { pts -> vm.drag { ClipTools.speedPoints(it, i, pts) } },
+                            onPointsEnd = { vm.endDrag("Speed curve") },
+                            onPointsSet = { label, pts -> vm.change(label) { ClipTools.speedPoints(it, i, pts) } },
+                            playFraction = run {
+                                val local = (pos - plan.startOf(i)).coerceAtLeast(0)
+                                // Output time back to the part's own time, along the curve.
+                                var src = 0f; var out = 0.0; val st = seg.steps; var prev = 0f
+                                val total = Speed.outPerSource(seg.speed, st) * seg.sourceMs
+                                for ((end, mult) in st) {
+                                    val span = (end - prev) * seg.sourceMs / (seg.speed * mult)
+                                    if (out + span >= local) { src = prev + ((local - out) / span * (end - prev)).toFloat(); break }
+                                    out += span; prev = end; src = end
+                                }
+                                if (total <= 0) null else src
+                            },
                         )
                         ClipTab.LOOK -> LookPanel(
                             seg.color,

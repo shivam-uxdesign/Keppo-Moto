@@ -395,7 +395,7 @@ class StudioRenderer(private val context: Context) {
         }
         val dur = when {
             cs?.still != null -> cs.durMs
-            cs != null -> Speed.outMs(srcLen, cs.speed, cs.ramp)
+            cs != null -> Speed.outMs(srcLen, cs.speed, cs.steps)
             else -> srcLen
         }
         val uri = input.files[clip.bit.momentId] ?: clip.bit.source?.let(Uri::parse) ?: error("Clip file missing")
@@ -406,7 +406,7 @@ class StudioRenderer(private val context: Context) {
             cs?.reverse != null && File(cs.reverse).isFile -> clipped(Uri.fromFile(File(cs.reverse)), 0, srcLen)
             else -> clipped(uri, from, from + srcLen)
         }
-        val sped = cs != null && cs.still == null && (cs.speed != 1f || cs.ramp != SpeedRamp.NONE)
+        val sped = cs != null && cs.still == null && cs.sped
 
         val segStart = plan.startOf(i)
         val clock = ItemClock(segStart, from, dur, preview)
@@ -424,7 +424,7 @@ class StudioRenderer(private val context: Context) {
         }
         val video = ArrayList<Effect>()
         // Speed first, so everything after sees the Reel's own time.
-        if (sped) video += SpeedChangeEffect(RampSpeed(cs!!.speed, cs.ramp, srcLen * 1000))
+        if (sped) video += SpeedChangeEffect(RampSpeed(cs!!.speed, cs.steps, srcLen * 1000))
         if (cs != null && (cs.rotation != 0 || cs.flip)) {
             video += ScaleAndRotateTransformation.Builder().setRotationDegrees((360 - cs.rotation).toFloat()).setScale(if (cs.flip) -1f else 1f, 1f).build()
         }
@@ -461,7 +461,7 @@ class StudioRenderer(private val context: Context) {
         }
         // Sped up or slowed: the sound at the same speed. The voice clean-up on talking clips.
         val procs = listOfNotNull(
-            if (sped) SpeedChangingAudioProcessor(RampSpeed(cs!!.speed, cs.ramp, srcLen * 1000)) else null,
+            if (sped) SpeedChangingAudioProcessor(RampSpeed(cs!!.speed, cs.steps, srcLen * 1000)) else null,
             if (plan.mix.cleanVoice && seg is ClipSegment && seg.lines.isNotEmpty()) HighPassProcessor() else null,
             audio,
         )
@@ -483,7 +483,7 @@ class StudioRenderer(private val context: Context) {
      * The speed over a clip's part ([lengthUs] long): constant, or in a ramp's steps. Times are
      * from the first frame or sample it sees.
      */
-    private class RampSpeed(private val speed: Float, private val ramp: SpeedRamp, private val lengthUs: Long) : androidx.media3.common.audio.SpeedProvider {
+    private class RampSpeed(private val speed: Float, private val steps: List<Pair<Float, Float>>, private val lengthUs: Long) : androidx.media3.common.audio.SpeedProvider {
         @Volatile private var base: Long? = null
 
         private fun origin(timeUs: Long): Long = base ?: synchronized(this) { base ?: timeUs.also { base = it } }
@@ -491,12 +491,12 @@ class StudioRenderer(private val context: Context) {
         override fun getSpeed(timeUs: Long): Float {
             val b = origin(timeUs)
             val f = ((timeUs - b).toFloat() / lengthUs.coerceAtLeast(1)).coerceIn(0f, 1f)
-            return Speed.at(speed, ramp, f)
+            return Speed.at(speed, steps, f)
         }
 
         override fun getNextSpeedChangeTimeUs(timeUs: Long): Long {
             val b = origin(timeUs)
-            return ramp.steps.dropLast(1).map { b + (it.first * lengthUs).toLong() }.firstOrNull { it > timeUs } ?: androidx.media3.common.C.TIME_UNSET
+            return steps.dropLast(1).map { b + (it.first * lengthUs).toLong() }.firstOrNull { it > timeUs } ?: androidx.media3.common.C.TIME_UNSET
         }
     }
 

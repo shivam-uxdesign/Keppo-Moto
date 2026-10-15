@@ -38,7 +38,7 @@ object ReelCover {
             start += seg.durMs
         }
         // Sped up or slowed: the clip's own time runs at its speed; a freeze holds its frame.
-        return best?.let { (seg, local) -> Spot(seg, seg.inMs + if (seg.still != null) 0 else (local / Speed.outPerSource(seg.speed, seg.ramp)).toLong()) }
+        return best?.let { (seg, local) -> Spot(seg, seg.inMs + if (seg.still != null) 0 else (local / Speed.outPerSource(seg.speed, seg.steps)).toLong()) }
     }
 
     /** Reel times worth trying for the cover: spread over the hook clip (or the first clip). Pure. */

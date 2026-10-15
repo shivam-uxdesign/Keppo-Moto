@@ -5,6 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -142,14 +145,38 @@ internal fun SpeedPanel(
     onFreeze: () -> Unit,
     onMute: () -> Unit,
     onBack: () -> Unit,
+    /** The ride's moments in this clip (ms into its recording), for the ride presets. */
+    marks: List<RideMark> = emptyList(),
+    /** A drawn curve: while dragging a point, on letting go, and a whole new one (a preset, Reset). */
+    onPoints: (List<SpeedPoint>) -> Unit = {},
+    onPointsEnd: () -> Unit = {},
+    onPointsSet: (String, List<SpeedPoint>) -> Unit = { _, _ -> },
+    /** How far through the clip's part the preview is (0..1), for the curve's playhead. */
+    playFraction: Float? = null,
 ) {
     val n = Speed.CHOICES.size
+    var ramp by remember { mutableStateOf(seg.speedPoints.size >= 2) }
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         PanelHead(
             "Speed",
-            speedLabel(seg.speed) + (fromMs?.takeIf { kotlin.math.abs(it - seg.durMs) > 50 }?.let { " · ${com.ridetrack.app.ui.format.Format.clock(it)} → ${com.ridetrack.app.ui.format.Format.clock(seg.durMs)}" } ?: " · ${com.ridetrack.app.ui.format.Format.clock(seg.durMs)}"),
+            (if (seg.speedPoints.size >= 2) "Ramp" else speedLabel(seg.speed)) + (fromMs?.takeIf { kotlin.math.abs(it - seg.durMs) > 50 }?.let { " · ${com.ridetrack.app.ui.format.Format.clock(it)} → ${com.ridetrack.app.ui.format.Format.clock(seg.durMs)}" } ?: " · ${com.ridetrack.app.ui.format.Format.clock(seg.durMs)}"),
             onBack,
         )
+        // Steady: one speed for the whole clip. Ramp: a curve, drawn or from the ride.
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp).clip(RoundedCornerShape(10.dp)).background(RtColors.Surface).padding(3.dp)) {
+            listOf(false to "Steady", true to "Ramp").forEach { (r, label) ->
+                Text(
+                    label, style = RtType.button, textAlign = TextAlign.Center,
+                    color = if (ramp == r) RtColors.TextPrimary else RtColors.TextSecondary,
+                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (ramp == r) RtColors.SurfaceRaised else Color.Transparent)
+                        .clickable { ramp = r }.padding(vertical = 6.dp),
+                )
+            }
+        }
+        if (ramp) {
+            RampEditor(seg, marks, onPoints, onPointsEnd, onPointsSet, playFraction)
+            return@Column
+        }
         Slider(
             value = Speed.CHOICES.indexOf(seg.speed).coerceAtLeast(0).toFloat(),
             onValueChange = { onSpeed(Speed.CHOICES[it.roundToInt().coerceIn(0, n - 1)]) },
@@ -170,6 +197,112 @@ internal fun SpeedPanel(
             PanelChip("Freeze here", false, onFreeze)
             PanelChip(if (seg.volume == 0f) "Unmute" else "Mute", seg.volume == 0f, onMute)
         }
+    }
+}
+
+/**
+ * A clip's speed as a curve: presets that follow the ride (slow at the lean, at each downshift,
+ * fast straights, a punch-in), then the curve itself. Tap it to add a point, drag a point (up is
+ * faster, 0.25–4×), hold one to delete it. The white line is where the preview is.
+ */
+@Composable
+private fun RampEditor(
+    seg: ClipSegment,
+    marks: List<RideMark>,
+    onPoints: (List<SpeedPoint>) -> Unit,
+    onPointsEnd: () -> Unit,
+    onPointsSet: (String, List<SpeedPoint>) -> Unit,
+    playFraction: Float?,
+) {
+    val points = seg.speedPoints.takeIf { it.size >= 2 } ?: listOf(SpeedPoint(0f, seg.speed), SpeedPoint(1f, seg.speed))
+    val now by rememberUpdatedState(points)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            SpeedPoints.Preset.entries.forEach { pr ->
+                val pts = SpeedPoints.preset(pr, marks, seg.inMs, seg.sourceMs)
+                Text(
+                    pr.label, style = RtType.caption,
+                    color = if (pts != null) RtColors.TextPrimary else RtColors.TextTertiary,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(RtColors.SurfaceRaised)
+                        .clickable(enabled = pts != null) { pts?.let { onPointsSet(pr.label, it) } }.padding(horizontal = 12.dp, vertical = 7.dp),
+                )
+            }
+            Text(
+                "Reset", style = RtType.caption, color = RtColors.TextSecondary,
+                modifier = Modifier.clip(RoundedCornerShape(50)).clickable { onPointsSet("Steady speed", emptyList()) }.padding(horizontal = 12.dp, vertical = 7.dp),
+            )
+        }
+        // Up is faster; on a doubling scale so 0.5× and 2× sit the same distance from 1×.
+        fun yOf(speed: Float, h: Float) = h * (1f - ((kotlin.math.ln(speed / SpeedPoints.MIN) / kotlin.math.ln(SpeedPoints.MAX / SpeedPoints.MIN)).toFloat()))
+        fun speedOf(y: Float, h: Float): Float {
+            val f = (1f - y / h).coerceIn(0f, 1f)
+            val v = SpeedPoints.MIN * kotlin.math.exp(f * kotlin.math.ln(SpeedPoints.MAX / SpeedPoints.MIN))
+            // Snap near the round speeds so 1× is easy to hit.
+            return listOf(0.25f, 0.5f, 1f, 2f, 4f).firstOrNull { kotlin.math.abs(kotlin.math.ln(it / v)) < 0.08f } ?: (v * 20).roundToInt() / 20f
+        }
+        var dragging by remember { mutableStateOf<Int?>(null) }
+        val accent = RtColors.Primary
+        val grid = RtColors.TextTertiary
+        Canvas(
+            Modifier.fillMaxWidth().height(120.dp).padding(horizontal = 12.dp)
+                .semantics { contentDescription = "Speed curve" }
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { o ->
+                            val f = (o.x / size.width).coerceIn(0f, 1f)
+                            onPointsSet("Speed point", SpeedPoints.clean(now + SpeedPoint(f, speedOf(o.y, size.height.toFloat()))))
+                        },
+                        onLongPress = { o ->
+                            val k = now.indices.minByOrNull { kotlin.math.abs(now[it].at * size.width - o.x) } ?: return@detectTapGestures
+                            if (k != 0 && k != now.lastIndex && kotlin.math.abs(now[k].at * size.width - o.x) < 40f) {
+                                onPointsSet("Delete speed point", now.filterIndexed { j, _ -> j != k })
+                            }
+                        },
+                    )
+                }
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragStart = { o -> dragging = now.indices.minByOrNull { kotlin.math.abs(now[it].at * size.width - o.x) }?.takeIf { kotlin.math.abs(now[it].at * size.width - o.x) < 60f } },
+                        onDragEnd = { if (dragging != null) onPointsEnd(); dragging = null },
+                        onDragCancel = { if (dragging != null) onPointsEnd(); dragging = null },
+                    ) { ch, _ ->
+                        val k = dragging ?: return@detectDragGestures
+                        ch.consume()
+                        val p = ch.position
+                        // The end points stay at the ends; the others slide between their neighbours.
+                        val at = when (k) { 0 -> 0f; now.lastIndex -> 1f; else -> (p.x / size.width).coerceIn(now[k - 1].at + 0.01f, now[k + 1].at - 0.01f) }
+                        onPoints(now.mapIndexed { j, q -> if (j == k) SpeedPoint(at, speedOf(p.y, size.height.toFloat())) else q })
+                    }
+                },
+        ) {
+            val h = size.height
+            listOf(0.5f, 1f, 2f).forEach { v ->
+                val y = yOf(v, h)
+                drawLine(grid.copy(alpha = if (v == 1f) 0.6f else 0.25f), Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+            }
+            // The ride's moments in the part, as faint ticks.
+            marks.forEach { m ->
+                val f = (m.clipMs - seg.inMs).toFloat() / seg.sourceMs.coerceAtLeast(1)
+                if (f in 0f..1f) drawLine(Color(0xFFFBBF24).copy(alpha = 0.6f), Offset(f * size.width, h - 10.dp.toPx()), Offset(f * size.width, h), strokeWidth = 2.dp.toPx())
+            }
+            val path = Path()
+            for (k in 0..60) {
+                val f = k / 60f
+                val y = yOf(SpeedPoints.at(points, f), h)
+                if (k == 0) path.moveTo(0f, y) else path.lineTo(f * size.width, y)
+            }
+            drawPath(path, accent, style = Stroke(width = 2.5.dp.toPx()))
+            points.forEach { pt -> drawCircle(Color.White, 6.dp.toPx(), Offset(pt.at * size.width, yOf(pt.speed, h))) }
+            playFraction?.takeIf { it in 0f..1f }?.let { f -> drawLine(Color.White.copy(alpha = 0.8f), Offset(f * size.width, 0f), Offset(f * size.width, h), strokeWidth = 1.5.dp.toPx()) }
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+            Text("Slower", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.weight(1f))
+            Text("lines: 2× · 1× · 0.5×", style = RtType.caption, color = RtColors.TextTertiary)
+        }
+        Text(
+            "Tap to add a point · drag one (up is faster) · hold one to remove it. Yellow ticks are the ride's moments.",
+            style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.padding(horizontal = 12.dp),
+        )
     }
 }
 

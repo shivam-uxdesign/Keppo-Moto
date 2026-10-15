@@ -25,14 +25,24 @@ object ClipTools {
         if (s.still != null) return plan
         val v = speed.coerceIn(0.25f, 4f)
         val dur = Speed.outMs(s.sourceMs, v, s.ramp).coerceAtLeast(TimelineEdits.MIN_MS)
-        return TimelineEdits.normalize(with(plan, i, s.copy(speed = v, durMs = dur, lines = scaleLines(s.lines, s.durMs, dur))))
+        return TimelineEdits.normalize(with(plan, i, s.copy(speed = v, speedPoints = emptyList(), durMs = dur, lines = scaleLines(s.lines, s.durMs, dur))))
     }
 
     fun ramp(plan: StudioPlan, i: Int, ramp: SpeedRamp): StudioPlan {
         val s = clip(plan, i) ?: return plan
         if (s.still != null) return plan
         val dur = Speed.outMs(s.sourceMs, s.speed, ramp).coerceAtLeast(TimelineEdits.MIN_MS)
-        return TimelineEdits.normalize(with(plan, i, s.copy(ramp = ramp, durMs = dur, lines = scaleLines(s.lines, s.durMs, dur))))
+        return TimelineEdits.normalize(with(plan, i, s.copy(ramp = ramp, speedPoints = emptyList(), durMs = dur, lines = scaleLines(s.lines, s.durMs, dur))))
+    }
+
+    /** A drawn speed curve on clip [i] (the steady speed and fixed ramps step aside); empty = back to steady 1×. */
+    fun speedPoints(plan: StudioPlan, i: Int, points: List<SpeedPoint>): StudioPlan {
+        val s = clip(plan, i) ?: return plan
+        if (s.still != null) return plan
+        val pts = if (points.size >= 2) SpeedPoints.clean(points) else emptyList()
+        val next = s.copy(speed = 1f, ramp = SpeedRamp.NONE, speedPoints = pts)
+        val dur = Speed.outMs(s.sourceMs, 1f, next.steps).coerceAtLeast(TimelineEdits.MIN_MS)
+        return TimelineEdits.normalize(with(plan, i, next.copy(durMs = dur, lines = scaleLines(s.lines, s.durMs, dur))))
     }
 
     /** The same clip again, right after it. */
@@ -44,7 +54,7 @@ object ClipTools {
     /** Another clip in its place, as long as this one was (if it's long enough). */
     fun replace(plan: StudioPlan, i: Int, bit: Bit): StudioPlan {
         val s = clip(plan, i) ?: return plan
-        val f = Speed.outPerSource(s.speed, s.ramp)
+        val f = Speed.outPerSource(s.speed, s.steps)
         val max = ((bit.clipDurationMs - bit.inMs) * f).toLong()
         val dur = s.durMs.coerceAtMost(max).coerceAtLeast(TimelineEdits.MIN_MS)
         val seg = s.copy(bit = bit, inMs = bit.inMs, durMs = dur, lines = bit.lines.filter { it.startMs < dur }, reverse = null, still = null, frame = emptyList())
@@ -56,7 +66,7 @@ object ClipTools {
         val s = clip(plan, i) ?: return plan
         if (s.still != null) return plan
         val newIn = (s.inMs + deltaMs).coerceIn(0, (s.bit.clipDurationMs - s.sourceMs).coerceAtLeast(0))
-        val shift = ((newIn - s.inMs) * Speed.outPerSource(s.speed, s.ramp)).toLong()
+        val shift = ((newIn - s.inMs) * Speed.outPerSource(s.speed, s.steps)).toLong()
         if (shift == 0L) return plan
         val lines = s.lines.map { it.copy(startMs = it.startMs - shift, endMs = it.endMs - shift) }.filter { it.endMs > 0 && it.startMs < s.durMs }
         return TimelineEdits.normalize(with(plan, i, s.copy(inMs = newIn, lines = lines, reverse = null)))
@@ -71,7 +81,7 @@ object ClipTools {
         val s = clip(plan, i) ?: return plan
         val split = if (local >= TimelineEdits.MIN_MS && local <= s.durMs - TimelineEdits.MIN_MS) TimelineEdits.split(plan, atMs) else plan
         val at = if (split === plan) (if (local < s.durMs / 2) i else i + 1) else i + 1
-        val srcAt = s.inMs + (local / Speed.outPerSource(s.speed, s.ramp)).toLong()
+        val srcAt = s.inMs + (local / Speed.outPerSource(s.speed, s.steps)).toLong()
         val hold = s.copy(
             inMs = srcAt.coerceAtMost(s.bit.clipDurationMs - 1), durMs = holdMs, lines = emptyList(), hook = false, text = null, volume = 0f,
             speed = 1f, ramp = SpeedRamp.NONE, reverse = null, still = file, frame = emptyList(), transition = Transition(TransitionKind.CUT),
@@ -169,7 +179,9 @@ object ClipTools {
         val src = plan.segments.getOrNull(from) as? ClipSegment ?: return plan
         var p = plan
         plan.segments.forEachIndexed { k, seg ->
-            if (k != from && seg is ClipSegment && seg.still == null && !seg.tail) p = ramp(speed(p, k, src.speed), k, src.ramp)
+            if (k != from && seg is ClipSegment && seg.still == null && !seg.tail) {
+                p = if (src.speedPoints.size >= 2) speedPoints(p, k, src.speedPoints) else ramp(speed(p, k, src.speed), k, src.ramp)
+            }
         }
         return p
     }

@@ -44,7 +44,7 @@ data class TimeMap(
         fun of(plan: StudioPlan, selected: Int?, pxPerMs: Float): TimeMap {
             val seg = selected?.let { plan.segments.getOrNull(it) as? ClipSegment }
             if (seg == null || seg.tail || seg.still != null) return TimeMap(pxPerMs)
-            val f = Speed.outPerSource(seg.speed, seg.ramp)
+            val f = Speed.outPerSource(seg.speed, seg.steps)
             val at = plan.startOf(selected)
             val before = seg.inMs * f
             val after = ((seg.bit.clipDurationMs - seg.inMs - seg.sourceMs).coerceAtLeast(0)) * f

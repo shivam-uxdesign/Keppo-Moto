@@ -85,7 +85,7 @@ object TextTools {
     fun relines(plan: StudioPlan, momentId: String, lines: List<CaptionLine>): StudioPlan = plan.copy(
         segments = plan.segments.map { seg ->
             if (seg !is ClipSegment || seg.bit.momentId != momentId || seg.tail || seg.still != null) return@map seg
-            val f = Speed.outPerSource(seg.speed, seg.ramp)
+            val f = Speed.outPerSource(seg.speed, seg.steps)
             val from = seg.inMs
             val to = seg.inMs + seg.sourceMs
             val mine = lines.filter { it.endMs > from && it.startMs < to }.map {

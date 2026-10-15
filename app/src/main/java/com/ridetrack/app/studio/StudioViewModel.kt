@@ -1666,7 +1666,7 @@ class StudioViewModel(
         if (seg.tail) return
         viewModelScope.launch {
             val uri = files()[seg.bit.momentId] ?: seg.bit.source?.let(Uri::parse) ?: return@launch say("Couldn't find that clip")
-            val at = seg.inMs + if (seg.still != null) 0 else (local / Speed.outPerSource(seg.speed, seg.ramp)).toLong()
+            val at = seg.inMs + if (seg.still != null) 0 else (local / Speed.outPerSource(seg.speed, seg.steps)).toLong()
             val still = seg.still?.let(::File) ?: ClipMedia.still(c.appContext, uri, at) ?: return@launch say("Couldn't read that frame")
             val ms = playheadMs
             change("Freeze frame") { ClipTools.freeze(it, ms, still.path) }
