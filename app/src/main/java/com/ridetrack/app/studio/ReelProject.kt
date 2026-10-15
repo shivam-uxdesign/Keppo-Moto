@@ -212,6 +212,7 @@ object ReelJson {
         is ClipSegment -> JSONObject().put("type", "clip").put("bit", bit(s.bit)).put("in", s.inMs).put("dur", s.durMs).put("lines", lines(s.lines))
             .put("hook", s.hook).put("tail", s.tail).put("teaser", s.teaser).put("section", s.section).put("text", s.text ?: JSONObject.NULL).put("volume", s.volume.toDouble())
             .put("speed", s.speed.toDouble()).put("ramp", s.ramp.name)
+            .put("box", s.box?.let { b -> JSONObject().put("w", b.w.toDouble()).put("h", b.h.toDouble()).put("cx", b.cx.toDouble()).put("cy", b.cy.toDouble()).put("aspect", b.aspect?.toDouble() ?: JSONObject.NULL) } ?: JSONObject.NULL)
             .put("speedPoints", org.json.JSONArray().apply { s.speedPoints.forEach { pt -> put(JSONObject().put("at", pt.at.toDouble()).put("speed", pt.speed.toDouble())) } }).put("reverse", s.reverse ?: JSONObject.NULL).put("still", s.still ?: JSONObject.NULL)
             .put("rotation", s.rotation).put("flip", s.flip)
             .put("frame", JSONArray().apply { s.frame.forEach { k -> put(JSONObject().put("at", k.atMs).put("z", k.zoom.toDouble()).put("x", k.x.toDouble()).put("y", k.y.toDouble())) } })
@@ -227,6 +228,7 @@ object ReelJson {
             o.optInt("section", -1), o.optStringOrNull("text"), o.optDouble("volume", 1.0).toFloat(),
             speed = o.optDouble("speed", 1.0).toFloat(),
             ramp = SpeedRamp.entries.firstOrNull { it.name == o.optString("ramp") } ?: SpeedRamp.NONE,
+            box = o.optJSONObject("box")?.let { b -> FrameBox(b.optDouble("w", 1.0).toFloat(), b.optDouble("h", 1.0).toFloat(), b.optDouble("cx", 0.5).toFloat(), b.optDouble("cy", 0.5).toFloat(), if (b.isNull("aspect")) null else b.optDouble("aspect").toFloat()) },
             speedPoints = o.optJSONArray("speedPoints")?.let { a -> (0 until a.length()).mapNotNull { k -> a.optJSONObject(k)?.let { p -> SpeedPoint(p.optDouble("at").toFloat(), p.optDouble("speed", 1.0).toFloat()) } } } ?: emptyList(),
             reverse = o.optStringOrNull("reverse"),
             still = o.optStringOrNull("still"),

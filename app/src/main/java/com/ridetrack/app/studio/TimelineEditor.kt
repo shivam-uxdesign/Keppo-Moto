@@ -279,6 +279,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var styleAt by remember { mutableIntStateOf(-1) }
     // A crop being pinched on the video: shown straight away, kept on letting go.
     var crop by remember { mutableStateOf(CropLive()) }
+    /** The crop frame while its corner is being dragged (shown live, kept on letting go). */
+    var cropBox by remember { mutableStateOf<FrameBox?>(null) }
     // Typing on the video: a new text (id null) or the one being changed.
     var typing by remember { mutableStateOf(false) }
     var typingId by remember { mutableStateOf<String?>(null) }
@@ -289,7 +291,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
     var toolPath by remember { mutableStateOf(emptyList<Int>()) }
     LaunchedEffect(s.pick) { toolPath = emptyList() }
     // With nothing selected: the tab shown at the bottom (Edit · Sound · Text · Look · Add).
-    var toolTab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(ToolTab.EDIT) }
+    var toolTab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<ToolTab?>(null) }
     var micAllowed by remember {
         mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED)
     }
@@ -564,13 +566,15 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         val fcs = fseg?.takeIf { !it.tail }
                         val cam = fseg?.let { seg ->
                             val c0 = art.camera(Cuts.frameAt(plan, fi, fl, seg.durMs))
-                            if (fcs == null || fcs.frame.isEmpty()) c0 else ClipTools.frameAt(fcs, fl).let { f ->
-                                val room = (f.zoom - 1f) / 2f
-                                c0.copy(k = c0.k * f.zoom, x = c0.x - f.x * art.w * room, y = c0.y - f.y * art.h * room)
+                            if (fcs == null || fcs.frame.isEmpty() && fcs.box == null) c0 else ClipTools.frameAt(fcs, fl).let { f ->
+                                val free = ClipTools.free(fcs)
+                                val room = ClipTools.room(f.zoom, free)
+                                val k0 = if (free) maxOf(c0.k, art.fill(c0)) * f.zoom else c0.k * f.zoom
+                                c0.copy(k = k0, x = c0.x - f.x * art.w * room, y = c0.y - f.y * art.h * room, free = free)
                             }
                         }
                         val turned = fcs != null && (fcs.rotation == 90 || fcs.rotation == 270)
-                        val k = (cam?.let { maxOf(it.k, art.fill(it)) } ?: 1f) * crop.z * (if (turned) maxOf(size.height / size.width, size.width / size.height) else 1f)
+                        val k = (cam?.let { if (it.free) it.k else maxOf(it.k, art.fill(it)) } ?: 1f) * crop.z * (if (turned) maxOf(size.height / size.width, size.width / size.height) else 1f)
                         scaleX = k * (if (fcs?.flip == true) -1f else 1f); scaleY = k
                         translationX = (cam?.x ?: 0f) * unit + crop.x
                         translationY = (cam?.y ?: 0f) * unit + crop.y
@@ -604,6 +608,18 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                         )
                     }
                 }
+                }
+                // The crop frame of the clip showing: dark outside it (as in the made video).
+                val boxNow by remember(plan) { derivedStateOf { (plan.segments.getOrNull(TimelineEdits.at(plan, pos).first) as? ClipSegment)?.takeIf { !it.tail }?.box } }
+                (cropBox ?: boxNow)?.let { b ->
+                    val ink = Color(Tok.INK)
+                    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                        val l = b.left * size.width; val r = b.right * size.width; val t = b.top * size.height; val bt = b.bottom * size.height
+                        drawRect(ink, Offset.Zero, androidx.compose.ui.geometry.Size(size.width, t))
+                        drawRect(ink, Offset(0f, bt), androidx.compose.ui.geometry.Size(size.width, size.height - bt))
+                        drawRect(ink, Offset(0f, t), androidx.compose.ui.geometry.Size(l, bt - t))
+                        drawRect(ink, Offset(r, t), androidx.compose.ui.geometry.Size(size.width - r, bt - t))
+                    }
                 }
                 // The graphics: drawn by the same code as the made video (hidden text and stickers left out).
                 val shown = remember(plan) { plan.shown() }
@@ -757,8 +773,9 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                     crop = CropLive()
                                     if (c == CropLive()) return@awaitEachGesture
                                     val here = ClipTools.frameAt(cs, 0)
-                                    val z = (here.zoom * c.z).coerceIn(1f, 3f)
-                                    val room = (z - 1f) / 2f
+                                    // Pinch out past the picture's edge to make the video smaller (it sits on dark).
+                                    val z = (here.zoom * c.z).coerceIn(ClipTools.MIN_ZOOM, 3f)
+                                    val room = ClipTools.room(z, cs.box != null || z < 1f)
                                     val dx = if (room > 0f) -c.x / (wPx * room) else 0f
                                     val dy = if (room > 0f) -c.y / (hPx * room) else 0f
                                     val turns = Math.floorMod((c.r / 90f).roundToInt(), 4)
@@ -770,6 +787,45 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                 }
                             },
                     )
+                    // The frame: drag a corner to size it (its shape kept, unless Free); the opposite corner stays.
+                    val shownBox = cropBox ?: cs.box ?: FrameBox(1f, 1f, aspect = null)
+                    val handle = 28.dp
+                    listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1).forEach { (cxSide, cySide) ->
+                        val hx = (if (cxSide == 0) shownBox.left else shownBox.right) * wPx
+                        val hy = (if (cySide == 0) shownBox.top else shownBox.bottom) * hPx
+                        Box(
+                            Modifier.offset { IntOffset((hx - handle.toPx() / 2).roundToInt(), (hy - handle.toPx() / 2).roundToInt()) }
+                                .size(handle)
+                                .pointerInput(ci, cxSide, cySide) {
+                                    detectDragGestures(
+                                        onDragStart = { cropBox = cs.box ?: FrameBox(1f, 1f, aspect = null) },
+                                        onDragEnd = { cropBox?.let { b -> vm.change("Crop frame") { ClipTools.box(it, ci, b) } }; cropBox = null },
+                                        onDragCancel = { cropBox = null },
+                                    ) { ch, d ->
+                                        ch.consume()
+                                        val b = cropBox ?: return@detectDragGestures
+                                        // The fixed corner, and the dragged one moved.
+                                        val fx = if (cxSide == 0) b.right else b.left
+                                        val fy = if (cySide == 0) b.bottom else b.top
+                                        var mx = (if (cxSide == 0) b.left else b.right) + d.x / wPx
+                                        var my = (if (cySide == 0) b.top else b.bottom) + d.y / hPx
+                                        var w = kotlin.math.abs(mx - fx).coerceIn(0.15f, 1f)
+                                        var h = kotlin.math.abs(my - fy).coerceIn(0.1f, 1f)
+                                        b.aspect?.let { a -> h = (a.let { w * FrameBox.CANVAS / it }).coerceIn(0.1f, 1f); w = h * a / FrameBox.CANVAS }
+                                        mx = if (cxSide == 0) fx - w else fx + w
+                                        my = if (cySide == 0) fy - h else fy + h
+                                        cropBox = FrameBox.clamp(b.copy(w = w, h = h, cx = (mx + fx) / 2, cy = (my + fy) / 2))
+                                    }
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(Modifier.size(14.dp).clip(RoundedCornerShape(3.dp)).background(Color.White).border(1.5.dp, RtColors.Primary, RoundedCornerShape(3.dp)))
+                        }
+                    }
+                    // The frame's outline.
+                    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                        drawRect(Color.White.copy(alpha = 0.9f), Offset(shownBox.left * size.width, shownBox.top * size.height), androidx.compose.ui.geometry.Size(shownBox.w * size.width, shownBox.h * size.height), style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx()))
+                    }
                 }
                 if (!playing) {
                     Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.align(Alignment.Center).size(48.dp))
@@ -1099,7 +1155,9 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                     val label = (if (s.engineFiles.isNotEmpty()) "Voice" else "Clip sound") + if (muted) " · muted" else ""
                                     Rows(1, "Mic 1 · Voice", Icons.Rounded.Mic) {
                                         voiced.forEach { (i, seg) ->
-                                            TrackBlock(label, starts[i], seg.durMs, 0, map, Color(0x5538BDF8), false, onClick = { mixer = true })
+                                            // A clip with words shows the words instead of the name (the row's icon names it).
+                                            val name = if ((seg as ClipSegment).bit.lines.isNotEmpty()) (if (muted) "Muted" else "") else label
+                                            TrackBlock(name, starts[i], seg.durMs, 0, map, Color(0x5538BDF8), false, onClick = { mixer = true })
                                         }
                                         // What was said, as faint text over the row (and over a selected clip's unused parts).
                                         val selIdx = (s.pick as? TimelinePick.Clip)?.index
@@ -1557,8 +1615,9 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     // At most 5 icons, never scrolling: a parent opens its own set, ‹ goes back up.
                     if (picked == null) {
                         // Nothing selected: the tab's tools over five fixed tabs, one tap between them.
-                        ToolBar(tabTree(toolTab), toolPath, onPath = { toolPath = it }, label = toolTab.label)
-                        ToolTabs(toolTab) { t -> toolTab = t; toolPath = emptyList() }
+                        // Only once a tab is tapped do its tools appear above it; tapping it again hides them.
+                        toolTab?.let { t -> ToolBar(tabTree(t), toolPath, onPath = { toolPath = it }, label = t.label) }
+                        ToolTabs(toolTab) { t -> toolTab = if (toolTab == t) null else t; toolPath = emptyList() }
                     } else {
                         // Something selected: only its tools, its name on the left, ✕ back to the tabs.
                         ToolBar(toolTree(picked, seg), toolPath, onPath = { toolPath = it }, label = pickLabel(picked), onClose = { vm.pick(null) })
@@ -1618,6 +1677,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                             onMirror = { vm.change("Mirror") { ClipTools.flip(it, i) } },
                             onPushIn = { vm.change("Slow push-in") { p -> ClipTools.reframe(ClipTools.reframe(ClipTools.clearFrame(p, i), i, 0), i, seg.durMs, dZoom = 0.25f) } },
                             onPunch = { vm.change("Punch-in") { ClipTools.punchIn(it, i) } },
+                            onShape = { b -> vm.change(if (b == null) "No frame" else "Frame ${FrameBox.SHAPES.firstOrNull { it.second == b.aspect }?.first ?: ""}") { ClipTools.box(it, i, b) } },
                             onReset = { vm.change("Reset crop") { p -> ClipTools.clearFrame(p, i).let { q -> if (seg.flip) ClipTools.flip(q, i) else q }.let { q -> var r = q; repeat(((360 - seg.rotation) % 360) / 90) { r = ClipTools.rotate(r, i) }; r } } },
                             onBack = back,
                         )
@@ -2127,7 +2187,7 @@ private fun RowName(name: String, icon: ImageVector) {
             .zIndex(4f)
             .width(ROW_NAME_W)
             .fillMaxHeight()
-            .background(RtColors.Background.copy(alpha = 0.94f))
+            .background(RtColors.Background)
             .semantics { contentDescription = name },
         contentAlignment = Alignment.Center,
     ) { Icon(icon, contentDescription = null, tint = RtColors.TextSecondary, modifier = Modifier.size(16.dp)) }
@@ -2527,6 +2587,8 @@ private class TNode(
     val panel: (@Composable () -> Unit)? = null,
 )
 
+private fun TNode.copyKids(kids: List<TNode>?): TNode = if (kids === this.kids) this else TNode(icon, label, danger, on, enabled, kids, slider, action, panel)
+
 private class TSlider(val value: Float, val range: ClosedFloatingPointRange<Float>, val format: (Float) -> String, val onChange: (Float) -> Unit, val onEnd: () -> Unit)
 
 /**
@@ -2535,7 +2597,10 @@ private class TSlider(val value: Float, val range: ClosedFloatingPointRange<Floa
  * value opens a slider in place of the icons.
  */
 @Composable
-private fun ToolBar(top: List<TNode>, path: List<Int>, onPath: (List<Int>) -> Unit, label: String, onClose: (() -> Unit)? = null) {
+private fun ToolBar(top0: List<TNode>, path: List<Int>, onPath: (List<Int>) -> Unit, label: String, onClose: (() -> Unit)? = null) {
+    // No "More": its tools follow on the next page instead.
+    fun unfold(l: List<TNode>): List<TNode> = l.flatMap { n -> if (n.label == "More" && n.kids != null) unfold(n.kids) else listOf(n.copyKids(n.kids?.let(::unfold))) }
+    val top = unfold(top0)
     var level = top
     val names = ArrayList<String>()
     var open: TNode? = null
@@ -2581,16 +2646,32 @@ private fun ToolBar(top: List<TNode>, path: List<Int>, onPath: (List<Int>) -> Un
                     )
                 }
             } else {
-                Row(Modifier.weight(1f)) {
-                    level.take(5).forEachIndexed { k, n ->
-                        TreeTool(n, Modifier.weight(1f)) {
-                            when {
-                                n.kids != null || n.slider != null || n.panel != null -> onPath(path + k)
-                                else -> n.action?.invoke()
+                // Five at a time; more than five: swipe sideways for the next five (dots say where).
+                val pages = (level.size + 4) / 5
+                val pager = androidx.compose.foundation.pager.rememberPagerState(pageCount = { pages.coerceAtLeast(1) })
+                Column(Modifier.weight(1f)) {
+                    androidx.compose.foundation.pager.HorizontalPager(pager, Modifier.fillMaxWidth(), key = { "$it:${path.size}" }) { pg ->
+                        Row(Modifier.fillMaxWidth()) {
+                            val slice = level.drop(pg * 5).take(5)
+                            slice.forEachIndexed { j, n ->
+                                val k = pg * 5 + j
+                                TreeTool(n, Modifier.weight(1f)) {
+                                    when {
+                                        n.kids != null || n.slider != null || n.panel != null -> onPath(path + k)
+                                        else -> n.action?.invoke()
+                                    }
+                                }
+                            }
+                            repeat(5 - slice.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                    if (pages > 1) {
+                        Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.Center) {
+                            repeat(pages) { d ->
+                                Box(Modifier.padding(horizontal = 3.dp).size(if (d == pager.currentPage) 7.dp else 5.dp).clip(CircleShape).background(if (d == pager.currentPage) RtColors.TextPrimary else RtColors.TextTertiary))
                             }
                         }
                     }
-                    repeat((5 - level.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
@@ -2664,15 +2745,15 @@ private fun PanelActions(onCancel: () -> Unit, onApplyAll: (() -> Unit)?, onDone
 
 /** The five areas of the editor, always at the bottom while nothing is selected. */
 private enum class ToolTab(val label: String, val icon: ImageVector) {
+    ADD("Add", Icons.Rounded.Add),
     EDIT("Edit", Icons.Rounded.ContentCut),
     SOUND("Sound", Icons.Rounded.Tune),
     TEXT("Text", Icons.Rounded.TextFields),
     LOOK("Look", Icons.Rounded.Palette),
-    ADD("Add", Icons.Rounded.Add),
 }
 
 @Composable
-private fun ToolTabs(selected: ToolTab, onSelect: (ToolTab) -> Unit) {
+private fun ToolTabs(selected: ToolTab?, onSelect: (ToolTab) -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(top = 4.dp).border(width = 0.5.dp, color = RtColors.Hairline, shape = RoundedCornerShape(0.dp)).padding(vertical = 4.dp),
     ) {
@@ -2850,7 +2931,7 @@ private fun TransitionPicker(
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         LazyRow(
             state = list,
-            modifier = Modifier.fillMaxWidth().height(96.dp),
+            modifier = Modifier.fillMaxWidth().height(104.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -2859,7 +2940,8 @@ private fun TransitionPicker(
                 val on = k == tr.kind
                 val z by animateFloatAsState(if (on) 1.12f else 0.92f, tween(200), label = "pick")
                 Column(
-                    Modifier.width(64.dp).clip(RoundedCornerShape(12.dp))
+                    // No clip here: the picked circle grows past its slot and must not be cut off.
+                    Modifier.width(64.dp).padding(top = 6.dp)
                         .clickable(role = Role.Button, onClickLabel = k.label) { onPick(Transition(k)) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),

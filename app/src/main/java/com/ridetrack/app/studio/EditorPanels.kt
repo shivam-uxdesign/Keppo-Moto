@@ -418,11 +418,23 @@ internal fun CropPanel(
     onPunch: () -> Unit,
     onReset: () -> Unit,
     onBack: () -> Unit,
+    /** A frame shape: null for none (the whole picture), else a [FrameBox] of that shape (Free: as it is now). */
+    onShape: (FrameBox?) -> Unit = {},
 ) {
     val zoom = seg.frame.maxOfOrNull { it.zoom } ?: 1f
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        PanelHead("Crop", if (zoom > 1.001f) String.format(java.util.Locale.US, "%.2f×", zoom) else null, onBack)
-        Text("Pinch the video to crop in, drag to move it, twist to turn it.", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(horizontal = 8.dp))
+        PanelHead("Crop", if (kotlin.math.abs(zoom - 1f) > 0.001f) String.format(java.util.Locale.US, "%.2f×", zoom) else null, onBack)
+        // The frame's shape: the video shows inside it, dark around it.
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            PanelChip("Full", seg.box == null) { onShape(null) }
+            FrameBox.SHAPES.forEach { (label, a) ->
+                val on = seg.box != null && seg.box.aspect == a
+                PanelChip(label, on) {
+                    onShape(if (a == null) (seg.box ?: FrameBox(0.8f, 0.6f)).copy(aspect = null) else FrameBox.of(a))
+                }
+            }
+        }
+        Text("Pinch the video to size it (smaller than the frame too), drag to move it, twist to turn it. Drag a corner of the frame to size the frame.", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(horizontal = 8.dp))
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             PanelChip("Rotate", seg.rotation != 0, onRotate)
             PanelChip("Mirror", seg.flip, onMirror)

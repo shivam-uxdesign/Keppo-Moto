@@ -77,3 +77,31 @@ class SpeedPointsTest {
         assertEquals(1f, SpeedPoints.at(pts, 0.5f), 0.01f)
     }
 }
+
+class FrameBoxTest {
+    @Test
+    fun `a shape is the biggest of its kind that fits the 9 by 16 picture`() {
+        val square = com.ridetrack.app.studio.FrameBox.of(1f)
+        assertEquals(1f, square.w, 0.001f)
+        assertEquals(9f / 16f, square.h, 0.001f)
+        val tall = com.ridetrack.app.studio.FrameBox.of(9f / 16f)
+        assertEquals(1f, tall.w, 0.001f)
+        assertEquals(1f, tall.h, 0.001f)
+        val wide = com.ridetrack.app.studio.FrameBox.of(16f / 9f)
+        assertEquals(1f, wide.w, 0.001f)
+        assertTrue(wide.h < 0.35f)
+    }
+
+    @Test
+    fun `a frame stays inside the picture`() {
+        val b = com.ridetrack.app.studio.FrameBox.clamp(com.ridetrack.app.studio.FrameBox(0.5f, 0.5f, cx = 0.95f, cy = 0.1f))
+        assertTrue(b.right <= 1f + 1e-4f && b.top >= -1e-4f)
+    }
+
+    @Test
+    fun `a video sized freely can move across the picture`() {
+        assertEquals(0.5f, com.ridetrack.app.studio.ClipTools.room(0.6f, free = true))
+        assertEquals(0f, com.ridetrack.app.studio.ClipTools.room(1f, free = false))
+        assertEquals(1f, com.ridetrack.app.studio.ClipTools.room(3f, free = true))
+    }
+}

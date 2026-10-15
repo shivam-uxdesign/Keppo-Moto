@@ -143,14 +143,7 @@ private class CutPictureProgram(private val at: (Long) -> PictureCuts.At?) : Bas
     }
 
     companion object {
-        const val VERTEX = """
-attribute vec4 aFramePosition;
-varying vec2 vTexSamplingCoord;
-void main() {
-  gl_Position = aFramePosition;
-  vTexSamplingCoord = vec2(aFramePosition.x * 0.5 + 0.5, aFramePosition.y * 0.5 + 0.5);
-}
-"""
+        const val VERTEX = CutPictureProgramShaders.VERTEX
         // Kind 0 passes the frame through. Split: each half slides out by up to half the width,
         // the gap dark. Blur: 16 taps on a spiral, reaching 4.5% of the width at the cut, a little
         // darker there. Luma: pixels darker than a rising level go dark first.
@@ -194,4 +187,73 @@ void main() {
 }
 """
     }
+}
+
+/** The crop frame on the made video: the picture inside [box], dark outside it. */
+@UnstableApi
+internal class FrameMaskEffect(private val box: FrameBox) : GlEffect {
+    override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram = FrameMaskProgram(box)
+}
+
+@UnstableApi
+private class FrameMaskProgram(private val box: FrameBox) : BaseGlShaderProgram(false, 1) {
+    private val program: GlProgram = try {
+        GlProgram(CutPictureProgramShaders.VERTEX, FRAGMENT).apply {
+            setBufferAttribute("aFramePosition", GlUtil.getNormalizedCoordinateBounds(), GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE)
+        }
+    } catch (e: GlUtil.GlException) {
+        throw VideoFrameProcessingException(e)
+    }
+
+    override fun configure(inputWidth: Int, inputHeight: Int): Size = Size(inputWidth, inputHeight)
+
+    override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
+        try {
+            program.use()
+            program.setSamplerTexIdUniform("uTexSampler", inputTexId, 0)
+            // Texture y runs bottom-up; the frame is measured from the top.
+            program.setFloatsUniform("uBox", floatArrayOf(box.left, 1f - box.bottom, box.right, 1f - box.top))
+            program.setFloatsUniform("uInk", floatArrayOf((Tok.INK shr 16 and 0xFF) / 255f, (Tok.INK shr 8 and 0xFF) / 255f, (Tok.INK and 0xFF) / 255f))
+            program.bindAttributesAndUniforms()
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        } catch (e: GlUtil.GlException) {
+            throw VideoFrameProcessingException(e, presentationTimeUs)
+        }
+    }
+
+    override fun release() {
+        super.release()
+        try {
+            program.delete()
+        } catch (e: GlUtil.GlException) {
+            throw VideoFrameProcessingException(e)
+        }
+    }
+
+    private companion object {
+        const val FRAGMENT = """
+precision mediump float;
+uniform sampler2D uTexSampler;
+uniform vec4 uBox;
+uniform vec3 uInk;
+varying vec2 vTexSamplingCoord;
+void main() {
+  vec2 uv = vTexSamplingCoord;
+  bool inside = uv.x >= uBox.x && uv.x <= uBox.z && uv.y >= uBox.y && uv.y <= uBox.w;
+  gl_FragColor = inside ? texture2D(uTexSampler, uv) : vec4(uInk, 1.0);
+}
+"""
+    }
+}
+
+/** The shared vertex shader (the whole frame, texture coordinates 0..1). */
+internal object CutPictureProgramShaders {
+    const val VERTEX = """
+attribute vec4 aFramePosition;
+varying vec2 vTexSamplingCoord;
+void main() {
+  gl_Position = aFramePosition;
+  vTexSamplingCoord = vec2(aFramePosition.x * 0.5 + 0.5, aFramePosition.y * 0.5 + 0.5);
+}
+"""
 }

@@ -37,4 +37,17 @@ class EditorPanelShots {
             }
         }
     }
+
+    @Test
+    fun crop() {
+        val bit = Bit("a#0", "a", 20_000, 0, 20_000, 1_000_000, emptyList(), 40.0, 3f)
+        val seg = ClipSegment(bit, 5_000, 10_000, emptyList(), hook = true, box = com.ridetrack.app.studio.FrameBox.of(1f))
+        captureRoboImage("build/shots/editor-crop.png") {
+            RideTrackTheme(dark = true) {
+                Column(Modifier.fillMaxWidth().background(RtColors.Background)) {
+                    com.ridetrack.app.studio.CropPanel(seg, onRotate = {}, onMirror = {}, onPushIn = {}, onPunch = {}, onReset = {}, onBack = {})
+                }
+            }
+        }
+    }
 }

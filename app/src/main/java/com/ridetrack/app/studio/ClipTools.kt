@@ -123,7 +123,8 @@ object ClipTools {
         val s = clip(plan, i) ?: return plan
         val t = localMs.coerceIn(0, s.durMs)
         val here = frameAt(s, t)
-        val k = FrameKey(t, (here.zoom + dZoom).coerceIn(1f, 3f), (here.x + dx).coerceIn(-1f, 1f), (here.y + dy).coerceIn(-1f, 1f))
+        // A fixed crop may make the video smaller than the picture (it then sits on dark).
+        val k = FrameKey(t, (here.zoom + dZoom).coerceIn(if (fixed) MIN_ZOOM else 1f, 3f), (here.x + dx).coerceIn(-1f, 1f), (here.y + dy).coerceIn(-1f, 1f))
         // A crop (no move): one key for the whole clip.
         if (fixed || s.frame.isEmpty() && t < 100) return with(plan, i, s.copy(frame = listOf(k.copy(atMs = 0))))
         val start = if (s.frame.isEmpty()) listOf(FrameKey(0)) else emptyList()
@@ -131,7 +132,22 @@ object ClipTools {
         return with(plan, i, s.copy(frame = keys.sortedBy { it.atMs }))
     }
 
-    fun clearFrame(plan: StudioPlan, i: Int): StudioPlan = clip(plan, i)?.let { with(plan, i, it.copy(frame = emptyList())) } ?: plan
+    fun clearFrame(plan: StudioPlan, i: Int): StudioPlan = clip(plan, i)?.let { with(plan, i, it.copy(frame = emptyList(), box = null)) } ?: plan
+
+    /** The smallest a cropped video can be: a third of the picture. */
+    const val MIN_ZOOM = 0.3f
+
+    /** The video is sized freely (smaller than the picture, or in a frame): no zoom-to-fill. */
+    fun free(s: ClipSegment): Boolean = s.box != null || s.frame.any { it.zoom < 1f }
+
+    /**
+     * How far a pan of 1 moves the video, as a share of the picture: the zoom's spare room, or at
+     * least half the picture when sized freely (so a small video can go anywhere).
+     */
+    fun room(zoom: Float, free: Boolean): Float = if (free) maxOf((zoom - 1f) / 2f, 0.5f) else (zoom - 1f) / 2f
+
+    /** Clip [i] shown in [box] (null: the whole picture again). */
+    fun box(plan: StudioPlan, i: Int, box: FrameBox?): StudioPlan = clip(plan, i)?.let { with(plan, i, it.copy(box = box?.let(FrameBox::clamp))) } ?: plan
 
     /** A quick push-in on each thing said (the emphasis), easing back after. */
     fun punchIn(plan: StudioPlan, i: Int, zoom: Float = 1.10f): StudioPlan {

@@ -434,6 +434,8 @@ class StudioRenderer(private val context: Context) {
                 val local = clock.localMs(us)
                 art.cameraMatrix(reframed(art, art.camera(frameAt(local)), cs, local))
             }
+            // The crop frame: dark outside it.
+            cs?.box?.let { b -> video += FrameMaskEffect(b) }
             // Split, Blur and Luma fade work on the picture, after the camera (so they stay put on screen).
             if (PictureCuts.touches(frameAt(0))) video += CutPictureEffect { us -> PictureCuts.at(frameAt(clock.localMs(us))) }
         } else if (seg is TitleSegment && !o.map) {
@@ -472,8 +474,10 @@ class StudioRenderer(private val context: Context) {
     private fun reframed(art: StudioArt, cam: Cam, cs: ClipSegment?, localMs: Long): Cam {
         if (cs == null || cs.frame.isEmpty()) return cam
         val f = ClipTools.frameAt(cs, localMs)
-        val room = (f.zoom - 1f) / 2f
-        return cam.copy(k = cam.k * f.zoom, x = cam.x - f.x * art.w * room, y = cam.y - f.y * art.h * room)
+        val free = ClipTools.free(cs)
+        val room = ClipTools.room(f.zoom, free)
+        val k = if (free) maxOf(cam.k, art.fill(cam)) * f.zoom else cam.k * f.zoom
+        return cam.copy(k = k, x = cam.x - f.x * art.w * room, y = cam.y - f.y * art.h * room, free = free)
     }
 
     /** A clip's own colour: exposure, contrast, saturation, warmth. */

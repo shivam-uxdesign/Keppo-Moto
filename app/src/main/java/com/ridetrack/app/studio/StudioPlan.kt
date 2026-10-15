@@ -83,6 +83,8 @@ data class ClipSegment(
     /** Playback speed (0.25–4) and how it changes across the clip. */
     val speed: Float = 1f,
     val ramp: SpeedRamp = SpeedRamp.NONE,
+    /** The frame the clip shows in (a crop shape); null = the whole 9:16 picture. */
+    val box: FrameBox? = null,
     /** A drawn speed curve (overrides [speed] and [ramp] when it has points); see [SpeedPoints]. */
     val speedPoints: List<SpeedPoint> = emptyList(),
     /** The part played backwards: a file made once when Reverse was tapped; null = forwards. */
@@ -106,6 +108,39 @@ data class ClipSegment(
 
     /** Played at another speed than as filmed (steady or a curve). */
     val sped: Boolean get() = speed != 1f || steps.any { it.second != 1f }
+}
+
+/**
+ * A crop frame on the 9:16 picture: [cx], [cy] its centre and [w], [h] its size, all as shares of
+ * the picture's width and height; outside it is dark. [aspect] is its shape (width ÷ height on
+ * screen), or null when drawn freely.
+ */
+data class FrameBox(val w: Float, val h: Float, val cx: Float = 0.5f, val cy: Float = 0.5f, val aspect: Float? = null) {
+    val left: Float get() = cx - w / 2
+    val right: Float get() = cx + w / 2
+    val top: Float get() = cy - h / 2
+    val bottom: Float get() = cy + h / 2
+
+    companion object {
+        /** The picture's own shape (9:16). */
+        const val CANVAS = 9f / 16f
+        /** Shapes to pick: label to width ÷ height (null = free). */
+        val SHAPES: List<Pair<String, Float?>> = listOf("Free" to null, "9:16" to 9f / 16f, "4:5" to 4f / 5f, "1:1" to 1f, "16:9" to 16f / 9f)
+
+        /** The biggest frame of [aspect] that fits the picture, centred. */
+        fun of(aspect: Float): FrameBox {
+            val h = (CANVAS / aspect).coerceAtMost(1f)
+            val w = (aspect * h / CANVAS).coerceAtMost(1f)
+            return FrameBox(w, h, aspect = aspect)
+        }
+
+        /** [b] kept inside the picture and at least a little big. */
+        fun clamp(b: FrameBox): FrameBox {
+            val w = b.w.coerceIn(0.15f, 1f)
+            val h = b.h.coerceIn(0.1f, 1f)
+            return b.copy(w = w, h = h, cx = b.cx.coerceIn(w / 2, 1 - w / 2), cy = b.cy.coerceIn(h / 2, 1 - h / 2))
+        }
+    }
 }
 
 /** How the speed changes across a clip: (end as a fraction of the clip's part, speed multiplier) steps. */

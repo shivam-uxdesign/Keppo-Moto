@@ -49,7 +49,8 @@ data class FrameAt(
 )
 
 /** A camera move on the footage: zoom [k] about the centre, then a shift of [x], [y] px, a tilt of [deg]. */
-data class Cam(val k: Float, val x: Float, val y: Float, val deg: Float)
+/** [free]: the rider sized the video themselves (it may be smaller than the frame): no zoom-to-fill. */
+data class Cam(val k: Float, val x: Float, val y: Float, val deg: Float, val free: Boolean = false)
 
 /**
  * Keppo Studio's graphics, drawn per frame on a transparent 1080×1920 overlay: captions,
@@ -216,7 +217,7 @@ class StudioArt(
 
     /** The camera as Media3 wants it: a matrix in normalised device coordinates (-1..1, y up). */
     fun cameraMatrix(c: Cam): Matrix = Matrix().apply {
-        val k = max(c.k, fill(c))
+        val k = if (c.free) c.k else max(c.k, fill(c))
         // Rotate in pixel space so a tilt doesn't shear the 9:16 frame.
         setScale(W / 2, H / 2)
         postRotate(-c.deg)
