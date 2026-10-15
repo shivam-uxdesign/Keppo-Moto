@@ -1387,7 +1387,11 @@ class StudioViewModel(
         val draft = readDraft()
         val engine = (clips + borrowed.values).filter { it.engineFile.isFile }.associate { it.id to Uri.fromFile(it.engineFile).toString() }
         // Two-mic clips: the engine sound is its own row from the start.
-        history = EditHistory(TrackEdits.withEngine(draft ?: TimelineEdits.liftTexts(plan) { newTextId() }, engine) { newId("e") })
+        // The title and series label become texts on the timeline, so they can be edited like any text.
+        val st = _state.value
+        val label = if (st.options.introOn) st.label.takeIf { st.series.isNotBlank() } else st.label
+        val start = TimelineEdits.liftOpener(draft ?: TimelineEdits.liftTexts(plan) { newTextId() }, label, st.hookLine) { newTextId() }
+        history = EditHistory(TrackEdits.withEngine(start, engine) { newId("e") })
         val saved = c.savedClips.clips.value.associate { "saved:${it.id}" to c.savedClips.thumb(it.id).takeIf(File::isFile) }
         _state.update { it.copy(step = StudioStep.EDIT, pick = null, footage = footage(), thumbs = it.thumbs + saved, engineFiles = engine) }
         // Horns and bumps on the engine mic, for the Engine row's marks (each file once, then cached).

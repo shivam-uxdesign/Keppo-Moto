@@ -454,7 +454,8 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
             brand = c.styles.brand.value.takeIf { !it.empty },
             clockAt = { Format.timeOfDay(it).lowercase(Locale.getDefault()) },
             music = s.musicUri,
-            opener = StudioArt.Opener(
+            // Once the title and label are texts on the timeline, the style doesn't draw them again.
+            opener = if (plan.openerLifted) null else StudioArt.Opener(
                 label = if (s.options.introOn) s.label.takeIf { s.series.isNotBlank() } else s.label,
                 hookLine = s.hookLine.ifBlank { null },
                 // Film's date label: the day of the ride.

@@ -89,6 +89,7 @@ object ReelJson {
         put("mix", mix(p.plan.mix))
         put("markers", JSONArray().apply { p.plan.markers.forEach { m -> put(JSONObject().put("id", m.id).put("at", m.atMs).put("label", m.label)) } })
         put("redlines", JSONArray().apply { p.plan.redlines.forEach { r -> put(JSONObject().put("id", r.id).put("from", r.startMs).put("to", r.endMs)) } })
+        put("openerLifted", p.plan.openerLifted)
         put("takes", JSONArray().apply { p.takes.forEach { t -> put(JSONObject().put("start", t.startMs).put("dur", t.durMs).put("file", t.file).put("lines", lines(t.lines))) } })
         put("tips", JSONArray().apply { p.tips.forEach { t -> put(JSONObject().put("text", t.text).put("action", t.action?.name ?: JSONObject.NULL).put("nextRide", t.nextRide)) } })
         put("durationMs", p.durationMs)
@@ -147,6 +148,7 @@ object ReelJson {
                 }.orEmpty(),
                 markers = o.optJSONArray("markers")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { m -> Marker(m.getString("id"), m.getLong("at"), m.optString("label")) } } }.orEmpty(),
                 redlines = o.optJSONArray("redlines")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { r -> RedlineTag(r.getString("id"), r.getLong("from"), r.getLong("to")) } } }.orEmpty(),
+                openerLifted = o.optBoolean("openerLifted"),
             ),
             takes = o.optJSONArray("takes")?.let { a ->
                 (0 until a.length()).map { i -> a.getJSONObject(i).let { t -> SavedTake(t.getLong("start"), t.getLong("dur"), t.getString("file"), readLines(t.optJSONArray("lines"))) } }

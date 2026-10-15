@@ -103,4 +103,15 @@ class TimelineTest {
         h.redo()
         assertEquals(5, h.current.segments.size)
     }
+
+    @Test
+    fun `the title and series label become texts over the first clip, once`() {
+        var n = 0
+        val p = TimelineEdits.liftOpener(plan(), "All downshifts", "Downshift and sound on") { "t${n++}" }
+        assertTrue(p.openerLifted)
+        assertEquals(listOf("Downshift and sound on", "ALL DOWNSHIFTS"), p.texts.map { it.text })
+        assertTrue(p.texts.all { it.startMs == 0L && it.endMs in 1L..4_000L })
+        // A second time adds nothing.
+        assertEquals(p, TimelineEdits.liftOpener(p, "All downshifts", "Downshift and sound on") { "x" })
+    }
 }

@@ -197,6 +197,24 @@ object TimelineEdits {
     fun placeText(plan: StudioPlan, id: String, y: Float) = text(plan, id) { it.copy(y = y.coerceIn(0.08f, 0.92f)) }
 
     /** The section texts the script put on clips become timeline text, so they can be moved and edited. */
+    /**
+     * The opening title ([hookLine]) and the series label above it become texts on the timeline,
+     * over the first clip, so they can be moved, lengthened, reworded and restyled like any text.
+     * Done once per edit; the style then stops drawing its own opener.
+     */
+    fun liftOpener(plan: StudioPlan, label: String?, hookLine: String?, newId: () -> String): StudioPlan {
+        if (plan.openerLifted) return plan
+        val first = plan.segments.indexOfFirst { it is ClipSegment && !it.tail && !it.teaser }
+        if (first < 0) return plan.copy(openerLifted = true)
+        val start = plan.startOf(first)
+        val end = start + minOf(Tok.OPENER_MS, plan.segments[first].durMs)
+        val extra = listOfNotNull(
+            hookLine?.takeIf { it.isNotBlank() }?.let { TextItem(newId(), start, end, it, Tok.TITLE_Y, size = 1.15f) },
+            label?.takeIf { it.isNotBlank() }?.let { TextItem(newId(), start, end, it.uppercase(), Tok.TITLE_Y - 0.065f, size = 0.42f) },
+        )
+        return plan.copy(texts = plan.texts + extra, openerLifted = true)
+    }
+
     fun liftTexts(plan: StudioPlan, newId: () -> String): StudioPlan {
         val extra = ArrayList<TextItem>()
         var start = 0L

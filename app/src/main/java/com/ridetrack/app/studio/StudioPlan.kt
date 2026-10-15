@@ -513,6 +513,8 @@ data class StudioPlan(
     val captionLook: CaptionLook = CaptionLook(),
     val stickers: List<StickerItem> = emptyList(),
     val redlines: List<RedlineTag> = emptyList(),
+    /** The title and series label are texts on the timeline (editable), not drawn on the first clip by the style. */
+    val openerLifted: Boolean = false,
 ) {
     val totalMs: Long = segments.sumOf { it.durMs }
     /** The clips the rider chose (the loop tail and the flash-forward teaser are not among them). */
