@@ -1,5 +1,6 @@
 package com.ridetrack.app.ui.profile
 
+import androidx.compose.ui.draw.clip
 import android.os.Build
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -493,7 +494,32 @@ private fun TwoMicTest(mic: String?, swapped: Boolean, onSwap: (Boolean) -> Unit
             right = null
         }
     }
+    // The last ride heard your voice on Mic 2 (set as Engine): offer the swap.
+    var voiceOnMic2 by remember { mutableStateOf(com.ridetrack.app.moments.MicRolePrefs.voiceOnMic2(context)) }
     Column(Modifier.fillMaxWidth().padding(vertical = RtDimens.xs), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (voiceOnMic2) {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(RtColors.Warning.copy(alpha = 0.14f)).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "On your last ride, your voice was heard on Mic 2, which is set as Engine. So engine noise was treated as your voice. Swap them so Mic 1 is your helmet.",
+                    style = RtType.caption,
+                    color = RtColors.TextPrimary,
+                )
+                androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Swap now", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                        onSwap(!swapped)
+                        com.ridetrack.app.moments.MicRolePrefs.setVoiceOnMic2(context, false)
+                        voiceOnMic2 = false
+                    }.padding(vertical = 4.dp))
+                    Text("They're right", style = RtType.button, color = RtColors.TextSecondary, modifier = Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                        com.ridetrack.app.moments.MicRolePrefs.setVoiceOnMic2(context, false)
+                        voiceOnMic2 = false
+                    }.padding(vertical = 4.dp))
+                }
+            }
+        }
         when {
             !canListen -> Text("Allow the microphone to test the mics.", style = RtType.caption, color = RtColors.TextSecondary)
             device == null -> Text("Plug in the USB-C receiver to test the two mics.", style = RtType.caption, color = RtColors.TextSecondary)

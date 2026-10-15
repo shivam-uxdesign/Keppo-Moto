@@ -48,9 +48,15 @@ class AudioEncoder(
     private val onClipping: ((Long, Int, Int) -> Unit)? = null,
     /** Each chunk with two mics: (left dBFS, right dBFS). */
     private val onChannels: ((Float, Float) -> Unit)? = null,
+    /** A second voice detector for the engine side: is the voice really on the Voice side? */
+    private val engineVad: SileroVad? = null,
+    /** Each chunk with two mics: the engine side's voice probability (0..1). */
+    private val onEngineVoice: ((Float) -> Unit)? = null,
 ) {
     private val windows = VoiceWindows(SAMPLE_RATE)
     private var lastVoice = 0f
+    private val engineWindows = VoiceWindows(SAMPLE_RATE)
+    private var lastEngineVoice = 0f
     private val voiceBand = VoiceBand(SAMPLE_RATE)
     private val audioManager = context.getSystemService<AudioManager>()
     private val bluetooth = device != null && Microphones.typeOf(device) == MicType.BLUETOOTH
@@ -205,6 +211,12 @@ class AudioEncoder(
         val vb = voiceBuf.order(java.nio.ByteOrder.nativeOrder())
         for (i in 0 until n) vb.putShort(voice[i])
         vb.flip()
+        engineVad?.let { v ->
+            var best = -1f
+            engineWindows.feed(n, { i -> engine[i] / 32768.0 }) { w -> best = maxOf(best, v.probability(w)) }
+            if (best >= 0f) lastEngineVoice = best
+            onEngineVoice?.invoke(lastEngineVoice)
+        }
         val pts = System.nanoTime() / 1000 - n * 1_000_000L / SAMPLE_RATE
         engineCodec?.let { ec ->
             val idx = ec.dequeueInputBuffer(5_000)

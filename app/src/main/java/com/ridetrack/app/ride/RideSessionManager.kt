@@ -498,11 +498,16 @@ class RideSessionManager(
         // mic standing out from the engine mic counts as loud too.
         levels.forEach { c ->
             val wind = com.ridetrack.telemetry.moments.VoiceInWind.wind(c.backgroundDb)
-            rec.speech.onLevel(
+            val speaking = rec.speech.onLevel(
                 c.timeMillis, c.aboveDb, c.chunkMillis,
                 com.ridetrack.telemetry.moments.VoiceInWind.margin(margin, wind), c.voice,
-                com.ridetrack.telemetry.moments.VoiceInWind.voiceMin(wind), c.liftDb,
+                com.ridetrack.telemetry.moments.VoiceInWind.voiceMin(wind), c.liftDb?.takeIf { rec.liftGuard.allowed(c.timeMillis) },
             )
+            if (rec.liftGuard.onChunk(c.timeMillis, c.voice, speaking)) {
+                rec.speech.reset()
+                momentsHub.reportLiftDistrusted(c.timeMillis)
+                momentsHub.log("voice: 30 s of \"speaking\" with no voice in it (helmet mic louder than the engine mic, but no words): engine or wind, not you. That rule is off for 5 min; are the mics swapped? (Settings › Moments › Two mics)")
+            }
         }
         momentsHub.setSpeaking(rec.speech.speaking)
         logVoice(rec, frame, levels, wasSpeaking, margin)
@@ -767,6 +772,8 @@ class RideSessionManager(
         var chainHasVoice = false
         /** "Start filming when I speak". */
         val speech = SpeechGate()
+        /** Stops the helmet-vs-engine rule keeping a video going with no voice in it (mics swapped, revs). */
+        val liftGuard = com.ridetrack.telemetry.moments.LiftGuard()
         val engineRevs = com.ridetrack.telemetry.moments.EngineRevs()
         var lastSpeechHandled = Long.MIN_VALUE
         var lastMicLog = 0L

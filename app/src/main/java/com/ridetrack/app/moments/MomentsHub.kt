@@ -210,11 +210,34 @@ class MomentsHub {
     fun reportTwo(voiceDb: Float, engineDb: Float, kind: TwoMicKind) {
         _twoMics.value = TwoMicLevels(voiceDb, engineDb, kind)
         // The helmet mic against the engine mic says who's talking; not when the receiver mixes them.
-        lift = if (kind != TwoMicKind.MONO) twoMicLift.onLevels(System.currentTimeMillis(), voiceDb, engineDb) else null
+        val l = if (kind != TwoMicKind.MONO) twoMicLift.onLevels(System.currentTimeMillis(), voiceDb, engineDb) else null
+        lift = if (_voiceOnEngineSide.value) null else l
     }
 
     private val twoMicLift = com.ridetrack.telemetry.moments.TwoMicLift()
     @Volatile private var lift: Float? = null
+
+    /** The engine side's voice probability, from the second voice detector (two mics). */
+    @Volatile private var engineVoice: Float? = null
+    fun reportEngineVoice(p: Float) {
+        engineVoice = p
+    }
+
+    private val roleCheck = com.ridetrack.telemetry.moments.MicRoleCheck()
+    private val _voiceOnEngineSide = MutableStateFlow(false)
+    /**
+     * The voice keeps being heard on the side set as Engine and not on the Voice side: the mics
+     * are set the wrong way round (Settings › Moments › Two mics › Swap). The app doesn't swap them
+     * itself; meanwhile the helmet-against-engine comparison is off (it would read revs as talking).
+     */
+    val voiceOnEngineSide: StateFlow<Boolean> = _voiceOnEngineSide.asStateFlow()
+
+    private val _liftDistrusted = MutableStateFlow(0L)
+    /** When the "helmet mic stands out" rule last kept a video going with no voice in it (0 = never). */
+    val liftDistrusted: StateFlow<Long> = _liftDistrusted.asStateFlow()
+    fun reportLiftDistrusted(timeMillis: Long) {
+        _liftDistrusted.value = timeMillis
+    }
 
     private val _wind = MutableStateFlow(0f)
     /** How windy the mic is now: 0 calm .. 1 heavy wind (from the background level), for the HUD's mark. */
@@ -258,6 +281,14 @@ class MomentsHub {
                 if (levels.size > MAX_LEVELS) levels.subList(0, levels.size - MAX_LEVELS).clear()
             }
         }
+        engineVoice?.let { ev ->
+            val swapped = synchronized(roleCheck) { roleCheck.onChunk(chunkMillis, voice, ev) } == com.ridetrack.telemetry.moments.MicRoleCheck.Verdict.SWAPPED
+            if (swapped && !_voiceOnEngineSide.value) {
+                _voiceOnEngineSide.value = true
+                lift = null
+                log("two mics: the voice is heard on Mic 2 (set as Engine), not on Mic 1: the mics look swapped. Helmet-vs-engine check off for this ride; swap them in Settings › Moments › Two mics")
+            }
+        }
         _wind.value = com.ridetrack.telemetry.moments.VoiceInWind.wind(chunk.backgroundDb)
         _micLift.value = chunk.liftDb
         _micLevel.value = chunk.aboveDb
@@ -271,6 +302,7 @@ class MomentsHub {
         _wind.value = 0f
         lift = null
         twoMicLift.reset()
+        engineVoice = null
         _twoMics.value = null
         synchronized(levels) {
             levels.clear()
@@ -314,6 +346,9 @@ class MomentsHub {
     fun reset() {
         eventPending.value = false
         writing = false
+        synchronized(roleCheck) { roleCheck.reset() }
+        _voiceOnEngineSide.value = false
+        _liftDistrusted.value = 0L
         clipStart = null
         _state.value = MomentState()
         clearLevel()

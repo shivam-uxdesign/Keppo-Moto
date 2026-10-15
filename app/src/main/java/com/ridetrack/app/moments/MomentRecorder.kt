@@ -93,6 +93,8 @@ class MomentRecorder(
         if (!settings.voice) null
         else SileroVad.load(context).also { log.log(if (it != null) "voice detector ready" else "voice detector unavailable: loudness only") }
     }
+    /** A second Silero for the engine side (two mics): tells whether the voice is on the side set as Voice. */
+    private val engineVad: SileroVad? by lazy { if (!settings.voice || !settings.twoMics) null else SileroVad.load(context) }
     /** The mic [audio] records from. */
     private var audioMic: MicChoice? = null
     /** The headset dropped call mode: skip it until the camera next restarts (no retry loop). */
@@ -259,6 +261,7 @@ class MomentRecorder(
         }
         stopAudio()
         if (settings.voice) vad?.close()
+        if (settings.voice && settings.twoMics) engineVad?.close()
         analysisExecutor.shutdown()
         encoder?.release()
         encoder = null
@@ -496,6 +499,8 @@ class MomentRecorder(
         audio = try {
             // Both channels of a USB-C receiver: its second transmitter can be the engine mic.
             AudioEncoder(context, buffer, device, onLevel = hub::reportLevel, vad = vad, onClipping = hub::reportClipping, twoMics = settings.twoMics && mic.type == MicType.USB, swap = settings.swapMics,
+                engineVad = if (settings.twoMics && mic.type == MicType.USB) engineVad else null,
+                onEngineVoice = hub::reportEngineVoice,
                 // The engine mic's level, for revs and exhaust pops (only when the two mics really differ).
                 onChannels = { l, r ->
                     val enc = audio

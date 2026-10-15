@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import com.ridetrack.app.moments.MomentSource
 import com.ridetrack.app.moments.MomentStatus
 import com.ridetrack.app.moments.MomentsHub
+import com.ridetrack.app.moments.MicRolePrefs
 import com.ridetrack.app.ui.format.Format
 import android.content.Intent
 import android.util.Log
@@ -167,6 +168,23 @@ class HudController(
                     lastSaid = now
                     note.value = "Mic overloaded by wind · your voice may not start a video (tips: Settings › Moments)" to now
                 }
+            }
+        }
+
+        scope.launch {
+            // The voice keeps turning up on the side set as Engine: the mics are the wrong way round.
+            // Said once, and remembered so Settings offers the swap after the ride.
+            moments.voiceOnEngineSide.collect { swapped ->
+                if (!swapped) return@collect
+                note.value = "Your voice is on Mic 2 · the mics look swapped. Swap them in Settings › Moments after the ride" to System.currentTimeMillis()
+                MicRolePrefs.setVoiceOnMic2(context, true)
+            }
+        }
+
+        scope.launch {
+            // "Speaking" for 30 s with no voice in it: engine or wind kept the video going.
+            moments.liftDistrusted.collect { at ->
+                if (at > 0) note.value = "That was engine noise, not your voice · it won't keep filming now" to at
             }
         }
 
