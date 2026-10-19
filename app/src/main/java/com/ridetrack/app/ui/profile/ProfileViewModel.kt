@@ -183,6 +183,10 @@ class ProfileViewModel(private val c: AppContainer) : ViewModel() {
         viewModelScope.launch { c.settings.setUnits(v) }
     }
 
+    fun setMatchAppToBike(on: Boolean) {
+        viewModelScope.launch { c.settings.setMatchAppToBike(on) }
+    }
+
     fun setAppTheme(v: AppTheme) {
         viewModelScope.launch { c.settings.setAppTheme(v) }
     }

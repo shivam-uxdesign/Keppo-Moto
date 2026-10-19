@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
             endRideIfAsked(intent)
         }
         val settings = (application as RideTrackApp).container.settings.settings
+        val bikes = (application as RideTrackApp).container.bikes.observeBikes()
         setContent {
             // Wait for the stored choice (a few ms) so the app doesn't flash the wrong theme.
             val theme by settings.collectAsStateWithLifecycle(initialValue = null)
@@ -45,7 +46,9 @@ class MainActivity : ComponentActivity() {
                 else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
                 enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
             }
-            RideTrackTheme(dark = dark) {
+            val garage by bikes.collectAsStateWithLifecycle(initialValue = emptyList())
+            val accent = if (theme?.matchAppToBike != false) com.ridetrack.app.ui.common.BikeColors.appAccent(garage, theme?.selectedBikeId) else null
+            RideTrackTheme(dark = dark, accent = accent) {
                 RideTrackNavHost(openRideId = openRide.value, onOpenRideHandled = { openRide.value = null })
             }
         }

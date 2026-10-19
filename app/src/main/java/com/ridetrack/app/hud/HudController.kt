@@ -42,6 +42,8 @@ class HudController(
     private val moments: MomentsHub,
     /** The coach's "film next time" shots not ticked off yet, shown at the start of a ride. */
     private val shots: () -> List<String> = { emptyList() },
+    /** The garage, for the pop-up's accent: the ridden bike's colour. */
+    private val bikes: kotlinx.coroutines.flow.Flow<List<com.ridetrack.telemetry.model.Bike>> = kotlinx.coroutines.flow.emptyFlow(),
 ) {
     private val scope = MainScope()
     private val appVisible = MutableStateFlow(true)
@@ -102,6 +104,11 @@ class HudController(
             },
         )
 
+        scope.launch {
+            combine(bikes, settings.settings, session.active) { garage, s, active ->
+                if (s.matchAppToBike) com.ridetrack.app.ui.common.BikeColors.appAccent(garage, active?.bikeId ?: s.selectedBikeId) else null
+            }.distinctUntilChanged().collect { overlay.accent = it }
+        }
         scope.launch {
             combine(session.state, session.active, appVisible, settings.settings, hiddenForRide) { state, active, visible, s, hidden ->
                 overlay.settings = s.hud

@@ -40,6 +40,8 @@ internal class HudOverlay(
 
     var data by mutableStateOf<HudData?>(null)
     var settings by mutableStateOf(HudSettings())
+    /** The ridden bike's colour for the pop-up's accent; null = teal. */
+    var accent by mutableStateOf<Int?>(null)
     /** The camera while you film a video; null otherwise. */
     var viewfinder by mutableStateOf<ImageBitmap?>(null)
     private var collapsed by mutableStateOf(false)
@@ -58,7 +60,9 @@ internal class HudOverlay(
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent {
                 val d = data
-                if (d != null) HudOverlayContent(d, settings, collapsed, controlsOpen, actions, viewfinder = viewfinder, onButtonsTop = { buttonsTop = it })
+                if (d != null) androidx.compose.runtime.CompositionLocalProvider(com.ridetrack.app.ui.theme.LocalAccent provides accent) {
+                    HudOverlayContent(d, settings, collapsed, controlsOpen, actions, viewfinder = viewfinder, onButtonsTop = { buttonsTop = it })
+                }
             }
         }
         val container = HudTouchContainer(context, gestureCallbacks).apply {

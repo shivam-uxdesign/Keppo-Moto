@@ -30,6 +30,8 @@ data class RtPalette(
     val primary: Color,
     val onPrimary: Color,
     val primaryContainer: Color,
+    /** Text and icons on [primaryContainer]. */
+    val onPrimaryContainer: Color,
     val inverse: Color,
     val onInverse: Color,
     val left: Color,
@@ -58,6 +60,7 @@ val DarkPalette = RtPalette(
     primary = Color(0xFF69C8CB),
     onPrimary = Color(0xFF04292A),
     primaryContainer = Color(0xFF1E3E40),
+    onPrimaryContainer = Color(0xFF69C8CB),
     inverse = Color(0xFFF4F4F5),
     onInverse = Color(0xFF0A0A0B),
     left = Color(0xFFA5A1FF),
@@ -86,6 +89,7 @@ val LightPalette = RtPalette(
     primary = Color(0xFF0B7377),
     onPrimary = Color(0xFFFFFFFF),
     primaryContainer = Color(0xFFCDEEEF),
+    onPrimaryContainer = Color(0xFF04292A),
     inverse = Color(0xFF0A0A0B),
     onInverse = Color(0xFFF4F4F5),
     left = Color(0xFF5246D6),
@@ -101,6 +105,9 @@ val LightPalette = RtPalette(
 )
 
 val LocalRtPalette = staticCompositionLocalOf { DarkPalette }
+
+/** The bike's colour the app follows (ARGB); null = Keppo teal. Riding screens read it too. */
+val LocalAccent = staticCompositionLocalOf<Int?> { null }
 
 /**
  * Premium Minimal palette: near-black (or warm paper) canvas, one teal accent, hairlines instead of
@@ -168,7 +175,7 @@ private fun RtPalette.scheme() = (if (isDark) darkColorScheme() else lightColorS
     primary = primary,
     onPrimary = onPrimary,
     primaryContainer = primaryContainer,
-    onPrimaryContainer = if (isDark) primary else Color(0xFF04292A),
+    onPrimaryContainer = onPrimaryContainer,
     secondary = left,
     secondaryContainer = primaryContainer,
     onSecondaryContainer = textPrimary,
@@ -200,15 +207,20 @@ private val shapes = Shapes(
     extraLarge = RoundedCornerShape(28.dp),
 )
 
-/** App theme: [dark] follows the rider's Appearance setting (system by default). */
+/**
+ * App theme: [dark] follows the rider's Appearance setting (system by default); [accent] is the
+ * ridden bike's colour when "Match the app to my bike" is on.
+ */
 @Composable
-fun RideTrackTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    RtTheme(if (dark) DarkPalette else LightPalette, content)
+fun RideTrackTheme(dark: Boolean = isSystemInDarkTheme(), accent: Int? = null, content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalAccent provides accent) {
+        RtTheme((if (dark) DarkPalette else LightPalette).withAccent(accent), content)
+    }
 }
 
 /** Riding screens (live ride, HUD, viewfinder, crash alert) stay dark in every theme: glare and night vision beat consistency. */
 @Composable
-fun RideDark(content: @Composable () -> Unit) = RtTheme(DarkPalette, content)
+fun RideDark(content: @Composable () -> Unit) = RtTheme(DarkPalette.withAccent(LocalAccent.current), content)
 
 @Composable
 private fun RtTheme(palette: RtPalette, content: @Composable () -> Unit) {

@@ -376,6 +376,15 @@ private fun AppearancePage(s: ProfileUiState, vm: ProfileViewModel) {
     }
     Spacer(Modifier.height(RtDimens.md))
     RtCard {
+        ToggleRow(
+            "Match the app to my bike",
+            "Buttons, tabs and the pop-up take the colour of the bike you ride. Change a bike's colour in Bike › Edit.",
+            s.settings.matchAppToBike,
+            vm::setMatchAppToBike,
+        )
+    }
+    Spacer(Modifier.height(RtDimens.md))
+    RtCard {
         val country = com.ridetrack.app.ui.format.Units.country
         val auto = com.ridetrack.app.ui.format.Units.defaultFor(country)
         Text("Units", style = RtType.bodyStrong, color = RtColors.TextPrimary)

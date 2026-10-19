@@ -22,7 +22,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
-import com.ridetrack.app.ui.common.BikeColors
 import androidx.compose.ui.unit.dp
 import com.ridetrack.app.ui.components.BikeImage
 import androidx.compose.foundation.layout.Column
@@ -47,6 +46,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -68,6 +69,7 @@ import java.util.Locale
 fun BikeEditScreen(bikeId: String?, onDone: () -> Unit) {
     val vm = appViewModel(key = "bike-edit-${bikeId ?: "new"}") { BikeEditViewModel(it, bikeId) }
     val f by vm.form.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) vm.pickPhoto(uri)
     }
@@ -103,23 +105,20 @@ fun BikeEditScreen(bikeId: String?, onDone: () -> Unit) {
                 Field("Weight (kg)", f.weightKg, "Optional", { v -> vm.update { it.copy(weightKg = v.filter(Char::isDigit).take(4)) } }, Modifier.weight(1f), number = true, error = f.weightError)
                 Field("Redline (rpm)", f.redlineRpm, "Optional", { v -> vm.update { it.copy(redlineRpm = v.filter(Char::isDigit).take(5)) } }, Modifier.weight(1f), number = true, error = f.redlineError)
             }
-            Text("Route colour", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(top = RtDimens.xs, bottom = 8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                BikeColors.PALETTE.forEach { c ->
-                    val argb = BikeColors.argb(c)
-                    val on = f.shownColor == argb
-                    Box(
-                        Modifier
-                            .size(30.dp)
-                            .border(2.dp, if (on) RtColors.TextPrimary else Color.Transparent, CircleShape)
-                            .padding(4.dp)
-                            .background(c, CircleShape)
-                            .clickable(role = Role.RadioButton) { vm.update { it.copy(routeColor = argb) } },
-                    )
-                }
+            var colorOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+            Text("Bike colour", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(top = RtDimens.xs, bottom = 8.dp))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClickLabel = if (colorOpen) "Close the colour picker" else "Change the colour") { colorOpen = !colorOpen }.padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(Modifier.size(30.dp).background(Color(f.shownColor), CircleShape))
+                Text(com.ridetrack.app.ui.theme.Accent.hex(f.shownColor), style = RtType.bodyStrong, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
+                Text(if (colorOpen) "Done" else "Change", style = RtType.bodyStrong, color = RtColors.Primary)
             }
+            if (colorOpen) BikeColorPicker(f.shownColor) { c -> vm.update { it.copy(routeColor = c) } }
             Text(
-                "Its rides show in this colour on the maps.",
+                "Used for the app and for this bike's rides on the maps.",
                 style = RtType.caption,
                 color = RtColors.TextTertiary,
                 modifier = Modifier.padding(top = 6.dp, bottom = RtDimens.xs),
@@ -155,7 +154,10 @@ fun BikeEditScreen(bikeId: String?, onDone: () -> Unit) {
         }
         PrimaryButton(
             if (vm.isNew) "Add bike" else "Save",
-            onClick = { vm.save { onDone() } },
+            onClick = {
+                f.routeColor?.let { RecentColors.add(context, it) }
+                vm.save { onDone() }
+            },
             enabled = f.isValid,
             large = true,
         )

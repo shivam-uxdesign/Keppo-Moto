@@ -33,4 +33,10 @@ object BikeColors {
     fun all(garage: List<Bike>): Map<String, Color> = garage.associate { it.id to of(it, garage) }
 
     fun argb(c: Color): Int = c.toArgb()
+
+    /** The app's main colour: the selected bike's (else the first bike's); null without bikes. */
+    fun appAccent(garage: List<Bike>, selectedId: String?): Int? {
+        val bike = garage.firstOrNull { it.id == selectedId } ?: garage.firstOrNull() ?: return null
+        return of(bike, garage).toArgb()
+    }
 }

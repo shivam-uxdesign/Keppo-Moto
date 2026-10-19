@@ -180,6 +180,8 @@ data class Settings(
     val hud: HudSettings = HudSettings(),
     val mapStyle: MapStyle = MapStyle.DARK,
     val appTheme: AppTheme = AppTheme.SYSTEM,
+    /** The app's main colour follows the colour of the bike being ridden. */
+    val matchAppToBike: Boolean = true,
     /** Kilometres or miles; null = from the phone's country. */
     val units: com.ridetrack.app.ui.format.UnitSystem? = null,
     val moments: MomentSettings = MomentSettings(),
@@ -231,6 +233,7 @@ class SettingsRepository(private val context: Context) {
         val hudPromptDismissed = booleanPreferencesKey("hud_prompt_dismissed")
         val mapStyle = stringPreferencesKey("map_style")
         val appTheme = stringPreferencesKey("app_theme")
+        val matchAppToBike = booleanPreferencesKey("match_app_bike")
         val units = stringPreferencesKey("units")
         val momentsEnabled = booleanPreferencesKey("moments_enabled")
         val momentsBraking = booleanPreferencesKey("moments_braking")
@@ -306,6 +309,7 @@ class SettingsRepository(private val context: Context) {
             ),
             mapStyle = enumOf(p[Keys.mapStyle], MapStyle.DARK),
             appTheme = enumOf(p[Keys.appTheme], AppTheme.SYSTEM),
+            matchAppToBike = p[Keys.matchAppToBike] ?: true,
             units = p[Keys.units]?.let { n -> com.ridetrack.app.ui.format.UnitSystem.entries.firstOrNull { it.name == n } },
             moments = MomentSettings(
                 enabled = p[Keys.momentsEnabled] ?: false,
@@ -459,6 +463,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setHudPromptDismissed(dismissed: Boolean) = context.dataStore.edit { it[Keys.hudPromptDismissed] = dismissed }
     suspend fun setMapStyle(style: MapStyle) = context.dataStore.edit { it[Keys.mapStyle] = style.name }
     suspend fun setAppTheme(theme: AppTheme) = context.dataStore.edit { it[Keys.appTheme] = theme.name }
+    suspend fun setMatchAppToBike(on: Boolean) = context.dataStore.edit { it[Keys.matchAppToBike] = on }
 
     /** Null: follow the phone's country. */
     suspend fun setUnits(units: com.ridetrack.app.ui.format.UnitSystem?) = context.dataStore.edit { if (units == null) it.remove(Keys.units) else it[Keys.units] = units.name }

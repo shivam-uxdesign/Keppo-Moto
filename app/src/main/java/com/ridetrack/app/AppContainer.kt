@@ -203,6 +203,6 @@ class AppContainer(context: Context) {
         }
     }
 
-    val hud = HudController(appContext, session, settings, momentsHub) { studio.shots.value.filter { !it.done }.map { it.text } }
+    val hud = HudController(appContext, session, settings, momentsHub, { studio.shots.value.filter { !it.done }.map { it.text } }, bikes.observeBikes())
     val crashAlerts = CrashAlerts(appContext, settings, session, battery, appScope)
 }
