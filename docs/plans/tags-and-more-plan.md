@@ -29,7 +29,7 @@ Each keyword has a **kind**, which decides its colour and where it comes from.
 
 | Keyword | When | Example |
 |---|---|---|
-| Lean | Biggest lean in the clip, 15° or more, with its side | Lean 26° right |
+| Lean | Biggest lean in the clip, from your lean setting up, with its side | Lean 26° right |
 | Acceleration (rider, 20 Oct: as speeds and time) | The speed-up run in the clip, from where it starts to where it peaks | 20–85 km/h in 6.1 s |
 | Benchmark sprint | When the run passes a standard mark | 0–60 km/h in 4.8 s · 0–100 km/h in 9.7 s |
 | Braking (as speeds and time) | The slow-down run | 80–20 km/h in 2.6 s · 60–0 km/h in 3.1 s |
@@ -99,8 +99,8 @@ How sound keywords are found:
 
 ### 1.4 Questions
 - **Decided (rider):** speeds in km/h (following the units setting). Acceleration and braking shown as speeds and time ("0–60 km/h in 4.8 s"), with the peak g small next to it.
-- **Question:** Keywords in English only, or Hinglish too (for example "Cheekh" for scream)? Claude's pick: English, because search also matches your Hinglish words.
-- **Question:** Are the limits right (lean from 15°; speed runs of 20 km/h or more)?
+- **Decided (rider, 20 Oct):** English only.
+- **Decided (rider, 20 Oct):** lean counts from the rider's own lean setting (Moments › Lean). Speed runs of 20 km/h or more.
 
 ---
 

@@ -1,6 +1,6 @@
 # Achievements: redesign plan (#47)
 
-Plan only. A prototype comes next, after you approve this. Answer the **Question:** lines.
+Plan only. No prototype (rider, 20 Oct). Open questions decided by Claude: level names as below; all badges in §3; no speed or lean records (§5). Build order in `final-plan-20-oct.md`.
 
 ## What's there today (Found in the code)
 - **22 achievements in 7 groups:**
