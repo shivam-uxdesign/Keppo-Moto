@@ -200,3 +200,12 @@ One zip containing:
 
 - **T1–T3 first** (one APK). Then your test ride: talk at a few speeds, including 80–90 km/h, a few times each.
 - **Then T4–T5** with that recording.
+
+### Instead, for now (rider, 19 Oct)
+
+No test ride mode yet. The rider films one of their own videos in the app across slow to 90+ km/h and talks a few times at each speed. Then they send:
+- the video (Share › Share original: the helmet mic is its sound);
+- the ride export (speeds, and what the detector decided while filming);
+- rough times of when they talked.
+
+With that, the T4 replay runs on the computer. T1–T3 get built only if this isn't enough. For example, the engine mic would be needed if the two-mic comparison matters; it isn't in a shared video, and adding it to Share original would be a small change.
