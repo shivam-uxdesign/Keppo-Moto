@@ -1,6 +1,6 @@
 # Final plan, 20 Oct: everything discussed
 
-Waiting for your approval. Nothing below is built yet.
+**Approved (rider, 20 Oct).** Building starts automatically at 5:00 am IST on 20 Oct. **One APK only, at the very end** (rider): no APKs between parts; each step is still committed and pushed.
 
 The detailed plans stay where they are; this page is the decision list and the build order.
 - Storyboard: `template-chat-plan.md`
@@ -27,7 +27,7 @@ The detailed plans stay where they are; this page is the decision list and the b
 
 ## Build order
 
-Each step is one commit. Where it says APK, I run the checks and send you `keppo-moto-<commit>.zip`.
+Each step is one commit, pushed. The "APK" marks below are now just checkpoints where the full checks run; the only APK is built and sent once everything is done.
 
 ### Part A: fixes and quick wins (APK 1)
 1. **Mic fix (#45).**
