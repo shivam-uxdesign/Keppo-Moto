@@ -2,7 +2,9 @@
 
 You describe a Reel idea in a chat, by text or voice note. Gemini turns it into a storyboard script. Once you approve it, the app builds a **Reel template**: the full Reel with titles, captions and transitions, with **placeholder clips** where footage goes. Each placeholder is a picture saying exactly what to film. You fill the placeholders with real footage later.
 
-Items are marked **Decided** (from your brief), **Claude's idea**, or **Correction** (where the brief and the app differ). Answer the **Question:** lines. Nothing is built until you approve this plan.
+Items are marked **Decided** (from your brief or your answers), **Claude's idea**, or **Correction** (where the brief and the app differ). Answer the **Question:** lines. Nothing is built until you approve this plan.
+
+Answers received 19 Oct: music note yes; back up made Reels; on-screen text can be anything; a template works exactly like the editor; record or upload (Claude decides how recording works); Pro limits as proposed. Still open: the name (§1.1).
 
 Log row #40.
 
@@ -31,7 +33,7 @@ Log row #40.
 ### Corrections
 - **C1 Music (Correction):** Studio has **no music library**, by your choice (#1: Instagram first). A Reel can carry one song you pick from your phone (`musicUri`), or the music is added in Instagram.
   - So a template can't come "with music". It gets a **music note**: mood, tempo and where the beat should drop ("hard hit at STEP 3"), plus your own song if you pick one.
-  - **Question:** Is a music note plus an optional song of your own right?
+  - **Decided (rider):** a music note plus an optional song of your own.
 - **C2 `GeminiWait`:** this is the on-screen "Gemini is free again at 4:30" countdown, not a request queue. The chat reuses it for its "wait" state.
 - **C3 Shot list:**
   - `StudioPrefs.shots` is only a list of text with a done tick, saved in a small settings file. It has to grow: the template it belongs to, its shot id, mount and position.
@@ -40,7 +42,7 @@ Log row #40.
   - The Drive backup carries rides, moments, bikes, settings, Studio styles, series and the brand kit.
   - It does **not** carry made Reels (`ReelStore`) or `studio-style.json`.
   - The plan adds chats, templates, gear and the style memory to it (§9).
-  - **Question:** Should made Reels be backed up too? That's separate work, and large, because of the video files.
+  - **Decided (rider):** made Reels are backed up too (see §11).
 - **C5 Studio works per ride:**
   - `StudioViewModel` / `StudioEngine` open either one ride's clips or "phone videos only" (`PHONE_STUDIO`).
   - A template belongs to no ride: it opens like a phone-videos Reel, and can borrow clips from any ride (the editor already does this for "other rides").
@@ -97,8 +99,11 @@ ScriptShot(
 How it stays safe:
 - **JSON:** the new fields are optional. `ScriptJson.read` keeps reading `clip` as before, and an empty clip is allowed. Old scripts have no `board` and load unchanged.
 - **The Reel pipeline:** a placeholder becomes a `ClipSegment` with a stand-in `Bit` (`ph:<shotId>`) and `still` = its picture (C7). When filled, the same segment gets the real `Bit`, with the shot id kept for replacing again.
-- **Sections:** stay `SectionKind`. "STEP 1: THE LOOK" is the section's `text`, shown as a title over its first shot, using the existing text system.
-- **Question:** For step titles, do you want the section text over the first shot (lighter), or a separate title card of about 1 s before each step (clearer, but longer)?
+- **Sections:** stay `SectionKind`.
+- **On-screen text (Decided, rider):** "STEP 1: THE LOOK" was only an example. Any text can appear on the Reel: titles, step names, jokes, captions.
+  - Gemini writes them as a list of **on-screen texts**, each with its words, which shot it starts on, and how long it stays.
+  - In the template they become ordinary **texts on the Text row** (as the title became in #37). You can move, lengthen, reword and restyle them like any other text.
+  - The spoken-word captions stay the existing caption system.
 
 ### 2.2 Versions (Decided)
 - Each template keeps its script history: version 1, 2, 3 and so on, each with what changed.
@@ -160,7 +165,7 @@ How replies are checked:
 - **Edit directly:** tap a field to change it. That field becomes locked. New pure edits go into `ScriptEdits` (setAction, setDuration, setFraming, moveShot, deleteShot, addShot), with unit tests.
 - **Edit by chat:** "make step 3 faster, 3 cuts of 1 s" → patches to those shots only.
 - **Your direct edits go into `StyleStore`'s edit log** (before, after, your note), the same as script edits today, so Studio learns from them (§9.2).
-- **Question:** Should moving a shot to another section be allowed, or only within its section?
+- **Claude's default:** a shot can be moved anywhere, including into another section. It's an ordinary clip in the editor (§5.2).
 
 ---
 
@@ -180,12 +185,14 @@ How replies are checked:
 
 ### 5.2 Building (Decided, with Claude's ideas)
 - **Approve → Make template:** script → `StudioPlan` through the existing planner, with placeholders as stills. Captions, step titles, transitions and the music note sit on their own tracks, so replacing footage keeps them.
-- **Rendering:**
-  - The editor preview works straight away: the stills play like freeze frames.
-  - A made video of an unfilled template is allowed (handy to show someone the plan). It's watermarked "Template · not filmed yet".
+- **A template works exactly like today's editor (Decided, rider).** It *is* a Reel in the editor:
+  - every tool works: trim, speed, crop, transitions, text, sound, layers, Share;
+  - placeholders are clips like any other, showing their picture;
+  - it can be made into a video at any time, as it stands, with no watermark;
+  - what's different: the "Template" filter in Your Reels, "6 of 11 shots filled", and the Replace options on a placeholder.
 - **Saved as a `ReelProject`** with `kind = TEMPLATE`, its chat id and its script versions (§10).
 - **In Your Reels**, it shows under a new filter, "Templates", with "6 of 11 shots filled".
-- **Question:** Should an unfilled template be makeable as a video (watermarked), or only once every shot is filled?
+
 
 ---
 
@@ -243,11 +250,17 @@ All of it is pure code with unit tests.
 - **On Home** (`ShotListCard`) and in the HUD pop-up for the first 30 s of a ride, as today, with the template's name.
 - **Done** when the slot is filled.
 
-### 8.2 Recording into a slot (Decided)
-- **"Record now"** opens the camera with the shot's instruction on screen, the right camera (front or back) chosen from its storyboard, and a 3-2-1 countdown.
-- It records the shot's length plus 1 s each side.
-- The clip drops into its slot, trimmed (§6.2).
-- **Question:** Should recording use the ride camera (the HUD pop-up's) or a simple full-screen camera page? Full-screen is easier off the bike, for tripod shots. The pop-up suits shots filmed while riding.
+### 8.2 Recording or upload (Decided, rider: "recording, you choose")
+Each placeholder offers **Record** or **Upload**: a phone video or a moment.
+
+How Record works, decided per shot from its storyboard:
+- **Shots off the bike** (tripod, handheld, a helper): a **full-screen camera page**. It shows:
+  - the shot's instruction on screen;
+  - the right camera, front or back;
+  - a guide frame for the framing;
+  - a 3-2-1 countdown.
+  - It records the shot's length plus 1 s each side; the clip drops into its slot, trimmed (§6.2). Retake or keep.
+- **Shots while riding** (fixed mount): recording on the bike happens with the ride camera, so these go on the **to-film list** (§8.1). On your next ride, the HUD pop-up shows them, and one tap there starts your own video for that shot. After the ride, the clip is offered for its slot ("Shot 4 filmed · Put it in?").
 
 ---
 
@@ -304,6 +317,10 @@ Studio › Settings › **Gear & style**:
 - **Drive backup gains small JSON files:** chats, templates (their `project.json` and script versions), gear, and the style memory (`studio-style.json`, missing today).
 - **Placeholder PNGs aren't uploaded.** They're redrawn from the storyboard after a restore, so they're quick to regenerate and save space.
 - **Older backups restore as before:** the new files are optional.
+- **Made Reels (Decided, rider), Claude's approach:**
+  - back up each Reel's `project.json`, cover, voice-over takes and the song you picked (small);
+  - don't back up the made video itself (large). After a restore it's made again from the project and the backed-up moments, the first time you open or share it.
+  - Templates and their footage come back the same way. Placeholder pictures are redrawn.
 
 ---
 
@@ -313,7 +330,7 @@ Studio › Settings › **Gear & style**:
 - **Pro:** unlimited chats (within the Gemini allowance).
 - **The free weekly Reel is used when a filled template is made into a video,** as with any Reel. Making the template (placeholders) doesn't use it.
 
-**Question:** Do these limits work, or should the chat be Pro only?
+**Decided (rider):** yes, these limits.
 
 ---
 
