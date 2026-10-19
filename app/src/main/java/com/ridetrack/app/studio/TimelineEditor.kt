@@ -923,7 +923,7 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                                     }
                                 } else {
                                     // Labels at least ~56 dp apart: 1, 2, 5, 10 or 30 s.
-                                    val step = listOf(1, 2, 5, 10, 30, 60).first { it * perSec >= 56.dp.toPx() } * 1000L
+                                    val step = (listOf(1, 2, 5, 10, 30, 60).firstOrNull { it * perSec >= 56.dp.toPx() } ?: 60) * 1000L
                                     var t = 0L
                                     while (t <= plan.totalMs) {
                                         val x = map.x(t)

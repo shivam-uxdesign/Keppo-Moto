@@ -138,7 +138,8 @@ class StudioRenderer(private val context: Context) {
 
     private suspend fun export(input: RenderInput, a: Attempt, output: File, onProgress: (Int) -> Unit): Result<File> {
         output.delete()
-        val composition = runCatching { composition(input, a) }.getOrElse { return Result.failure(it) }
+        // Built off the screen's thread: it reads whole sound files (see soundMix).
+        val composition = withContext(Dispatchers.Default) { runCatching { composition(input, a) } }.getOrElse { return Result.failure(it) }
         return withContext(Dispatchers.Main) {
             suspendCancellableCoroutine { cont ->
                 val transformer = Transformer.Builder(context)
@@ -274,10 +275,16 @@ class StudioRenderer(private val context: Context) {
      * ([out], AAC) as long as the Reel. Null when there are none.
      */
     suspend fun soundMix(input: RenderInput, out: File): File? {
-        val extras = runCatching { extraSequences(input) }.getOrElse { return null }
-        if (extras.isEmpty()) return null
+        // Off the screen's thread: getting the sounds ready reads whole files (the engine mic's
+        // horns and bumps are found by decoding it), which froze the editor ("isn't responding").
+        val (extras, silence) = withContext(Dispatchers.Default) {
+            (runCatching { extraSequences(input) }.getOrNull() ?: return@withContext null to null).let { ex ->
+                if (ex.isEmpty()) ex to null else ex to Fillers.silence(context, input.plan.totalMs)
+            }
+        }
+        if (extras == null || extras.isEmpty() || silence == null) return null
         // A silent track as long as the Reel first: it sets the length (the song loops to it).
-        val base = EditedMediaItemSequence(listOf(EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(Fillers.silence(context, input.plan.totalMs)))).build()))
+        val base = EditedMediaItemSequence(listOf(EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(silence))).build()))
         val composition = Composition.Builder(listOf(base) + extras).experimentalSetForceAudioTrack(true).build()
         out.delete()
         return withContext(Dispatchers.Main) {

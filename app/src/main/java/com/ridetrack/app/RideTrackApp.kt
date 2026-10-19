@@ -29,6 +29,8 @@ class RideTrackApp : Application() {
             runCatching { container.errors.record("Crash", "The app stopped (${e.javaClass.simpleName}) on ${thread.name}", e) }
             previous?.uncaughtException(thread, e)
         }
+        // Freezes ("isn't responding") into the error log too, with what the app was doing.
+        runCatching { com.ridetrack.app.diag.FreezeWatch(this, container.errors).start() }
         MapLibre.getInstance(this)
         createNotificationChannel()
         container.hud.start()
