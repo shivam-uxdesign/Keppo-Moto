@@ -1,6 +1,6 @@
 # Keywords on moments, and the 20 Oct list: plan
 
-Plan only, nothing built. Items are marked **Claude's idea** or **Found in the code**. Answer the **Question:** lines.
+Plan only, nothing built. Items are marked **Claude's idea** or **Found in the code**. All questions answered on 20 Oct; build order in `final-plan-20-oct.md`.
 
 Log rows #41–#46. Voice at speed stays #39.
 
@@ -80,7 +80,7 @@ How sound keywords are found:
   - the bike is moving;
   - it's at least 5 s long.
 - **What's in the picture:** Google's on-phone picture labeller (ML Kit, free and offline) looks at 3 frames of each clip. It gives words like Sky, Mountain, Tree, Road, Bridge, Building, Night, Rain or Sunset. Only the confident ones are kept.
-- Gemini could describe frames in more detail (a tunnel, traffic, a ghat road), but it costs one request per clip. **Question:** keep that off, and use it only for clips you open?
+- Gemini could describe frames in more detail (a tunnel, traffic, a ghat road), but it costs one request per clip. **Decided (Claude):** off; the on-phone labeller only.
 
 ### 1.2 Your own keywords and finding moments (#41, part 4)
 - **Moment viewer:** keyword chips under the video, coloured by kind.
