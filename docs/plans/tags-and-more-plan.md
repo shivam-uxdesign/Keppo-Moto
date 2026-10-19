@@ -52,7 +52,7 @@ Each keyword has a **kind**, which decides its colour and where it comes from.
 - Speeds are rounded to 5 km/h, and "0" means below 5 km/h.
 - Times use the moments between samples, shown to 0.1 s. GPS updates about once a second, so the times are good to about ±0.3 s. The keyword says "about" when the GPS was weak.
 - Benchmarks: 0–60 and 0–100 km/h; 60–0 and 100–0 km/h for braking. In miles, 0–30 and 0–60 mph.
-- **Personal bests (Claude's idea):** your fastest 0–60 and shortest 60–0 get a "Best" keyword. They can show on the Achievements page and as a HUD note: "New best 0–60: 4.6 s".
+- ~~Personal bests with a "Best" keyword and a HUD note~~: dropped. They break the app's rule of no speed or lean goals (see `achievements-plan.md` §5). The runs stay as plain keywords.
 
 **Sound (what was heard)**
 
