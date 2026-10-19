@@ -115,3 +115,88 @@ One commit each, then one APK.
   - a shout and normal talk mixed into each (must trigger within 1.5 s);
   - a horn and an engine rev (must not trigger).
 - Each step replays your exported ride's levels and compares what triggers before and after.
+
+## Ride of 18 Oct (Sector 79 → Sector 70): what the log shows (#39)
+
+The mic line is logged every 5 s, and the export had no sound. Averages by speed:
+
+| Speed | Readings | Wind background | Level above it | Voice detector ≥ 0.5 | Two-mic lift ≥ 6 dB |
+|---|---|---|---|---|---|
+| Stopped | 37 | -34 dB | +6 dB | 2 | 12 |
+| 1–40 km/h | 77 | -25 dB | +5 dB | 21 | 11 |
+| 40–65 km/h | 39 | -19 dB | +4 dB | 2 | 4 |
+| 65–94 km/h | 64 | **-15 dB** | **+2 dB** | 3 | **0** |
+
+- Up to about 65 km/h it works: at 10:20 a shout at 66 km/h was caught (voice detector 0.74–0.99).
+- The fast stretch (10:12:56 to 10:18:08, 64–94 km/h, about 5 minutes) gave no start at all, and every signal failed at once:
+  - **Loudness:** the wind fills the helmet mic to about -12 dB (near full volume). Nothing gets more than 1–3 dB above it.
+  - **Voice detector:** 0.00 in every reading.
+  - **Two-mic lift:** at most +4 dB, below the 6 dB rule. The wind is as loud on the helmet mic as on the back-seat mic, so the helmet mic doesn't stand out.
+- At a standstill, engine revs still gave false starts through the lift: 9 starts at 0 km/h had voice 0.00. The 30 s safety net (#33) caught it at 10:09:45 as designed.
+
+**What the log can't tell us:**
+- whether the voice is audible at all under the wind at 90 km/h;
+- exactly when the rider spoke, since the readings are 5 s apart.
+
+So any threshold change made now would be a guess. A fix needs the real sound, with the moments the rider spoke marked.
+
+## V0, redone: a voice test ride (the rider's idea A)
+
+**Not built yet.**
+
+### T1. Voice test mode
+
+- Settings › Moments › Voice at speed › **Record a voice test ride** (one ride, then it turns itself off).
+- **Records both mics all ride long**, besides the normal clips: the helmet mic and the engine mic as two sound files, about 1 MB per minute each (roughly 60 MB for 30 minutes).
+- **Writes every chunk's measurements** (every 46 ms) to a file. These are:
+  - level and background;
+  - the voice detector's score, on both mics;
+  - the lift and the clipping;
+  - speed;
+  - the decision ("loud", "speaking").
+  - New candidates, measured but not used yet: pitch strength (does it have a voice's pitch?), syllable rhythm (does it pulse 3–6 times a second?), how noise-like the sound is, and the energy below 300 Hz (wind) against 300–3400 Hz (voice).
+- The pop-up shows "Voice test · recording" so it's never on by surprise.
+- The recording stays on the phone. It only leaves when you export it.
+
+### T2. Marking where you spoke (the least effort first)
+
+1. **Automatic:** after the ride, Gemini listens to the whole helmet track and returns where speech is, with the words. Those become proposed "you spoke here" marks.
+2. **Review screen:**
+   - the ride's timeline, with speed, the proposed marks, and where the app started a clip;
+   - tap any point to hear it;
+   - add a mark where you spoke and nothing caught it, or remove a wrong one.
+3. **Optional, during the ride:** press the helmet's media button (V6) as you start talking. That press is also a mark.
+
+### T3. Export voice test
+
+One zip containing:
+- both sound tracks;
+- the measurements file;
+- the marks.
+
+### T4. Replay and fix (my part, with your recording)
+
+1. A replay test (pure code, on the computer) runs the detector over your recording, chunk by chunk, exactly as on the phone.
+2. It scores each speed band: marks caught within 1.5 s, marks missed, and false starts (revs, wind, horns).
+3. First I check whether your voice is audible at 80–94 km/h at all.
+   - If it is buried in the wind, no software can find it. The answer is then:
+     - mic placement: inside the helmet by the chin, behind the padding;
+     - the fur windscreen on;
+     - lower receiver gain;
+     - DJI noise cancelling on;
+     - the media button as the start.
+   - If it is audible, the detector changes (V2, V3 and better two-mic use) are designed and tuned on your recording until the misses and false starts are low in every band:
+     - V2: pitch strength and syllable rhythm;
+     - V3: subtracting the wind, learned for each speed;
+     - comparing the two mics across frequencies, not only their loudness.
+4. Your recording's measurements become a permanent test, so later changes can't break it.
+
+### T5. Confirm
+
+- One normal ride with the new detector.
+- The log's mic lines stay as they are, plus a line each time a mark-worthy shout is missed while the test mode is on.
+
+### Build order
+
+- **T1–T3 first** (one APK). Then your test ride: talk at a few speeds, including 80–90 km/h, a few times each.
+- **Then T4–T5** with that recording.
