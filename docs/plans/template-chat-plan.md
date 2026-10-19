@@ -6,7 +6,7 @@ Items are marked **Decided** (from your brief or your answers), **Claude's idea*
 
 Answers received 19 Oct: music note yes; back up made Reels; on-screen text can be anything; a template works exactly like the editor; record or upload (Claude decides how recording works); Pro limits as proposed. Entry: a floating button on the Studio page. Name: **Storyboard** (§1.1).
 
-Prototype (build step 1): https://claude.ai/artifact/LQFy25thQ6CoiTJ1eVUtaQ: Studio page button, saved storyboards, the chat, shot review with the to-film list, a placeholder picture, and the template in the editor with the fill sheet.
+Prototype (build step 1): https://claude.ai/artifact/LQFy25thQ6CoiTJ1eVUtaQ: Studio page button, saved storyboards, the chat, shot review with the to-film list, a placeholder picture, and the template in the editor with the fill sheet. A second example, a story ("The ride I almost skipped"), uses all seven section kinds, a voice-over line per shot, home shots before the ride, and a short Stories version made from the same shots.
 
 Log row #40.
 
@@ -99,6 +99,7 @@ ScriptShot(
 - `gearFallback`: the ideal gear, the reason, and what is used instead.
 - `durationMs`, `caption`, `audio` (engine, music or voice first), `transition`.
 - `match`: event types, context words, minimum length, needs engine sound, must-record or can-match.
+- `say` (Claude's idea, from the story example): an optional voice-over line for the shot. Story pieces get one per shot; you read them all in one go after the ride and Studio places each line on its shot (as the existing voice-over tool does). Shown on the shot card and the placeholder picture.
 
 How it stays safe:
 - **JSON:** the new fields are optional. `ScriptJson.read` keeps reading `clip` as before, and an empty clip is allowed. Old scripts have no `board` and load unchanged.
