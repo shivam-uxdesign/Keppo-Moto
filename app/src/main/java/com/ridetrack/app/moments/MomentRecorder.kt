@@ -68,6 +68,8 @@ class MomentRecorder(
     private val landscapeMount: Boolean,
     private val scope: CoroutineScope,
     rideId: String,
+    /** Where a mic the app had to move back is noted once per ride, for Send details. */
+    private val errors: com.ridetrack.app.diag.ErrorLog? = null,
 ) {
     private val buffer = RollingBuffer()
     /** Joins a clip that starts where (or soon after) the last one ended into it, right after it's saved. */
@@ -113,6 +115,9 @@ class MomentRecorder(
     }
     /** A mic that dropped out is only switched back to once it stays connected. */
     private val micStability = MicStability()
+    private val routing = MicRouting()
+    /** The kind of mic Android really records from now (may differ from [audioMic]). */
+    @Volatile private var routedMic: MicType? = null
     /** The external mic used last this ride, so Automatic can say which one went missing. */
     private var lastExternal: MicChoice? = null
     private var powerReceiver: BroadcastReceiver? = null
@@ -533,7 +538,16 @@ class MomentRecorder(
                 hub.setMicFallback(fallbackName(choice, mic))
                 log.log("audio from ${if (device == null) "phone mic" else "${mic.type.label} ${device.productName}"} (setting: ${choice.label})${if (enc.recordingTwo) ", both channels (two mics)" else ""}")
                 // A mic that drops out (battery, range) falls back to the phone; note it in the log.
-                enc.addOnRoutingChanged { d -> log.log("audio now from ${d?.let { "${Microphones.typeOf(it)?.label ?: it.type} ${it.productName}" } ?: "default mic"}") }
+                enc.addOnRoutingChanged { d ->
+                    log.log("audio now from ${d?.let { "${Microphones.typeOf(it)?.label ?: it.type} ${it.productName}" } ?: "default mic"}")
+                    scope.launch(Dispatchers.Main) {
+                        if (audio !== enc) return@launch
+                        // The pop-up shows the mic really recording; the check moves it back if it can.
+                        routedMic = d?.let(Microphones::typeOf)
+                        hub.setMicType(routedMic ?: mic.type)
+                        micsChanged()
+                    }
+                }
             }
         } catch (e: Exception) {
             log.error("audio unavailable, clips without sound", e)
@@ -569,10 +583,18 @@ class MomentRecorder(
         }.onFailure { log.error("engine mic sound couldn't be written", it) }
     }
 
+    /** The mic really recording, for each saved clip's log line. */
+    private fun micNow(): String = when {
+        audio == null -> "none"
+        (routedMic ?: audioMic?.type) == MicType.PHONE -> "phone"
+        else -> audioMic?.label ?: "phone"
+    }
+
     private fun stopAudio() {
         audio?.release()
         audio = null
         audioMic = null
+        routedMic = null
         hub.setMicType(null)
         hub.clearLevel()
     }
@@ -631,6 +653,21 @@ class MomentRecorder(
             if (settleMillis > 0) delay(settleMillis)
             val current = audioMic ?: return@launch
             val now = android.os.SystemClock.elapsedRealtime()
+            // Asked for the receiver but Android records from the phone mic (another app took the
+            // mic for a moment): reopen on the receiver while it's still connected.
+            val routed = audio?.routedDevice?.let(Microphones::typeOf)
+            if (routed != null && routed != routedMic) {
+                routedMic = routed
+                hub.setMicType(routed)
+            }
+            if (routing.shouldReopen(current.type, routed, Microphones.find(context, current) != null, now)) {
+                log.log("phone mic used although ${current.label} is connected: reopened")
+                if (routing.reopens == 1) runCatching {
+                    errors?.record("Moments", "Recording had moved to the phone mic although ${current.label} was connected; moved it back", warning = true)
+                }
+                restartAudio()
+                return@launch
+            }
             val best = pickMic()
             micStability.onSeen(now, best.type != MicType.PHONE)
             if (best == current) return@launch
@@ -778,7 +815,7 @@ class MomentRecorder(
                 clipStartMillis = clipStartMillis,
             ),
         )
-        log.log("clip saved: ${file.name} ${length / 1000}s ${file.length() / 1024}KB, ${video.size} frames, ${audioSamples.size} audio")
+        log.log("clip saved: ${file.name} ${length / 1000}s ${file.length() / 1024}KB, ${video.size} frames, ${audioSamples.size} audio · mic: ${micNow()}")
         hub.onSaved()
         continueLast(r.rideId, clipStartMillis, clipStartMillis + length)
     }
@@ -1026,7 +1063,7 @@ class MomentRecorder(
                 camera = camera,
             ),
         )
-        log.log("video saved ($reason): ${file.name} ${length / 1000}s ${file.length() / 1024}KB · " + engineNote(l.rec.engineFile.isFile))
+        log.log("video saved ($reason): ${file.name} ${length / 1000}s ${file.length() / 1024}KB · mic: ${micNow()} · " + engineNote(l.rec.engineFile.isFile))
         hub.onSaved()
         // Your own videos stay separate; event and voice videos continue the last clip.
         if (req.source != MomentSource.MANUAL) continueLast(req.rideId, start, start + length) else lastClip = null
