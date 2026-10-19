@@ -1,10 +1,12 @@
-# Template Chat: plan (Phase 0)
+# Storyboard (Template Chat): plan (Phase 0)
 
 You describe a Reel idea in a chat, by text or voice note. Gemini turns it into a storyboard script. Once you approve it, the app builds a **Reel template**: the full Reel with titles, captions and transitions, with **placeholder clips** where footage goes. Each placeholder is a picture saying exactly what to film. You fill the placeholders with real footage later.
 
 Items are marked **Decided** (from your brief or your answers), **Claude's idea**, or **Correction** (where the brief and the app differ). Answer the **Question:** lines. Nothing is built until you approve this plan.
 
-Answers received 19 Oct: music note yes; back up made Reels; on-screen text can be anything; a template works exactly like the editor; record or upload (Claude decides how recording works); Pro limits as proposed. Entry: a floating button on the Studio page. Still open: the name (§1.1).
+Answers received 19 Oct: music note yes; back up made Reels; on-screen text can be anything; a template works exactly like the editor; record or upload (Claude decides how recording works); Pro limits as proposed. Entry: a floating button on the Studio page. Name: **Storyboard** (§1.1).
+
+Prototype (build step 1): https://claude.ai/artifact/LQFy25thQ6CoiTJ1eVUtaQ: Studio page button, saved storyboards, the chat, shot review with the to-film list, a placeholder picture, and the template in the editor with the fill sheet.
 
 Log row #40.
 
@@ -57,9 +59,9 @@ Log row #40.
 - **A round floating button** at the bottom right of the Studio tab, above the tab bar: a chat bubble with a sparkle, in Studio's accent colour.
   - It doesn't cover the idea cards' swipe area or the "Ask for something" box: it sits just above that box, at the right.
   - For free riders, the "1 free Reel this week" chip moves to the left, so the two never overlap.
-  - When the button first appears, a one-time hint says "Plan a Reel with Studio".
+  - When the button first appears, a one-time hint says "Plan a Reel with Storyboard".
 - Tapping it opens the chat list, newest first, with "New chat" at the top. Tap a chat to reopen it.
-- **Question:** Is "Plan a Reel" the right name? Alternatives: "Template chat", "Storyboard".
+- **Name (Decided, rider):** **Storyboard**. The chat list and the chat screen are titled Storyboard.
 
 ### 1.2 The chat screen (Claude's idea)
 - **Top:** the chat's title and ⋯ (Rename, Delete chat, Gear & style).
