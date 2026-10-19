@@ -30,8 +30,10 @@ Each keyword has a **kind**, which decides its colour and where it comes from.
 | Keyword | When | Example |
 |---|---|---|
 | Lean | Biggest lean in the clip, 15° or more, with its side | Lean 26° right |
-| Acceleration | Strongest pull, 0.3 g or more | Acceleration 0.6 g |
-| Hard brake | Strongest braking, 0.4 g or more | Hard brake 0.8 g |
+| Acceleration (rider, 20 Oct: as speeds and time) | The speed-up run in the clip, from where it starts to where it peaks | 20–85 km/h in 6.1 s |
+| Benchmark sprint | When the run passes a standard mark | 0–60 km/h in 4.8 s · 0–100 km/h in 9.7 s |
+| Braking (as speeds and time) | The slow-down run | 80–20 km/h in 2.6 s · 60–0 km/h in 3.1 s |
+| Peak force | Kept small next to the run, for the curious | 0.6 g |
 | Top speed | Always | Top 94 km/h (or mph) |
 | Downshift | Downshifts heard in the engine sound | Downshift ×3 |
 | Rev | A rev while stopped | Rev |
@@ -40,6 +42,17 @@ Each keyword has a **kind**, which decides its colour and where it comes from.
 | Time of day | From the clock and the sun's position where you were | Sunrise · Day · Sunset · Night |
 | Place | The area name, as ride names already use | Sector 70 |
 | Camera | Which camera | Selfie · Road |
+
+**How the speed runs are measured (Claude's idea)**
+- From the ride's speed samples while the clip was filmed:
+  - a run starts where the speed starts rising (or falling) steadily;
+  - it ends where it stops rising (or falling);
+  - short wobbles under 2 km/h don't break a run.
+- Only runs of at least 20 km/h change are kept.
+- Speeds are rounded to 5 km/h, and "0" means below 5 km/h.
+- Times use the moments between samples, shown to 0.1 s. GPS updates about once a second, so the times are good to about ±0.3 s. The keyword says "about" when the GPS was weak.
+- Benchmarks: 0–60 and 0–100 km/h; 60–0 and 100–0 km/h for braking. In miles, 0–30 and 0–60 mph.
+- **Personal bests (Claude's idea):** your fastest 0–60 and shortest 60–0 get a "Best" keyword. They can show on the Achievements page and as a HUD note: "New best 0–60: 4.6 s".
 
 **Sound (what was heard)**
 
@@ -85,9 +98,9 @@ How sound keywords are found:
 - Backup: your own keywords and removals go with the moments.
 
 ### 1.4 Questions
-- **Decided (rider):** speeds in km/h (following the units setting). g-force shown as "0.6 g" unless you say otherwise.
+- **Decided (rider):** speeds in km/h (following the units setting). Acceleration and braking shown as speeds and time ("0–60 km/h in 4.8 s"), with the peak g small next to it.
 - **Question:** Keywords in English only, or Hinglish too (for example "Cheekh" for scream)? Claude's pick: English, because search also matches your Hinglish words.
-- **Question:** Are the limits in the table right (lean from 15°, acceleration from 0.3 g, braking from 0.4 g)?
+- **Question:** Are the limits right (lean from 15°; speed runs of 20 km/h or more)?
 
 ---
 
@@ -188,10 +201,10 @@ Plan:
 - If you have other 18 Oct rides, export them too. But a missed shout has no recording either way, because the camera wasn't filming. So the ways forward are still:
   - **A.** Your in-app video talking at several speeds (no build needed), as agreed.
   - **B.** I build the voice test mode now (T1–T3, one APK): both mics recorded all ride, every reading every 46 ms. You do one ride and export it.
-- **Question:** A or B? Claude's pick: B if you want me to focus on it now, because it gives both mics and exact readings, and A can't.
+- **Decided (rider, 20 Oct): A.** You film in the app and send the video, the export and when you talked.
 
 ---
 
 ## 8. "42"
 
-- **Question:** You wrote "42". Did you mean a row in the log, or something else?
+Nothing (rider, 20 Oct).
