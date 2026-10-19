@@ -154,7 +154,12 @@ val LocalNavigate = androidx.compose.runtime.staticCompositionLocalOf<(String) -
 internal val OPEN_RIDE_SHAPE = Regex("^(?:[a-z]+:)?[A-Za-z0-9._-]{0,100}(?:#[A-Za-z0-9._-]{1,100})?$")
 
 @Composable
-fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit = {}) {
+fun RideTrackNavHost(
+    openRideId: String? = null,
+    onOpenRideHandled: () -> Unit = {},
+    quickStart: Boolean = false,
+    onQuickStartHandled: () -> Unit = {},
+) {
     val nav = rememberNavController()
     val container = appContainer()
     val session = container.session
@@ -166,6 +171,17 @@ fun RideTrackNavHost(openRideId: String? = null, onOpenRideHandled: () -> Unit =
     // If a ride is in progress (e.g. the activity was recreated), go straight back to it.
     LaunchedEffect(Unit) {
         if (session.state.value.isActive) nav.navigate(Routes.LIVE) { launchSingleTop = true }
+    }
+
+    // Start a ride from the widget, shortcut, tile or the Assistant: a 3 s countdown, then the live screen.
+    if (quickStart) {
+        com.ridetrack.app.ui.home.QuickStartDialog(
+            onStarted = {
+                onQuickStartHandled()
+                nav.navigate(Routes.LIVE) { launchSingleTop = true }
+            },
+            onClose = onQuickStartHandled,
+        )
     }
 
     // OPEN_RIDE from Keppo Journal (or any app): the ride, Recently deleted, or the rides list.

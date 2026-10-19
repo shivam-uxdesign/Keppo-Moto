@@ -5,4 +5,17 @@
     <string name="notification_channel_ride_desc">Shown while a ride is being recorded.</string>
     <string name="notification_channel_ride_alerts">Ride breaks</string>
     <string name="notification_channel_ride_alerts_desc">When a ride pauses for a break, and when a break has gone on a long time.</string>
+    <string name="widget_start">Start ride</string>
+    <string name="widget_pause">Pause the ride</string>
+    <string name="widget_resume">Resume the ride</string>
+    <string name="widget_end">End the ride</string>
+    <string name="widget_small_description">Start a ride with one tap</string>
+    <string name="widget_large_description">Start a ride, see if you\'re ready, and your last ride</string>
+    <string name="tile_label">Start ride</string>
+    <string-array name="ride_names">
+        <item>ride</item>
+        <item>motorcycle ride</item>
+        <item>bike ride</item>
+        <item>motorbike ride</item>
+    </string-array>
 </resources>

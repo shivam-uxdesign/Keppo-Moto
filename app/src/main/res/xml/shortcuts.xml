@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Long-press the app icon: Start ride. The capability lets Google Assistant start a ride
+  ("Hey Google, start a ride on Keppo Moto"); App Actions only take effect for Play Store installs.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <capability android:name="actions.intent.START_EXERCISE">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.ridetrack.app.MainActivity"
+            android:targetPackage="com.keppo.moto">
+            <url-template android:value="keppomoto://ride/start{?exercise}" />
+            <parameter android:name="exercise.name" android:key="exercise" />
+        </intent>
+    </capability>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_tile_ride"
+        android:shortcutId="start_ride"
+        android:shortcutLongLabel="@string/widget_start"
+        android:shortcutShortLabel="@string/widget_start">
+        <intent
+            android:action="com.keppo.action.START_RIDE"
+            android:targetClass="com.ridetrack.app.MainActivity"
+            android:targetPackage="com.keppo.moto" />
+        <capability-binding android:key="actions.intent.START_EXERCISE">
+            <parameter-binding android:key="exercise.name" android:value="@array/ride_names" />
+        </capability-binding>
+    </shortcut>
+</shortcuts>

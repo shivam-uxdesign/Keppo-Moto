@@ -306,6 +306,21 @@ private fun StatisticsPage(s: ProfileUiState) {
 @Composable
 private fun RidingPage(s: ProfileUiState, vm: ProfileViewModel) {
     RtCard {
+        Text("Start a ride faster", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+        Text(
+            "Each of these opens Keppo Moto and starts after a 3 s countdown you can cancel:\n" +
+                "• The Keppo Moto widget on your home screen (long-press the home screen › Widgets).\n" +
+                "• Long-press the app icon › Start ride.\n" +
+                "• The Start ride tile in Quick Settings (swipe down, edit the tiles).\n" +
+                "• \"Hey Google, start a ride on Keppo Moto\" (when the app is installed from the Play Store). " +
+                "If your phone's assistant doesn't follow it, make a routine in the Google app: " +
+                "when you say \"Let's ride\", open the Keppo Moto shortcut Start ride.",
+            style = RtType.caption,
+            color = RtColors.TextSecondary,
+        )
+    }
+    Spacer(Modifier.height(RtDimens.md))
+    RtCard {
         ToggleRow(
             "Auto pause",
             "Show the ride as paused when you've been stopped for a few seconds. The ride never ends on its own.",

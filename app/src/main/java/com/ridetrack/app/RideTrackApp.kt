@@ -34,6 +34,7 @@ class RideTrackApp : Application() {
         MapLibre.getInstance(this)
         createNotificationChannel()
         container.hud.start()
+        com.ridetrack.app.widget.RideWidgets.watch(this, container, container.appScope)
         container.crashReports.start()
         container.errors.report = container.crashReports::record
         container.crashAlerts.start()

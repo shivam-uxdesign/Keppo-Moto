@@ -314,12 +314,9 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
         if (starting.value) return
         starting.value = true
         viewModelScope.launch {
-            c.settings.setSelectedBike(bike.id)
-            // A new ride: anything left unfinished is saved as it is.
-            c.continuation.saveStale(0L)
-            val id = c.session.startNow(bike)
+            val started = com.ridetrack.app.ride.QuickStart.start(c, bike)
             starting.value = false
-            if (id != null || c.session.state.value.isActive) onStarted()
+            if (started) onStarted()
         }
     }
 

@@ -19,6 +19,8 @@ import com.ridetrack.app.ui.theme.RideTrackTheme
 class MainActivity : ComponentActivity() {
     /** A ride to open, from Keppo Journal's OPEN_RIDE (see docs/keppo-ride-format.md). */
     private val openRide = mutableStateOf<String?>(null)
+    /** Asked to start a ride from the widget, shortcut, tile or the Assistant. */
+    private val quickStart = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -29,6 +31,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             openRide.value = rideToOpen(intent)
             endRideIfAsked(intent)
+            if (com.ridetrack.app.ride.QuickStart.isAsk(intent)) quickStart.value = true
         }
         val settings = (application as RideTrackApp).container.settings.settings
         val bikes = (application as RideTrackApp).container.bikes.observeBikes()
@@ -49,7 +52,12 @@ class MainActivity : ComponentActivity() {
             val garage by bikes.collectAsStateWithLifecycle(initialValue = emptyList())
             val accent = if (theme?.matchAppToBike != false) com.ridetrack.app.ui.common.BikeColors.appAccent(garage, theme?.selectedBikeId) else null
             RideTrackTheme(dark = dark, accent = accent) {
-                RideTrackNavHost(openRideId = openRide.value, onOpenRideHandled = { openRide.value = null })
+                RideTrackNavHost(
+                    openRideId = openRide.value,
+                    onOpenRideHandled = { openRide.value = null },
+                    quickStart = quickStart.value,
+                    onQuickStartHandled = { quickStart.value = false },
+                )
             }
         }
     }
@@ -65,6 +73,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         rideToOpen(intent)?.let { openRide.value = it }
         endRideIfAsked(intent)
+        if (com.ridetrack.app.ride.QuickStart.isAsk(intent)) quickStart.value = true
     }
 
     /** "End ride" on the break notification: the live screen asks to confirm. */
