@@ -4,6 +4,8 @@ Plan only, nothing built. Items are marked **Claude's idea** or **Found in the c
 
 Log rows #41–#46. Voice at speed stays #39.
 
+Answers 20 Oct: auto ride start and friends parked; WhatsApp skipped; start by voice and a widget instead (§2); a full colour wheel (§4); the mic bug is the phone mic used while the DJI mic was connected (§5); km/h.
+
 ---
 
 ## 1. Keywords on every moment (#41)
@@ -83,98 +85,97 @@ How sound keywords are found:
 - Backup: your own keywords and removals go with the moments.
 
 ### 1.4 Questions
-- **Question:** Show g-force as "0.6 g" (Claude's pick: what riders use) or "6 m/s²"?
+- **Decided (rider):** speeds in km/h (following the units setting). g-force shown as "0.6 g" unless you say otherwise.
 - **Question:** Keywords in English only, or Hinglish too (for example "Cheekh" for scream)? Claude's pick: English, because search also matches your Hinglish words.
 - **Question:** Are the limits in the table right (lean from 15°, acceleration from 0.3 g, braking from 0.4 g)?
 
 ---
 
-## 2. Auto ride start (#42)
+## 2. Start a ride by voice, from a widget, or from a tile (#42)
 
-**Found in the code:** nothing starts a ride by itself today.
+**Parked (rider, 20 Oct):** starting a ride automatically when you ride off, and friends (#43). The WhatsApp alerts (#46) are skipped.
 
-**Android's limit:** since Android 11 and 14, an app may not turn on the camera or mic from the background. Keppo Moto can't silently start filming when you ride off; something you do has to open it. Here are three ways that stay within the rules (Claude's idea):
+Android won't let an app turn on the camera or mic from the background, but all three ways below open the app first, so they're allowed. Each one opens the ride screen and starts the ride after a **3 s countdown with Cancel**. You asked for it, so no extra tap is needed. The usual checks (GPS, mic, mount) run as they do today; a check that fails stops the countdown and says why.
 
-1. **"Riding? Start" notification.**
-   - Android's activity recognition, which costs little battery, notices you're in a vehicle.
-   - A short GPS check confirms more than 15 km/h for 30 s.
-   - Then a notification appears with **Start ride**. One tap and recording begins, with a 5 s countdown and Cancel.
-   - It can also be shown on the lock screen.
-2. **Plug in the DJI receiver.**
-   - Android can open an app when a particular USB device is plugged in. You tick "always open Keppo Moto" once.
-   - Plugging the DJI receiver into the phone then opens Keppo Moto and starts the ride with the countdown.
-   - This needs testing on your phone to confirm the receiver identifies itself.
-3. **NFC sticker on the phone mount.**
-   - A cheap NFC sticker on the mount: putting the phone in the mount opens the app and starts the ride with the countdown.
-   - This works on any phone with NFC.
+### 2.1 "Hey Google, start a ride on Keppo Moto" (Claude's idea)
+- **App Actions:** the app tells Google Assistant it can "start an exercise". The exercise name is "ride" (also "motorcycle ride" and "bike ride"). Saying any of these opens Keppo Moto's start link:
+  - "Hey Google, start a ride on Keppo Moto"
+  - "Hey Google, start Keppo Moto ride"
+- **Also works without any setup:**
+  - "Hey Google, open Keppo Moto".
+  - A Google Assistant routine of your own, for example "Hey Google, let's ride" → open Keppo Moto's **Start ride** shortcut.
+- **Risks:**
+  - On many phones Gemini has replaced Google Assistant, and Google has been changing how far Gemini follows App Actions.
+  - App Actions only take effect for an app installed from the Play Store (the internal test track is fine).
+  - So this gets tested on your phone. If the exact phrase doesn't work, the routine always does, and Settings will show you how to set it up.
 
-- **Claude's recommendation:** 1 and 2 first. 3 if you like it.
-- **Question:** Which ones do you want? Should the countdown start the ride on its own, or wait for a tap?
+### 2.2 Home-screen widget
+- **Small (2×1):** a round **Start ride** button in your bike's colour, with the bike's name.
+- **Large (4×2):**
+  - Start ride;
+  - the bike;
+  - a readiness line: "DJI mic connected · GPS ready" or "DJI mic not connected";
+  - last ride: "29.8 km · 44 min · Sunday".
+- **During a ride:** the widget switches to the time and distance so far, with **Pause** and **End**. End asks to confirm in the app.
+- Built with Jetpack Glance (Android's way of building widgets with Compose).
 
----
-
-## 3. Add friends (#43)
-
-This needs accounts and a server. **Found in the code:** there's no sign-in today; Firebase is used only for Gemini and App Check. It's a big feature, so first: what should friends do? Some options:
-- **A. Ride together, live:** during a group ride, everyone's dot is on everyone's map, with "Waiting for you" and "Stopped" notes. This is the most useful while riding, but it shares live location, so it's opt-in per ride.
-- **B. See each other's rides and Reels:** a small feed, likes and comments.
-- **C. Compare:** the same road, top speeds, distance this month.
-- **D. Share without accounts:** a link to a ride or a live location that anyone can open. This is the quickest, and needs no friend list.
-
-- **Question:** Which of these do you want, and which first? Claude's pick: D first (no accounts), then A with Google sign-in.
-
----
-
-## 4. The app's colour follows your bike (#44)
-
-**Found in the code:** each bike already has a colour, used for its routes. You can pick it from 8 colours (teal, amber, pink, violet, lime, orange, sky, red); otherwise it gets one by its place in the garage. The first bike keeps the app's teal.
-
-Plan (Claude's idea):
-- The app's main colour (buttons, selected tabs, the Studio button, the HUD accent) becomes the colour of the **bike you're riding**, the one picked on Home.
-- In light mode the colour is darkened automatically so text on it stays readable. Each of the 8 colours is checked for this.
-- These stay fixed, so they still mean the same thing: the recording red, the brake and acceleration colours, and left/right lean.
-- **Risk:** the red bike colour is close to the recording red. Fix: drop red from the picks, or change the recording colour to a deeper red when the bike is red.
-- In Bike › Edit, the colour row becomes "Bike colour · used for the app and its routes", with a live preview.
-- Settings › Appearance gets "Match the app to my bike" (on by default).
-- **Question:** Only the 8 colours, or a free colour picker? Claude's pick: the 8, because any colour can be unreadable somewhere.
+### 2.3 Also, almost free
+- **Long-press the app icon → Start ride** (an app shortcut).
+- **Quick Settings tile "Start ride":** in the swipe-down panel, next to Wi-Fi and Bluetooth.
+- These, the widget and the voice command all use the same start link, so they behave the same.
 
 ---
 
-## 5. The mic is sometimes on in the background (#45, bug)
+## 3. Friends (#43): parked
 
-**Found in the code:** while a ride is running, the mic keeps listening even when the camera rests: at stops, on a break (off the bike) and on a manual pause. That's because "Film when I speak" needs it. Android shows its green mic dot then. So you'd see the mic in use whenever:
-- a ride is paused or on a break (by design today);
-- a ride wasn't ended, for example when stop detection didn't end it;
-- the voice-over recorder or the mic test was left open.
+---
+
+## 4. Bike colour: a full colour wheel (#44)
+
+**Found in the code:** a bike's colour is stored as any colour already (`routeColor`), so a free choice needs no data change, only the picker.
+
+The colour picker (Bike › Edit › Bike colour):
+- **A colour wheel** (hue and strength) with a **brightness slider**.
+- **Hex code field**: type or paste, for example `#E4572E`. It updates the wheel, and the wheel updates it.
+- **Quick picks:** the 8 current colours, plus your recent ones.
+- **Live preview:** a Start button, a selected tab, and a stretch of route on the dark map, in light and dark mode.
+- **Readable everywhere:**
+  - The app checks the colour against the dark and light backgrounds.
+  - When text on it or around it wouldn't be readable, the app uses a slightly lighter or darker shade of the same colour for buttons and text, and says so: "Adjusted for readability: #C8471F".
+  - Your exact colour is still used for the routes and the bike.
+- **Close to the recording red:** a note says "Close to the recording colour" so you know. The recording dot still blinks, so it stays recognisable.
+
+Where the colour shows:
+- The app's main colour (buttons, selected tabs, the Storyboard button, the HUD accent) follows the bike you're riding, the one picked on Home.
+- These stay fixed: the recording red, the brake and acceleration colours, left and right lean.
+- Settings › Appearance: "Match the app to my bike" (on by default).
+
+---
+
+## 5. The phone mic was used although the DJI mic was connected (#45, bug)
+
+What you saw: a few times the app recorded with the phone's mic even though the DJI receiver was plugged in. It couldn't be reproduced.
+
+**Found in the code:**
+- The app asks Android for the DJI receiver, but Android treats that as a preference. If Android routes the sound to the phone mic anyway, the app writes "audio now from Phone…" in the log and **carries on**. It still thinks it's on the DJI mic, the pop-up shows the DJI mic, and its 10-second check compares against what it asked for, not what it actually gets. So the phone mic can stay for the rest of the ride. This is the likely cause.
+  - Android does this when another app grabs the mic for a moment: Google Assistant, a call, a voice note.
+- Two smaller known cases, both by design:
+  - When the receiver drops for a moment (cable bump, low battery), the app switches to the phone mic at once. It goes back only after the receiver has stayed connected for a while, so a loose receiver doesn't chop clips.
+  - When a ride starts before the receiver is ready, the 10-second check moves to it once it appears.
+- The 18 Oct ride's log shows only one switch to the phone mic: at 10:26:54, 23 s before the ride ended. The receiver was reported "disconnected", which looks like it was unplugged at the end. That's not this bug.
 
 Plan:
-1. **Stop listening when it can't matter:**
-   - on a manual pause;
-   - after 2 minutes on a break (you got off the bike);
-   - listening resumes the moment you move.
-2. **Say so:** the ride notification says "Listening for your voice" whenever the mic is on.
-3. **Catch it:**
-   - log a line each time the mic opens or closes, with the reason;
-   - a watchdog writes an error if the mic is open with no ride running, naming who opened it.
-- **Question:** When did you notice it? During a ride (stopped or on a break), after a ride ended, or with no ride at all? The answer tells me whether it's the design (fix 1) or a leak (fix 3 finds it).
+1. **Watch the real mic, not the asked-for one:**
+   - every 10 s, and on every routing change, check which mic Android is actually recording from;
+   - if it's the phone mic while the DJI receiver is still connected, reopen the mic on the receiver at most once every 30 s;
+   - log "phone mic used although the DJI mic is connected: reopened".
+2. **The pop-up tells the truth:** the blue "phone" label shows whenever the sound really comes from the phone mic, even if the app asked for the DJI mic.
+3. **Each clip notes its mic:** the log line "video saved" gains "mic: DJI" or "mic: phone". If it happens again, the export shows exactly which clips and why.
+4. **The error log** (Send details) gets one entry per ride when the fix in step 1 had to step in, so it isn't lost.
 
 ---
 
-## 6. WhatsApp instead of SMS for crash alerts (#46)
-
-**Found in the code:** crash alerts send an SMS straight from the phone. It works with no internet and nobody has to tap anything.
-
-**WhatsApp's limit:** WhatsApp doesn't let an app send a message by itself. An app can only open WhatsApp with the message typed in, and then someone must tap Send, which is useless if you're hurt. The only automatic way is the **WhatsApp Business Platform**:
-- the message is sent from a business number through our server;
-- it needs Meta business verification and pre-approved message templates;
-- it costs a small amount per message;
-- it needs internet at the crash spot.
-
-Plan (Claude's idea):
-- **Keep SMS** as the alert that always works.
-- **Add WhatsApp as a second channel** once the server exists (server step 8): the same alert with the live location link.
-- **Now:** a "Share live location on WhatsApp" button when starting a ride, which you tap yourself.
-- **Question:** What's the problem with SMS for you: cost, delivery, or that your contacts don't read SMS? If it's delivery, the SMS log already shows whether each text really left the phone.
+## 6. WhatsApp for crash alerts (#46): skipped
 
 ---
 
