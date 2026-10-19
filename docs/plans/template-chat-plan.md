@@ -4,7 +4,7 @@ You describe a Reel idea in a chat, by text or voice note. Gemini turns it into 
 
 Items are marked **Decided** (from your brief or your answers), **Claude's idea**, or **Correction** (where the brief and the app differ). Answer the **Question:** lines. Nothing is built until you approve this plan.
 
-Answers received 19 Oct: music note yes; back up made Reels; on-screen text can be anything; a template works exactly like the editor; record or upload (Claude decides how recording works); Pro limits as proposed. Still open: the name (§1.1).
+Answers received 19 Oct: music note yes; back up made Reels; on-screen text can be anything; a template works exactly like the editor; record or upload (Claude decides how recording works); Pro limits as proposed. Entry: a floating button on the Studio page. Still open: the name (§1.1).
 
 Log row #40.
 
@@ -53,10 +53,12 @@ Log row #40.
 
 ## 1. Where it lives
 
-### 1.1 Entry (Claude's idea)
-- **Studio tab, top bar:** a new **chat icon** next to + (New Reel), Search and Your Reels. Called "**Plan a Reel**".
-- **Also:** the + sheet's first row, "Plan a Reel with Studio (chat)".
-- Inside, chats are listed newest first. Tap one to reopen it; "New chat" sits at the top.
+### 1.1 Entry (Decided, rider: a floating button on the Studio page)
+- **A round floating button** at the bottom right of the Studio tab, above the tab bar: a chat bubble with a sparkle, in Studio's accent colour.
+  - It doesn't cover the idea cards' swipe area or the "Ask for something" box: it sits just above that box, at the right.
+  - For free riders, the "1 free Reel this week" chip moves to the left, so the two never overlap.
+  - When the button first appears, a one-time hint says "Plan a Reel with Studio".
+- Tapping it opens the chat list, newest first, with "New chat" at the top. Tap a chat to reopen it.
 - **Question:** Is "Plan a Reel" the right name? Alternatives: "Template chat", "Storyboard".
 
 ### 1.2 The chat screen (Claude's idea)
