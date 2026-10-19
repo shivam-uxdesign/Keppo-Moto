@@ -167,6 +167,13 @@ interface MomentDao {
     @Query("UPDATE moments SET transcript = :text WHERE id = :id")
     suspend fun setTranscript(id: String, text: String)
 
+    @Query("UPDATE moments SET keywords = :json WHERE id = :id")
+    suspend fun setKeywords(id: String, json: String)
+
+    /** Clips whose ride keywords haven't been worked out, oldest first. */
+    @Query("SELECT m.* FROM moments m JOIN rides r ON r.id = m.rideId WHERE m.kind = 'CLIP' AND m.keywords IS NULL AND m.deletedAtMillis IS NULL AND r.deletedAtMillis IS NULL AND r.endTimeMillis IS NOT NULL ORDER BY m.timeMillis ASC")
+    suspend fun untagged(): List<MomentEntity>
+
     @Query("DELETE FROM moments WHERE id = :id")
     suspend fun delete(id: String)
 

@@ -68,6 +68,12 @@ class RideTrackApp : Application() {
                     .forEach { r -> runCatching { com.ridetrack.app.studio.ClipDownshifts.tagRide(container, r.id) } }
             }
         }
+        // Older clips get their keywords once, while the phone charges.
+        container.appScope.launch {
+            val plugged = registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+                ?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) ?: 0
+            if (plugged != 0) runCatching { com.ridetrack.app.moments.KeywordTagger.catchUp(container) }
+        }
         container.appScope.launch {
             container.reels.purgeExpired()
             // After the purge, so files of Reels deleted for good go too.

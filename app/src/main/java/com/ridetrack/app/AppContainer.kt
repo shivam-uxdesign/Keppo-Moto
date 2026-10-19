@@ -70,6 +70,9 @@ class AppContainer(context: Context) {
                 // Downshifts tagged from the joined clips' engine sound and the ride's speed.
                 runCatching { com.ridetrack.app.studio.ClipDownshifts.tagRide(this@AppContainer, id) }
                     .onFailure { errors.warn("Moments", "Couldn't tag downshifts", it) }
+                // Keywords to find each clip by: lean, speed runs, top speed, turns, time of day…
+                runCatching { com.ridetrack.app.moments.KeywordTagger.tagRide(this@AppContainer, id) }
+                    .onFailure { errors.warn("Moments", "Couldn't add keywords to the clips", it) }
                 transcribeSoon()
                 // Named by place (when the phone can look it up), so the Journal gets the name.
                 runCatching { places.nameRide(id) }

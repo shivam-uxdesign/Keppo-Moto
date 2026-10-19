@@ -65,7 +65,12 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
      * Captions for several clips in one request (the free tier allows few requests a day): each
      * clip's lines, in the same order; null for a clip Gemini skipped, empty for no speech.
      */
-    suspend fun captionsBatch(audios: List<File>): List<List<CaptionLine>?> {
+    suspend fun captionsBatch(audios: List<File>): List<List<CaptionLine>?> = hear(audios).map { it?.lines }
+
+    /** What was said in each clip, and the sounds heard in it (scream, laugh…), in one request. */
+    data class Heard(val lines: List<CaptionLine>, val sounds: List<String>)
+
+    suspend fun hear(audios: List<File>): List<Heard?> {
         if (audios.isEmpty()) return emptyList()
         val parts = audios.map { it.readBytes() }
         val text = call(json = true, models = FirebaseTranscriber.LITE + FirebaseTranscriber.MODELS, timeoutMs = timeoutFor(parts.sumOf { it.size.toLong() })) { m ->
@@ -79,7 +84,8 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
                 },
             ).text.orEmpty()
         }
-        return StudioText.parseBatch(text, audios.size)
+        val sounds = StudioText.parseSounds(text, audios.size)
+        return StudioText.parseBatch(text, audios.size).mapIndexed { i, l -> l?.let { Heard(it, sounds.getOrNull(i).orEmpty()) } }
     }
 
     /** Scripts for [prompt] (a content plan, one piece, or a rewrite); text only, clips by their keys. */
@@ -332,8 +338,9 @@ object StudioText {
         Also write the rider's reactions and drawn-out sounds as they sound ("Tooooo", "Aaaahh", "Fhit!", "Nooo"), each as its own line.
         When a line isn't in English, add "en": what it means in short, natural English (for subtitles); leave "en" out for English lines and sounds.
         Add "key": the one word of the line that matters most (a number, a strong word), exactly as written in "text"; leave it out when no word stands out.
-        Reply with JSON only: {"clips":[{"clip":1,"lines":[{"start":1.2,"end":3.4,"text":"...","en":"...","key":"..."}]}]} with one entry per clip;
-        a clip with no clear speech has "lines":[].
+        Also list the sounds you clearly hear in each clip, only from: ${StudioText.SOUNDS.joinToString(", ")} (leave out the constant wind and engine).
+        Reply with JSON only: {"clips":[{"clip":1,"lines":[{"start":1.2,"end":3.4,"text":"...","en":"...","key":"..."}],"sounds":["laugh"]}]} with one entry per clip;
+        a clip with no clear speech has "lines":[], and one with none of those sounds has "sounds":[].
     """.trimIndent()
 
     /** English for Hinglish caption lines that have none yet (clips read before subtitles), in one text request. */
@@ -349,6 +356,24 @@ object StudioText {
         val a = JSONObject(jsonPart(reply)).getJSONArray("en")
         (0 until n).map { i -> a.optString(i).trim().takeIf { it.isNotEmpty() && it != "null" } }
     }.getOrNull()
+
+    /** The sounds Gemini may name in a clip (MomentKeywords turns them into keywords). */
+    val SOUNDS = listOf("scream", "shout", "laugh", "sneeze", "cough", "singing", "whistle", "horn", "siren", "rain", "dog")
+
+    /** Each clip's sounds from a batch reply (only names in [SOUNDS]); empty where none or missing. */
+    fun parseSounds(reply: String, n: Int): List<List<String>> {
+        val out = MutableList(n) { emptyList<String>() }
+        runCatching {
+            val arr = JSONObject(jsonPart(reply)).optJSONArray("clips") ?: return out
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val k = (o.optInt("clip", i + 1) - 1).takeIf { it in 0 until n } ?: continue
+                val a = o.optJSONArray("sounds") ?: continue
+                out[k] = (0 until a.length()).map { a.optString(it).trim().lowercase() }.filter { it in SOUNDS }.distinct()
+            }
+        }
+        return out
+    }
 
     /** Each clip's lines from a batch reply, by position; null where the clip is missing. */
     fun parseBatch(reply: String, n: Int): List<List<CaptionLine>?> {

@@ -26,6 +26,8 @@ dependencyResolutionManagement {
                 includeGroupByRegex("androidx.*")
                 includeGroupByRegex("com\\.google\\.firebase.*")
                 includeGroupByRegex("com\\.google\\.gms.*")
+                // ML Kit (on-phone picture labels for moment keywords).
+                includeGroupByRegex("com\\.google\\.mlkit.*")
             }
         }
         mavenCentral()

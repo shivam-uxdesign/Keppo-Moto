@@ -70,6 +70,7 @@ maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "mapl
 junit = { module = "junit:junit", version.ref = "junit" }
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
 kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutines" }
+mlkit-image-labeling = { module = "com.google.mlkit:image-labeling", version = "17.0.9" }
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 org-json = { module = "org.json:json", version.ref = "orgJson" }
 

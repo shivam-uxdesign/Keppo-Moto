@@ -212,6 +212,8 @@ dependencies {
     // Google Drive backup: Drive access through Play services; uploads run as WorkManager jobs.
     implementation(libs.play.services.auth)
     implementation(libs.kotlinx.coroutines.play.services)
+    // On-phone picture labels (Sky, Road, Mountain…) for moment keywords; bundled, works offline.
+    implementation(libs.mlkit.image.labeling)
     implementation(libs.androidx.work.runtime.ktx)
 
     testImplementation(libs.junit)

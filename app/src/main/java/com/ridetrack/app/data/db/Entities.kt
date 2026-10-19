@@ -140,4 +140,6 @@ data class MomentEntity(
     val transcript: String? = null,
     /** "back" when filmed with the back camera (road view); null = the selfie camera. */
     val camera: String? = null,
+    /** Keywords to find it by, as MomentKeywords.encode(); null = not worked out yet. */
+    val keywords: String? = null,
 )

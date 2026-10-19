@@ -42,6 +42,8 @@ data class Moment(
     val transcript: String? = null,
     /** "back" for the back camera (road view); null = the selfie camera. */
     val camera: String? = null,
+    /** Keywords to find it by; null = not worked out yet. */
+    val keywords: List<MomentKeyword>? = null,
 ) {
     /** The engine mic's sound for this clip (two-mic recording), next to it; may not exist. */
     val engineFile: File get() = File(file.parentFile, file.nameWithoutExtension + ".engine.m4a")
@@ -124,6 +126,43 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
 
     suspend fun setTranscript(id: String, text: String) = dao.setTranscript(id, text)
 
+    suspend fun setKeywords(id: String, list: List<MomentKeyword>) = dao.setKeywords(id, MomentKeywords.encode(list))
+
+    /** Puts [fresh] keywords on a moment, replacing its keywords of the same kinds (own and removed ones stay). */
+    suspend fun addKeywords(id: String, fresh: List<MomentKeyword>) {
+        val e = dao.get(id) ?: return
+        dao.setKeywords(id, MomentKeywords.encode(MomentKeywords.merge(MomentKeywords.decode(e.keywords), fresh)))
+    }
+
+    /** A moment's keywords now (null if it's gone). */
+    suspend fun keywords(id: String): List<MomentKeyword>? = dao.get(id)?.let { MomentKeywords.decode(it.keywords) }
+
+    /** Clips of finished rides still without keywords, oldest first. */
+    suspend fun untagged(): List<Moment> = dao.untagged().map { it.toModel() }
+
+    /** Every live moment, for keyword search. */
+    suspend fun allLive(): List<Moment> = dao.all().map { it.toModel() }
+
+    /**
+     * Works out the ride keywords of each clip of [rideId] (from its [samples]) that has none
+     * yet. [leanMinDeg] is the rider's lean setting; [place] names the area when known.
+     */
+    suspend fun fillKeywords(rideId: String, samples: List<TelemetrySample>, leanMinDeg: Int, miles: Boolean, place: suspend (Double, Double) -> String? = { _, _ -> null }): Int {
+        if (samples.isEmpty()) return 0
+        var filled = 0
+        dao.forRide(rideId).filter { it.kind == MomentKind.CLIP.name && it.keywords == null }.forEach { e ->
+            val start = e.clipStartMillis ?: (e.timeMillis - 10_000)
+            val end = start + (e.durationMillis ?: 20_000)
+            if (samples.last().timeMillis < end) return@forEach
+            val types = e.types.split(',').mapNotNull { n -> RideEventType.entries.firstOrNull { it.name == n } }.toSet()
+            val at = samples.firstOrNull { it.timeMillis >= start && it.latitude != null }
+            val keys = MomentKeywords.ride(samples, start, end, leanMinDeg, types, e.camera, at?.let { place(it.latitude!!, it.longitude!!) }, miles)
+            dao.setKeywords(e.id, MomentKeywords.encode(keys))
+            filled++
+        }
+        return filled
+    }
+
     suspend fun fillTopSpeeds(rideId: String, samples: List<TelemetrySample>): Int {
         if (samples.isEmpty()) return 0
         var filled = 0
@@ -170,6 +209,7 @@ class MomentRepository(private val context: Context, private val dao: MomentDao)
             topSpeedMps = topSpeedMps,
             transcript = transcript,
             camera = camera,
+            keywords = keywords?.let(MomentKeywords::decode),
         )
     }
 }

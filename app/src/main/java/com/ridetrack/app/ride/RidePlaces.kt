@@ -66,6 +66,21 @@ class RidePlaces(private val context: Context, private val rides: RideRepository
         }
     }
 
+    private val nearby = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** The area's name at a point, remembered per ~1 km so a ride's clips look it up once. */
+    suspend fun placeAt(lat: Double, lon: Double): String? {
+        if (!Geocoder.isPresent()) return null
+        val key = String.format(Locale.US, "%.2f,%.2f", lat, lon)
+        nearby[key]?.let { return it }
+        return place(lat, lon)?.also { nearby[key] = it }
+    }
+
+    /** The state or region at a point (for the "States" badge); null when it can't be looked up. */
+    suspend fun stateAt(lat: Double, lon: Double): String? = withTimeoutOrNull(10_000) {
+        runCatching { address(lat, lon) }.getOrNull()?.adminArea
+    }
+
     /** The neighbourhood or town at a point; null when it can't be looked up. */
     private suspend fun place(lat: Double, lon: Double): String? = withTimeoutOrNull(10_000) {
         val a = runCatching { address(lat, lon) }.getOrNull() ?: return@withTimeoutOrNull null

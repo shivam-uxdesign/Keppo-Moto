@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [BikeEntity::class, RideEntity::class, SampleEntity::class, EventEntity::class, MomentEntity::class],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 abstract class RideTrackDatabase : RoomDatabase() {
@@ -22,7 +22,7 @@ abstract class RideTrackDatabase : RoomDatabase() {
             Room.databaseBuilder(context, RideTrackDatabase::class.java, "ridetrack.db")
                 // WAL keeps frequent small ride writes cheap and durable.
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                 .build()
 
         /** Bike photo + redline, and OBD engine data per sample. Existing rows get NULL (unknown). */
@@ -113,6 +113,13 @@ abstract class RideTrackDatabase : RoomDatabase() {
         val MIGRATION_12_13 = object : Migration(12, 13) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE moments ADD COLUMN camera TEXT")
+            }
+        }
+
+        /** Keywords on each moment (ride, sound, picture and the rider's own). */
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE moments ADD COLUMN keywords TEXT")
             }
         }
 

@@ -110,11 +110,18 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 try {
                     val usable = audios.filter { (m, f) -> ClipAudio.extract(m.file, f) && f.length() <= MAX_BYTES }
                     audios.filter { it !in usable }.forEach { (m, _) -> c.moments.setTranscript(m.id, ""); rides += m.rideId }
-                    val results = if (usable.isEmpty()) emptyList() else g.captionsBatch(usable.map { it.second })
+                    val results = if (usable.isEmpty()) emptyList() else g.hear(usable.map { it.second })
                     usable.forEachIndexed { i, (m, _) ->
-                        val lines = results.getOrNull(i) ?: return@forEachIndexed // skipped by Gemini: try next time
+                        val heard = results.getOrNull(i) ?: return@forEachIndexed // skipped by Gemini: try next time
+                        val lines = heard.lines
                         com.ridetrack.app.studio.StudioText.save(m.file, lines)
                         c.moments.setTranscript(m.id, lines.joinToString(" ") { it.text })
+                        // Sound keywords: talking and its words, the sounds heard, a shout.
+                        runCatching {
+                            val said = com.ridetrack.app.studio.ClipTags.of(lines, "back", null).filter { it != "road" && it != "talking" }
+                            val shouted = com.ridetrack.app.studio.EngineAudio.decode(applicationContext, m.file, null)?.let { (pcm, rate) -> com.ridetrack.app.moments.MomentKeywords.loud(pcm, rate) } == true
+                            c.moments.addKeywords(m.id, com.ridetrack.app.moments.MomentKeywords.sound(said, heard.sounds, shouted))
+                        }
                         rides += m.rideId
                     }
                 } catch (e: GeminiUnreachable) {
@@ -146,9 +153,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         } catch (e: Exception) {
             c.errors.record("Transcripts", "Couldn't transcribe", e)
             t.setError(
-                if (GeminiNet.isUnreachable(e)) GeminiNet.message(e)
-                else if (AppCheckSetup.isRejected(e)) "Firebase didn't accept this phone (App Check). Add the debug token shown below in Firebase › App Check › Manage debug tokens."
-                else "Couldn't transcribe: ${e.message}",
+                when {
+                    GeminiNet.isUnreachable(e) -> GeminiNet.message(e)
+                    AppCheckSetup.isRejected(e) -> "Firebase didn't accept this phone (App Check). Add the debug token shown below in Firebase › App Check › Manage debug tokens."
+                    else -> "Couldn't transcribe: ${e.message}"
+                },
             )
             // A dropped connection says nothing about the model: keep the one that worked.
             if (!GeminiNet.isUnreachable(e)) t.model = null
