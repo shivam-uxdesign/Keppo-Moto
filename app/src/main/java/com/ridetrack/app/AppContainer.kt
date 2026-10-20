@@ -171,6 +171,8 @@ class AppContainer(context: Context) {
 
     /** How the rider wants stories written: their rules and every change they made to a script. */
     val style = com.ridetrack.app.studio.StyleStore(appContext)
+    /** Storyboard: chats, their scripts, and the rider's gear. */
+    val storyboard = com.ridetrack.app.studio.storyboard.StoryboardStore(appContext)
 
     /** Keppo Studio's series name and the shot list for the next ride. */
     val studio = com.ridetrack.app.studio.StudioPrefs(appContext)

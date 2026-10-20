@@ -88,6 +88,18 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         return StudioText.parseBatch(text, audios.size).mapIndexed { i, l -> l?.let { Heard(it, sounds.getOrNull(i).orEmpty()) } }
     }
 
+    /** Storyboard: one chat turn, JSON back (see StoryboardEngine). */
+    suspend fun storyboard(prompt: String): String =
+        call(json = true, temperature = 0.7f, timeoutMs = 150_000) { m -> m.generateContent(prompt).text.orEmpty() }
+
+    /** A voice note, as text the rider can check before sending. */
+    suspend fun voiceNote(audio: ByteArray, mime: String = "audio/wav"): String {
+        val text = call(json = false, models = FirebaseTranscriber.LITE + FirebaseTranscriber.MODELS, timeoutMs = timeoutFor(audio.size.toLong())) { m ->
+            m.generateContent(content { inlineData(audio, mime); text("Write down exactly what is said in this voice note. ${SpeechLanguage.RULE} Reply with only the words.") }).text.orEmpty()
+        }
+        return text.trim().trim('"')
+    }
+
     /** Scripts for [prompt] (a content plan, one piece, or a rewrite); text only, clips by their keys. */
     suspend fun scripts(prompt: String, footage: List<Footage>, onAnswer: (String) -> Unit = {}, onUnreadable: (String) -> Unit = {}): List<Script> {
         // Several scripts are a long answer (up to 15 with Show all): give it three minutes.
