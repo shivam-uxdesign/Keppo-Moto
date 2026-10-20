@@ -41,7 +41,12 @@ object SceneLabels {
             r.setDataSource(clip.path)
             val ms = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: return emptyList()
             listOf(0.25, 0.5, 0.75).mapNotNull { f ->
-                r.getScaledFrameAtTime((ms * f * 1000).toLong(), MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 480, 480)
+                val us = (ms * f * 1000).toLong()
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+                    r.getScaledFrameAtTime(us, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 480, 480)
+                } else {
+                    r.getFrameAtTime(us, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                }
             }
         } catch (e: Exception) {
             emptyList()
