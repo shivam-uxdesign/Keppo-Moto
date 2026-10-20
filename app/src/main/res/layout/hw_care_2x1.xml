@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/hw_card" android:paddingStart="14dp" android:paddingEnd="14dp" android:paddingTop="10dp" android:paddingBottom="10dp" android:contentDescription="@string/hw_switch_bike">
+    <ViewFlipper android:id="@+id/flip_text" android:layout_width="match_parent" android:layout_height="match_parent" android:inAnimation="@anim/hw_fade_in" android:outAnimation="@anim/hw_fade_out" />
+</FrameLayout>

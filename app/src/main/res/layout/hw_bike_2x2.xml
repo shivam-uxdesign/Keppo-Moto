@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/hw_card" android:orientation="vertical" android:padding="10dp">
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <ViewFlipper android:id="@+id/flip_photo" android:layout_width="match_parent" android:layout_height="match_parent" android:inAnimation="@anim/hw_slide_in" android:outAnimation="@anim/hw_slide_out" android:contentDescription="@string/hw_switch_bike" />
+        <ImageView android:id="@+id/dots" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end|top" android:layout_margin="10dp" android:importantForAccessibility="no" />
+    </FrameLayout>
+    <ViewFlipper android:id="@+id/flip_text" android:layout_width="match_parent" android:layout_height="40dp" android:layout_marginTop="6dp" android:paddingStart="4dp" android:inAnimation="@anim/hw_fade_in" android:outAnimation="@anim/hw_fade_out" />
+    <LinearLayout android:id="@+id/start" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="6dp" android:background="@drawable/hw_pill_white" android:gravity="center" android:orientation="horizontal" android:contentDescription="@string/hw_start_ride">
+        <ImageView android:layout_width="13dp" android:layout_height="13dp" android:src="@drawable/hw_ic_play" android:importantForAccessibility="no" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="@string/hw_start_ride" android:textColor="#FF0A0A0B" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+    </LinearLayout>
+</LinearLayout>

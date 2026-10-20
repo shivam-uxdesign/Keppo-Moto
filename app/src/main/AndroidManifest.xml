@@ -107,6 +107,56 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_large_info" />
         </receiver>
         <receiver android:name=".widget.RideWidgetActions" android:exported="false" />
+        <!-- The home-screen widgets: before a ride, after a ride, records, the calendar. -->
+        <receiver android:name=".widget.BikeWidget" android:exported="true" android:label="@string/hw_bike">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/hw_bike_info" />
+        </receiver>
+        <receiver android:name=".widget.FilmTodayWidget" android:exported="true" android:label="@string/hw_film">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/hw_film_info" />
+        </receiver>
+        <receiver android:name=".widget.DaylightWidget" android:exported="true" android:label="@string/hw_daylight">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/hw_daylight_info" />
+        </receiver>
+        <receiver android:name=".widget.BikeCareWidget" android:exported="true" android:label="@string/hw_care">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/hw_care_info" />
+        </receiver>
+        <receiver android:name=".widget.LastRideWidget" android:exported="true" android:label="@string/hw_last_ride">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/hw_last_ride_info" />
+        </receiver>
+        <receiver android:name=".widget.MomentsWidget" android:exported="true" android:label="@string/hw_moments">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/hw_moments_info" />
+        </receiver>
+        <receiver android:name=".widget.RecordsWidget" android:exported="true" android:label="@string/hw_records">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/hw_records_info" />
+        </receiver>
+        <receiver android:name=".widget.CalendarWidget" android:exported="true" android:label="@string/hw_calendar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/hw_calendar_info" />
+        </receiver>
+        <receiver android:name=".widget.HomeWidgetActions" android:exported="false" />
 
         <!-- Quick Settings: Start ride. -->
         <service

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/hw_card" android:orientation="horizontal" android:padding="12dp">
+    <FrameLayout android:layout_width="0dp" android:layout_weight="0.38" android:layout_height="match_parent">
+        <ViewFlipper android:id="@+id/flip_photo" android:layout_width="match_parent" android:layout_height="match_parent" android:inAnimation="@anim/hw_slide_in" android:outAnimation="@anim/hw_slide_out" android:contentDescription="@string/hw_earlier_ride" />
+        <ImageView android:id="@+id/dots" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal|bottom" android:layout_marginBottom="10dp" android:importantForAccessibility="no" />
+    </FrameLayout>
+    <LinearLayout android:layout_width="0dp" android:layout_weight="0.62" android:layout_height="match_parent" android:layout_marginStart="12dp" android:orientation="vertical">
+        <ViewFlipper android:id="@+id/flip_text" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:inAnimation="@anim/hw_fade_in" android:outAnimation="@anim/hw_fade_out" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="36dp" android:layout_marginTop="6dp" android:orientation="horizontal">
+            <LinearLayout android:id="@+id/moments" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:background="@drawable/hw_pill_dark" android:gravity="center" android:orientation="horizontal">
+                <ImageView android:layout_width="14dp" android:layout_height="14dp" android:src="@drawable/hw_ic_video" android:importantForAccessibility="no" />
+                <TextView android:id="@+id/moments_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:textColor="#FFF4F4F5" android:textSize="13sp" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/share" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:layout_marginStart="6dp" android:background="@drawable/hw_pill_white" android:gravity="center" android:orientation="horizontal" android:contentDescription="@string/hw_share">
+                <ImageView android:layout_width="14dp" android:layout_height="14dp" android:src="@drawable/hw_ic_share_dark" android:importantForAccessibility="no" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="@string/hw_share" android:textColor="#FF0A0A0B" android:textSize="13sp" android:fontFamily="sans-serif-medium" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

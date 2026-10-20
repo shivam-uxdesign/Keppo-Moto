@@ -91,7 +91,13 @@ class MainActivity : ComponentActivity() {
         val ride = intent.getStringExtra("rideId").orEmpty()
         val reel = intent.getStringExtra(EXTRA_REEL)
         if (reel != null) return STUDIO_PREFIX + ride + "#" + reel
-        return ride.takeIf { it.isNotBlank() }?.let { if (intent.getBooleanExtra(EXTRA_STUDIO, false)) STUDIO_PREFIX + it else it }
+        return ride.takeIf { it.isNotBlank() }?.let {
+            when {
+                intent.getBooleanExtra(EXTRA_STUDIO, false) -> STUDIO_PREFIX + it
+                intent.getBooleanExtra(EXTRA_SHARE, false) -> SHARE_PREFIX + it
+                else -> it
+            }
+        }
     }
 
     companion object {
@@ -103,5 +109,8 @@ class MainActivity : ComponentActivity() {
         /** Opens ready videos full screen, at this one ("Today's post"). */
         const val EXTRA_REVIEW = "review"
         const val REVIEW_PREFIX = "review:"
+        /** Opens the ride's Share page (the home-screen widgets' Share). */
+        const val EXTRA_SHARE = "share"
+        const val SHARE_PREFIX = "share:"
     }
 }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/hw_card" android:orientation="vertical" android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="8dp" android:paddingBottom="12dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:orientation="horizontal">
+        <ImageView android:id="@+id/prev" android:layout_width="32dp" android:layout_height="32dp" android:padding="8dp" android:src="@drawable/hw_ic_left" android:contentDescription="@string/hw_prev_month" />
+        <ViewFlipper android:id="@+id/flip_text" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:inAnimation="@anim/hw_fade_in" android:outAnimation="@anim/hw_fade_out" />
+        <ImageView android:id="@+id/next" android:layout_width="32dp" android:layout_height="32dp" android:padding="8dp" android:src="@drawable/hw_ic_right" android:contentDescription="@string/hw_next_month" />
+    </LinearLayout>
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:paddingStart="4dp" android:paddingEnd="4dp" android:text="@string/hw_week_letters" android:textColor="#FF85858E" android:textSize="9sp" android:letterSpacing="1.35" android:maxLines="1" />
+    <ViewFlipper android:id="@+id/flip_photo" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="3dp" android:paddingStart="4dp" android:paddingEnd="4dp" android:inAnimation="@anim/hw_slide_in" android:outAnimation="@anim/hw_slide_out" />
+    <ViewFlipper android:id="@+id/flip_foot" android:layout_width="match_parent" android:layout_height="18dp" android:paddingStart="4dp" android:inAnimation="@anim/hw_fade_in" android:outAnimation="@anim/hw_fade_out" />
+</LinearLayout>

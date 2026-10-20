@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal">
+    <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+        <TextView android:id="@+id/label_a" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF85858E" android:textSize="10sp" android:letterSpacing="0.08" android:fontFamily="sans-serif-medium" />
+        <TextView android:id="@+id/value_a" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFF4F4F5" android:textSize="22sp" android:maxLines="1" />
+        <TextView android:id="@+id/unit_a" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF8B8B93" android:textSize="11sp" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+        <TextView android:id="@+id/label_b" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF85858E" android:textSize="10sp" android:letterSpacing="0.08" android:fontFamily="sans-serif-medium" />
+        <TextView android:id="@+id/value_b" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFF4F4F5" android:textSize="22sp" android:maxLines="1" />
+        <TextView android:id="@+id/unit_b" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF8B8B93" android:textSize="11sp" />
+    </LinearLayout>
+</LinearLayout>

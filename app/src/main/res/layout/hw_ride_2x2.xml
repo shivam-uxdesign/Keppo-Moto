@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/hw_card" android:orientation="vertical" android:padding="10dp">
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <ViewFlipper android:id="@+id/flip_photo" android:layout_width="match_parent" android:layout_height="match_parent" android:inAnimation="@anim/hw_slide_in" android:outAnimation="@anim/hw_slide_out" android:contentDescription="@string/hw_earlier_ride" />
+        <ImageView android:id="@+id/dots" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end|top" android:layout_margin="10dp" android:importantForAccessibility="no" />
+    </FrameLayout>
+    <ViewFlipper android:id="@+id/flip_text" android:layout_width="match_parent" android:layout_height="68dp" android:layout_marginTop="6dp" android:inAnimation="@anim/hw_fade_in" android:outAnimation="@anim/hw_fade_out" />
+</LinearLayout>

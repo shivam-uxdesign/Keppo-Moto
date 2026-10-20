@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/hw_card" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="10dp" android:paddingEnd="14dp" android:paddingTop="10dp" android:paddingBottom="10dp">
+    <ImageView android:id="@+id/fan" android:layout_width="70dp" android:layout_height="match_parent" android:scaleType="fitCenter" android:importantForAccessibility="no" />
+    <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:orientation="vertical">
+        <TextView android:id="@+id/count" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFF4F4F5" android:textSize="18sp" />
+        <TextView android:id="@+id/label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF8B8B93" android:textSize="11sp" />
+        <TextView android:id="@+id/when" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FF69C8CB" android:textSize="11sp" android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+</LinearLayout>

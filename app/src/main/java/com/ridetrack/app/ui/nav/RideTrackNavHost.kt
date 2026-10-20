@@ -222,6 +222,11 @@ fun RideTrackNavHost(
             nav.navigate(Routes.review(asked.removePrefix(com.ridetrack.app.MainActivity.REVIEW_PREFIX)))
             return@LaunchedEffect
         }
+        if (asked.startsWith(com.ridetrack.app.MainActivity.SHARE_PREFIX)) {
+            val ride = asked.removePrefix(com.ridetrack.app.MainActivity.SHARE_PREFIX)
+            if (container.rides.lookup(ride) == RideLookup.LIVE) nav.navigate(Routes.share(ride))
+            return@LaunchedEffect
+        }
         val studio = asked.startsWith(com.ridetrack.app.MainActivity.STUDIO_PREFIX)
         val id = asked.removePrefix(com.ridetrack.app.MainActivity.STUDIO_PREFIX).substringBefore('#')
         // A Reel (from "How did it do?"): open it.

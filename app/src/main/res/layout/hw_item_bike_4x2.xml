@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
+    <TextView android:id="@+id/name" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFF4F4F5" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:maxLines="1" android:ellipsize="end" />
+    <TextView android:id="@+id/odo" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FF8B8B93" android:textSize="12sp" android:maxLines="1" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:gravity="center_vertical" android:orientation="horizontal">
+        <ImageView android:id="@+id/ready_dot" android:layout_width="8dp" android:layout_height="8dp" android:src="@drawable/hw_dot" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/ready" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:textColor="#FFF4F4F5" android:textSize="13sp" android:fontFamily="sans-serif-medium" android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/fuel_row" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:gravity="center_vertical" android:orientation="horizontal">
+        <ImageView android:layout_width="14dp" android:layout_height="14dp" android:src="@drawable/hw_ic_fuel" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/fuel" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:textColor="#FF8B8B93" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/care_row" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:gravity="center_vertical" android:orientation="horizontal">
+        <ImageView android:id="@+id/care_icon" android:layout_width="14dp" android:layout_height="14dp" android:src="@drawable/hw_ic_wrench" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/care" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:textColor="#FF8B8B93" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+</LinearLayout>
