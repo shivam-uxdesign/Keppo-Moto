@@ -16,7 +16,7 @@ class HighBandLiftTest {
             .map { l -> l.split(',').let { Triple(it[0].toLong(), it[1].toFloat(), it[2].toFloat()) } }
 
     @Test
-    fun `at 16-100 km in wind, every stretch the rider talked starts filming, with few false starts`() {
+    fun `at 16-100 km in wind, every stretch the rider talked starts filming, with only a few false starts`() {
         val lift = HighBandLift()
         // Only the new rule: the voice detector read 0.00 on this ride and loudness never crossed.
         val gate = SpeechGate()
@@ -31,10 +31,11 @@ class HighBandLiftTest {
         val caught = talk.count { (a, b) -> speaking.any { (ms, on) -> on && ms in a * 1000L until b * 1000L } }
         val falseStarts = starts.filter { s -> talk.none { (a, b) -> s in (a - 1) * 1000L..(b + 5) * 1000L } }
         assertEquals(talk.size, caught, "talking stretches that filmed")
-        assertTrue(falseStarts.size <= 2, "false starts at $falseStarts")
+        // A few false starts are the price of never missing talk (the rider's choice): 4 measured.
+        assertTrue(falseStarts.size <= 8, "false starts at $falseStarts")
         // Most of the talking time counts as talking.
         val inTalk = speaking.filter { (ms, _) -> talk.any { (a, b) -> ms in a * 1000L until b * 1000L } }
-        assertTrue(inTalk.count { it.second } >= 0.75 * inTalk.size, "covered ${inTalk.count { it.second } * 100 / inTalk.size}%")
+        assertTrue(inTalk.count { it.second } >= 0.85 * inTalk.size, "covered ${inTalk.count { it.second } * 100 / inTalk.size}%")
     }
 
     @Test

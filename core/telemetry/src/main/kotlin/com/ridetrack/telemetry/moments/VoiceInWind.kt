@@ -50,8 +50,10 @@ class TwoMicLift(windowMillis: Long = 8_000L) {
  * a voice reaches the helmet mic alone. "Usual" is the 10th percentile of the last minute, so a
  * rider who talks most of the time doesn't teach it their voice; the difference is averaged over
  * [smoothMillis] first. Measured on the 20 Oct ride (16–100 km/h, the rider's own marks): talking
- * +8 dB (median), silence +2; [SPEECH_DB] caught all 10 talking stretches with one false start in
- * 4 minutes, where the voice detector read 0.00 throughout. Pure.
+ * +8 dB (median), silence +2; where the voice detector read 0.00 throughout. At 5 dB it caught
+ * all 10 talking stretches with one false start in 4 minutes; [SPEECH_DB] is lower because the
+ * rider would rather have a few false starts than miss talking (about 5 in those 4 minutes,
+ * and talk counted sooner and held longer). Pure.
  */
 class HighBandLift(windowMillis: Long = 60_000L, private val smoothMillis: Long = 100L) {
     private val usual = BackgroundLevel(windowMillis, percentile = 0.1)
@@ -71,7 +73,7 @@ class HighBandLift(windowMillis: Long = 60_000L, private val smoothMillis: Long 
     }
 
     companion object {
-        /** At or above this lift the chunk counts as talking. */
-        const val SPEECH_DB = 5f
+        /** At or above this lift the chunk counts as talking (missing talk is worse than a false start). */
+        const val SPEECH_DB = 3f
     }
 }
