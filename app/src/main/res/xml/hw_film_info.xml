@@ -2,6 +2,7 @@
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/hw_film_description"
     android:initialLayout="@layout/hw_loading"
+    android:previewImage="@drawable/hw_preview_film"
     android:minWidth="250dp"
     android:minHeight="110dp"
     android:minResizeWidth="250dp"

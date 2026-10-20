@@ -6,10 +6,6 @@
     <string name="notification_channel_ride_alerts">Ride breaks</string>
     <string name="notification_channel_ride_alerts_desc">When a ride pauses for a break, and when a break has gone on a long time.</string>
     <string name="widget_start">Start ride</string>
-    <string name="widget_pause">Pause the ride</string>
-    <string name="widget_resume">Resume the ride</string>
-    <string name="widget_end">End the ride</string>
-    <string name="widget_small_description">Start a ride with one tap</string>
     <!-- Home-screen widgets: before a ride, after a ride, records and the calendar. -->
     <string name="hw_bike">Bike</string>
     <string name="hw_bike_description">Your bike, ready or not, and Start. Tap the photo to switch bikes.</string>
@@ -47,8 +43,6 @@
     <string name="hw_days_ridden">days ridden</string>
     <string name="hw_less">less</string>
     <string name="hw_more">more</string>
-    <string name="hw_week_letters">MTWTFSS</string>
-    <string name="widget_large_description">Start a ride, see if you\'re ready, and your last ride</string>
     <string name="tile_label">Start ride</string>
     <string-array name="ride_names">
         <item>ride</item>

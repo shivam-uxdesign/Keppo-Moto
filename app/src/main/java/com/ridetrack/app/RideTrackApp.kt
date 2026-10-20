@@ -34,7 +34,6 @@ class RideTrackApp : Application() {
         MapLibre.getInstance(this)
         createNotificationChannel()
         container.hud.start()
-        com.ridetrack.app.widget.RideWidgets.watch(this, container, container.appScope)
         com.ridetrack.app.widget.HomeWidgets.watch(this, container, container.appScope)
         // Storyboard shots still to film, on the shot list: kept in step with every template change.
         container.appScope.launch {

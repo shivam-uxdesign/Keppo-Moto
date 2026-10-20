@@ -93,20 +93,6 @@
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
 
-        <!-- Home-screen widgets and their Pause / Resume. -->
-        <receiver android:name=".widget.RideWidgetSmall" android:exported="true" android:label="@string/widget_start">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_small_info" />
-        </receiver>
-        <receiver android:name=".widget.RideWidgetLarge" android:exported="true" android:label="@string/app_name">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_large_info" />
-        </receiver>
-        <receiver android:name=".widget.RideWidgetActions" android:exported="false" />
         <!-- The home-screen widgets: before a ride, after a ride, records, the calendar. -->
         <receiver android:name=".widget.BikeWidget" android:exported="true" android:label="@string/hw_bike">
             <intent-filter>

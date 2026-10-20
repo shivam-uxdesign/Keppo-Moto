@@ -28,6 +28,7 @@ class HomeWidgetDataTest {
 
     @Test fun `each widget picks its design from the home-screen size`() {
         assertEquals(WidgetSize(1, 1), WidgetSize.of(70, 100))
+        assertEquals(WidgetSize(1, 1), WidgetSize.of(110, 110))
         assertEquals(WidgetSize(2, 1), WidgetSize.of(180, 110))
         assertEquals(WidgetSize(2, 2), WidgetSize.of(180, 220))
         assertEquals(WidgetSize(4, 1), WidgetSize.of(320, 100))

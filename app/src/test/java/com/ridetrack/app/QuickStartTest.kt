@@ -3,7 +3,6 @@ package com.ridetrack.app
 import android.content.Intent
 import android.net.Uri
 import com.ridetrack.app.ride.QuickStart
-import com.ridetrack.app.widget.WidgetState
 import com.ridetrack.telemetry.model.Bike
 import com.ridetrack.telemetry.model.FuelType
 import com.ridetrack.telemetry.model.MountOrientation
@@ -35,12 +34,5 @@ class QuickStartTest {
         assertEquals("b", QuickStart.bike(garage, "b")?.id)
         assertEquals("a", QuickStart.bike(garage, "gone")?.id)
         assertNull(QuickStart.bike(emptyList(), null))
-    }
-
-    @Test
-    fun `the widget says what's ready`() {
-        assertEquals("Wireless Mic Rx · USB-C connected · GPS on", WidgetState.readiness("Wireless Mic Rx · USB-C", gpsOn = true, locationAllowed = true))
-        assertEquals("No external mic · GPS off", WidgetState.readiness(null, gpsOn = false, locationAllowed = true))
-        assertEquals("No external mic · Location not allowed", WidgetState.readiness(null, gpsOn = true, locationAllowed = false))
     }
 }

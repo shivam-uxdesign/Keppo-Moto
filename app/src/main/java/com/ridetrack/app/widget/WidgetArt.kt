@@ -57,7 +57,8 @@ class WidgetArt(context: Context) {
             c.save()
             c.translate((b.width - 120 * s) / 2, (b.height - 72 * s) / 2)
             c.scale(s, s)
-            c.drawPath(BIKE, stroke(color, 3.4f))
+            // Already scaled to the outline's grid, so the width is in its units, as the prototype's.
+            c.drawPath(BIKE, stroke(color, 0f).apply { strokeWidth = if (wDp < 100f) 4f else 3f })
             c.restore()
         }
 
@@ -117,33 +118,47 @@ class WidgetArt(context: Context) {
         return b
     }
 
-    /** Distance bars for the last 7 days, today last. */
-    fun weekBars(km: List<Double>, wDp: Float, hDp: Float): Bitmap {
+    /** Distance bars for the last 7 days, today last, each with its day's letter under it. */
+    fun weekBars(km: List<Double>, letters: List<String>, wDp: Float, hDp: Float): Bitmap {
         val b = bmp(wDp, hDp)
         val c = Canvas(b)
         val gap = px(5f).toFloat()
         val bw = (b.width - gap * 6) / 7
+        val labelH = px(14f).toFloat()
+        val top = b.height - labelH
         val max = (km.maxOrNull() ?: 0.0).coerceAtLeast(1.0)
+        val text = label(10f)
         km.forEachIndexed { k, v ->
             val x = k * (bw + gap)
-            val bh = if (v > 0) max(px(6f).toFloat(), (v / max * b.height).toFloat()) else px(3f).toFloat()
-            c.drawRoundRect(RectF(x, b.height - bh, x + bw, b.height.toFloat()), px(4f).toFloat(), px(4f).toFloat(), fill(if (v > 0) shadeColor(HomeWidgetData.shade(v)) else OUTLINE))
+            val bh = if (v > 0) max(px(6f).toFloat(), (v / max * top).toFloat()) else px(3f).toFloat()
+            c.drawRoundRect(RectF(x, top - bh, x + bw, top), px(4f).toFloat(), px(4f).toFloat(), fill(if (v > 0) shadeColor(HomeWidgetData.shade(v)) else OUTLINE))
+            text.color = if (k == km.lastIndex) TEXT else TEXT_TERTIARY
+            c.drawText(letters.getOrElse(k) { "" }, x + bw / 2, b.height - px(2f).toFloat(), text)
         }
         return b
     }
 
-    /** One month as a Monday-first grid of rounded squares, [today] ringed. */
-    fun month(days: Map<LocalDate, Double>, first: LocalDate, today: LocalDate, cellDp: Float, gapDp: Float): Bitmap {
+    /** One month as a Monday-first grid of rounded squares under the weekday letters, [today] ringed, fitted to [wDp]×[hDp]. */
+    fun month(days: Map<LocalDate, Double>, first: LocalDate, today: LocalDate, wDp: Float, hDp: Float): Bitmap {
         val lead = (first.dayOfWeek.value + 6) % 7
         val n = first.lengthOfMonth()
-        val rows = (lead + n + 6) / 7
-        val b = bmp(7 * cellDp + 6 * gapDp, rows * cellDp + (rows - 1) * gapDp)
+        val head = 14f
+        // Always room for 6 weeks, so the grid doesn't jump between months.
+        val cellDp = minOf((wDp - 6 * 3f) / 7f, (hDp - head - 5 * 3f) / 6f)
+        val gapDp = cellDp * 0.18f
+        val gridW = 7 * cellDp + 6 * gapDp
+        val left = (wDp - gridW) / 2
+        val b = bmp(wDp, hDp)
         val c = Canvas(b)
+        val text = label(9f)
+        "MTWTFSS".forEachIndexed { k, ch -> c.drawText(ch.toString(), px(left + k * (cellDp + gapDp) + cellDp / 2).toFloat(), px(10f).toFloat(), text) }
+        c.save()
+        c.translate(px(left).toFloat(), px(head).toFloat())
         for (d in 1..n) {
-            val date = first.withDayOfMonth(d)
             val k = lead + d - 1
-            cell(c, k % 7, k / 7, cellDp, gapDp, date, days, today)
+            cell(c, k % 7, k / 7, cellDp, gapDp, first.withDayOfMonth(d), days, today)
         }
+        c.restore()
         return b
     }
 
@@ -231,6 +246,7 @@ class WidgetArt(context: Context) {
         }
     }
 
+    private fun label(sizeDp: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = sizeDp * density; color = TEXT_TERTIARY; textAlign = Paint.Align.CENTER }
     private fun fill(color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color; style = Paint.Style.FILL }
     private fun stroke(color: Int, wDp: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         this.color = color; style = Paint.Style.STROKE; strokeWidth = wDp * density; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND

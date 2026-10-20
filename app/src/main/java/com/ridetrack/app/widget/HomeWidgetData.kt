@@ -25,7 +25,7 @@ data class WidgetSize(val cols: Int, val rows: Int) {
     companion object {
         /** From the launcher's sizes (dp): the portrait width and height. */
         fun of(widthDp: Int, heightDp: Int): WidgetSize = WidgetSize(
-            cols = when { widthDp <= 0 -> 4; widthDp < 100 -> 1; widthDp < 220 -> 2; else -> 4 },
+            cols = when { widthDp <= 0 -> 4; widthDp < 130 -> 1; widthDp < 220 -> 2; else -> 4 },
             rows = when { heightDp <= 0 -> 2; heightDp < 130 -> 1; heightDp < 260 -> 2; else -> 3 },
         )
     }

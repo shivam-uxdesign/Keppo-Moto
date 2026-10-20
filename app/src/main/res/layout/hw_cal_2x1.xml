@@ -4,6 +4,5 @@
         <TextView android:id="@+id/streak" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:textColor="#FF69C8CB" android:textSize="12sp" android:maxLines="1" />
         <TextView android:id="@+id/total" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF8B8B93" android:textSize="11sp" />
     </LinearLayout>
-    <ImageView android:id="@+id/bars" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="4dp" android:scaleType="fitXY" android:importantForAccessibility="no" />
-    <TextView android:id="@+id/days" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="#FF85858E" android:textSize="10sp" android:letterSpacing="1.1" android:maxLines="1" />
+    <ImageView android:id="@+id/bars" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="4dp" android:scaleType="fitCenter" android:importantForAccessibility="no" />
 </LinearLayout>

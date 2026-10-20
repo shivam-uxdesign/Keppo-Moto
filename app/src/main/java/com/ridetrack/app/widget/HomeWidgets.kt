@@ -10,11 +10,13 @@ import android.content.Intent
 import android.location.LocationManager
 import android.net.Uri
 import android.os.BatteryManager
+import android.os.Build
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
+import android.util.SizeF
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.getSystemService
@@ -72,7 +74,7 @@ internal enum class Shown(val layout: Int, val photo: Boolean, val text: Boolean
 }
 
 /** Everything the widgets show, read once per refresh. */
-internal class Snapshot(
+internal data class Snapshot(
     val bikes: List<BikeCard>,
     val bikeIx: Int,
     val ready: Readiness,
@@ -95,6 +97,10 @@ internal class Snapshot(
  * on a photo, route, record or month slides or fades to the next (ViewFlipper, the motion home
  * screens allow), and the data catches up a moment later. They refresh when bikes, settings,
  * rides or Reels change while the app runs, and every 30 min otherwise.
+ *
+ * On Android 12 and later each widget is drawn at every size the launcher shows it at (portrait
+ * and landscape), pictures included, and a tap redraws it whole: the children of a flipper keep
+ * stable ids, so the launcher reuses them and the slide still plays.
  */
 object HomeWidgets {
     const val NEXT_BIKE = "bike"
@@ -120,6 +126,9 @@ object HomeWidgets {
     private const val WHITE = 0xFFF4F4F5.toInt()
 
     @OptIn(FlowPreview::class)
+    /** The last snapshot, so a tap can redraw without reading everything again. */
+    @Volatile private var last: Snapshot? = null
+
     fun watch(context: Context, c: AppContainer, scope: CoroutineScope) {
         scope.launch {
             combine(c.settings.settings, c.bikes.observeBikes(), c.rides.observeCompleted(), c.reels.reels) { _, _, _, _ -> Unit }
@@ -133,18 +142,52 @@ object HomeWidgets {
         val all = PROVIDERS.associateWith { m.getAppWidgetIds(ComponentName(context, it)) }
         if (all.values.all { it.isEmpty() }) return
         val snap = withContext(Dispatchers.IO) { snapshot(context, c) }
+        last = snap
+        draw(context, c, snap, all.mapValues { (_, ids) -> ids.filter { only == null || it in only } })
+    }
+
+    private fun draw(context: Context, c: AppContainer, snap: Snapshot, ids: Map<Class<*>, List<Int>>) {
+        val m = AppWidgetManager.getInstance(context)
         val art = WidgetArt(context)
-        all.forEach { (cls, ids) ->
-            ids.filter { only == null || it in only }.forEach { id ->
-                runCatching { m.updateAppWidget(id, render(context, art, snap, cls, id, size(m, id))) }
+        ids.forEach { (cls, list) ->
+            list.forEach { id ->
+                runCatching { m.updateAppWidget(id, views(context, art, snap, cls, id, m.getAppWidgetOptions(id))) }
                     .onFailure { c.errors.warn("Widgets", "Couldn't draw the ${cls.simpleName}", it) }
             }
         }
     }
 
-    private fun size(m: AppWidgetManager, id: Int): WidgetSize {
-        val o: Bundle = m.getAppWidgetOptions(id)
-        return WidgetSize.of(o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH), o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT))
+    /** Redraws [ids] after a tap, from the last snapshot when there is one. */
+    private suspend fun redraw(ctx: Context, c: AppContainer, ids: Map<Class<*>, List<Int>>, change: (Snapshot) -> Snapshot = { it }) {
+        val snap = last?.let(change) ?: withContext(Dispatchers.IO) { snapshot(ctx, c) }.also { last = it }
+        draw(ctx, c, snap, ids)
+    }
+
+    /** Each flipper's item count when the current draw began, and as it's drawn now (see [clear]). */
+    private var before: Map<String, Int> = emptyMap()
+    private val counts = HashMap<String, Int>()
+
+    /** One design per size the launcher shows the widget at, each drawn to fit it exactly. */
+    @Synchronized
+    private fun views(ctx: Context, art: WidgetArt, s: Snapshot, cls: Class<*>, id: Int, o: Bundle): RemoteViews {
+        val p = prefs(ctx)
+        before = p.all.filterKeys { it.startsWith("c.$id.") }.mapValues { (_, v) -> v as? Int ?: -1 }
+        counts.clear()
+        try {
+            return sized(ctx, art, s, cls, id, o)
+        } finally {
+            p.edit().apply { before.keys.forEach { remove(it) }; counts.forEach { (k, v) -> putInt(k, v) } }.apply()
+            before = emptyMap()
+        }
+    }
+
+    private fun sized(ctx: Context, art: WidgetArt, s: Snapshot, cls: Class<*>, id: Int, o: Bundle): RemoteViews {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            @Suppress("DEPRECATION")
+            val sizes = o.getParcelableArrayList<SizeF>(AppWidgetManager.OPTION_APPWIDGET_SIZES).orEmpty().filter { it.width > 0 && it.height > 0 }.distinct().take(16)
+            if (sizes.isNotEmpty()) return RemoteViews(sizes.associateWith { render(ctx, art, s, cls, id, it.width, it.height) })
+        }
+        return render(ctx, art, s, cls, id, o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH).toFloat(), o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT).toFloat())
     }
 
     // ---- data -----------------------------------------------------------------------------
@@ -212,18 +255,24 @@ object HomeWidgets {
 
     // ---- drawing ----------------------------------------------------------------------------
 
-    private fun render(ctx: Context, art: WidgetArt, s: Snapshot, cls: Class<*>, id: Int, size: WidgetSize): RemoteViews = when (cls) {
-        BikeWidget::class.java -> bike(ctx, art, s, id, size)
-        FilmTodayWidget::class.java -> film(ctx, art, s, id)
-        DaylightWidget::class.java -> daylight(ctx, art, s, id)
-        BikeCareWidget::class.java -> care(ctx, s, id)
-        LastRideWidget::class.java -> lastRide(ctx, art, s, id, size)
-        MomentsWidget::class.java -> moments(ctx, art, s, id)
-        RecordsWidget::class.java -> records(ctx, art, s, id, size)
-        else -> calendar(ctx, art, s, id, size)
+    /** [cls]'s widget at [wDp]×[hDp] (0 when the launcher hasn't said: drawn as 4×2). */
+    internal fun render(ctx: Context, art: WidgetArt, s: Snapshot, cls: Class<*>, id: Int, wDp: Float, hDp: Float): RemoteViews {
+        val size = WidgetSize.of(wDp.roundToInt(), hDp.roundToInt())
+        val w = if (wDp > 0) wDp else 360f
+        val h = if (hDp > 0) hDp else 200f
+        return when (cls) {
+            BikeWidget::class.java -> bike(ctx, art, s, id, size, w, h)
+            FilmTodayWidget::class.java -> film(ctx, art, s, id)
+            DaylightWidget::class.java -> daylight(ctx, art, s, id)
+            BikeCareWidget::class.java -> care(ctx, s, id)
+            LastRideWidget::class.java -> lastRide(ctx, art, s, id, size, w, h)
+            MomentsWidget::class.java -> moments(ctx, art, s, id)
+            RecordsWidget::class.java -> records(ctx, art, s, id, size)
+            else -> calendar(ctx, art, s, id, size)
+        }
     }
 
-    private fun bike(ctx: Context, art: WidgetArt, s: Snapshot, id: Int, size: WidgetSize): RemoteViews {
+    private fun bike(ctx: Context, art: WidgetArt, s: Snapshot, id: Int, size: WidgetSize, w: Float, h: Float): RemoteViews {
         if (s.bikes.isEmpty()) return empty(ctx, id, "Add your bike in Keppo Moto", open(ctx))
         val shown = when {
             size.cols == 1 -> Shown.BIKE_1X1
@@ -238,18 +287,23 @@ object HomeWidgets {
         val readyColor = if (s.ready.ok) OK else AMBER
         if (shown == Shown.BIKE_1X1) {
             val b = s.bikes[ix]
-            rv.setImageViewBitmap(R.id.photo, art.bike(photo(ctx, b), b.color, 84f, 96f, 24f))
+            rv.setImageViewBitmap(R.id.photo, art.bike(photo(ctx, b), b.color, w, h, 24f))
             rv.setInt(R.id.ready_dot, "setColorFilter", readyColor)
             rv.setContentDescription(R.id.root, "Start ride on ${b.name}. ${s.ready.short}")
             rv.setOnClickPendingIntent(R.id.root, QuickStart.pendingIntent(ctx))
             return rv
         }
-        val (pw, ph) = when (shown) { Shown.BIKE_2X1 -> 72f to 76f; Shown.BIKE_2X2 -> 156f to 96f; Shown.BIKE_4X1 -> 92f to 76f; else -> 140f to 176f }
-        rv.removeAllViews(R.id.flip_photo)
-        rv.removeAllViews(R.id.flip_text)
-        s.bikes.forEach { b ->
-            rv.addView(R.id.flip_photo, image(ctx, art.bike(photo(ctx, b), b.color, pw, ph, if (shown == Shown.BIKE_4X2) 18f else 16f)))
-            rv.addView(R.id.flip_text, bikeText(ctx, shown, b, s.ready))
+        // The photo box in each layout (dp): fixed sides as the XML has them, the rest from the widget.
+        val (pw, ph) = when (shown) {
+            Shown.BIKE_2X1 -> 72f to h - 20
+            Shown.BIKE_2X2 -> w - 20 to h - 116
+            Shown.BIKE_4X1 -> 92f to h - 20
+            else -> (w - 36) * 0.42f to h - 24
+        }
+        clear(rv, id, shown, s.bikes.size, R.id.flip_photo, R.id.flip_text)
+        s.bikes.forEachIndexed { k, b ->
+            add(rv, R.id.flip_photo, image(ctx, art.bike(photo(ctx, b), b.color, fit(pw), fit(ph), if (shown == Shown.BIKE_4X2) 18f else 16f)), k)
+            add(rv, R.id.flip_text, bikeText(ctx, shown, b, s.ready, short = h < 190), k)
         }
         rv.setDisplayedChild(R.id.flip_photo, ix)
         rv.setDisplayedChild(R.id.flip_text, ix)
@@ -262,13 +316,14 @@ object HomeWidgets {
         return rv
     }
 
-    private fun bikeText(ctx: Context, shown: Shown, b: BikeCard, r: Readiness): RemoteViews {
+    /** [short]: a 2-row widget under 190 dp tall (some phones), so the 4×2 drops the odometer to fit. */
+    private fun bikeText(ctx: Context, shown: Shown, b: BikeCard, r: Readiness, short: Boolean = false): RemoteViews {
         val readyColor = if (r.ok) OK else AMBER
         val careColor = when (b.careLevel) { 2 -> ROSE; 1 -> AMBER; else -> GREY }
         return when (shown) {
             Shown.BIKE_4X2 -> RemoteViews(ctx.packageName, R.layout.hw_item_bike_4x2).apply {
                 setTextViewText(R.id.name, b.name)
-                setTextViewText(R.id.odo, b.odometer ?: "Set the odometer in the app")
+                if (short) setViewVisibility(R.id.odo, View.GONE) else setTextViewText(R.id.odo, b.odometer ?: "Set the odometer in the app")
                 setInt(R.id.ready_dot, "setColorFilter", readyColor)
                 setTextViewText(R.id.ready, if (r.ok) "All set" else "${r.problem} · ${r.fix}")
                 setTextColor(R.id.ready, if (r.ok) WHITE else AMBER)
@@ -297,17 +352,17 @@ object HomeWidgets {
         if (s.bikes.isEmpty()) return empty(ctx, id, "Add your bike in Keppo Moto", open(ctx))
         remember(ctx, id, Shown.CARE, s.bikes.size, s.bikeIx)
         val rv = RemoteViews(ctx.packageName, R.layout.hw_care_2x1)
-        rv.removeAllViews(R.id.flip_text)
-        s.bikes.forEach { b ->
+        clear(rv, id, Shown.CARE, s.bikes.size, R.id.flip_text)
+        s.bikes.forEachIndexed { k, b ->
             val careColor = when (b.careLevel) { 2 -> ROSE; 1 -> AMBER; else -> WHITE }
-            rv.addView(R.id.flip_text, RemoteViews(ctx.packageName, R.layout.hw_item_care).apply {
+            add(rv, R.id.flip_text, RemoteViews(ctx.packageName, R.layout.hw_item_care).apply {
                 setInt(R.id.bike_dot, "setColorFilter", b.color)
                 setTextViewText(R.id.name, b.name)
                 setTextViewText(R.id.fuel, b.fuel ?: "Log a fill-up")
                 setTextViewText(R.id.care, b.care?.substringBefore(" · ")?.let { name -> "$name ${b.careShort?.substringAfter(' ')?.let { "· $it" }.orEmpty()}" } ?: "No reminders set")
                 setTextColor(R.id.care, careColor)
                 setInt(R.id.care_icon, "setColorFilter", if (b.care == null) GREY else careColor)
-            })
+            }, k)
         }
         rv.setDisplayedChild(R.id.flip_text, s.bikeIx.coerceIn(0, s.bikes.lastIndex))
         rv.setOnClickPendingIntent(R.id.root, if (s.bikes.size > 1) action(ctx, NEXT_BIKE, id) else open(ctx))
@@ -367,13 +422,13 @@ object HomeWidgets {
             else -> {
                 val left = (set - s.now) / 60_000
                 rv.setTextViewText(R.id.time, hm(set))
-                rv.setTextViewText(R.id.sub, "sunset · ${left / 60} h ${left % 60} m left")
+                rv.setTextViewText(R.id.sub, if (left >= 60) "sunset in ${left / 60}h ${left % 60}m" else "sunset in ${left}m")
             }
         }
         return rv
     }
 
-    private fun lastRide(ctx: Context, art: WidgetArt, s: Snapshot, id: Int, size: WidgetSize): RemoteViews {
+    private fun lastRide(ctx: Context, art: WidgetArt, s: Snapshot, id: Int, size: WidgetSize, w: Float, h: Float): RemoteViews {
         if (s.rides.isEmpty()) return empty(ctx, id, "Your rides show up here after your first ride.", open(ctx))
         val shown = when {
             size.cols <= 2 && size.rows == 1 -> Shown.RIDE_2X1
@@ -394,12 +449,15 @@ object HomeWidgets {
             rv.setOnClickPendingIntent(R.id.root, openRide(ctx, r.id))
             return rv
         }
-        val (pw, ph) = when (shown) { Shown.RIDE_2X1 -> 58f to 76f; Shown.RIDE_2X2 -> 156f to 96f; else -> 124f to 176f }
-        rv.removeAllViews(R.id.flip_photo)
-        rv.removeAllViews(R.id.flip_text)
+        val (pw, ph) = when (shown) {
+            Shown.RIDE_2X1 -> 58f to h - 20
+            Shown.RIDE_2X2 -> w - 20 to h - 94
+            else -> (w - 36) * 0.38f to h - 24
+        }
+        clear(rv, id, shown, s.rides.size, R.id.flip_photo, R.id.flip_text)
         s.rides.forEachIndexed { k, r ->
-            rv.addView(R.id.flip_photo, image(ctx, art.route(s.routes.getOrNull(k), pw, ph, 16f)))
-            rv.addView(R.id.flip_text, rideText(ctx, shown, r))
+            add(rv, R.id.flip_photo, image(ctx, art.route(s.routes.getOrNull(k), fit(pw), fit(ph), 16f)), k)
+            add(rv, R.id.flip_text, rideText(ctx, shown, r, short = h < 190), k)
         }
         rv.setDisplayedChild(R.id.flip_photo, i)
         rv.setDisplayedChild(R.id.flip_text, i)
@@ -417,11 +475,16 @@ object HomeWidgets {
         return rv
     }
 
-    private fun rideText(ctx: Context, shown: Shown, r: RideCard): RemoteViews {
+    /** [short]: as [bikeText]; the 4×2 drops the date line. */
+    private fun rideText(ctx: Context, shown: Shown, r: RideCard, short: Boolean = false): RemoteViews {
         val leanText = r.lean?.let { SpannableString("$it ${if (r.leanLeft) "L" else "R"}").apply { setSpan(ForegroundColorSpan(if (r.leanLeft) VIOLET else ROSE), it.length + 1, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) } } ?: "–"
         return when (shown) {
             Shown.RIDE_4X2 -> RemoteViews(ctx.packageName, R.layout.hw_item_ride_4x2).apply {
-                setTextViewText(R.id.`when`, r.whenText)
+                if (short) setViewVisibility(R.id.`when`, View.GONE) else setTextViewText(R.id.`when`, r.whenText)
+                if (short && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    setViewLayoutMargin(R.id.stats1, RemoteViews.MARGIN_TOP, 2f, android.util.TypedValue.COMPLEX_UNIT_DIP)
+                    setViewLayoutMargin(R.id.stats2, RemoteViews.MARGIN_TOP, 0f, android.util.TypedValue.COMPLEX_UNIT_DIP)
+                }
                 setTextViewText(R.id.name, r.name)
                 setTextViewText(R.id.km, unit(r.km, Units.distanceUnit))
                 setTextViewText(R.id.time, unit(r.time, "h"))
@@ -467,31 +530,31 @@ object HomeWidgets {
         val i = index(ctx, id, n)
         remember(ctx, id, shown, n, i)
         val rv = RemoteViews(ctx.packageName, shown.layout)
-        rv.removeAllViews(R.id.flip_text)
+        clear(rv, id, shown, n, R.id.flip_text)
         when (shown) {
-            Shown.REC_1X1 -> list.forEach { r ->
-                rv.addView(R.id.flip_text, RemoteViews(ctx.packageName, R.layout.hw_item_rec_1x1).apply {
+            Shown.REC_1X1 -> list.forEachIndexed { k, r ->
+                add(rv, R.id.flip_text, RemoteViews(ctx.packageName, R.layout.hw_item_rec_1x1).apply {
                     setTextViewText(R.id.value, r.value); setTextViewText(R.id.label, r.short); setTextViewText(R.id.unit, r.unit); setTextColor(R.id.unit, leanColor(r))
-                })
+                }, k)
             }
-            Shown.REC_2X1 -> pairs.forEach { (a, b) ->
-                rv.addView(R.id.flip_text, RemoteViews(ctx.packageName, R.layout.hw_item_rec_pair).apply {
+            Shown.REC_2X1 -> pairs.forEachIndexed { k, (a, b) ->
+                add(rv, R.id.flip_text, RemoteViews(ctx.packageName, R.layout.hw_item_rec_pair).apply {
                     setTextViewText(R.id.label_a, a.short); setTextViewText(R.id.value_a, a.value); setTextViewText(R.id.unit_a, a.unit); setTextColor(R.id.unit_a, leanColor(a))
                     if (b == null) { setTextViewText(R.id.label_b, ""); setTextViewText(R.id.value_b, ""); setTextViewText(R.id.unit_b, "") } else {
                         setTextViewText(R.id.label_b, b.short); setTextViewText(R.id.value_b, b.value); setTextViewText(R.id.unit_b, b.unit); setTextColor(R.id.unit_b, leanColor(b))
                     }
-                })
+                }, k)
             }
             Shown.REC_2X2 -> {
-                list.forEach { r ->
-                    rv.addView(R.id.flip_text, RemoteViews(ctx.packageName, R.layout.hw_item_rec_card).apply {
+                list.forEachIndexed { k, r ->
+                    add(rv, R.id.flip_text, RemoteViews(ctx.packageName, R.layout.hw_item_rec_card).apply {
                         setTextViewText(R.id.label, r.label)
                         setViewVisibility(R.id.fresh, if (r.fresh) View.VISIBLE else View.GONE)
                         setTextViewText(R.id.value, r.value)
                         setTextViewText(R.id.unit, if (r.lean != null) "leaning ${r.unit}" else r.unit)
                         setTextColor(R.id.unit, leanColor(r))
                         setTextViewText(R.id.context, r.context)
-                    })
+                    }, k)
                 }
                 rv.setImageViewBitmap(R.id.dots, art.dots(list.size, i, small = true))
             }
@@ -503,9 +566,9 @@ object HomeWidgets {
                     rv.setTextViewText(TILE_VALUES[k], if (r.lean != null) r.value else unit(r.value, r.unit))
                     rv.setInt(tile, "setBackgroundResource", if (k == i) R.drawable.hw_tile_sel else R.drawable.hw_chip)
                     rv.setOnClickPendingIntent(tile, action(ctx, TILE, id, k))
-                    rv.addView(R.id.flip_text, RemoteViews(ctx.packageName, R.layout.hw_item_line).apply {
+                    add(rv, R.id.flip_text, RemoteViews(ctx.packageName, R.layout.hw_item_line).apply {
                         setTextViewText(R.id.text, "${r.value}${if (r.lean == null) " " + r.unit else ""} · ${r.context}")
-                    })
+                    }, k)
                 }
             }
         }
@@ -527,8 +590,7 @@ object HomeWidgets {
                 RemoteViews(ctx.packageName, R.layout.hw_cal_2x1).apply {
                     setTextViewText(R.id.streak, streakText)
                     setTextViewText(R.id.total, "${fmtKm(week.sumOf { days[it] ?: 0.0 })} ${Units.distanceUnit}")
-                    setImageViewBitmap(R.id.bars, art.weekBars(week.map { days[it] ?: 0.0 }, 148f, 44f))
-                    setTextViewText(R.id.days, week.joinToString("") { it.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.ENGLISH) })
+                    setImageViewBitmap(R.id.bars, art.weekBars(week.map { days[it] ?: 0.0 }, week.map { it.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.ENGLISH) }, 148f, 56f))
                     setOnClickPendingIntent(R.id.root, open(ctx))
                 }
             }
@@ -536,16 +598,17 @@ object HomeWidgets {
                 val i = index(ctx, id, 3, default = 2)
                 remember(ctx, id, Shown.CAL_2X2, 3, i)
                 RemoteViews(ctx.packageName, R.layout.hw_cal_2x2).apply {
-                    removeAllViews(R.id.flip_photo); removeAllViews(R.id.flip_text); removeAllViews(R.id.flip_foot)
+                    clear(this, id, Shown.CAL_2X2, 3, R.id.flip_photo, R.id.flip_text, R.id.flip_foot)
                     (2 downTo 0).forEach { back ->
+                        val k = 2 - back
                         val first = today.withDayOfMonth(1).minusMonths(back.toLong())
                         val inMonth = days.filterKeys { it.year == first.year && it.month == first.month }
-                        addView(R.id.flip_photo, RemoteViews(ctx.packageName, R.layout.hw_item_month).apply { setImageViewBitmap(R.id.img, art.month(days, first, today, 18f, 3f)) })
-                        addView(R.id.flip_text, RemoteViews(ctx.packageName, R.layout.hw_item_cal_head).apply {
+                        add(this, R.id.flip_photo, RemoteViews(ctx.packageName, R.layout.hw_item_month).apply { setImageViewBitmap(R.id.img, art.month(days, first, today, 148f, 124f)) }, k)
+                        add(this, R.id.flip_text, RemoteViews(ctx.packageName, R.layout.hw_item_cal_head).apply {
                             setTextViewText(R.id.name, first.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH))
                             setTextViewText(R.id.days, "${inMonth.size} days")
-                        })
-                        addView(R.id.flip_foot, RemoteViews(ctx.packageName, R.layout.hw_item_text).apply { setTextViewText(R.id.text, "${fmtKm(inMonth.values.sum())} ${Units.distanceUnit} this month") })
+                        }, k)
+                        add(this, R.id.flip_foot, RemoteViews(ctx.packageName, R.layout.hw_item_text).apply { setTextViewText(R.id.text, "${fmtKm(inMonth.values.sum())} ${Units.distanceUnit} this month") }, k)
                     }
                     setDisplayedChild(R.id.flip_photo, i); setDisplayedChild(R.id.flip_text, i); setDisplayedChild(R.id.flip_foot, i)
                     setOnClickPendingIntent(R.id.prev, action(ctx, MONTH, id, -1))
@@ -608,6 +671,11 @@ object HomeWidgets {
                 val next = (p.getInt("bikeIx", 0) + 1) % ids.size
                 p.edit().putInt("bikeIx", next).apply()
                 // Every bike widget and Bike care slides together; the bike becomes the selected one.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    redraw(ctx, c, listOf(BikeWidget::class.java, BikeCareWidget::class.java).associateWith { m.getAppWidgetIds(ComponentName(ctx, it)).toList() }) { it.copy(bikeIx = next) }
+                    c.settings.setSelectedBike(ids[next])
+                    return
+                }
                 listOf(BikeWidget::class.java, BikeCareWidget::class.java).flatMap { m.getAppWidgetIds(ComponentName(ctx, it)).toList() }.forEach { w ->
                     val shown = shown(ctx, w) ?: return@forEach
                     if (shown.layout == 0 || shown == Shown.BIKE_1X1) return@forEach
@@ -621,12 +689,14 @@ object HomeWidgets {
                 if (n < 2) return
                 val i = (p.getInt("i.$id", 0) + 1) % n
                 p.edit().putInt("i.$id", i).apply()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return redraw(ctx, c, mapOf(providerOf(m, id) to listOf(id)))
                 val rv = flip(ctx, art, shown, i, n)
                 if (what == NEXT_RIDE) p.getString("rides", "").orEmpty().split(',').getOrNull(i)?.takeIf { it.isNotBlank() }?.let { rv.setOnClickPendingIntent(R.id.root, openRide(ctx, it)) }
                 m.partiallyUpdateAppWidget(id, rv)
             }
             TILE -> {
                 p.edit().putInt("i.$id", arg).apply()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return redraw(ctx, c, mapOf(RecordsWidget::class.java to listOf(id)))
                 val rv = RemoteViews(ctx.packageName, R.layout.hw_rec_4x2)
                 TILES.forEachIndexed { k, tile -> rv.setInt(tile, "setBackgroundResource", if (k == arg) R.drawable.hw_tile_sel else R.drawable.hw_chip) }
                 rv.setDisplayedChild(R.id.flip_text, arg)
@@ -635,6 +705,7 @@ object HomeWidgets {
             MONTH -> {
                 val i = (p.getInt("i.$id", 2) + arg).coerceIn(0, 2)
                 p.edit().putInt("i.$id", i).apply()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return redraw(ctx, c, mapOf(CalendarWidget::class.java to listOf(id)))
                 m.partiallyUpdateAppWidget(id, RemoteViews(ctx.packageName, R.layout.hw_cal_2x2).apply {
                     setDisplayedChild(R.id.flip_photo, i); setDisplayedChild(R.id.flip_text, i); setDisplayedChild(R.id.flip_foot, i)
                 })
@@ -643,7 +714,7 @@ object HomeWidgets {
                 val now = LocalDate.now().monthValue - 1
                 val sel = p.getInt("m.$id", now)
                 p.edit().putInt("m.$id", if (sel <= 0) now else sel - 1).apply()
-                refresh(ctx, c, setOf(id))
+                redraw(ctx, c, mapOf(CalendarWidget::class.java to listOf(id)))
             }
         }
     }
@@ -660,6 +731,29 @@ object HomeWidgets {
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("home_widgets", Context.MODE_PRIVATE)
 
+    private fun providerOf(m: AppWidgetManager, id: Int): Class<*> =
+        PROVIDERS.firstOrNull { cls -> m.getAppWidgetInfo(id)?.provider?.className == cls.name } ?: LastRideWidget::class.java
+
+    /**
+     * Empties [flippers] before they're filled, unless (Android 12 and later) the same design holds
+     * as many items as last time: then the launcher reuses their children (stable ids), so a
+     * redraw slides instead of jumping.
+     */
+    private fun clear(rv: RemoteViews, id: Int, shown: Shown, n: Int, vararg flippers: Int) {
+        val key = "c.$id.${shown.name}"
+        val keep = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && before[key] == n
+        counts[key] = n
+        if (!keep) flippers.forEach { rv.removeAllViews(it) }
+    }
+
+    /** Adds item [k] of a flipper; with a stable id on Android 12 and later, so it can be reused. */
+    private fun add(rv: RemoteViews, flipper: Int, child: RemoteViews, k: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) rv.addStableView(flipper, child, k) else rv.addView(flipper, child)
+    }
+
+    /** A picture side in dp, never too small to draw. */
+    private fun fit(dp: Float) = dp.coerceAtLeast(24f)
+
     private fun remember(ctx: Context, id: Int, shown: Shown, n: Int, i: Int) {
         prefs(ctx).edit().putString("shown.$id", shown.name).putInt("n.$id", n).putInt("i.$id", i).apply()
     }
@@ -671,7 +765,7 @@ object HomeWidgets {
 
     internal fun forget(ctx: Context, ids: IntArray) {
         val e = prefs(ctx).edit()
-        ids.forEach { id -> listOf("shown", "n", "i", "m").forEach { e.remove("$it.$id") } }
+        ids.forEach { id -> listOf("shown", "n", "i", "m").forEach { e.remove("$it.$id") }; Shown.entries.forEach { e.remove("c.$id.${it.name}") } }
         e.apply()
     }
 

@@ -2,6 +2,7 @@
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/hw_daylight_description"
     android:initialLayout="@layout/hw_loading"
+    android:previewImage="@drawable/hw_preview_daylight"
     android:minWidth="110dp"
     android:minHeight="40dp"
     android:minResizeWidth="110dp"
