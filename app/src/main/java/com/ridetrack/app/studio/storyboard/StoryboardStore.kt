@@ -100,11 +100,13 @@ class StoryboardStore(private val context: Context) {
             .put("templates", JSONArray(c.templateIds))
             .put("raw", JSONArray(c.raw.takeLast(20)))
             .put("versions", JSONArray().apply { c.versions.forEach { put(ScriptJson.write(it)) } })
+            .put("current", c.current)
             .put("messages", JSONArray().apply {
                 c.messages.forEach { m ->
                     put(JSONObject().put("rider", m.fromRider).put("text", m.text).put("at", m.at)
                         .put("voiceMs", m.voiceMs ?: JSONObject.NULL).put("question", m.question ?: JSONObject.NULL)
                         .put("choices", JSONArray(m.choices)).put("version", m.version ?: JSONObject.NULL).put("template", m.templateId ?: JSONObject.NULL)
+                        .put("changes", JSONArray(m.changes))
                         .put("chips", JSONArray().apply {
                             m.chips.forEach { ch ->
                                 put(JSONObject().put("text", ch.text).put("removed", ch.removed).put("undone", ch.undone)
@@ -121,6 +123,7 @@ class StoryboardStore(private val context: Context) {
                     templateIds = o.optJSONArray("templates").strings(),
                     raw = o.optJSONArray("raw").strings(),
                     versions = o.optJSONArray("versions")?.let { a -> (0 until a.length()).mapNotNull { ScriptJson.read(a.optJSONObject(it)) } }.orEmpty(),
+                    current = o.optInt("current", -1),
                     messages = o.optJSONArray("messages")?.let { a ->
                         (0 until a.length()).mapNotNull { i ->
                             val m = a.optJSONObject(i) ?: return@mapNotNull null
@@ -131,6 +134,7 @@ class StoryboardStore(private val context: Context) {
                                 choices = m.optJSONArray("choices").strings(),
                                 version = if (m.isNull("version")) null else m.optInt("version"),
                                 templateId = if (m.isNull("template")) null else m.optString("template").ifBlank { null },
+                                changes = m.optJSONArray("changes").strings(),
                                 chips = m.optJSONArray("chips")?.let { ca ->
                                     (0 until ca.length()).mapNotNull { k ->
                                         val ch = ca.optJSONObject(k) ?: return@mapNotNull null

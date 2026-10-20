@@ -127,8 +127,8 @@ object Routes {
     const val STORYBOARD = "storyboard"
     const val STORYBOARD_CHAT = "storyboard/{chatId}"
     fun storyboardChat(id: String) = "storyboard/$id"
-    const val STORYBOARD_SHOTS = "storyboard-shots/{chatId}"
-    fun storyboardShots(id: String) = "storyboard-shots/$id"
+    const val STORYBOARD_SHOTS = "storyboard-shots/{chatId}?v={v}"
+    fun storyboardShots(id: String, version: Int? = null) = "storyboard-shots/$id" + (version?.let { "?v=$it" } ?: "")
     const val STORYBOARD_GEAR = "storyboard-gear"
     const val STORYBOARD_FILL = "storyboard-fill/{reelId}/{shotId}"
     fun storyboardFill(reelId: String, shotId: String) = "storyboard-fill/$reelId/$shotId"
@@ -462,10 +462,10 @@ fun RideTrackNavHost(
                 }
                 composable(Routes.STORYBOARD_CHAT, arguments = listOf(navArgument("chatId") { type = NavType.StringType })) { entry ->
                     val id = entry.arguments?.getString("chatId").orEmpty()
-                    DarkRoute { com.ridetrack.app.studio.storyboard.StoryboardChatScreen(id, onBack = { nav.popBackStack() }, onReview = { nav.navigate(Routes.storyboardShots(id)) }, onOpenTemplate = { nav.navigate(Routes.studioPhone(it, edit = true)) }) }
+                    DarkRoute { com.ridetrack.app.studio.storyboard.StoryboardChatScreen(id, onBack = { nav.popBackStack() }, onReview = { v -> nav.navigate(Routes.storyboardShots(id, v)) }, onOpenTemplate = { nav.navigate(Routes.studioPhone(it, edit = true)) }) }
                 }
-                composable(Routes.STORYBOARD_SHOTS, arguments = listOf(navArgument("chatId") { type = NavType.StringType })) { entry ->
-                    DarkRoute { com.ridetrack.app.studio.storyboard.ShotCardsScreen(entry.arguments?.getString("chatId").orEmpty(), onBack = { nav.popBackStack() }, onFill = { reel, shot -> nav.navigate(Routes.storyboardFill(reel, shot)) }, onReadLines = { nav.navigate(Routes.storyboardLines(it)) }) }
+                composable(Routes.STORYBOARD_SHOTS, arguments = listOf(navArgument("chatId") { type = NavType.StringType }, navArgument("v") { type = NavType.StringType; nullable = true; defaultValue = null })) { entry ->
+                    DarkRoute { com.ridetrack.app.studio.storyboard.ShotCardsScreen(entry.arguments?.getString("chatId").orEmpty(), entry.arguments?.getString("v")?.toIntOrNull(), onBack = { nav.popBackStack() }, onFill = { reel, shot -> nav.navigate(Routes.storyboardFill(reel, shot)) }, onReadLines = { nav.navigate(Routes.storyboardLines(it)) }) }
                 }
                 composable(Routes.STORYBOARD_LINES, arguments = listOf(navArgument("reelId") { type = NavType.StringType })) { entry ->
                     DarkRoute { com.ridetrack.app.studio.storyboard.VoiceLinesScreen(entry.arguments?.getString("reelId").orEmpty(), onBack = { nav.popBackStack() }) }

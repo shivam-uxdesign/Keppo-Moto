@@ -116,12 +116,17 @@ object ShotEdits {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ShotCardsScreen(chatId: String, onBack: () -> Unit, onFill: (templateId: String, shotId: String) -> Unit, onReadLines: (templateId: String) -> Unit = {}) {
+fun ShotCardsScreen(chatId: String, version: Int? = null, onBack: () -> Unit, onFill: (templateId: String, shotId: String) -> Unit, onReadLines: (templateId: String) -> Unit = {}) {
     val c = appContainer()
     val chats by c.storyboard.chats.collectAsStateWithLifecycle()
     val reels by c.reels.reels.collectAsStateWithLifecycle()
     val chat = chats.firstOrNull { it.id == chatId } ?: return
-    val s = chat.script ?: return
+    if (chat.versions.isEmpty()) return
+    // The version looked at: the one asked for, else the current one. Picking a pill only looks.
+    var viewing by remember(chatId) { mutableStateOf((version?.minus(1))?.takeIf { it in chat.versions.indices } ?: chat.currentIndex) }
+    val shown = viewing.coerceIn(0, chat.versions.lastIndex)
+    val s = chat.versions[shown]
+    val isCurrent = shown == chat.currentIndex
     var tab by remember { mutableStateOf(0) }
     var editing by remember { mutableStateOf<ScriptShot?>(null) }
     val template = reels.filter { it.id in chat.templateIds && it.deletedAt == null }.maxByOrNull { it.updatedAt }
@@ -130,7 +135,8 @@ fun ShotCardsScreen(chatId: String, onBack: () -> Unit, onFill: (templateId: Str
     val scope = rememberCoroutineScope()
 
     fun save(n: Script, note: String?, before: String, after: String) {
-        c.storyboard.update(chatId) { it.copy(versions = it.versions + n) }
+        c.storyboard.update(chatId) { it.withVersion(n) }
+        viewing = chat.versions.size
         runCatching { c.style.record(before, after, note) }
     }
 
@@ -139,17 +145,24 @@ fun ShotCardsScreen(chatId: String, onBack: () -> Unit, onFill: (templateId: Str
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = RtColors.TextPrimary) }
             Column(Modifier.weight(1f)) {
                 Text("${Placeholders.shots(s).size} shots · ${s.totalMs / 1000} s", style = RtType.bodyStrong, color = RtColors.TextPrimary)
-                Text("Version ${chat.versions.size} · tap a shot to change it", style = RtType.caption, color = RtColors.TextSecondary)
+                Text("Version ${shown + 1}" + (if (isCurrent) " · current" else "") + " · tap a shot to change it", style = RtType.caption, color = RtColors.TextSecondary)
             }
         }
         if (chat.versions.size > 1) Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            chat.versions.forEachIndexed { i, v ->
-                val now = i == chat.versions.size - 1
-                Text("v${i + 1}", style = RtType.caption, color = if (now) RtColors.OnPrimary else RtColors.TextPrimary,
-                    modifier = Modifier.clip(RoundedCornerShape(50)).background(if (now) RtColors.Primary else RtColors.SurfaceRaised)
-                        .clickable(role = Role.Button, onClickLabel = "Bring back version ${i + 1}") { if (!now) c.storyboard.update(chatId) { it.copy(versions = it.versions + v) } }
+            chat.versions.forEachIndexed { i, _ ->
+                val on = i == shown
+                Text("v${i + 1}" + if (i == chat.currentIndex) " ✓" else "", style = RtType.caption, color = if (on) RtColors.OnPrimary else RtColors.TextPrimary,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) RtColors.Primary else RtColors.SurfaceRaised)
+                        .clickable(role = Role.Tab, onClickLabel = "Look at version ${i + 1}") { viewing = i }
                         .padding(horizontal = 12.dp, vertical = 6.dp))
             }
+        }
+        if (!isCurrent) Row(
+            Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.SurfaceRaised).padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("An older version. Changes here start a new version from it.", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
+            TextButton(onClick = { c.storyboard.update(chatId) { it.copy(current = shown) } }) { Text("Use this one") }
         }
         val lines = VoiceLines.lines(s)
         if (template != null && lines.isNotEmpty()) {

@@ -116,4 +116,77 @@ class StoryboardEngineTest {
         assertEquals("How to enter a tunnel 101", StoryboardEngine.titleOf("Title is how to enter a tunnel 101. Step one: the ___"))
         assertEquals("Sunday 5 am, alarm goes off", StoryboardEngine.titleOf("Sunday 5 am, alarm goes off. It's raining"))
     }
+
+    @Test fun `asking to remove a shot by its number really removes it, and the card says so`() {
+        val s0 = StoryboardEngine.parse(first, null)!!.script!!
+        val ids = s0.sections.flatMap { it.shots }.map { it.id }
+        // Gemini's whole updated script without shot #2 (and nothing else changed).
+        val without = s0.copy(sections = s0.sections.map { sec -> sec.copy(shots = sec.shots.filter { it.id != ids[1] }) }.filter { it.shots.isNotEmpty() })
+        val answer = org.json.JSONObject().put("reply", "Removed #2").put("changes", org.json.JSONArray(listOf("Removed #2")))
+            .put("script", com.ridetrack.app.studio.ScriptJson.write(without).let { org.json.JSONObject(storyboardJson(without)) })
+        val r = StoryboardEngine.parse(answer.toString(), s0)!!
+        val next = StoryboardEngine.next(s0, r)!!
+        assertTrue(next.sections.flatMap { it.shots }.none { it.id == ids[1] })
+        val diff = StoryboardEngine.diff(s0, next)
+        assertEquals("Removed #2: Your eyes through the visor lock on the tunnel", diff.single { it.startsWith("Removed") })
+        assertEquals(listOf("Removed #2"), r.claimed)
+    }
+
+    @Test fun `an old-style delete patch works with "remove" and the shot number the rider sees`() {
+        val s0 = StoryboardEngine.parse(first, null)!!.script!!
+        val r = StoryboardEngine.parse("""{"reply":"ok","patches":[{"op":"remove","id":"3"}]}""", s0)!!
+        assertEquals(1, r.patches.size)
+        val next = StoryboardEngine.next(s0, r)!!
+        assertEquals(3, next.sections.sumOf { it.shots.size })
+        assertEquals(StoryboardEngine.resolveId(s0, "#3"), r.patches.single().id)
+        assertEquals(null, StoryboardEngine.resolveId(s0, "shot 9"))
+    }
+
+    @Test fun `a full rewrite keeps the rider's hand edits and changes the rest`() {
+        val s0 = StoryboardEngine.parse(first, null)!!.script!!
+        val id = s0.sections.flatMap { it.shots }[1].id!!
+        val mine = com.ridetrack.app.studio.storyboard.ShotEdits.edit(s0, id) { it.copy(action = "My own words") }
+        val rewrite = mine.copy(sections = mine.sections.map { sec -> sec.copy(shots = sec.shots.map { sh -> sh.copy(board = sh.board!!.copy(action = "Gemini's words", durationMs = 3_000)) }) })
+        val merged = StoryboardEngine.merge(mine, rewrite)
+        val shot = merged.sections.flatMap { it.shots }.first { it.id == id }
+        assertEquals("My own words", shot.board!!.action)
+        assertEquals(3_000L, shot.board!!.durationMs)
+        assertEquals(setOf(ShotFields.ACTION), shot.locked)
+        assertEquals("Gemini's words", StoryboardEngine.merge(mine, rewrite, setOf("$id.action")).sections.flatMap { it.shots }.first { it.id == id }.board!!.action)
+        assertTrue(StoryboardEngine.diff(mine, mine).isEmpty())
+    }
+
+    @Test fun `going back to a version doesn't copy it, and a new change starts from it`() {
+        val s0 = StoryboardEngine.parse(first, null)!!.script!!
+        val s1 = s0.copy(title = "Two")
+        var chat = StoryboardChat("c", "t", 0, 0).withVersion(s0).withVersion(s1)
+        assertEquals(1, chat.currentIndex)
+        chat = chat.copy(current = 0)
+        assertEquals(2, chat.versions.size)
+        assertEquals(s0, chat.script)
+        chat = chat.withVersion(s0.copy(title = "Three"))
+        assertEquals(3, chat.versions.size)
+        assertEquals("Three", chat.script!!.title)
+        val back = StoryboardStore.readChat(org.json.JSONObject(StoryboardStore.write(listOf(chat.copy(current = 1, messages = listOf(ChatMessage(false, "x", 1, version = 2, changes = listOf("Title: Two"))))), Gear(), "2026-10", 1)).getJSONArray("chats").getJSONObject(0))!!
+        assertEquals(1, back.currentIndex)
+        assertEquals(listOf("Title: Two"), back.messages.single().changes)
+    }
+
+    @Test fun `the prompt asks for a shape that fits the idea, and questions before guessing`() {
+        val p = StoryboardEngine.prompt(StoryboardChat("c", "t", 0, 0), Gear(), null, "a reel about my chai stop", firstChat = true)
+        assertTrue("no fixed number of shots" in p && "ASK BEFORE GUESSING" in p && "ALWAYS return the whole updated" in p)
+    }
+
+    /** A script written back the way Gemini sends it. */
+    private fun storyboardJson(s: com.ridetrack.app.studio.Script): String = org.json.JSONObject()
+        .put("title", s.title).put("format", s.format.name.lowercase())
+        .put("sections", org.json.JSONArray().apply {
+            s.sections.forEach { sec ->
+                put(org.json.JSONObject().put("kind", sec.kind.name.lowercase()).put("text", sec.text ?: org.json.JSONObject.NULL).put("shots", org.json.JSONArray().apply {
+                    sec.shots.forEach { sh -> val b = sh.board!!; put(org.json.JSONObject().put("id", sh.id).put("action", b.action).put("framing", b.framing).put("camera", b.camera).put("mount", b.mount).put("riding", b.riding).put("sec", b.durationMs / 1000.0).put("audio", b.audio)
+                        .put("match", org.json.JSONObject().put("events", org.json.JSONArray(b.match.events)).put("words", org.json.JSONArray(b.match.words)).put("engine", b.match.engine).put("mustRecord", b.match.mustRecord))
+                        .apply { b.fallback?.let { f -> put("fallback", org.json.JSONObject().put("ideal", f.ideal).put("reason", f.reason).put("using", f.using)) } }) }
+                }))
+            }
+        }).toString()
 }

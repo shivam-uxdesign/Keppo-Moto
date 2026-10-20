@@ -41,6 +41,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -154,7 +155,7 @@ fun StoryboardListScreen(onBack: () -> Unit, onOpen: (String) -> Unit, onGear: (
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: () -> Unit, onOpenTemplate: (String) -> Unit) {
+fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: (version: Int?) -> Unit, onOpenTemplate: (String) -> Unit) {
     val c = appContainer()
     val context = LocalContext.current
     val chats by c.storyboard.chats.collectAsStateWithLifecycle()
@@ -167,6 +168,7 @@ fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: () -> Uni
     var busy by remember { mutableStateOf<String?>(null) }
     var making by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(false) }
+    var history by remember { mutableStateOf(false) }
     val recorder = remember { VoiceRecorder() }
     val list = rememberLazyListState()
     LaunchedEffect(chat?.messages?.size) { chat?.messages?.size?.takeIf { it > 0 }?.let { list.animateScrollToItem(it) } }
@@ -208,8 +210,9 @@ fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: () -> Uni
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = RtColors.TextPrimary) }
             Column(Modifier.weight(1f)) {
                 Text(chat?.title ?: "Storyboard", style = RtType.bodyStrong, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("Storyboard", style = RtType.caption, color = RtColors.TextSecondary)
+                Text(chat?.versions?.takeIf { it.isNotEmpty() }?.let { "Version ${chat.currentIndex + 1} of ${it.size}" } ?: "Storyboard", style = RtType.caption, color = RtColors.TextSecondary)
             }
+            if ((chat?.versions?.size ?: 0) > 1) TextButton(onClick = { history = true }) { Text("Versions") }
         }
         LazyColumn(Modifier.weight(1f), state = list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (chat == null || chat.messages.isEmpty()) item {
@@ -237,7 +240,7 @@ fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: () -> Uni
                                 }
                             }
                         }
-                        m.version?.let { v -> chat.versions.getOrNull(v - 1)?.let { s -> StoryboardCard(s, v, onReview, making) {
+                        m.version?.let { v -> chat.versions.getOrNull(v - 1)?.let { s -> StoryboardCard(s, v, m.changes, current = v - 1 == chat.currentIndex, onUse = { c.storyboard.update(chatId) { it.copy(current = v - 1) } }, onReview = { onReview(v) }, making = making) {
                             if (making) return@StoryboardCard
                             making = true
                             scope.launch {
@@ -260,7 +263,7 @@ fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: () -> Uni
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             TextField(
                 value = text, onValueChange = { text = it },
-                placeholder = { Text(if (recording) "Listening… let go to stop" else if (chat?.script == null) "Describe your Reel idea…" else "Describe a change…") },
+                placeholder = { Text(if (recording) "Listening… let go to stop" else if (chat?.script == null) "Describe your Reel idea…" else if (chat.versions.size > 1) "Change version ${chat.currentIndex + 1}…" else "Describe a change…") },
                 modifier = Modifier.weight(1f), shape = RoundedCornerShape(24.dp), maxLines = 5,
                 colors = TextFieldDefaults.colors(focusedContainerColor = RtColors.Surface, unfocusedContainerColor = RtColors.Surface, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent),
             )
@@ -278,6 +281,32 @@ fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: () -> Uni
             ) { Icon(Icons.Rounded.ArrowUpward, "Send", tint = RtColors.OnPrimary) }
         }
     }
+    if (history && chat != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { history = false },
+            title = { Text("Versions") },
+            text = {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(chat.versions.indices.reversed().toList()) { i ->
+                        val v = chat.versions[i]
+                        val made = chat.messages.firstOrNull { it.version == i + 1 }
+                        val what = made?.changes?.takeIf { it.isNotEmpty() }?.let { ch -> ch.take(3).joinToString("\n") + if (ch.size > 3) "\n+${ch.size - 3} more" else "" }
+                            ?: if (i == 0) "First draft" else made?.let { "From the chat" } ?: "Your edit on the shot cards"
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (i == chat.currentIndex) RtColors.PrimaryContainer else RtColors.Surface)
+                                .clickable(role = Role.Button, onClickLabel = "Use version ${i + 1}") { c.storyboard.update(chatId) { it.copy(current = i) }; history = false }.padding(12.dp),
+                        ) {
+                            Text("Version ${i + 1}" + if (i == chat.currentIndex) " · current" else "", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+                            Text("${Placeholders.shots(v).size} shots · ${v.totalMs / 1000} s", style = RtType.caption, color = RtColors.TextSecondary)
+                            Text(what, style = RtType.caption, color = RtColors.TextSecondary)
+                            Text("Review shots", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { history = false; onReview(i + 1) }.padding(top = 6.dp))
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { history = false }) { Text("Close") } },
+        )
+    }
 }
 
 @Composable
@@ -293,29 +322,66 @@ private fun Bubble(rider: Boolean, text: String, voiceMs: Long? = null) {
     }
 }
 
-/** The storyboard in a reply: its parts in colour, the music note, Review shots and Make template. */
+/**
+ * The storyboard in a reply: what changed from the version before (worked out by the app, not
+ * Gemini's say-so), every shot in its part, the music note, and Review shots / Make template. An
+ * older version says so and can be made the current one.
+ */
 @Composable
-fun StoryboardCard(s: com.ridetrack.app.studio.Script, version: Int, onReview: () -> Unit, making: Boolean, onMake: () -> Unit) {
+fun StoryboardCard(
+    s: com.ridetrack.app.studio.Script, version: Int, changes: List<String>, current: Boolean,
+    onUse: () -> Unit, onReview: () -> Unit, making: Boolean, onMake: () -> Unit,
+) {
     val shots = Placeholders.shots(s)
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(RtColors.Surface).border(1.dp, RtColors.Outline, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("STORYBOARD · VERSION $version", style = RtType.label, color = RtColors.Primary)
+    var all by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(RtColors.Surface)
+            .border(1.dp, if (current) RtColors.Primary else RtColors.Outline, RoundedCornerShape(20.dp)).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("STORYBOARD · VERSION $version" + if (current) " · CURRENT" else "", style = RtType.label, color = if (current) RtColors.Primary else RtColors.TextTertiary, modifier = Modifier.weight(1f))
+            if (!current) Text("Use this", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onUse).padding(4.dp))
+        }
         Text(s.title, style = RtType.headline, color = RtColors.TextPrimary)
-        Text("${s.format.label} · ${s.totalMs / 1000} s · ${shots.size} shots · ${shots.count { !it.second.board!!.riding || it.second.board!!.match.mustRecord }} to film", style = RtType.caption, color = RtColors.TextSecondary)
+        Text("${s.format.label} · ${s.totalMs / 1000} s · ${shots.size} shot${if (shots.size != 1) "s" else ""} · ${shots.count { !it.second.board!!.riding || it.second.board!!.match.mustRecord }} to film", style = RtType.caption, color = RtColors.TextSecondary)
+        if (changes.isNotEmpty()) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(RtColors.SurfaceRaised).padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("WHAT CHANGED", style = RtType.label, color = RtColors.TextTertiary)
+                changes.forEach { ch ->
+                    Text(ch, style = RtType.caption, color = when { ch.startsWith("Removed") -> RtColors.Error; ch.startsWith("Added") -> RtColors.Ok; else -> RtColors.TextPrimary })
+                }
+            }
+        }
         Row(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             s.sections.forEachIndexed { i, sec -> Box(Modifier.weight(sec.shots.sumOf { it.durMs }.toFloat().coerceAtLeast(1f)).fillMaxSize().background(sectionColor(i))) }
         }
+        val limit = if (all) Int.MAX_VALUE else 8
+        var n = 0
         s.sections.forEachIndexed { i, sec ->
-            Row(verticalAlignment = Alignment.Top) {
-                Box(Modifier.padding(top = 6.dp).size(8.dp).background(sectionColor(i), CircleShape))
-                Spacer(Modifier.size(10.dp))
-                Text((sec.text ?: sec.kind.label) + " · ${sec.shots.size} shot${if (sec.shots.size > 1) "s" else ""}", style = RtType.body, color = RtColors.TextPrimary)
+            if (n >= limit) return@forEachIndexed
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).background(sectionColor(i), CircleShape))
+                Spacer(Modifier.size(8.dp))
+                Text((sec.text ?: sec.kind.label).uppercase(java.util.Locale.US), style = RtType.label, color = RtColors.TextSecondary)
+            }
+            sec.shots.forEach { sh ->
+                val b = sh.board ?: return@forEach
+                if (n >= limit) return@forEach
+                n++
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.Top) {
+                    Text("#${Placeholders.number(s, sh.id!!).trimStart('0')}", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.widthIn(min = 28.dp))
+                    Text(b.action, style = RtType.caption, color = RtColors.TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(String.format(java.util.Locale.US, "%.1f s", b.durationMs / 1000.0), style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.padding(start = 8.dp))
+                }
             }
         }
-        s.musicNote?.let { n ->
+        if (shots.size > 8) Text(if (all) "Show less" else "Show all ${shots.size} shots", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { all = !all }.padding(vertical = 2.dp))
+        s.musicNote?.let { m ->
             Row(verticalAlignment = Alignment.Top) {
                 Icon(Icons.Rounded.MusicNote, null, tint = RtColors.TextSecondary, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.size(8.dp))
-                Text("Music: $n", style = RtType.caption, color = RtColors.TextSecondary)
+                Text("Music: $m", style = RtType.caption, color = RtColors.TextSecondary)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

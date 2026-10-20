@@ -26,6 +26,8 @@ data class ChatMessage(
     val version: Int? = null,
     /** A template made at this point. */
     val templateId: String? = null,
+    /** What this reply's version changed, worked out by the app from the two versions ("Removed shot 3: …"). */
+    val changes: List<String> = emptyList(),
 )
 
 /** A memory change shown as a chip: what it says, and what Undo puts back. */
@@ -59,8 +61,14 @@ data class StoryboardChat(
     val templateIds: List<String> = emptyList(),
     /** Gemini's raw answers, for Send details. */
     val raw: List<String> = emptyList(),
+    /** The version being worked on (index into [versions]); -1 = the newest. Going back doesn't copy it. */
+    val current: Int = -1,
 ) {
-    val script: Script? get() = versions.lastOrNull()
+    val currentIndex: Int get() = if (current in versions.indices) current else versions.lastIndex
+    val script: Script? get() = versions.getOrNull(currentIndex)
+
+    /** [s] as a new version, made the current one (older versions stay in the history). */
+    fun withVersion(s: Script): StoryboardChat = copy(versions = versions + s, current = versions.size)
 }
 
 /** What Gemini answered: the chat reply, a full script or patches, memory changes, one question. */
@@ -76,6 +84,8 @@ data class StoryboardReply(
     val unlock: Set<String> = emptySet(),
     /** Asked to save the change as a new template (true) or update this one (false); null = not said. */
     val newVersion: Boolean? = null,
+    /** What Gemini says it changed; checked against the real difference. */
+    val claimed: List<String> = emptyList(),
 )
 
 /** A change to one shot: update some fields, insert a new shot after one, or delete it. */
@@ -95,6 +105,13 @@ object StoryboardEngine {
     fun prompt(chat: StoryboardChat, gear: Gear, style: StyleContext?, text: String, firstChat: Boolean): String = buildString {
         appendLine("You are Keppo Studio's storyboard writer for a motorcycle rider's Instagram Reels and Stories.")
         appendLine("The rider describes a Reel idea; you turn it into a storyboard script: sections, and for each shot exactly what to film.")
+        appendLine("SHAPE THE STORY TO THE IDEA:")
+        appendLine("- There is no fixed number of shots or sections. Use as many shots as this idea needs: one continuous shot, 3 quick cuts, or 15+ for a step-by-step. Never pad or trim to a pattern, and never copy the shape of an example.")
+        appendLine("- Use only the sections the story needs (one section is fine). Section kinds: hook, setup, build, peak, turn, payoff, ending.")
+        appendLine("- Lengths follow the idea: a punchy Reel is 7–20 s, a story or tutorial can run to the format's limit (Reel 90 s, Story 60 s, Short 60 s).")
+        appendLine("ASK BEFORE GUESSING:")
+        appendLine("- Before the first draft, if the idea leaves out something that would change the plan a lot (where it's filmed, roughly how long, whether the rider talks on camera or uses voice-over, the feel, who it's for), ask about it instead of drafting. One question per answer, with 2–4 short choices that fit THIS idea; at most 3 questions in a row, then draft with sensible guesses and say what you assumed.")
+        appendLine("- If the idea is already clear enough, draft right away. After a draft, ask a question only when it really matters.")
         appendLine("RULES:")
         appendLine("- Only plan shots the rider's gear can capture. If the ideal gear isn't owned, plan the closest alternative and fill \"fallback\" (ideal, reason, using). Never silently drop a shot.")
         appendLine("- Every shot must be filmable solo unless the gear says a helper is available.")
@@ -102,10 +119,12 @@ object StoryboardEngine {
         appendLine("- Be specific enough that two people would film nearly the same shot: who, what moves, from where, what must be in frame.")
         appendLine("- Fill gaps sensibly (\"Step one: the ___\" becomes a fitting name) and say so in the reply.")
         appendLine("- The rider's style below is the default; what they ask for in this chat wins (without changing the style).")
-        appendLine("- Keep the reply short and friendly. Ask at most ONE question, only if it really matters, with up to 4 choices.")
+        appendLine("- Keep the reply short and friendly.")
         appendLine("- On-screen text can be anything (titles, step names, jokes): list it in \"texts\", each with the shot it starts on.")
         appendLine("- Story pieces may have a voice-over line per shot in \"say\", in the rider's own language (Hinglish in English letters, the way people text it).")
         appendLine("- Never change a field marked LOCKED unless the rider asks for that exact change; then list it in \"unlock\" (\"s3.action\").")
+        appendLine("- The rider sees shots numbered #1, #2… in order. \"Shot 3\", \"clip 3\" or \"the third one\" means #3; find its id in the script below.")
+        appendLine("- To change the storyboard, ALWAYS return the whole updated \"script\": keep the id of every shot you keep, drop the ones removed, give new shots new ids. List what you changed in \"changes\" (\"Removed #3: the tunnel exit\"). If nothing in the storyboard changes, \"script\" is null and \"changes\" is empty.")
         appendLine("- Mentioned gear changes (\"I bought a GoPro\", \"no tripod any more\") go in \"memory\", each with a short confirm text.")
         appendLine()
         appendLine("RIDER'S GEAR: ${gear.describe()}")
@@ -116,7 +135,7 @@ object StoryboardEngine {
         }
         chat.script?.let { s ->
             appendLine()
-            appendLine("THE SCRIPT SO FAR (change it with \"patches\" only; keep approved parts as they are):")
+            appendLine("THE CURRENT SCRIPT (return it whole, changed, when the rider asks for a change; keep everything they didn't ask to change exactly as it is):")
             appendLine(describe(s))
         }
         val recent = chat.messages.takeLast(HISTORY)
@@ -129,14 +148,13 @@ object StoryboardEngine {
         appendLine("RIDER NOW: $text")
         appendLine()
         appendLine(
-            "Reply with JSON only: {\"reply\":\"...\",\"script\":SCRIPT or null,\"patches\":[...],\"memory\":[...],\"styleSuggestion\":null,\"needsClarification\":null,\"unlock\":[],\"newVersion\":null}. " +
-                "SCRIPT (only when there's no script yet, or the rider asks for a new one): {\"title\":\"...\",\"format\":\"reel|story|short\",\"musicNote\":\"...\"," +
+            "Reply with JSON only: {\"reply\":\"...\",\"script\":SCRIPT or null,\"changes\":[\"...\"],\"memory\":[...],\"styleSuggestion\":null,\"needsClarification\":null,\"unlock\":[],\"newVersion\":null}. " +
+                "SCRIPT (the first draft, and the whole updated script after any change): {\"title\":\"...\",\"format\":\"reel|story|short\",\"musicNote\":\"...\"," +
                 "\"sections\":[{\"kind\":\"hook|setup|build|peak|turn|payoff|ending\",\"text\":\"on-screen text at its start or null\",\"shots\":[SHOT]}],\"texts\":[{\"text\":\"...\",\"shot\":\"s1\",\"sec\":2}]}. " +
                 "SHOT: {\"id\":\"s1\",\"action\":\"...\",\"framing\":\"extreme close-up|close-up|medium|wide\",\"angle\":\"...\",\"movement\":\"...\",\"mustShow\":\"...\"," +
                 "\"camera\":\"phone back|phone front|...\",\"mount\":\"handlebar|tripod at ...|handheld|...\",\"riding\":true,\"fallback\":{\"ideal\":\"...\",\"reason\":\"...\",\"using\":\"...\"} or null," +
                 "\"sec\":1.5,\"say\":\"voice-over line or null\",\"audio\":\"engine|music|voice\",\"transition\":\"cut|whip|fade|null\"," +
                 "\"match\":{\"events\":[\"strong acceleration\"],\"words\":[\"tunnel\"],\"minSec\":1,\"engine\":true,\"mustRecord\":false}}. " +
-                "PATCH: {\"op\":\"update\",\"id\":\"s3\",\"fields\":{SHOT fields to change}} | {\"op\":\"insert\",\"after\":\"s3\",\"section\":\"build\",\"shot\":SHOT} | {\"op\":\"delete\",\"id\":\"s5\"}. " +
                 "MEMORY: {\"op\":\"add|update|remove\",\"kind\":\"camera|mount|audio|extra|helper\",\"name\":\"tripod\",\"detail\":\"...\",\"confirm\":\"Added: tripod\"}. " +
                 "needsClarification: {\"question\":\"...\",\"choices\":[\"...\"]}. newVersion: true when the rider asks for a new version or a different take, false when they ask to change this one.",
         )
@@ -150,7 +168,7 @@ object StoryboardEngine {
             sec.shots.forEach { sh ->
                 val b = sh.board
                 if (b == null) appendLine("  ${sh.id ?: "-"}: filmed clip, ${sh.durMs / 1000.0} s (keep)")
-                else appendLine("  ${sh.id}: ${b.action} | ${b.framing} | ${b.camera} on ${b.mount} | ${b.durationMs / 1000.0} s" +
+                else appendLine("  #${Placeholders.number(s, sh.id!!).trimStart('0')} id ${sh.id}: ${b.action} | ${b.framing} | ${b.camera} on ${b.mount} | ${b.durationMs / 1000.0} s" +
                     (b.say?.let { " | say \"$it\"" } ?: "") + (if (sh.clip.isNotEmpty()) " | FILMED (keep)" else "") +
                     sh.locked.takeIf { it.isNotEmpty() }?.let { " | LOCKED: ${it.joinToString()}" }.orEmpty())
             }
@@ -169,7 +187,12 @@ object StoryboardEngine {
         val patches = o.optJSONArray("patches")?.let { p -> (0 until p.length()).mapNotNull { patchOf(p.optJSONObject(it)) } }.orEmpty()
         // Patches to shots that don't exist are refused, not guessed.
         val ids = current?.sections?.flatMap { it.shots }?.mapNotNull { it.id }?.toSet().orEmpty()
-        val okPatches = patches.filter { p -> when (p.op) { "insert" -> p.after == null || p.after in ids; else -> p.id in ids } }
+        val okPatches = patches.mapNotNull { p ->
+            when (p.op) {
+                "insert" -> if (p.after == null) p else current?.let { resolveId(it, p.after) }?.let { p.copy(after = it) }
+                else -> current?.let { resolveId(it, p.id) }?.let { p.copy(id = it) }
+            }
+        }.filter { p -> when (p.op) { "insert" -> p.after == null || p.after in ids; else -> p.id in ids } }
         val q = o.optJSONObject("needsClarification")
         StoryboardReply(
             reply = text,
@@ -181,6 +204,7 @@ object StoryboardEngine {
             choices = q?.optJSONArray("choices")?.let { c -> (0 until c.length()).map { c.optString(it) }.filter { it.isNotBlank() }.take(4) }.orEmpty(),
             unlock = o.optJSONArray("unlock")?.let { u -> (0 until u.length()).map { u.optString(it) }.toSet() }.orEmpty(),
             newVersion = if (o.has("newVersion") && !o.isNull("newVersion")) o.optBoolean("newVersion") else null,
+            claimed = o.optJSONArray("changes")?.let { c -> (0 until c.length()).map { c.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
         )
     }.getOrNull()
 
@@ -270,9 +294,14 @@ object StoryboardEngine {
 
     private fun patchOf(o: JSONObject?): Patch? {
         o ?: return null
-        val op = o.optString("op").lowercase(Locale.US).takeIf { it in listOf("update", "insert", "delete") } ?: return null
+        val op = when (o.optString("op").lowercase(Locale.US)) {
+            "update", "edit", "change", "modify" -> "update"
+            "insert", "add" -> "insert"
+            "delete", "remove", "drop", "cut" -> "delete"
+            else -> return null
+        }
         return Patch(
-            op, o.optString("id").takeIf { it.isNotBlank() }, o.optString("after").takeIf { it.isNotBlank() },
+            op, (o.optString("id").takeIf { it.isNotBlank() } ?: o.optString("shot").takeIf { it.isNotBlank() && o.optJSONObject("shot") == null }), o.optString("after").takeIf { it.isNotBlank() },
             SectionKind.of(o.optString("section")), o.optJSONObject("fields") ?: o.optJSONObject("shot") ?: JSONObject(),
         )
     }
@@ -341,6 +370,89 @@ object StoryboardEngine {
         // A filmed shot keeps its footage and length.
         if (sh.clip.isNotEmpty()) n = n.copy(durationMs = b.durationMs)
         return sh.copy(board = n, outMs = if (sh.clip.isEmpty()) sh.inMs + n.durationMs else sh.outMs)
+    }
+
+    /**
+     * The storyboard after a reply: the first draft; Gemini's whole updated script laid over the
+     * current one; or (older answers) patches applied. Null when the reply changes nothing.
+     */
+    fun next(base: Script?, r: StoryboardReply): Script? = when {
+        r.script != null && base == null -> r.script
+        r.script != null && base != null -> merge(base, r.script, r.unlock)
+        base != null && r.patches.isNotEmpty() -> apply(base, r.patches, r.unlock)
+        else -> null
+    }
+
+    /** "s7", "3", "#3", "shot 3": the shot's id, as the rider numbers shots on screen; null if there's none. */
+    fun resolveId(s: Script, raw: String?): String? {
+        val t = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (s.sections.any { sec -> sec.shots.any { it.id == t } }) return t
+        val n = Regex("\\d+").find(t)?.value?.toIntOrNull() ?: return null
+        return Placeholders.shots(s).getOrNull(n - 1)?.second?.id
+    }
+
+    /**
+     * Gemini's whole updated script laid over [old]: fields the rider edited by hand stay theirs
+     * (unless [unlock] names them), filmed shots keep their footage, ids it reused stay the same.
+     */
+    fun merge(old: Script, new: Script, unlock: Set<String> = emptySet()): Script {
+        val before = old.sections.flatMap { it.shots }.filter { it.id != null }.associateBy { it.id!! }
+        val out = new.copy(sections = new.sections.map { sec ->
+            sec.copy(shots = sec.shots.map { sh ->
+                val was = before[sh.id] ?: return@map sh
+                val b = sh.board
+                val wb = was.board
+                if (b == null || wb == null) return@map was
+                fun keep(field: String) = field in was.locked && "${sh.id}.$field" !in unlock
+                val n = b.copy(
+                    action = if (keep(ShotFields.ACTION)) wb.action else b.action,
+                    framing = if (keep(ShotFields.FRAMING)) wb.framing else b.framing,
+                    mount = if (keep(ShotFields.MOUNT)) wb.mount else b.mount,
+                    camera = if (keep(ShotFields.CAMERA)) wb.camera else b.camera,
+                    durationMs = if (keep(ShotFields.DURATION) || was.clip.isNotEmpty()) wb.durationMs else b.durationMs,
+                    say = if (keep(ShotFields.SAY)) wb.say else b.say,
+                )
+                sh.copy(board = n, locked = was.locked - unlock.filter { it.startsWith("${sh.id}.") }.map { it.substringAfter('.') }.toSet(),
+                    clip = was.clip, inMs = if (was.clip.isNotEmpty()) was.inMs else 0, outMs = if (was.clip.isNotEmpty()) was.outMs else n.durationMs)
+            })
+        })
+        return fit(out)
+    }
+
+    /** What changed from [a] to [b], in the rider's words and shot numbers. Empty = the same storyboard. */
+    fun diff(a: Script, b: Script): List<String> {
+        val out = ArrayList<String>()
+        val sa = Placeholders.shots(a).map { it.second }
+        val sb = Placeholders.shots(b).map { it.second }
+        val ia = sa.mapNotNull { it.id }.toSet()
+        val ib = sb.mapNotNull { it.id }.toSet()
+        fun num(s: Script, id: String) = "#" + Placeholders.number(s, id).trimStart('0')
+        fun short(t: String) = if (t.length > 48) t.take(46).trimEnd() + "…" else t
+        if (a.title != b.title) out += "Title: ${b.title}"
+        sa.filter { it.id !in ib }.forEach { out += "Removed ${num(a, it.id!!)}: ${short(it.board!!.action)}" }
+        sb.filter { it.id !in ia }.forEach { out += "Added ${num(b, it.id!!)}: ${short(it.board!!.action)}" }
+        sb.filter { it.id in ia }.forEach { n ->
+            val o = sa.first { it.id == n.id }
+            val ob = o.board!!
+            val nb = n.board!!
+            val what = buildList {
+                if (ob.action != nb.action) add("what to film")
+                if (ob.framing != nb.framing) add("framing")
+                if (ob.camera != nb.camera || ob.mount != nb.mount) add("camera")
+                if (ob.durationMs != nb.durationMs) add(String.format(Locale.US, "%.1f s → %.1f s", ob.durationMs / 1000.0, nb.durationMs / 1000.0))
+                if (ob.say != nb.say) add(if (nb.say == null) "no voice-over" else "voice-over line")
+                if (ob.riding != nb.riding || ob.audio != nb.audio || ob.angle != nb.angle || ob.movement != nb.movement || ob.mustShow != nb.mustShow) add("details")
+            }
+            if (what.isNotEmpty()) out += "${num(b, n.id!!)}: ${what.joinToString(", ")}"
+        }
+        val keptA = sa.mapNotNull { it.id }.filter { it in ib }
+        val keptB = sb.mapNotNull { it.id }.filter { it in ia }
+        if (keptA != keptB) out += "New order"
+        if (a.sections.map { it.kind to it.text } != b.sections.map { it.kind to it.text }) out += "Parts: " + b.sections.joinToString(" · ") { it.text ?: it.kind.label }
+        if (a.texts != b.texts) out += "On-screen text"
+        if (a.musicNote != b.musicNote) out += "Music: ${b.musicNote ?: "none"}"
+        if (a.format != b.format) out += "Format: ${b.format.label}"
+        return out
     }
 
     /** The gear after Gemini's memory updates, and the chips to show (each with what Undo restores). */
