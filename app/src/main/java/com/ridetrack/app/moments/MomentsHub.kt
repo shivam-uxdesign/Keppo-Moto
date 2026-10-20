@@ -227,13 +227,18 @@ class MomentsHub {
     // The voice's crisp part (1–4 kHz), where wind is weakest: above its own background, and the
     // helmet mic against the engine mic there. Logged with each mic line (peaks since the last).
     private val highBackground = BackgroundLevel(8_000L)
-    private val highLift = com.ridetrack.telemetry.moments.TwoMicLift()
+    private val highLift = com.ridetrack.telemetry.moments.HighBandLift()
+    /** The latest crisp-band lift (two mics), going into the next chunk for the speech check. */
+    @Volatile private var latestHighLift: Float? = null
+    private val _micHighLift = MutableStateFlow<Float?>(null)
+    /** How far the helmet mic stands out in the crisp band (dB), for the HUD meter. */
+    val micHighLift: StateFlow<Float?> = _micHighLift.asStateFlow()
     private var highPeak: Float? = null
     private var highLiftPeak: Float? = null
     fun reportHigh(timeMillis: Long, voiceDb: Float, engineDb: Float?) = synchronized(highBackground) {
         val bg = if (_speaking.value) highBackground.current else highBackground.onLevel(timeMillis, voiceDb)
         highPeak = maxOf(highPeak ?: -99f, voiceDb - bg)
-        engineDb?.let { e -> highLiftPeak = maxOf(highLiftPeak ?: -99f, highLift.onLevels(timeMillis, voiceDb, e)) }
+        latestHighLift = engineDb?.let { e -> highLift.onLevels(timeMillis, voiceDb, e).also { highLiftPeak = maxOf(highLiftPeak ?: -99f, it) } }
     }
 
     /** " · high +6 dB · high lift +4 dB" since the last call, for the mic line; empty before any audio. */
@@ -300,7 +305,7 @@ class MomentsHub {
     fun reportLevel(timeMillis: Long, levelDb: Float, chunkMillis: Long, voice: Float) {
         val chunk = synchronized(levels) {
             val bg = if (_speaking.value) background.current else background.onLevel(timeMillis, levelDb)
-            VoiceChunk(timeMillis, levelDb, bg, chunkMillis, voice, lift).also {
+            VoiceChunk(timeMillis, levelDb, bg, chunkMillis, voice, lift, latestHighLift.takeIf { !_voiceOnEngineSide.value }).also {
                 levels += it
                 if (levels.size > MAX_LEVELS) levels.subList(0, levels.size - MAX_LEVELS).clear()
             }
@@ -314,7 +319,9 @@ class MomentsHub {
             }
         }
         _wind.value = com.ridetrack.telemetry.moments.VoiceInWind.wind(chunk.backgroundDb)
-        _voiceLike.value = voice >= com.ridetrack.telemetry.moments.VoiceInWind.voiceMin(_wind.value)
+        _voiceLike.value = voice >= com.ridetrack.telemetry.moments.VoiceInWind.voiceMin(_wind.value) ||
+            (chunk.highLiftDb ?: -99f) >= com.ridetrack.telemetry.moments.HighBandLift.SPEECH_DB
+        _micHighLift.value = chunk.highLiftDb
         _micLift.value = chunk.liftDb
         _micLevel.value = chunk.aboveDb
     }
@@ -323,6 +330,9 @@ class MomentsHub {
 
     fun clearLevel() {
         _micLevel.value = null
+        _micHighLift.value = null
+        latestHighLift = null
+        synchronized(highBackground) { highLift.reset() }
         _micLift.value = null
         _wind.value = 0f
         lift = null
@@ -416,6 +426,6 @@ data class TwoMicLevels(val voiceDb: Float, val engineDb: Float, val kind: TwoMi
  * One audio chunk: its level in the voice range and the background then (dBFS), how voice-like
  * it is (0..1), and with two mics how much the helmet mic stands out from the engine mic ([liftDb]).
  */
-data class VoiceChunk(val timeMillis: Long, val levelDb: Float, val backgroundDb: Float, val chunkMillis: Long, val voice: Float = 1f, val liftDb: Float? = null) {
+data class VoiceChunk(val timeMillis: Long, val levelDb: Float, val backgroundDb: Float, val chunkMillis: Long, val voice: Float = 1f, val liftDb: Float? = null, val highLiftDb: Float? = null) {
     val aboveDb: Float get() = levelDb - backgroundDb
 }

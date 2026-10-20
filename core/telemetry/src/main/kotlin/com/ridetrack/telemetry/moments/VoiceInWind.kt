@@ -43,3 +43,35 @@ class TwoMicLift(windowMillis: Long = 8_000L) {
 
     fun reset() = usual.reset()
 }
+
+/**
+ * Two mics, talking at speed: how much louder the helmet mic is than usual next to the engine
+ * mic in the voice's crisp band (1–4 kHz). Wind and engine reach both mics there about equally;
+ * a voice reaches the helmet mic alone. "Usual" is the 10th percentile of the last minute, so a
+ * rider who talks most of the time doesn't teach it their voice; the difference is averaged over
+ * [smoothMillis] first. Measured on the 20 Oct ride (16–100 km/h, the rider's own marks): talking
+ * +8 dB (median), silence +2; [SPEECH_DB] caught all 10 talking stretches with one false start in
+ * 4 minutes, where the voice detector read 0.00 throughout. Pure.
+ */
+class HighBandLift(windowMillis: Long = 60_000L, private val smoothMillis: Long = 100L) {
+    private val usual = BackgroundLevel(windowMillis, percentile = 0.1)
+    private val recent = ArrayDeque<Pair<Long, Float>>()
+
+    /** One chunk's 1–4 kHz levels (dBFS); returns the lift above usual (dB). */
+    fun onLevels(timeMillis: Long, voiceDb: Float, engineDb: Float): Float {
+        recent.addLast(timeMillis to (voiceDb - engineDb))
+        while (timeMillis - recent.first().first > smoothMillis) recent.removeFirst()
+        val diff = recent.map { it.second }.average().toFloat()
+        return diff - usual.onLevel(timeMillis, diff)
+    }
+
+    fun reset() {
+        recent.clear()
+        usual.reset()
+    }
+
+    companion object {
+        /** At or above this lift the chunk counts as talking. */
+        const val SPEECH_DB = 5f
+    }
+}

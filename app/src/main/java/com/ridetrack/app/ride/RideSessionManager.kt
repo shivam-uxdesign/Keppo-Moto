@@ -502,8 +502,12 @@ class RideSessionManager(
                 c.timeMillis, c.aboveDb, c.chunkMillis,
                 com.ridetrack.telemetry.moments.VoiceInWind.margin(margin, wind), c.voice,
                 com.ridetrack.telemetry.moments.VoiceInWind.voiceMin(wind), c.liftDb?.takeIf { rec.liftGuard.allowed(c.timeMillis) },
+                c.highLiftDb,
             )
-            if (rec.liftGuard.onChunk(c.timeMillis, c.voice, speaking)) {
+            // The crisp-band lift is a voice in its own right (the detector reads 0 at speed): the
+            // guard against "talking" with no voice in it mustn't count it as silence.
+            val voiceLike = if ((c.highLiftDb ?: -99f) >= com.ridetrack.telemetry.moments.HighBandLift.SPEECH_DB) 1f else c.voice
+            if (rec.liftGuard.onChunk(c.timeMillis, voiceLike, speaking)) {
                 rec.speech.reset()
                 momentsHub.reportLiftDistrusted(c.timeMillis)
                 momentsHub.log("voice: 30 s of \"speaking\" with no voice in it (helmet mic louder than the engine mic, but no words): engine or wind, not you. That rule is off for 5 min; are the mics swapped? (Settings › Moments › Two mics)")
@@ -573,6 +577,7 @@ class RideSessionManager(
             momentsHub.log(
                 "voice start: level ${db(latest.levelDb)} · background ${db(latest.backgroundDb)} (+${db(latest.aboveDb, false)}) · " +
                     "${"%.1f".format(Locale.US, rec.speech.sustainedMillis / 1000.0)} s sustained · voice ${"%.2f".format(Locale.US, latest.voice)} · " +
+                    (levels.mapNotNull { it.highLiftDb }.maxOrNull()?.let { "high lift +${it.roundToInt()} dB · " } ?: "") +
                     "margin +${margin.roundToInt()} dB · $speed",
             )
         } else if (!speaking && wasSpeaking) {

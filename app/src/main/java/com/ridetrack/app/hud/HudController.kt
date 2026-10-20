@@ -243,7 +243,8 @@ class HudController(
             micLevelDb = run {
                 val margin = VoiceInWind.margin(voice.value.second.marginDb, moments.wind.value)
                 val fromLift = moments.micLift.value?.let { it / VoiceInWind.LIFT_DB * margin }
-                listOfNotNull(moments.micLevel.value, fromLift).maxOrNull()
+                val fromHigh = moments.micHighLift.value?.let { it / com.ridetrack.telemetry.moments.HighBandLift.SPEECH_DB * margin }
+                listOfNotNull(moments.micLevel.value, fromLift, fromHigh).maxOrNull()
             },
             voiceMarginDb = VoiceInWind.margin(voice.value.second.marginDb, moments.wind.value),
             speaking = moments.speaking.value,

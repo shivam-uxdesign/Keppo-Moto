@@ -36,6 +36,8 @@ class SpeechGate(
      * [voiceMin]: how voice-like it must be (lower in wind, see [VoiceInWind]).
      * [liftDb]: with two mics, how much louder the helmet mic is than usual next to the engine
      * mic; wind and traffic reach both, a voice mostly the helmet one ([TwoMicLift]).
+     * [highLiftDb]: the same in the voice's crisp band over the last minute ([HighBandLift]): what
+     * still hears the rider at speed, where the voice detector reads 0.
      */
     fun onLevel(
         timeMillis: Long,
@@ -45,11 +47,13 @@ class SpeechGate(
         voice: Float = 1f,
         voiceMin: Float = VOICE_MIN,
         liftDb: Float? = null,
+        highLiftDb: Float? = null,
     ): Boolean {
         // Loud enough and voice-like; or, with two mics, the helmet mic standing out from the engine
         // mic on its own (wind and traffic reach both mics; the voice detector gives up in wind).
         val byLift = liftDb != null && liftDb >= VoiceInWind.LIFT_DB
-        val loud = (aboveDb >= marginDb && voice >= voiceMin) || byLift
+        val byHigh = highLiftDb != null && highLiftDb >= HighBandLift.SPEECH_DB
+        val loud = (aboveDb >= marginDb && voice >= voiceMin) || byLift || byHigh
         recent.addLast(Triple(timeMillis, chunkMillis, loud))
         while (recent.isNotEmpty() && timeMillis - recent.first().first >= startMillis) recent.removeFirst()
         val last = lastLoud
