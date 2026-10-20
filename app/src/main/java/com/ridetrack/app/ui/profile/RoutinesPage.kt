@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.AlertDialog
@@ -85,18 +86,27 @@ internal fun RoutinesPage(editing: String?, onEdit: (String?) -> Unit) {
     val save: (List<Routine>) -> Unit = { l -> scope.launch { c.settings.setRoutines(Routines.encode(l)) } }
     val r = list.firstOrNull { it.id == editing }
     if (editing != null && r != null) {
-        RoutineEditor(r, onChange = { n -> save(list.map { if (it.id == n.id) n else it }) }, onDelete = {
-            onEdit(null)
-            save(list.filterNot { it.id == r.id })
-        })
+        RoutineEditor(
+            r,
+            onTest = { scope.launch { c.routines.test(r) } },
+            onChange = { n -> save(list.map { if (it.id == n.id) n else it }) },
+            onDuplicate = {
+                val copy = r.copy(id = java.util.UUID.randomUUID().toString(), name = "${r.name} copy")
+                save(list.flatMap { if (it.id == r.id) listOf(it, copy) else listOf(it) })
+                onEdit(copy.id)
+            },
+            onDelete = {
+                onEdit(null)
+                save(list.filterNot { it.id == r.id })
+            },
+        )
     } else {
-        RoutineList(list, settings != null, save, onEdit)
+        RoutineList(list, settings != null, c.routines::lastRun, save, onEdit)
     }
 }
 
 @Composable
-private fun RoutineList(list: List<Routine>, loaded: Boolean, save: (List<Routine>) -> Unit, onEdit: (String?) -> Unit) {
-    val c = appContainer()
+internal fun RoutineList(list: List<Routine>, loaded: Boolean, lastRun: (String) -> String?, save: (List<Routine>) -> Unit, onEdit: (String?) -> Unit) {
     Text(
         "Things the phone does by itself when a ride starts, ends, or you arrive somewhere. Nothing needs a tap while you ride.",
         style = RtType.caption,
@@ -110,7 +120,7 @@ private fun RoutineList(list: List<Routine>, loaded: Boolean, save: (List<Routin
                 Column(Modifier.weight(1f)) {
                     Text(r.name.ifBlank { "Routine" }, style = RtType.bodyStrong, color = RtColors.TextPrimary)
                     Text(r.summary, style = RtType.caption, color = RtColors.TextSecondary)
-                    c.routines.lastRun(r.id)?.let { Text(it, style = RtType.caption, color = if (it.contains("didn't")) RtColors.Warning else RtColors.TextTertiary) }
+                    lastRun(r.id)?.let { Text(it, style = RtType.caption, color = if (it.contains("didn't")) RtColors.Warning else RtColors.TextTertiary) }
                 }
                 Spacer(Modifier.padding(start = RtDimens.sm))
                 Switch(
@@ -138,7 +148,7 @@ private fun RoutineList(list: List<Routine>, loaded: Boolean, save: (List<Routin
     }
     Spacer(Modifier.height(RtDimens.xs))
     SecondaryButton("New routine", icon = Icons.Rounded.Add, onClick = {
-        val n = Routine(name = "Ride start", trigger = RoutineTrigger.RIDE_START, actions = listOf(RoutineAction.ResumeMusic))
+        val n = Routine(name = "New routine", triggers = listOf(RoutineTrigger.RIDE_START), actions = emptyList())
         save(list + n)
         onEdit(n.id)
     })
@@ -175,14 +185,19 @@ private fun Permissions(list: List<Routine>) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RoutineEditor(r: Routine, onChange: (Routine) -> Unit, onDelete: () -> Unit) {
+internal fun RoutineEditor(r: Routine, onTest: () -> Unit, onChange: (Routine) -> Unit, onDuplicate: () -> Unit, onDelete: () -> Unit) {
     val context = LocalContext.current
-    val c = appContainer()
-    val scope = rememberCoroutineScope()
     var name by remember(r.id) { mutableStateOf(r.name) }
-    var adding by remember { mutableStateOf(false) }
+    var addingTrigger by remember { mutableStateOf(false) }
+    // The step dialog: adding (null) or changing step [stepAt].
+    var stepDialog by remember { mutableStateOf(false) }
+    var stepAt by remember { mutableStateOf<Int?>(null) }
     var pickingApp by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    val setStep: (RoutineAction) -> Unit = { a ->
+        val at = stepAt
+        onChange(r.copy(actions = if (at == null) r.actions + a else r.actions.mapIndexed { k, x -> if (k == at) a else x }))
+    }
 
     RtCard {
         OutlinedTextField(
@@ -192,16 +207,28 @@ private fun RoutineEditor(r: Routine, onChange: (Routine) -> Unit, onDelete: () 
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(RtDimens.md))
-        Label("When")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
-            RoutineTrigger.entries.forEach { t ->
-                Pick(t.short, r.trigger == t) {
-                    onChange(r.copy(trigger = t, actions = if (t == RoutineTrigger.ARRIVE) r.actions else r.actions - RoutineAction.EndRide))
-                }
+        ToggleRow("On", if (r.enabled) "Runs by itself" else "Off: kept, but never runs", r.enabled, { onChange(r.copy(enabled = it)) })
+    }
+
+    Spacer(Modifier.height(RtDimens.sm))
+    RtCard {
+        Label("When any of these happens")
+        if (r.triggers.isEmpty()) Text("Add a trigger so it can run.", style = RtType.caption, color = RtColors.Warning, modifier = Modifier.padding(vertical = 8.dp))
+        r.triggers.forEachIndexed { i, t ->
+            if (i > 0) HorizontalDivider(color = RtColors.Outline.copy(alpha = 0.6f))
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(t.label, style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
+                IconButton(onClick = {
+                    val left = r.triggers - t
+                    onChange(r.copy(triggers = left, actions = if (RoutineTrigger.ARRIVE in left) r.actions else r.actions - RoutineAction.EndRide))
+                }) { Icon(Icons.Rounded.Close, contentDescription = "Remove ${t.label}", tint = RtColors.TextSecondary) }
             }
+            if (t == RoutineTrigger.ARRIVE) PlaceEditor(r, onChange)
         }
-        if (r.trigger == RoutineTrigger.ARRIVE) PlaceEditor(r, onChange)
+        if (r.triggers.size < RoutineTrigger.entries.size) {
+            Spacer(Modifier.height(RtDimens.xs))
+            SecondaryButton("Add a trigger", icon = Icons.Rounded.Add, onClick = { addingTrigger = true })
+        }
     }
 
     Spacer(Modifier.height(RtDimens.sm))
@@ -212,34 +239,47 @@ private fun RoutineEditor(r: Routine, onChange: (Routine) -> Unit, onDelete: () 
             if (i > 0) HorizontalDivider(color = RtColors.Outline.copy(alpha = 0.6f))
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("${i + 1}", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.padding(end = RtDimens.sm))
-                Column(Modifier.weight(1f)) {
+                Column(
+                    Modifier.weight(1f).clickable(role = Role.Button, onClickLabel = "Change step") {
+                        stepAt = i
+                        if (a is RoutineAction.OpenApp) pickingApp = true else stepDialog = true
+                    },
+                ) {
                     Text(a.label, style = RtType.body, color = RtColors.TextPrimary)
                     hint(a)?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
-                    if (a is RoutineAction.MediaVolume) {
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
-                            listOf(30, 50, 70, 100).forEach { p ->
-                                Pick("$p%", a.percent == p) { onChange(r.copy(actions = r.actions.mapIndexed { k, x -> if (k == i) RoutineAction.MediaVolume(p) else x })) }
-                            }
-                        }
-                    }
+                    if (a is RoutineAction.EndRide && RoutineTrigger.ARRIVE !in r.triggers) Text("Only runs on arrival", style = RtType.caption, color = RtColors.Warning)
                 }
-                if (i > 0) {
-                    IconButton(onClick = { onChange(r.copy(actions = r.actions.toMutableList().apply { add(i - 1, removeAt(i)) })) }) {
-                        Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Move ${a.label} up", tint = RtColors.TextSecondary)
-                    }
+                IconButton(onClick = { onChange(r.copy(actions = r.actions.toMutableList().apply { add(i - 1, removeAt(i)) })) }, enabled = i > 0) {
+                    Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Move ${a.label} up", tint = if (i > 0) RtColors.TextSecondary else RtColors.TextTertiary.copy(alpha = 0.3f))
+                }
+                IconButton(onClick = { onChange(r.copy(actions = r.actions.toMutableList().apply { add(i + 1, removeAt(i)) })) }, enabled = i < r.actions.lastIndex) {
+                    Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Move ${a.label} down", tint = if (i < r.actions.lastIndex) RtColors.TextSecondary else RtColors.TextTertiary.copy(alpha = 0.3f))
                 }
                 IconButton(onClick = { onChange(r.copy(actions = r.actions.filterIndexed { k, _ -> k != i })) }) {
                     Icon(Icons.Rounded.Close, contentDescription = "Remove ${a.label}", tint = RtColors.TextSecondary)
                 }
             }
+            val amounts = when (a) {
+                is RoutineAction.MediaVolume -> listOf(30, 50, 70, 100).map { p -> "$p%" to (a.percent == p) to RoutineAction.MediaVolume(p) }
+                is RoutineAction.Wait -> listOf(5, 10, 30, 60).map { t -> "$t s" to (a.seconds == t) to RoutineAction.Wait(t) }
+                else -> emptyList()
+            }
+            if (amounts.isNotEmpty()) {
+                FlowRow(Modifier.padding(start = 20.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
+                    amounts.forEach { (chip, value) ->
+                        Pick(chip.first, chip.second) { onChange(r.copy(actions = r.actions.mapIndexed { k, x -> if (k == i) value else x })) }
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(RtDimens.xs))
-        SecondaryButton("Add a step", icon = Icons.Rounded.Add, onClick = { adding = true })
+        SecondaryButton("Add a step", icon = Icons.Rounded.Add, onClick = { stepAt = null; stepDialog = true })
     }
 
     Spacer(Modifier.height(RtDimens.md))
-    Row(horizontalArrangement = Arrangement.spacedBy(RtDimens.sm)) {
-        PrimaryButton("Test now", icon = Icons.Rounded.PlayArrow, onClick = { scope.launch { c.routines.test(r) } }, enabled = r.actions.isNotEmpty())
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.sm), verticalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
+        PrimaryButton("Test now", icon = Icons.Rounded.PlayArrow, onClick = onTest, enabled = r.actions.isNotEmpty())
+        SecondaryButton("Duplicate", onClick = onDuplicate)
         TextButton(onClick = { confirmDelete = true }) { Text("Delete", color = RtColors.Error) }
     }
     if (r.actions.any { it is RoutineAction.OpenApp || it == RoutineAction.OpenMaps }) {
@@ -247,19 +287,34 @@ private fun RoutineEditor(r: Routine, onChange: (Routine) -> Unit, onDelete: () 
         Text("Test now opens apps over this screen; come back with Back.", style = RtType.caption, color = RtColors.TextTertiary)
     }
 
-    if (adding) {
+    if (addingTrigger) {
         AlertDialog(
-            onDismissRequest = { adding = false },
-            title = { Text("Add a step") },
+            onDismissRequest = { addingTrigger = false },
+            title = { Text("Add a trigger") },
             text = {
                 Column {
-                    (Routines.choices(r.trigger) - r.actions.filter { it !is RoutineAction.MediaVolume }.toSet()).forEach { a ->
-                        Choice(a.label, hint(a)) { adding = false; onChange(r.copy(actions = r.actions + a)) }
+                    (RoutineTrigger.entries - r.triggers.toSet()).forEach { t ->
+                        Choice(t.label, triggerHint(t)) { addingTrigger = false; onChange(r.copy(triggers = r.triggers + t)) }
                     }
-                    Choice("Open an app…", "Any app on this phone") { adding = false; pickingApp = true }
                 }
             },
-            confirmButton = { TextButton(onClick = { adding = false }) { Text("Cancel") } },
+            confirmButton = { TextButton(onClick = { addingTrigger = false }) { Text("Cancel") } },
+        )
+    }
+    if (stepDialog) {
+        val at = stepAt
+        AlertDialog(
+            onDismissRequest = { stepDialog = false },
+            title = { Text(if (at == null) "Add a step" else "Change step ${at + 1}") },
+            text = {
+                Column {
+                    Routines.choices(r.triggers).forEach { a ->
+                        Choice(a.label.substringBefore(" 70%").substringBefore(" 10 s"), hint(a)) { stepDialog = false; setStep(a) }
+                    }
+                    Choice("Open an app…", "Any app on this phone") { stepDialog = false; pickingApp = true }
+                }
+            },
+            confirmButton = { TextButton(onClick = { stepDialog = false }) { Text("Cancel") } },
         )
     }
     if (pickingApp) {
@@ -278,7 +333,7 @@ private fun RoutineEditor(r: Routine, onChange: (Routine) -> Unit, onDelete: () 
             text = {
                 LazyColumn(Modifier.heightIn(max = 420.dp)) {
                     items(apps, key = { it.first }) { (pkg, label) ->
-                        Choice(label, null) { pickingApp = false; onChange(r.copy(actions = r.actions + RoutineAction.OpenApp(pkg, label))) }
+                        Choice(label, null) { pickingApp = false; setStep(RoutineAction.OpenApp(pkg, label)) }
                     }
                 }
             },
@@ -355,6 +410,12 @@ private fun Choice(title: String, sub: String?, onClick: () -> Unit) {
     }
 }
 
+private fun triggerHint(t: RoutineTrigger): String = when (t) {
+    RoutineTrigger.RIDE_START -> "From the app, the widget, the quick tile or auto-start"
+    RoutineTrigger.RIDE_END -> "Once the ride is saved"
+    RoutineTrigger.ARRIVE -> "A place you save, like home or the office"
+}
+
 private fun hint(a: RoutineAction): String? = when (a) {
     RoutineAction.ResumeMusic -> "Whatever you played last: YouTube Music, Spotify…"
     RoutineAction.PauseMusic -> "Pauses what's playing"
@@ -362,5 +423,6 @@ private fun hint(a: RoutineAction): String? = when (a) {
     RoutineAction.DoNotDisturb -> "Turned back off when the ride ends"
     is RoutineAction.MediaVolume -> "Put back when the ride ends"
     RoutineAction.EndRide -> "Stops recording and saves the ride"
+    is RoutineAction.Wait -> "Before the next step"
     is RoutineAction.OpenApp -> null
 }

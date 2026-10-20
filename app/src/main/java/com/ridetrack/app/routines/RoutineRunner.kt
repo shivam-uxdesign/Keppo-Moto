@@ -51,13 +51,14 @@ class RoutineRunner(
                 val started = !prev.isActive && now is RideState.Recording
                 val ended = prev.isActive && !now.isActive
                 prev = now
+                // Each routine runs on its own, so a long Wait doesn't hold up noticing the next change.
                 if (started) {
                     arrival = ArrivalWatch()
-                    run(RoutineTrigger.RIDE_START)
+                    scope.launch { run(scope, RoutineTrigger.RIDE_START) }
                 }
-                if (ended) {
+                if (ended) scope.launch {
                     undo()
-                    run(RoutineTrigger.RIDE_END)
+                    run(scope, RoutineTrigger.RIDE_END)
                 }
             }
         }
@@ -67,8 +68,8 @@ class RoutineRunner(
                 val lat = f?.latitude ?: return@collect
                 val lon = f.longitude ?: return@collect
                 val list = routines()
-                if (list.none { it.enabled && it.trigger == RoutineTrigger.ARRIVE }) return@collect
-                arrival.update(list, lat, lon, f.timeMillis).forEach { runSteps(it, it.runnable) }
+                if (list.none { it.enabled && RoutineTrigger.ARRIVE in it.triggers }) return@collect
+                arrival.update(list, lat, lon, f.timeMillis).forEach { r -> scope.launch { runSteps(r, r.runnable(RoutineTrigger.ARRIVE)) } }
             }
         }
     }
@@ -78,8 +79,8 @@ class RoutineRunner(
 
     private suspend fun routines() = Routines.decode(settings.settings.first().routines)
 
-    private suspend fun run(trigger: RoutineTrigger) {
-        routines().filter { it.enabled && it.trigger == trigger }.forEach { runSteps(it, it.runnable) }
+    private suspend fun run(scope: CoroutineScope, trigger: RoutineTrigger) {
+        routines().filter { it.enabled && trigger in it.triggers }.forEach { r -> scope.launch { runSteps(r, r.runnable(trigger)) } }
     }
 
     private suspend fun runSteps(r: Routine, steps: List<RoutineAction>, remember: Boolean = true) {
@@ -122,6 +123,10 @@ class RoutineRunner(
                 if (!nm.isNotificationPolicyAccessGranted) return false
                 if (remember && dndBefore == null) dndBefore = nm.currentInterruptionFilter
                 nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+                true
+            }
+            is RoutineAction.Wait -> {
+                delay(a.seconds * 1_000L)
                 true
             }
             RoutineAction.EndRide -> {
