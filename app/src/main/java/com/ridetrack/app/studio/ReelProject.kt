@@ -56,9 +56,14 @@ data class ReelProject(
     val seriesId: String? = null,
     /** When it was first shared or saved to the phone. */
     val postedAt: Long? = null,
+    /** A Storyboard template (placeholders to fill); null for an ordinary Reel. */
+    val template: TemplateInfo? = null,
 ) {
     val vibe: Vibe get() = options.vibe
 }
+
+/** A Storyboard template: its chat, the script version it was made from, how many shots, and which were filled by a suggestion (to confirm). */
+data class TemplateInfo(val chatId: String, val version: Int, val shots: Int, val suggested: Set<String> = emptySet())
 
 data class SavedTake(val startMs: Long, val durMs: Long, val file: String, val lines: List<CaptionLine>)
 
@@ -110,6 +115,7 @@ object ReelJson {
         put("ytDescription", p.youtubeDescription ?: JSONObject.NULL)
         put("seriesId", p.seriesId ?: JSONObject.NULL)
         put("postedAt", p.postedAt ?: JSONObject.NULL)
+        p.template?.let { t -> put("template", JSONObject().put("chat", t.chatId).put("version", t.version).put("shots", t.shots).put("suggested", org.json.JSONArray(t.suggested.toList()))) }
     }.toString()
 
     fun read(text: String): ReelProject? = runCatching {
@@ -176,6 +182,9 @@ object ReelJson {
             youtubeDescription = o.optStringOrNull("ytDescription"),
             seriesId = o.optStringOrNull("seriesId"),
             postedAt = o.optLongOrNull("postedAt"),
+            template = o.optJSONObject("template")?.let { t ->
+                TemplateInfo(t.optString("chat"), t.optInt("version", 1), t.optInt("shots"), t.optJSONArray("suggested")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }.orEmpty())
+            },
         )
     }.getOrNull()
 

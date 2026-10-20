@@ -27,9 +27,22 @@ enum class SectionKind(val label: String) {
     }
 }
 
-/** A part of one clip: [clip] is its moment id (or phone video id); times are ms into the clip. */
-data class ScriptShot(val clip: String, val inMs: Long, val outMs: Long) {
+/**
+ * A part of one clip: [clip] is its moment id (or phone video id); times are ms into the clip.
+ * A Storyboard shot not filmed yet has [clip] "" and its [board] (what to film); [id] names it for
+ * patches and filling, and [locked] lists the fields the rider edited by hand.
+ */
+data class ScriptShot(
+    val clip: String,
+    val inMs: Long,
+    val outMs: Long,
+    val id: String? = null,
+    val board: com.ridetrack.app.studio.storyboard.Storyboard? = null,
+    val locked: Set<String> = emptySet(),
+) {
     val durMs: Long get() = outMs - inMs
+    /** A storyboard shot still to film or fill. */
+    val placeholder: Boolean get() = clip.isEmpty() && board != null
 }
 
 /** One section: its [form] ("sound", "monologue", "loop", "stats"…), shots, on-screen text and why. */
@@ -61,11 +74,15 @@ data class Script(
     val variationOf: String? = null,
     /** An episode of this series (its id); null for an ordinary idea. */
     val series: String? = null,
+    /** Storyboard: text on the Reel, each starting on a shot. */
+    val texts: List<com.ridetrack.app.studio.storyboard.OnScreenText> = emptyList(),
+    /** Storyboard: what the music should do ("a dark build, the drop on the entry"). */
+    val musicNote: String? = null,
 ) {
     val totalMs: Long get() = sections.sumOf { s -> s.shots.sumOf { it.durMs } }
 
-    /** The clips it uses (moment or phone video ids), in order of first use. */
-    val clips: List<String> get() = sections.flatMap { s -> s.shots.map { it.clip } }.distinct()
+    /** The clips it uses (moment or phone video ids), in order of first use; placeholders aren't clips. */
+    val clips: List<String> get() = sections.flatMap { s -> s.shots.map { it.clip } }.filter { it.isNotEmpty() }.distinct()
 }
 
 /** One clip as the script writer sees it. [key] is the short name used in prompts ("c3"). */
@@ -740,14 +757,32 @@ object ScriptJson {
         .put("variationOf", s.variationOf ?: JSONObject.NULL)
         .put("series", s.series ?: JSONObject.NULL)
         .put("captions", JSONObject().apply { s.captions.forEach { (k, v) -> put(k, v) } })
+        .apply {
+            if (s.texts.isNotEmpty()) put("texts", com.ridetrack.app.studio.storyboard.StoryboardJson.writeTexts(s.texts))
+            s.musicNote?.let { put("musicNote", it) }
+        }
         .put("sections", JSONArray().apply {
             s.sections.forEach { sec ->
                 put(
                     JSONObject().put("kind", sec.kind.name).put("form", sec.form).put("text", sec.text ?: JSONObject.NULL).put("why", sec.why ?: JSONObject.NULL)
-                        .put("shots", JSONArray().apply { sec.shots.forEach { put(JSONObject().put("clip", it.clip).put("in", it.inMs).put("out", it.outMs)) } }),
+                        .put("shots", JSONArray().apply { sec.shots.forEach { put(shot(it)) } }),
                 )
             }
         })
+
+    /** One shot; storyboard fields only when it has them, so older readers see the same shape. */
+    private fun shot(sh: ScriptShot): JSONObject = JSONObject().put("clip", sh.clip).put("in", sh.inMs).put("out", sh.outMs).apply {
+        sh.id?.let { put("id", it) }
+        sh.board?.let { put("board", com.ridetrack.app.studio.storyboard.StoryboardJson.write(it)) }
+        if (sh.locked.isNotEmpty()) put("locked", JSONArray(sh.locked.toList()))
+    }
+
+    private fun readShot(x: JSONObject): ScriptShot = ScriptShot(
+        x.optString("clip"), x.getLong("in"), x.getLong("out"),
+        id = x.optString("id").takeIf { it.isNotEmpty() },
+        board = com.ridetrack.app.studio.storyboard.StoryboardJson.read(x.optJSONObject("board")),
+        locked = x.optJSONArray("locked")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }.orEmpty(),
+    )
 
     fun read(o: JSONObject?): Script? = o?.let {
         runCatching {
@@ -767,13 +802,15 @@ object ScriptJson {
                 variationOf = o.optStringOrNull("variationOf"),
                 series = o.optStringOrNull("series"),
                 captions = o.optJSONObject("captions")?.let { c -> c.keys().asSequence().associateWith { k -> c.optString(k) } }.orEmpty(),
+                texts = com.ridetrack.app.studio.storyboard.StoryboardJson.readTexts(o.optJSONArray("texts")),
+                musicNote = o.optStringOrNull("musicNote"),
                 sections = o.getJSONArray("sections").let { a ->
                     (0 until a.length()).mapNotNull { i ->
                         val so = a.getJSONObject(i)
                         val kind = SectionKind.of(so.optString("kind")) ?: return@mapNotNull null
                         Section(
                             kind, so.optString("form"),
-                            so.optJSONArray("shots")?.let { sh -> (0 until sh.length()).map { j -> sh.getJSONObject(j).let { x -> ScriptShot(x.getString("clip"), x.getLong("in"), x.getLong("out")) } } }.orEmpty(),
+                            so.optJSONArray("shots")?.let { sh -> (0 until sh.length()).map { j -> readShot(sh.getJSONObject(j)) } }.orEmpty(),
                             so.optStringOrNull("text"), so.optStringOrNull("why"),
                         )
                     }
