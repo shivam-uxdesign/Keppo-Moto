@@ -155,6 +155,12 @@ class RollingBuffer(private val capacityMicros: Long = 45_000_000L) {
     }
 }
 
-/** One line of the Moments diagnostics log: UTC time, then the message. */
+/**
+ * One line of the Moments diagnostics log: UTC time, then the message. A fixed pattern: Instant's
+ * own text drops the milliseconds on a whole second, and cutting it then crashed the ride.
+ */
 fun momentLogLine(wallMillis: Long, message: String): String =
-    java.time.Instant.ofEpochMilli(wallMillis).toString().substring(11, 23) + "Z  " + message.replace('\n', ' ')
+    LOG_TIME.format(java.time.Instant.ofEpochMilli(wallMillis)) + "Z  " + message.replace('\n', ' ')
+
+private val LOG_TIME: java.time.format.DateTimeFormatter =
+    java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS").withZone(java.time.ZoneOffset.UTC)

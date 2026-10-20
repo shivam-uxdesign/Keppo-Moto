@@ -67,4 +67,11 @@ class RollingBufferTest {
         val (v, _) = b.extract(0, 30_000_000)
         assertTrue(v.first().keyFrame && v.first().wallMicros >= 13_900_000)
     }
+
+    @Test
+    fun `a log line on a whole second keeps its milliseconds instead of crashing`() {
+        val whole = java.time.Instant.parse("2026-10-20T05:53:20Z").toEpochMilli()
+        kotlin.test.assertEquals("05:53:20.000Z  mic", com.ridetrack.telemetry.moments.momentLogLine(whole, "mic"))
+        kotlin.test.assertEquals("05:53:20.007Z  a b", com.ridetrack.telemetry.moments.momentLogLine(whole + 7, "a\nb"))
+    }
 }
