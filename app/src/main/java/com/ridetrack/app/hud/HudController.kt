@@ -247,6 +247,7 @@ class HudController(
             },
             voiceMarginDb = VoiceInWind.margin(voice.value.second.marginDb, moments.wind.value),
             speaking = moments.speaking.value,
+            voiceLike = moments.voiceLike.value,
             twoMics = moments.twoMics.value,
         )
     }

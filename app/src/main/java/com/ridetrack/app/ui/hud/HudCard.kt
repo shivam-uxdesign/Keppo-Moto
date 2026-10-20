@@ -199,11 +199,13 @@ private fun VoiceMeter(data: HudData, c: HudColors) {
     fun frac(db: Float) = ((db - METER_MIN_DB) / (METER_MAX_DB - METER_MIN_DB)).coerceIn(0f, 1f)
     val fill = level?.let(::frac) ?: 0f
     val tick = frac(data.voiceMarginDb)
-    val color = if (data.speaking) DarkPalette.primary else c.muted
+    // Loud enough but not voice-like: say so, rather than a bar past the mark that does nothing.
+    val blocked = !data.speaking && !data.voiceLike && level != null && level >= data.voiceMarginDb
+    val color = when { data.speaking -> DarkPalette.primary; blocked -> Color(0xFFFBBF24); else -> c.muted }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) {
-        contentDescription = if (level == null) "Mic off" else "Mic ${level.toInt()} dB above background, films at ${data.voiceMarginDb.toInt()} dB"
+        contentDescription = if (level == null) "Mic off" else "Mic ${level.toInt()} dB above background, films at ${data.voiceMarginDb.toInt()} dB" + if (blocked) ", but it doesn't sound like a voice" else ""
     }) {
-        Text("MIC", style = hudLabel, color = color)
+        Text(if (blocked) "NOT VOICE" else "MIC", style = hudLabel, color = color)
         Spacer(Modifier.width(6.dp))
         Layout(
             content = {

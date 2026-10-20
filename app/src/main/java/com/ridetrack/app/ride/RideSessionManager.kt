@@ -586,6 +586,7 @@ class RideSessionManager(
                     "voice ${"%.2f".format(Locale.US, levels.maxOf { it.voice })} · margin +${margin.roundToInt()} dB · " +
                     "wind ${"%.2f".format(Locale.US, com.ridetrack.telemetry.moments.VoiceInWind.wind(latest.backgroundDb))}" +
                     (levels.mapNotNull { it.liftDb }.maxOrNull()?.let { " · lift +${it.roundToInt()} dB" } ?: "") +
+                    momentsHub.highSummary() +
                     " · ${if (speaking) "speaking" else "quiet"} · $speed",
             )
         }

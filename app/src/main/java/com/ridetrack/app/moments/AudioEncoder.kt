@@ -48,6 +48,8 @@ class AudioEncoder(
     private val onClipping: ((Long, Int, Int) -> Unit)? = null,
     /** Each chunk with two mics: (left dBFS, right dBFS). */
     private val onChannels: ((Float, Float) -> Unit)? = null,
+    /** Each chunk: (wall time, the voice mic's 1–4 kHz level, the engine mic's, with two mics; dBFS). */
+    private val onHigh: ((Long, Float, Float?) -> Unit)? = null,
     /** A second voice detector for the engine side: is the voice really on the Voice side? */
     private val engineVad: SileroVad? = null,
     /** Each chunk with two mics: the engine side's voice probability (0..1). */
@@ -58,6 +60,10 @@ class AudioEncoder(
     private val engineWindows = VoiceWindows(SAMPLE_RATE)
     private var lastEngineVoice = 0f
     private val voiceBand = VoiceBand(SAMPLE_RATE)
+    // The crisp part of a voice (1–4 kHz), where wind is weakest; measured on both mics for the log.
+    private val voiceHigh = VoiceBand(SAMPLE_RATE, 1_000.0, 4_000.0)
+    private val engineHigh = VoiceBand(SAMPLE_RATE, 1_000.0, 4_000.0)
+    @Volatile private var lastEngineHigh: Float? = null
     private val audioManager = context.getSystemService<AudioManager>()
     private val bluetooth = device != null && Microphones.typeOf(device) == MicType.BLUETOOTH
     @Volatile private var scoStarted = false
@@ -156,6 +162,10 @@ class AudioEncoder(
                         val samples = read / 2
                         val at = (nowMicros + offsetMicros) / 1000
                         report(at, levelDb(inBuf, samples), samples * 1000L / SAMPLE_RATE, voice(inBuf, samples))
+                        onHigh?.let { high ->
+                            val b = inBuf.duplicate().order(java.nio.ByteOrder.nativeOrder())
+                            high(at, voiceHigh.levelDb(samples) { i -> b.getShort(i * 2) / 32768.0 }, if (stereo) lastEngineHigh else null)
+                        }
                         onClipping?.let { clip ->
                             val b = inBuf.duplicate().order(java.nio.ByteOrder.nativeOrder())
                             clip(at, clipWatch.count({ i -> b.getShort(i * 2) }, samples), samples)
@@ -211,6 +221,7 @@ class AudioEncoder(
         val vb = voiceBuf.order(java.nio.ByteOrder.nativeOrder())
         for (i in 0 until n) vb.putShort(voice[i])
         vb.flip()
+        lastEngineHigh = engineHigh.levelDb(n) { i -> engine[i] / 32768.0 }
         engineVad?.let { v ->
             var best = -1f
             engineWindows.feed(n, { i -> engine[i] / 32768.0 }) { w -> best = maxOf(best, v.probability(w)) }

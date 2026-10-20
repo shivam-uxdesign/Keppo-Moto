@@ -506,6 +506,7 @@ class MomentRecorder(
             AudioEncoder(context, buffer, device, onLevel = hub::reportLevel, vad = vad, onClipping = hub::reportClipping, twoMics = settings.twoMics && mic.type == MicType.USB, swap = settings.swapMics,
                 engineVad = if (settings.twoMics && mic.type == MicType.USB) engineVad else null,
                 onEngineVoice = hub::reportEngineVoice,
+                onHigh = hub::reportHigh,
                 // The engine mic's level, for revs and exhaust pops (only when the two mics really differ).
                 onChannels = { l, r ->
                     val enc = audio

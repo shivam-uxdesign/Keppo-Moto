@@ -76,6 +76,8 @@ data class HudData(
     val voiceOn: Boolean = false,
     /** dB above the background noise. */
     val micLevelDb: Float? = null,
+    /** The voice detector hears a voice now; when not, loudness alone doesn't film (the meter says so). */
+    val voiceLike: Boolean = true,
     val voiceMarginDb: Float = 9f,
     val speaking: Boolean = false,
     /** Both mics' levels while a two-transmitter receiver records (a meter per mic). */

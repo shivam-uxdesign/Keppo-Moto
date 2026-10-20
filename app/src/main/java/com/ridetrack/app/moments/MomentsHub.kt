@@ -9,6 +9,7 @@ import com.ridetrack.telemetry.moments.MomentWindow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.roundToInt
 
 sealed interface MomentRequest {
     val rideId: String
@@ -223,6 +224,29 @@ class MomentsHub {
         engineVoice = p
     }
 
+    // The voice's crisp part (1–4 kHz), where wind is weakest: above its own background, and the
+    // helmet mic against the engine mic there. Logged with each mic line (peaks since the last).
+    private val highBackground = BackgroundLevel(8_000L)
+    private val highLift = com.ridetrack.telemetry.moments.TwoMicLift()
+    private var highPeak: Float? = null
+    private var highLiftPeak: Float? = null
+    fun reportHigh(timeMillis: Long, voiceDb: Float, engineDb: Float?) = synchronized(highBackground) {
+        val bg = if (_speaking.value) highBackground.current else highBackground.onLevel(timeMillis, voiceDb)
+        highPeak = maxOf(highPeak ?: -99f, voiceDb - bg)
+        engineDb?.let { e -> highLiftPeak = maxOf(highLiftPeak ?: -99f, highLift.onLevels(timeMillis, voiceDb, e)) }
+    }
+
+    /** " · high +6 dB · high lift +4 dB" since the last call, for the mic line; empty before any audio. */
+    fun highSummary(): String = synchronized(highBackground) {
+        val out = (highPeak?.let { " · high +${it.roundToInt()} dB" } ?: "") + (highLiftPeak?.let { " · high lift +${it.roundToInt()} dB" } ?: "")
+        highPeak = null; highLiftPeak = null
+        out
+    }
+
+    private val _voiceLike = MutableStateFlow(true)
+    /** The latest chunk passed the voice detector (the HUD says when loudness alone isn't enough). */
+    val voiceLike: StateFlow<Boolean> = _voiceLike.asStateFlow()
+
     private val roleCheck = com.ridetrack.telemetry.moments.MicRoleCheck()
     private val _voiceOnEngineSide = MutableStateFlow(false)
     /**
@@ -290,6 +314,7 @@ class MomentsHub {
             }
         }
         _wind.value = com.ridetrack.telemetry.moments.VoiceInWind.wind(chunk.backgroundDb)
+        _voiceLike.value = voice >= com.ridetrack.telemetry.moments.VoiceInWind.voiceMin(_wind.value)
         _micLift.value = chunk.liftDb
         _micLevel.value = chunk.aboveDb
     }
