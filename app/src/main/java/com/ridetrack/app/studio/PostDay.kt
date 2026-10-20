@@ -38,7 +38,8 @@ object PostDay {
      * episodes always in episode order.
      */
     fun queue(reels: List<ReelProject>, skipped: Map<String, Long>, now: Long): List<ReelProject> {
-        val ready = reels.filter { it.deletedAt == null && !it.posted && now - it.createdAt <= FRESH_MS }
+        // A Storyboard template with shots still to fill isn't a video yet.
+        val ready = reels.filter { it.deletedAt == null && !it.posted && now - it.createdAt <= FRESH_MS && !(it.template != null && com.ridetrack.app.studio.storyboard.TemplateBuilder.placeholders(it.plan).isNotEmpty()) }
             .sortedWith(compareBy<ReelProject> { skipped[it.id] ?: 0L }.thenBy { it.createdAt })
         // Each series' episodes take its places in the line, in episode order.
         val bySeries = ready.filter { it.seriesId != null }.groupBy { it.seriesId }.mapValues { (_, v) -> ArrayDeque(v.sortedBy { it.episode }) }

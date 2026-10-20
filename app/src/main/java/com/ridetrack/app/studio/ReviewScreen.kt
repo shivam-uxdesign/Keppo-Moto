@@ -74,7 +74,7 @@ fun ReviewScreen(start: String?, rideId: String?, onBack: () -> Unit, onEdit: (R
         val reels = c.reels.reels.value
         val line = if (rideId != null) reels.filter { it.rideId == rideId && it.deletedAt == null && !it.posted }.sortedBy { it.createdAt } else c.postPlan.queue(reels)
         val first = line.firstOrNull { it.id == start } ?: start?.let { id -> reels.firstOrNull { it.id == id && it.deletedAt == null } }
-        listOfNotNull(first) + line.filter { it.id != first?.id }
+        (listOfNotNull(first) + line.filter { it.id != first?.id }).filter { c.reels.video(it.id).isFile }
     }
     var done by remember { mutableStateOf(mapOf<String, String>()) }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
