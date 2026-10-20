@@ -325,7 +325,7 @@ object HomeWidgets {
                 setTextViewText(R.id.name, b.name)
                 if (short) setViewVisibility(R.id.odo, View.GONE) else setTextViewText(R.id.odo, b.odometer ?: "Set the odometer in the app")
                 setInt(R.id.ready_dot, "setColorFilter", readyColor)
-                setTextViewText(R.id.ready, if (r.ok) "All set" else "${r.problem} · ${r.fix}")
+                setTextViewText(R.id.ready, if (r.ok) "All set" else "${r.problem} · tap to fix")
                 setTextColor(R.id.ready, if (r.ok) WHITE else AMBER)
                 setTextViewText(R.id.fuel, b.fuel ?: "Log fill-ups to see the range")
                 if (b.care == null) setViewVisibility(R.id.care_row, View.GONE) else {
