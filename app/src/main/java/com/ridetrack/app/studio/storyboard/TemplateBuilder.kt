@@ -64,6 +64,15 @@ object TemplateBuilder {
         return StudioPlan(segs, vibe, texts = texts.filter { it.endMs > it.startMs }, openerLifted = true)
     }
 
+    /** Templates whose placeholder pictures are missing (restored from a backup) get them drawn again. */
+    suspend fun redraw(c: AppContainer) {
+        c.reels.reels.value.filter { it.template != null && it.script != null }.forEach { p ->
+            if (p.plan.clips.any { isPlaceholder(it.bit) && it.still?.let { s -> !File(s).isFile } == true }) {
+                runCatching { pictures(c.reels.dir(p.id), p.script!!, 0xFF69C8CB.toInt()) }
+            }
+        }
+    }
+
     /** Placeholders still in [plan], by shot id. */
     fun placeholders(plan: StudioPlan): List<String> = plan.clips.mapNotNull { shotIdOf(it.bit) }
 

@@ -144,13 +144,16 @@ class ReelStore(private val context: Context) {
 
     fun bytes(): Long = root.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
+    /** Reads every Reel from disk again (after a restore). */
+    fun reload() { _reels.value = load() }
+
     private fun publish(p: ReelProject) {
         _reels.value = (listOf(p) + _reels.value.filter { it.id != p.id }).sortedByDescending { it.createdAt }
     }
 
     private fun load(): List<ReelProject> =
         root.listFiles()?.mapNotNull { d -> File(d, PROJECT).takeIf { it.isFile }?.let { ReelJson.read(it.readText()) } }
-            ?.filter { video(it.id).isFile }
+            ?.filter { video(it.id).isFile || it.template != null }
             ?.sortedByDescending { it.createdAt }
             .orEmpty()
 

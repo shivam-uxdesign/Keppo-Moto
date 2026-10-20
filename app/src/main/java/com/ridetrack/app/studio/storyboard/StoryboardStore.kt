@@ -68,6 +68,9 @@ class StoryboardStore(private val context: Context) {
 
     private fun thisMonth() = LocalDate.now().let { "${it.year}-${it.monthValue}" }
 
+    /** Reads the file again (after a restore). */
+    fun reload() { load() }
+
     private fun load() = runCatching {
         if (!file.isFile) return@runCatching
         val o = JSONObject(file.readText())

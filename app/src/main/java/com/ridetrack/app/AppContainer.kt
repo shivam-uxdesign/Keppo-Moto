@@ -194,7 +194,12 @@ class AppContainer(context: Context) {
 
     val routeImages = RouteImages(appContext, database)
     val journal = JournalSource(appContext, database, settings, routeImages, reels)
-    val backup = BackupRepository(appContext, database, settings, journal::routePng) { journal.onRideSaved(null) }
+    val backup = BackupRepository(appContext, database, settings, journal::routePng, onRidesRestored = { journal.onRideSaved(null) }, onStudioRestored = {
+        storyboard.reload()
+        style.reload()
+        reels.reload()
+        com.ridetrack.app.studio.storyboard.TemplateBuilder.redraw(this)
+    })
     val trash = RecentlyDeleted(appContext, database, journal) { backUpSoon() }
 
     /** A ride was renamed: Keppo Journal re-reads its ride.json, and Drive gets the new one. */

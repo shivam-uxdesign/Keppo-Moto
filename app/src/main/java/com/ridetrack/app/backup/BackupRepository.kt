@@ -46,6 +46,8 @@ class BackupRepository(
     private val routePng: suspend (RideEntity) -> File,
     /** Rides came back from Drive: tell Keppo Journal once to check everything. */
     private val onRidesRestored: suspend () -> Unit = {},
+    /** Storyboard chats, style memory or templates came back: the stores read their files again. */
+    private val onStudioRestored: suspend () -> Unit = {},
 ) {
     private val auth = DriveAuth(context)
     private val drive = DriveApi { auth.token() }
@@ -103,6 +105,16 @@ class BackupRepository(
             // Studio's styles and the brand kit (logo, font) are small: always refresh.
             File(context.filesDir, com.ridetrack.app.studio.StyleLibrary.FILE).takeIf { it.isFile }?.let { putText(f.moto, STYLES, it.readText(), f.motoFiles[STYLES]) }
             File(context.filesDir, com.ridetrack.app.studio.SeriesStore.FILE).takeIf { it.isFile }?.let { putText(f.moto, SERIES, it.readText(), f.motoFiles[SERIES]) }
+            // Storyboard: chats and gear, the style memory, and each template (its placeholders are redrawn on restore).
+            File(context.filesDir, com.ridetrack.app.studio.storyboard.StoryboardStore.FILE).takeIf { it.isFile }?.let { putText(f.moto, STORYBOARD, it.readText(), f.motoFiles[STORYBOARD]) }
+            File(context.filesDir, STYLE_MEMORY).takeIf { it.isFile }?.let { putText(f.moto, STYLE_MEMORY, it.readText(), f.motoFiles[STYLE_MEMORY]) }
+            File(context.filesDir, "reels").listFiles()?.forEach { d ->
+                val project = File(d, com.ridetrack.app.studio.ReelStore.PROJECT).takeIf { it.isFile } ?: return@forEach
+                val text = project.readText()
+                if (com.ridetrack.app.studio.ReelJson.read(text)?.let { it.template != null && it.deletedAt == null } == true) {
+                    putText(f.moto, "$TEMPLATE${d.name}.json", text, f.motoFiles["$TEMPLATE${d.name}.json"])
+                }
+            }
             BRAND_FILES.forEach { n ->
                 val file = File(File(context.filesDir, "brand"), n)
                 if (file.isFile) drive.putLarge(f.moto, "brand-$n", file, if (n.endsWith(".png")) "image/png" else "application/octet-stream", f.motoFiles["brand-$n"])
@@ -220,6 +232,21 @@ class BackupRepository(
             if (!styles.isFile) f.motoFiles[STYLES]?.let { styles.writeText(drive.downloadText(it)) }
             val series = File(context.filesDir, com.ridetrack.app.studio.SeriesStore.FILE)
             if (!series.isFile) f.motoFiles[SERIES]?.let { series.writeText(drive.downloadText(it)) }
+            var studio = false
+            val storyboard = File(context.filesDir, com.ridetrack.app.studio.storyboard.StoryboardStore.FILE)
+            if (!storyboard.isFile) f.motoFiles[STORYBOARD]?.let { storyboard.writeText(drive.downloadText(it)); studio = true }
+            val memory = File(context.filesDir, STYLE_MEMORY)
+            if (!memory.isFile) f.motoFiles[STYLE_MEMORY]?.let { memory.writeText(drive.downloadText(it)); studio = true }
+            f.motoFiles.filterKeys { it.startsWith(TEMPLATE) && it.endsWith(".json") }.forEach { (name, id) ->
+                val reel = name.removePrefix(TEMPLATE).removeSuffix(".json")
+                if (!BackupNames.safe(reel)) return@forEach
+                val dir = File(File(context.filesDir, "reels"), reel)
+                if (File(dir, com.ridetrack.app.studio.ReelStore.PROJECT).isFile) return@forEach
+                dir.mkdirs()
+                File(dir, com.ridetrack.app.studio.ReelStore.PROJECT).writeText(drive.downloadText(id))
+                studio = true
+            }
+            if (studio) onStudioRestored()
             BRAND_FILES.forEach { n ->
                 val file = File(File(context.filesDir, "brand").apply { mkdirs() }, n)
                 if (!file.isFile) f.motoFiles["brand-$n"]?.let { download(it, file) }
@@ -396,6 +423,9 @@ class BackupRepository(
         private const val BIKES = "bikes.json"
         private const val STYLES = "studio-styles.json"
         private const val SERIES = "studio-series.json"
+        private const val STORYBOARD = "studio-storyboard.json"
+        private const val STYLE_MEMORY = "studio-style.json"
+        private const val TEMPLATE = "storyboard-template-"
         private val BRAND_FILES = listOf("logo.png", "font.ttf")
         private const val RIDE = "ride.json"
         private const val SAMPLES = "samples.jsonl.gz"

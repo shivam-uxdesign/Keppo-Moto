@@ -66,6 +66,9 @@ class StyleStore(context: Context) {
         context.startActivity(Intent.createChooser(send, "Send your style log").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
+    /** Reads the file again (after a restore). */
+    fun reload() { load() }
+
     private fun load() = runCatching {
         val o = JSONObject(file.readText())
         _rules.value = o.optJSONArray("rules")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()

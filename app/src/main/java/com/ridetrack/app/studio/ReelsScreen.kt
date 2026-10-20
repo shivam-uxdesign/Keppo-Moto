@@ -122,7 +122,7 @@ fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String,
         }
     }
     val deleted = all.filter { it.deletedAt != null }
-    fun open(p: ReelProject, edit: Boolean = false) = if (p.rideId != null) onOpenReel(p.rideId, p.id, edit) else onOpenPhone(p.id, edit)
+    fun open(p: ReelProject, edit: Boolean = false) = if (p.rideId != null) onOpenReel(p.rideId, p.id, edit) else onOpenPhone(p.id, edit || p.template != null)
     fun stopSelecting() { selecting = false; selected = emptySet() }
     fun save(ids: Set<String>) = scope.launch {
         note = "Saving ${ids.size}…"
