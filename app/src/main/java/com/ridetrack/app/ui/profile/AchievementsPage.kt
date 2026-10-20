@@ -102,6 +102,7 @@ suspend fun loadAchievementInputs(c: com.ridetrack.app.AppContainer, factsBudget
             .map { m -> MomentFact(m.rideId, m.timeMillis, com.ridetrack.app.moments.MomentKeywords.shown(m.keywords.orEmpty()).map { it.key }.toSet()) },
         bikes = bikes.map { BikeFact(it.id, "${it.make} ${it.model}".trim(), it.odometerKm) },
         seriesCount = series.size,
+        storyboardsFilled = reels.count { it.template != null && com.ridetrack.app.studio.storyboard.TemplateBuilder.placeholders(it.plan).isEmpty() },
         seriesWithEpisodes = series.count { s -> reels.any { it.seriesId == s.id } },
     )
 }
