@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ridetrack.app.AppContainer
 import com.ridetrack.app.share.ShareImages
 import com.ridetrack.app.studio.Bit
@@ -128,7 +129,8 @@ fun FillScreen(reelId: String, shotId: String, onBack: () -> Unit) {
     val c = appContainer()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val project = c.reels.reels.value.firstOrNull { it.id == reelId }
+    val reels by c.reels.reels.collectAsStateWithLifecycle()
+    val project = reels.firstOrNull { it.id == reelId }
     val script = project?.script
     val shot = script?.let { Placeholders.find(it, shotId) }
     val b = shot?.board

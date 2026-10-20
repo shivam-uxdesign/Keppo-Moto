@@ -159,6 +159,7 @@ fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: () -> Uni
     val context = LocalContext.current
     val chats by c.storyboard.chats.collectAsStateWithLifecycle()
     val chat = chats.firstOrNull { it.id == chatId }
+    val gear by c.storyboard.gear.collectAsStateWithLifecycle()
     val talk = remember { StoryboardTalk(c) }
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
@@ -213,7 +214,7 @@ fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: () -> Uni
         LazyColumn(Modifier.weight(1f), state = list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (chat == null || chat.messages.isEmpty()) item {
                 Bubble(false, "Tell me your Reel idea, as rough as you like: the title, the steps or the story, the feel. Type it or hold the mic to talk." +
-                    if (!c.storyboard.gear.value.asked) " And what do you film with? Cameras, mounts, mics." else "")
+                    if (!gear.asked) " And what do you film with? Cameras, mounts, mics." else "")
             }
             chat?.messages?.forEach { m ->
                 item(key = "m${m.at}") {
