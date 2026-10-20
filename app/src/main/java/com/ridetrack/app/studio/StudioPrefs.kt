@@ -110,6 +110,12 @@ class StudioPrefs(context: Context) {
 
     fun toggle(text: String) = save(_shots.value.map { if (it.text == text) it.copy(done = !it.done) else it })
 
+    /** Storyboard's unfilled shots, grouped by where the phone goes; they replace the earlier Storyboard ones (the coach's stay). */
+    fun setStoryboardShots(texts: List<String>) {
+        val others = _shots.value.filter { !it.text.startsWith(STORYBOARD) }
+        save((texts.map { Shot(STORYBOARD + it) } + others).take(MAX + texts.size))
+    }
+
     fun clear() = save(emptyList())
 
     /** A back-camera clip was filmed: shots about the road ahead are done. */
@@ -127,7 +133,10 @@ class StudioPrefs(context: Context) {
         (0 until arr.length()).map { i -> arr.getJSONObject(i).let { Shot(it.getString("t"), it.optBoolean("d")) } }
     }.getOrDefault(emptyList())
 
-    private companion object {
+    companion object {
+        /** Marks shot-list lines that come from Storyboard templates. */
+        const val STORYBOARD = "Storyboard · "
+
         val ROAD = Regex("road|back camera|ahead|view", RegexOption.IGNORE_CASE)
         const val SERIES = "series"
         const val EPISODE = "episode"

@@ -54,6 +54,13 @@ object ClipTools {
     /** Another clip in its place, as long as this one was (if it's long enough). */
     fun replace(plan: StudioPlan, i: Int, bit: Bit): StudioPlan {
         val s = clip(plan, i) ?: return plan
+        if (com.ridetrack.app.studio.storyboard.TemplateBuilder.isPlaceholder(s.bit)) {
+            // A template's shot: the clip is fitted to the slot (centred, or gently slowed when short).
+            val fit = com.ridetrack.app.studio.storyboard.AutoTrim.fit(bit.clipDurationMs - bit.inMs, s.durMs)
+            val inMs = bit.inMs + fit.inMs
+            val seg = s.copy(bit = bit, inMs = inMs, durMs = fit.durMs.coerceAtLeast(TimelineEdits.MIN_MS), speed = fit.speed, ramp = SpeedRamp.NONE, speedPoints = emptyList(), lines = emptyList(), reverse = null, still = null, frame = emptyList())
+            return TimelineEdits.normalize(with(plan, i, seg))
+        }
         val f = Speed.outPerSource(s.speed, s.steps)
         val max = ((bit.clipDurationMs - bit.inMs) * f).toLong()
         val dur = s.durMs.coerceAtMost(max).coerceAtLeast(TimelineEdits.MIN_MS)

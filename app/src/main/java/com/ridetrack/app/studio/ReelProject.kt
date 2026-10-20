@@ -63,7 +63,7 @@ data class ReelProject(
 }
 
 /** A Storyboard template: its chat, the script version it was made from, how many shots, and which were filled by a suggestion (to confirm). */
-data class TemplateInfo(val chatId: String, val version: Int, val shots: Int, val suggested: Set<String> = emptySet())
+data class TemplateInfo(val chatId: String, val version: Int, val shots: Int, val suggested: Set<String> = emptySet(), val filled: Map<String, String> = emptyMap())
 
 data class SavedTake(val startMs: Long, val durMs: Long, val file: String, val lines: List<CaptionLine>)
 
@@ -115,7 +115,7 @@ object ReelJson {
         put("ytDescription", p.youtubeDescription ?: JSONObject.NULL)
         put("seriesId", p.seriesId ?: JSONObject.NULL)
         put("postedAt", p.postedAt ?: JSONObject.NULL)
-        p.template?.let { t -> put("template", JSONObject().put("chat", t.chatId).put("version", t.version).put("shots", t.shots).put("suggested", org.json.JSONArray(t.suggested.toList()))) }
+        p.template?.let { t -> put("template", JSONObject().put("chat", t.chatId).put("version", t.version).put("shots", t.shots).put("suggested", org.json.JSONArray(t.suggested.toList())).put("filled", JSONObject(t.filled))) }
     }.toString()
 
     fun read(text: String): ReelProject? = runCatching {
@@ -183,7 +183,8 @@ object ReelJson {
             seriesId = o.optStringOrNull("seriesId"),
             postedAt = o.optLongOrNull("postedAt"),
             template = o.optJSONObject("template")?.let { t ->
-                TemplateInfo(t.optString("chat"), t.optInt("version", 1), t.optInt("shots"), t.optJSONArray("suggested")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }.orEmpty())
+                TemplateInfo(t.optString("chat"), t.optInt("version", 1), t.optInt("shots"), t.optJSONArray("suggested")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }.orEmpty(),
+                    t.optJSONObject("filled")?.let { f -> f.keys().asSequence().associateWith { f.getString(it) } }.orEmpty())
             },
         )
     }.getOrNull()

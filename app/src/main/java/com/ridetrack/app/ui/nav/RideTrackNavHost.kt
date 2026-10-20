@@ -123,6 +123,15 @@ object Routes {
     /** Studio with videos from the phone only (no ride). */
     const val STUDIO_PHONE = "studio-phone?reel={reel}&edit={edit}"
     fun studioPhone(reelId: String?, edit: Boolean = false) = "studio-phone" + (reelId?.let { "?reel=$it" + if (edit) "&edit=true" else "" } ?: "")
+    /** Studio › Storyboard: chats that plan a Reel, its shot cards, gear, and filling a template's shots. */
+    const val STORYBOARD = "storyboard"
+    const val STORYBOARD_CHAT = "storyboard/{chatId}"
+    fun storyboardChat(id: String) = "storyboard/$id"
+    const val STORYBOARD_SHOTS = "storyboard-shots/{chatId}"
+    fun storyboardShots(id: String) = "storyboard-shots/$id"
+    const val STORYBOARD_GEAR = "storyboard-gear"
+    const val STORYBOARD_FILL = "storyboard-fill/{reelId}/{shotId}"
+    fun storyboardFill(reelId: String, shotId: String) = "storyboard-fill/$reelId/$shotId"
     const val MOMENTS = "moments/{rideId}/{momentId}"
     fun moments(rideId: String, momentId: String) = "moments/$rideId/$momentId"
     const val MOMENT_SHARE = "moment-share/{rideId}/{momentId}"
@@ -279,6 +288,7 @@ fun RideTrackNavHost(
                         onOpenSearch = { nav.navigate(Routes.STUDIO_SEARCH) },
                         onOpenSettings = { nav.navigate(Routes.STUDIO_SETTINGS) },
                         onOpenPaywall = { nav.navigate(Routes.PAYWALL) },
+                        onOpenStoryboard = { nav.navigate(Routes.STORYBOARD) },
                     ) }
                 }
                 composable(Routes.STUDIO_FOR, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
@@ -293,6 +303,7 @@ fun RideTrackNavHost(
                         onOpenPaywall = { nav.navigate(Routes.PAYWALL) },
                         startRide = entry.arguments?.getString("rideId"),
                         onBack = { nav.popBackStack() },
+                        onOpenStoryboard = { nav.navigate(Routes.STORYBOARD) },
                     ) }
                 }
                 composable(Routes.RIDES_MAP) {
@@ -443,6 +454,22 @@ fun RideTrackNavHost(
                             onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
                         )
                     }
+                }
+                composable(Routes.STORYBOARD) {
+                    DarkRoute { com.ridetrack.app.studio.storyboard.StoryboardListScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate(Routes.storyboardChat(it)) }, onGear = { nav.navigate(Routes.STORYBOARD_GEAR) }) }
+                }
+                composable(Routes.STORYBOARD_CHAT, arguments = listOf(navArgument("chatId") { type = NavType.StringType })) { entry ->
+                    val id = entry.arguments?.getString("chatId").orEmpty()
+                    DarkRoute { com.ridetrack.app.studio.storyboard.StoryboardChatScreen(id, onBack = { nav.popBackStack() }, onReview = { nav.navigate(Routes.storyboardShots(id)) }, onOpenTemplate = { nav.navigate(Routes.studioPhone(it, edit = true)) }) }
+                }
+                composable(Routes.STORYBOARD_SHOTS, arguments = listOf(navArgument("chatId") { type = NavType.StringType })) { entry ->
+                    DarkRoute { com.ridetrack.app.studio.storyboard.ShotCardsScreen(entry.arguments?.getString("chatId").orEmpty(), onBack = { nav.popBackStack() }, onFill = { reel, shot -> nav.navigate(Routes.storyboardFill(reel, shot)) }) }
+                }
+                composable(Routes.STORYBOARD_GEAR) {
+                    DarkRoute { com.ridetrack.app.studio.storyboard.GearScreen(onBack = { nav.popBackStack() }) }
+                }
+                composable(Routes.STORYBOARD_FILL, arguments = listOf(navArgument("reelId") { type = NavType.StringType }, navArgument("shotId") { type = NavType.StringType })) { entry ->
+                    DarkRoute { com.ridetrack.app.studio.storyboard.FillScreen(entry.arguments?.getString("reelId").orEmpty(), entry.arguments?.getString("shotId").orEmpty(), onBack = { nav.popBackStack() }) }
                 }
                 composable(Routes.STUDIO_SETTINGS) {
                     DarkRoute { com.ridetrack.app.studio.StudioSettingsScreen(onBack = { nav.popBackStack() }) }

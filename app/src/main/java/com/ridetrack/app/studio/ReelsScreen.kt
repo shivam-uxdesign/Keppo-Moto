@@ -73,7 +73,7 @@ import kotlin.math.abs
 
 private enum class ReelsTab(val label: String) { REELS("Reels"), SAVED("Saved clips"), DELETED("Deleted") }
 
-private enum class ReelFilter(val label: String) { ALL("All"), DRAFTS("Not posted"), RIDES("From rides"), PHONE("Your videos"), JOURNAL("In Journal") }
+private enum class ReelFilter(val label: String) { ALL("All"), DRAFTS("Not posted"), RIDES("From rides"), PHONE("Your videos"), TEMPLATES("Templates"), JOURNAL("In Journal") }
 
 /** 48000 → "0:48". */
 private fun formatClock(ms: Long): String = "%d:%02d".format(ms / 60_000, ms / 1000 % 60)
@@ -116,7 +116,8 @@ fun ReelsScreen(onBack: () -> Unit, onOpenReel: (rideId: String, reelId: String,
             ReelFilter.ALL -> true
             ReelFilter.DRAFTS -> !it.posted
             ReelFilter.RIDES -> it.rideId != null
-            ReelFilter.PHONE -> it.rideId == null
+            ReelFilter.PHONE -> it.rideId == null && it.template == null
+            ReelFilter.TEMPLATES -> it.template != null
             ReelFilter.JOURNAL -> it.inJournal
         }
     }

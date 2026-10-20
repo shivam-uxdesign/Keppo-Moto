@@ -715,7 +715,10 @@ class StudioViewModel(
         // Clips from other rides need their files to be made again.
         val missing = p.plan.clips.filter { it.bit.source == null }.map { it.bit.momentId }.filter { id -> clips.none { it.id == id } }.toSet()
         if (missing.isNotEmpty()) c.moments.all().filter { it.id in missing }.forEach { borrowed[it.id] = it }
-        val gallery = p.plan.clips.mapNotNull { it.bit.source }.distinct().filter { u -> phone.values.none { it.uri.toString() == u } }
+        // A template's placeholder pictures aren't gallery videos: shown by their own picture.
+        val stills = p.plan.clips.filter { com.ridetrack.app.studio.storyboard.TemplateBuilder.isPlaceholder(it.bit) }
+        if (stills.isNotEmpty()) _state.update { s -> s.copy(thumbs = s.thumbs + stills.mapNotNull { seg -> seg.still?.let { seg.bit.momentId to File(it) } }) }
+        val gallery = p.plan.clips.filterNot { com.ridetrack.app.studio.storyboard.TemplateBuilder.isPlaceholder(it.bit) }.mapNotNull { it.bit.source }.distinct().filter { u -> phone.values.none { it.uri.toString() == u } }
         if (gallery.isNotEmpty()) {
             withContext(Dispatchers.IO) { gallery.mapNotNull { PhoneVideos.read(c.appContext, Uri.parse(it)) } }.forEach { phone[it.id] = it }
             engine.refreshBits()
@@ -1989,7 +1992,7 @@ class StudioViewModel(
         val voice = s.takes.takeIf { it.isNotEmpty() }?.let { takes ->
             withContext(Dispatchers.IO) { VoiceRecorder.mix(takes, plan.totalMs, File(c.appContext.cacheDir, "studio-voice.wav")) }
         }
-        val gone = plan.clips.mapNotNull { it.bit.source }.distinct().filter { u -> !withContext(Dispatchers.IO) { PhoneVideos.exists(c.appContext, Uri.parse(u)) } }.toSet()
+        val gone = plan.clips.filterNot { com.ridetrack.app.studio.storyboard.TemplateBuilder.isPlaceholder(it.bit) }.mapNotNull { it.bit.source }.distinct().filter { u -> !withContext(Dispatchers.IO) { PhoneVideos.exists(c.appContext, Uri.parse(u)) } }.toSet()
         if (gone.isNotEmpty()) {
             var p = plan
             while (true) {

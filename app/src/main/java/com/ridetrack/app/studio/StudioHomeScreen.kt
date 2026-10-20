@@ -271,6 +271,7 @@ fun StudioHomeScreen(
     onOpenPaywall: () -> Unit = {},
     startRide: String? = null,
     onBack: (() -> Unit)? = null,
+    onOpenStoryboard: () -> Unit = {},
 ) {
     val c = com.ridetrack.app.ui.appContainer()
     val pro by c.entitlements.pro.collectAsStateWithLifecycle()
@@ -285,7 +286,10 @@ fun StudioHomeScreen(
         }
         if (!consent) com.ridetrack.app.ui.pro.AiConsentCard(onNotNow = null)
         else if (locked) com.ridetrack.app.ui.pro.StudioLocked(com.ridetrack.app.pro.FreeReelRule.nextAt(usedAt, now), onOpenPaywall, onOpenReels = onOpenReels)
-        else if (!pro) com.ridetrack.app.ui.pro.FreeReelChip(onOpenPaywall, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+        else {
+            if (!pro) com.ridetrack.app.ui.pro.FreeReelChip(onOpenPaywall, Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 16.dp))
+            com.ridetrack.app.studio.storyboard.StoryboardButton(onOpenStoryboard, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp))
+        }
     }
 }
 
