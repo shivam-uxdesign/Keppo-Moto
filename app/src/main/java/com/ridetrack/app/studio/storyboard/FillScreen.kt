@@ -64,9 +64,10 @@ import java.io.File
 object TemplateFill {
     /**
      * [seg] in place of shot [shotId]'s placeholder (or suggestion). When it's shorter than the slot,
-     * the next shots move up and so do the texts after it. The shot stops being "suggested".
+     * the next shots move up and so do the texts after it. The shot stops being "suggested",
+     * unless [suggested] (Studio's own pick, badged until the rider keeps it).
      */
-    suspend fun apply(c: AppContainer, reelId: String, shotId: String, seg: ClipSegment) {
+    suspend fun apply(c: AppContainer, reelId: String, shotId: String, seg: ClipSegment, suggested: Boolean = false) {
         c.reels.update(reelId) { p ->
             val i = p.plan.segments.indexOfFirst { it is ClipSegment && (TemplateBuilder.shotIdOf(it.bit) == shotId || it.bit.momentId == filledBy(p, shotId)) }
             if (i < 0) return@update p
@@ -75,10 +76,35 @@ object TemplateFill {
             val delta = seg.durMs - old.durMs
             val texts = p.plan.texts.map { t -> if (t.startMs >= start + old.durMs) t.copy(startMs = t.startMs + delta, endMs = t.endMs + delta) else t }
             val plan = TimelineEdits.normalize(p.plan.copy(segments = p.plan.segments.toMutableList().also { it[i] = seg.copy(section = old.section, hook = old.hook, text = old.text) }, texts = texts))
-            val info = p.template?.let { it.copy(suggested = it.suggested - shotId, filled = it.filled + (shotId to seg.bit.momentId)) }
+            val info = p.template?.let { it.copy(suggested = if (suggested) it.suggested + shotId else it.suggested - shotId, filled = it.filled + (shotId to seg.bit.momentId)) }
             p.copy(plan = plan, durationMs = plan.totalMs, template = info)
         }
         ToFilmList.sync(c)
+    }
+
+    /** The rider keeps Studio's pick for [shotId]: the badge goes. */
+    suspend fun keep(c: AppContainer, reelId: String, shotId: String) {
+        c.reels.update(reelId) { p -> p.copy(template = p.template?.let { it.copy(suggested = it.suggested - shotId) }) }
+    }
+
+    /**
+     * After a ride: every template's empty shots that footage can fill get the strongest new match,
+     * badged as suggested. Must-record shots and clips already in the template are left alone.
+     */
+    suspend fun suggestOpen(c: AppContainer) {
+        val templates = c.reels.reels.value.filter { it.template != null && it.deletedAt == null && it.script != null && TemplateBuilder.placeholders(it.plan).isNotEmpty() }
+        if (templates.isEmpty()) return
+        val cands = Candidates.all(c)
+        templates.forEach { p ->
+            val used = p.plan.clips.map { it.bit.momentId }.toMutableSet()
+            TemplateBuilder.placeholders(p.plan).forEach { id ->
+                val b = Placeholders.find(p.script!!, id)?.board ?: return@forEach
+                val best = Suggest.rank(b, cands, 1, exclude = used).firstOrNull()?.takeIf { it.second >= Suggest.THRESHOLD + 2 } ?: return@forEach
+                val seg = Candidates.segment(c, best.first, b) ?: return@forEach
+                used += best.first.momentId
+                apply(c, p.id, id, seg, suggested = true)
+            }
+        }
     }
 
     /** The clip that fills [shotId] now, when it's filled. */

@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +48,7 @@ import com.ridetrack.app.studio.ScriptShot
 import com.ridetrack.app.ui.appContainer
 import com.ridetrack.app.ui.theme.RtColors
 import com.ridetrack.app.ui.theme.RtType
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 /** The rider's direct changes to shots: each changed field gets locked so Gemini leaves it. Pure, unit-tested. */
@@ -125,6 +127,7 @@ fun ShotCardsScreen(chatId: String, onBack: () -> Unit, onFill: (templateId: Str
     val template = reels.filter { it.id in chat.templateIds && it.deletedAt == null }.maxByOrNull { it.updatedAt }
     val open = template?.let { TemplateBuilder.placeholders(it.plan).toSet() }
     val suggested = template?.template?.suggested.orEmpty()
+    val scope = rememberCoroutineScope()
 
     fun save(n: Script, note: String?, before: String, after: String) {
         c.storyboard.update(chatId) { it.copy(versions = it.versions + n) }
@@ -169,12 +172,13 @@ fun ShotCardsScreen(chatId: String, onBack: () -> Unit, onFill: (templateId: Str
                     item(key = sh.id) {
                         val status = when {
                             open == null -> if (b.match.mustRecord) "Must record" else "Can use your footage"
-                            sh.id in suggested && sh.id !in open -> "Suggested from your rides · tap Fill to change"
+                            sh.id in suggested && sh.id !in open -> "Suggested from your rides · Keep it, or Fill to change"
                             sh.id !in open -> "Filled"
                             b.match.mustRecord -> "Must record"
                             else -> "To film · or use your footage"
                         }
-                        ShotCard(Placeholders.number(s, sh.id!!), sh, b, status, onEdit = { editing = sh }, onFill = template?.takeIf { sh.id in open.orEmpty() || sh.id in suggested }?.let { t -> { onFill(t.id, sh.id) } })
+                        ShotCard(Placeholders.number(s, sh.id!!), sh, b, status, onEdit = { editing = sh }, onFill = template?.takeIf { sh.id in open.orEmpty() || sh.id in suggested }?.let { t -> { onFill(t.id, sh.id) } },
+                            onKeep = template?.takeIf { sh.id in suggested && sh.id !in open.orEmpty() }?.let { t -> { scope.launch { TemplateFill.keep(c, t.id, sh.id) } } })
                     }
                 }
             } else {
@@ -241,7 +245,7 @@ fun ShotCardsScreen(chatId: String, onBack: () -> Unit, onFill: (templateId: Str
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ShotCard(number: String, sh: ScriptShot, b: Storyboard, status: String, onEdit: () -> Unit, onFill: (() -> Unit)?) {
+private fun ShotCard(number: String, sh: ScriptShot, b: Storyboard, status: String, onEdit: () -> Unit, onFill: (() -> Unit)?, onKeep: (() -> Unit)? = null) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RtColors.Surface).clickable(role = Role.Button, onClickLabel = "Change the shot", onClick = onEdit).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
@@ -266,6 +270,7 @@ private fun ShotCard(number: String, sh: ScriptShot, b: Storyboard, status: Stri
                 b.say?.let { Text("Say: “$it”", style = RtType.caption, color = RtColors.Primary) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(status, style = RtType.caption, color = when { status.startsWith("Must") -> RtColors.Error; status.startsWith("Filled") || status.startsWith("Suggested") -> RtColors.Ok; else -> RtColors.TextSecondary }, modifier = Modifier.weight(1f))
+                    onKeep?.let { Text("Keep", style = RtType.button, color = RtColors.Ok, modifier = Modifier.clickable(role = Role.Button, onClick = it).padding(6.dp)) }
                     onFill?.let { Text("Fill", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = it).padding(6.dp)) }
                 }
             }

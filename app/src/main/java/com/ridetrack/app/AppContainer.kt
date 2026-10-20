@@ -74,6 +74,9 @@ class AppContainer(context: Context) {
                 runCatching { com.ridetrack.app.moments.KeywordTagger.tagRide(this@AppContainer, id) }
                     .onFailure { errors.warn("Moments", "Couldn't add keywords to the clips", it) }
                 transcribeSoon()
+                // Storyboard templates with empty shots get the new ride's best matches.
+                runCatching { com.ridetrack.app.studio.storyboard.TemplateFill.suggestOpen(this@AppContainer) }
+                    .onFailure { errors.warn("Storyboard", "Couldn't suggest clips for templates", it) }
                 // Named by place (when the phone can look it up), so the Journal gets the name.
                 runCatching { places.nameRide(id) }
                 journal.onRideSaved(id)
