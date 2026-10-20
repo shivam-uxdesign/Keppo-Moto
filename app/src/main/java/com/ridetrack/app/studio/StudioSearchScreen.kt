@@ -2,6 +2,7 @@ package com.ridetrack.app.studio
 
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -75,6 +76,8 @@ class StudioSearchViewModel(private val c: AppContainer) : ViewModel() {
     private var lines: Map<String, List<CaptionLine>> = emptyMap()
     private var seen: Map<String, List<String>> = emptyMap()
     private var tags: Map<String, List<String>> = emptyMap()
+    /** Each clip's keywords (lean, speed runs, sounds, what's in the picture, the rider's own). */
+    private var keywords: Map<String, List<com.ridetrack.app.moments.MomentKeyword>> = emptyMap()
 
     init { reload() }
 
@@ -91,6 +94,7 @@ class StudioSearchViewModel(private val c: AppContainer) : ViewModel() {
                 seen = all.mapNotNull { m -> ClipSeen.load(m.file)?.let { m.id to it } }.toMap()
                 // Tags the app worked out itself ("downshift"), searchable like what Gemini saw.
                 tags = all.mapNotNull { m -> ClipDownshifts.load(m.file)?.takeIf { it.isNotEmpty() }?.let { m.id to listOf("downshift", "downshifting") } }.toMap()
+                keywords = all.mapNotNull { m -> m.keywords?.let(com.ridetrack.app.moments.MomentKeywords::shown)?.takeIf { it.isNotEmpty() }?.let { m.id to it } }.toMap()
             }
             _state.update { s ->
                 s.copy(
@@ -108,8 +112,15 @@ class StudioSearchViewModel(private val c: AppContainer) : ViewModel() {
         _state.update { it.copy(query = q) }
         if (q.isBlank()) { _state.update { it.copy(hits = emptyList()) }; return }
         val seenAndTags = (seen.keys + tags.keys).associateWith { id -> seen[id].orEmpty() + tags[id].orEmpty() }
-        val hits = ClipSearch.search(q, lines, seenAndTags) { id -> clips[id]?.let { m -> Triple(m.rideId, rideNames[m.rideId] ?: "A ride", m.videoStartMillis) } }
-        _state.update { it.copy(hits = hits.take(100)) }
+        val meta = { id: String -> clips[id]?.let { m -> Triple(m.rideId, rideNames[m.rideId] ?: "A ride", m.videoStartMillis) } }
+        val hits = ClipSearch.search(q, lines, seenAndTags, meta)
+        // Keywords, numbers too: "lean 30" finds leans of 30° or more.
+        val byKeyword = keywords.mapNotNull { (id, kw) ->
+            if (hits.any { it.momentId == id } || !com.ridetrack.app.moments.MomentKeywords.matches(kw, null, q)) return@mapNotNull null
+            val m = meta(id) ?: return@mapNotNull null
+            SearchHit(id, m.first, m.second, m.third, CaptionLine(0, 0, "Keywords: " + kw.take(6).joinToString(", ") { it.text }), seen = true)
+        }.sortedByDescending { it.atMillis }
+        _state.update { it.copy(hits = (hits + byKeyword).take(100)) }
     }
 
     fun thumb(id: String) = clips[id]?.thumb
@@ -139,6 +150,9 @@ class StudioSearchViewModel(private val c: AppContainer) : ViewModel() {
         }
     }
 }
+
+/** Quick filters above the results. */
+private val QUICK = listOf("Lean", "Braking", "Talking", "Scream", "Laugh", "B-roll", "Road", "Selfie", "Sunrise", "Night")
 
 /** Which hits Search shows. */
 private enum class SearchKind(val label: String) { BOTH("Both"), SAID("What you said"), SEEN("What's in it") }
@@ -188,6 +202,17 @@ fun StudioSearchScreen(onBack: () -> Unit, onOpenRide: (String) -> Unit, onOpenS
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (k == kind) RtColors.Surface else androidx.compose.ui.graphics.Color.Transparent)
                         .clickable(role = Role.Tab) { kind = k }.padding(vertical = 8.dp),
+                )
+            }
+        }
+        // Quick filters: the keywords people look for most.
+        Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            QUICK.forEach { q ->
+                val on = s.query.equals(q, ignoreCase = true)
+                Text(
+                    q, style = RtType.caption, color = if (on) RtColors.OnPrimary else RtColors.TextPrimary,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) RtColors.Primary else RtColors.SurfaceRaised)
+                        .clickable(role = Role.Button) { open = null; vm.search(if (on) "" else q) }.padding(horizontal = 12.dp, vertical = 7.dp),
                 )
             }
         }

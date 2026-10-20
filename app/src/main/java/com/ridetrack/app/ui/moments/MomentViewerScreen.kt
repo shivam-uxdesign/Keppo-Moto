@@ -116,6 +116,8 @@ data class ViewerState(val loading: Boolean = true, val moments: List<Moment> = 
 
 class MomentViewerViewModel(private val c: AppContainer, rideId: String) : ViewModel() {
     private val samples = MutableStateFlow<List<TelemetrySample>>(emptyList())
+    /** The rider's own keywords from all moments, offered when adding one. */
+    val ownKeywords = MutableStateFlow<List<String>>(emptyList())
 
     val state: StateFlow<ViewerState> = combine(c.moments.observe(rideId), samples) { m, s -> ViewerState(false, m, s) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ViewerState())
@@ -125,6 +127,19 @@ class MomentViewerViewModel(private val c: AppContainer, rideId: String) : ViewM
             val s = c.rides.track(rideId).samples
             samples.value = s
             c.moments.fillTopSpeeds(rideId, s)
+            runCatching { com.ridetrack.app.moments.KeywordTagger.tagRide(c, rideId) }
+            ownKeywords.value = runCatching { c.moments.allLive().flatMap { m -> m.keywords.orEmpty().filter { it.kind == com.ridetrack.app.moments.MomentKeyword.Kind.OWN && !it.removed }.map { it.text } }.distinct() }.getOrDefault(emptyList())
+        }
+    }
+
+    fun removeKeyword(m: Moment, text: String) {
+        viewModelScope.launch { c.moments.setKeywords(m.id, com.ridetrack.app.moments.MomentKeywords.remove(c.moments.keywords(m.id).orEmpty(), text)) }
+    }
+
+    fun addKeyword(m: Moment, text: String) {
+        viewModelScope.launch {
+            c.moments.setKeywords(m.id, com.ridetrack.app.moments.MomentKeywords.add(c.moments.keywords(m.id).orEmpty(), text))
+            if (ownKeywords.value.none { it.equals(text.trim(), ignoreCase = true) }) ownKeywords.value = listOf(text.trim()) + ownKeywords.value
         }
     }
 
@@ -411,6 +426,10 @@ fun MomentViewerScreen(rideId: String, startId: String?, onBack: () -> Unit, onS
                     color = RtColors.TextSecondary,
                     modifier = Modifier.padding(top = 6.dp),
                 )
+            }
+            if (clip) {
+                val own by vm.ownKeywords.collectAsStateWithLifecycle()
+                KeywordChips(current.keywords, own, onRemove = { vm.removeKeyword(current, it) }, onAdd = { vm.addKeyword(current, it) })
             }
             }
             if (clip && hasEngine) {

@@ -97,3 +97,12 @@ fun circlePin(thumb: Bitmap?, ring: Color, sizePx: Int, ringPx: Float, empty: Co
     c.drawCircle(r, r, inner, paint)
     return out
 }
+
+/** Chip colour by where a keyword came from: the ride, sound, the picture, or the rider. */
+@androidx.compose.runtime.Composable
+fun keywordColor(kind: com.ridetrack.app.moments.MomentKeyword.Kind): androidx.compose.ui.graphics.Color = when (kind) {
+    com.ridetrack.app.moments.MomentKeyword.Kind.RIDE -> com.ridetrack.app.ui.theme.RtColors.Primary
+    com.ridetrack.app.moments.MomentKeyword.Kind.SOUND -> com.ridetrack.app.ui.theme.RtColors.Left
+    com.ridetrack.app.moments.MomentKeyword.Kind.SCENE -> com.ridetrack.app.ui.theme.RtColors.Ok
+    com.ridetrack.app.moments.MomentKeyword.Kind.OWN -> com.ridetrack.app.ui.theme.RtColors.Warning
+}

@@ -97,8 +97,12 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
                 lines = StudioText.load(m.file).orEmpty(),
                 kmhMax = (0..(dur / 1000).toInt()).maxOfOrNull { s -> speedAt(m.videoStartMillis + s * 1000L) }?.coerceAtLeast(0) ?: 0,
                 events = (m.types.filter { it != RideEventType.VOICE }.map { it.name.lowercase().replace('_', ' ') } +
-                    listOfNotNull(ClipDownshifts.load(m.file)?.size?.takeIf { it > 0 }?.let { n -> if (n == 1) "downshift" else "downshift ×$n" }))
-                    .joinToString(),
+                    listOfNotNull(ClipDownshifts.load(m.file)?.size?.takeIf { it > 0 }?.let { n -> if (n == 1) "downshift" else "downshift ×$n" }) +
+                    // Its keywords (speed runs, lean, sounds, what's in the picture, the rider's own), minus what's said already.
+                    com.ridetrack.app.moments.MomentKeywords.shown(m.keywords.orEmpty())
+                        .filter { k -> k.text != "Road" && k.text != "Selfie" && !k.text.startsWith("Top ") && !k.key.startsWith("downshift") }
+                        .map { it.text.lowercase() })
+                    .distinct().joinToString(),
                 label = Format.timeOfDay(m.videoStartMillis),
                 horns = m.engineFile.takeIf { it.isFile }?.let { EngineNoises.cached(it) }?.count { it.kind == com.ridetrack.telemetry.moments.EngineNoise.Kind.HORN } ?: 0,
             )
