@@ -189,6 +189,15 @@ If Keppo Moto isn't installed, the journal can offer "Sync from Google Drive": i
 - Event moments chained into one longer video keep `"source": null`. Their `durationMillis` can be longer than before (minutes, not seconds). `timeMillis` is the first event; `clipStartMillis` is the first frame.
 - `moments[].topSpeedMps`: for clips, the fastest the bike went while the clip was filmed (m/s). `null` until Keppo Moto has worked it out (older clips get it the next time the ride is read).
 
+## Keywords (keppo.ride v1 additions)
+
+- `moments[].keywords`: words to find a clip by, or `null` until Keppo Moto has worked them out. An array of objects:
+  - `text`: what's shown, English only, e.g. `"Lean 26° right"`, `"0–60 km/h in 4.8 s"`, `"Braking 80–20 km/h in 2.6 s"`, `"Scream"`, `"Sky"`, `"B-roll"`, or the rider's own word.
+  - `kind`: `RIDE` (from the ride's samples), `SOUND` (heard in the clip), `SCENE` (seen in the picture) or `OWN` (added by the rider).
+  - `value` and `unit` (optional): the number in it, for searches like "lean 30" (`26.4`, `"°"`; a speed run's change in km/h).
+  - `detail` (optional): shown small beside it, e.g. the peak `"0.6 g"` of a speed run.
+  - `removed` (optional, `true`): the rider took it off; readers should hide it. It stays so it isn't added back.
+
 ## Transcripts (keppo.ride v1 additions)
 
 - `moments[].transcript`: what the rider said in a talking clip (`types` includes `VOICE`), written in English letters (Hinglish as it's texted, e.g. "bhai ye road mast hai"). Made after the ride with the rider's own Gemini key, if they turned it on.

@@ -28,7 +28,14 @@ class BackupTest {
     )
     private val events = listOf(EventEntity(rideId = "r1", type = "HARD_BRAKE", timeMillis = 2_000, latitude = 28.6, longitude = null, speedMps = 12.0, value = -0.6))
     private val moments = listOf(
-        MomentEntity("m1", "r1", "CLIP", "HARD_BRAKE", 2_000, 28.6, 77.2, 12.0, -0.6, "m1.mp4", "m1.jpg", 20_000, true, 1_500, null),
+        MomentEntity("m1", "r1", "CLIP", "HARD_BRAKE", 2_000, 28.6, 77.2, 12.0, -0.6, "m1.mp4", "m1.jpg", 20_000, true, 1_500, null,
+            keywords = com.ridetrack.app.moments.MomentKeywords.encode(
+                listOf(
+                    com.ridetrack.app.moments.MomentKeyword("Lean 26° right", com.ridetrack.app.moments.MomentKeyword.Kind.RIDE, 26.4, "°"),
+                    com.ridetrack.app.moments.MomentKeyword("Road", com.ridetrack.app.moments.MomentKeyword.Kind.RIDE, removed = true),
+                ),
+            ),
+        ),
         MomentEntity("m2", "r1", "PHOTO", "", 3_000, null, null, null, null, "m2.jpg", null, null, false, null, "MANUAL"),
     )
 

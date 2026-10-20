@@ -57,7 +57,8 @@ object BackupFormat {
                         .put("peakValue", m.peakValue.orNull()).put("file", m.file).put("thumbFile", m.thumbFile ?: JSONObject.NULL)
                         .put("durationMillis", m.durationMillis.orNull()).put("starred", m.starred)
                         .put("clipStartMillis", m.clipStartMillis.orNull()).put("source", m.source ?: JSONObject.NULL)
-                        .put("topSpeedMps", m.topSpeedMps.orNull()).put("transcript", m.transcript ?: JSONObject.NULL))
+                        .put("topSpeedMps", m.topSpeedMps.orNull()).put("transcript", m.transcript ?: JSONObject.NULL)
+                        .put("keywords", m.keywords?.let { JSONArray(it) } ?: JSONObject.NULL))
                 }
             })
         return o.toString(1)
@@ -91,6 +92,8 @@ object BackupFormat {
                 durationMillis = m.longOrNull("durationMillis"), starred = m.optBoolean("starred"),
                 clipStartMillis = m.longOrNull("clipStartMillis"), source = m.stringOrNull("source"),
                 topSpeedMps = m.doubleOrNull("topSpeedMps"), transcript = m.stringOrNull("transcript"),
+                // Older backups have none: worked out again after the restore.
+                keywords = m.optJSONArray("keywords")?.let { com.ridetrack.app.moments.MomentKeywords.encode(com.ridetrack.app.moments.MomentKeywords.decode(it.toString())) },
             )
         }
         return RideBundle(ride, events, moments)
