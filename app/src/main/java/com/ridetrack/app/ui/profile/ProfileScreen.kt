@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.AutoMode
 import androidx.compose.material.icons.outlined.HealthAndSafety
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
@@ -83,6 +84,7 @@ enum class ProfilePage(val route: String, val title: String) {
     RIDING("riding", "Riding"),
     MOMENTS("moments", "Moments"),
     SAFETY("safety", "Safety"),
+    ROUTINES("routines", "Routines"),
     SYNC("sync", "Journal & backup"),
     APPEARANCE("appearance", "Appearance"),
     DEVELOPER("developer", "Developer"),
@@ -144,6 +146,8 @@ fun ProfileScreen(onOpenPage: (ProfilePage) -> Unit, onOpenHudSettings: () -> Un
             NavRow(Icons.Outlined.Videocam, "Moments", momentsSummary(st)) { onOpenPage(ProfilePage.MOMENTS) }
             Line()
             NavRow(Icons.Outlined.HealthAndSafety, "Safety", safetySummary(st)) { onOpenPage(ProfilePage.SAFETY) }
+            Line()
+            NavRow(Icons.Outlined.AutoMode, "Routines", routinesSummary(st.routines)) { onOpenPage(ProfilePage.ROUTINES) }
         }
 
         Group("Your data") {
@@ -192,10 +196,13 @@ fun ProfilePageScreen(page: ProfilePage, onBack: () -> Unit) {
         // Moments has its own sub-pages and a "How Moments works" sheet (ⓘ).
         var momentsSub by rememberSaveable { mutableStateOf<MomentsSub?>(null) }
         var how by remember { mutableStateOf(false) }
+        // Routines: one routine open in its editor.
+        var routine by rememberSaveable { mutableStateOf<String?>(null) }
         androidx.activity.compose.BackHandler(enabled = momentsSub != null) { momentsSub = null }
+        androidx.activity.compose.BackHandler(enabled = routine != null) { routine = null }
         ScreenHeader(
-            momentsSub?.title ?: page.title,
-            onBack = { if (momentsSub != null) momentsSub = null else onBack() },
+            momentsSub?.title ?: if (routine != null) "Routine" else page.title,
+            onBack = { if (momentsSub != null) momentsSub = null else if (routine != null) routine = null else onBack() },
             actions = {
                 if (page == ProfilePage.MOMENTS && momentsSub == null) {
                     IconButton(onClick = { how = true }) { Icon(Icons.Outlined.Info, contentDescription = "How Moments works", tint = RtColors.TextSecondary) }
@@ -208,6 +215,7 @@ fun ProfilePageScreen(page: ProfilePage, onBack: () -> Unit) {
             ProfilePage.RIDING -> RidingPage(s, vm)
             ProfilePage.MOMENTS -> MomentsSection(s, vm, showHeader = false, sub = momentsSub, onSub = { momentsSub = it }, showHow = how, onHowDismiss = { how = false })
             ProfilePage.SAFETY -> SafetySection(s, vm, showHeader = false)
+            ProfilePage.ROUTINES -> RoutinesPage(routine) { routine = it }
             ProfilePage.SYNC -> {
                 JournalSection(s, vm)
                 BackupSection(s, vm)

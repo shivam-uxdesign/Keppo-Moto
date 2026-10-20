@@ -189,6 +189,9 @@ class AppContainer(context: Context) {
     /** The battery during a ride: time left, and when to charge. */
     val batteryWatch = BatteryWatch(appContext, battery, moments)
 
+    /** The rider's routines: when a ride starts, ends or arrives somewhere, do these. */
+    val routines = com.ridetrack.app.routines.RoutineRunner(appContext, settings, session, errors)
+
     /** Unfinished rides: carry on, or save; and why the app last stopped. */
     val continuation = RideContinuation(appContext, rides, bikes, moments, session)
 

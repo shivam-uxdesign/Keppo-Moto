@@ -208,6 +208,8 @@ data class Settings(
     val fuelPrompts: String? = null,
     /** Read the card SMS around a pump stop for the amount. Off by default. */
     val fuelReadSms: Boolean = false,
+    /** The rider's routines (when a ride starts, ends, or arrives somewhere: do these), as Routines.encode(). */
+    val routines: String? = null,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -269,6 +271,7 @@ class SettingsRepository(private val context: Context) {
         val journalConnected = longPreferencesKey("journal_connected")
         val journalShareDemo = booleanPreferencesKey("journal_share_demo")
         val bikeCare = stringPreferencesKey("bike_care")
+        val routines = stringPreferencesKey("routines")
         val homeDismissedRide = stringPreferencesKey("home_dismissed_ride")
         val fuelLog = stringPreferencesKey("fuel_log")
         val fuelPrompts = stringPreferencesKey("fuel_prompts")
@@ -354,6 +357,7 @@ class SettingsRepository(private val context: Context) {
             journalConnectedMillis = p[Keys.journalConnected],
             journalShareDemo = p[Keys.journalShareDemo] ?: false,
             bikeCare = p[Keys.bikeCare],
+            routines = p[Keys.routines],
             homeDismissedRide = p[Keys.homeDismissedRide],
             fuelLog = p[Keys.fuelLog],
             fuelPrompts = p[Keys.fuelPrompts],
@@ -412,6 +416,8 @@ class SettingsRepository(private val context: Context) {
     suspend fun setJournalLastRead(atMillis: Long) = context.dataStore.edit { it[Keys.journalLastRead] = atMillis }
 
     suspend fun setBikeCare(encoded: String) = context.dataStore.edit { it[Keys.bikeCare] = encoded }
+
+    suspend fun setRoutines(encoded: String) = context.dataStore.edit { it[Keys.routines] = encoded }
     suspend fun setFuelLog(encoded: String) = context.dataStore.edit { it[Keys.fuelLog] = encoded }
     suspend fun setFuelPrompts(encoded: String) = context.dataStore.edit { it[Keys.fuelPrompts] = encoded }
     suspend fun setFuelReadSms(on: Boolean) = context.dataStore.edit { it[Keys.fuelReadSms] = on }

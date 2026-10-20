@@ -23,6 +23,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Optional pop-up HUD over other apps during a ride; asked for with an explanation. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Routines: Do Not Disturb during a ride, put back after. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <!-- Safety: text emergency contacts after a crash, and show the alert full screen. -->
     <uses-permission android:name="android.permission.SEND_SMS" />
     <!-- Fuel log, only when the rider turns on "Read card SMS at petrol pumps": the amount of a card payment at a pump. -->
@@ -50,6 +52,12 @@
     <!-- Keppo Journal: see whether it's installed, and let the "ride saved" signal reach it (Android 11+ package visibility). -->
     <queries>
         <package android:name="com.keppo.journal" />
+        <!-- Routines: open Maps, or any app the rider picks from their launcher. -->
+        <package android:name="com.google.android.apps.maps" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <application
