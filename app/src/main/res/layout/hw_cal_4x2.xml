@@ -10,7 +10,7 @@
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/hw_days_ridden" android:textColor="#FF8B8B93" android:textSize="11sp" />
         <TextView android:id="@+id/km" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="#FFF4F4F5" android:textSize="22sp" />
         <TextView android:id="@+id/unit" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF8B8B93" android:textSize="11sp" />
-        <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
         <TextView android:id="@+id/streak" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF69C8CB" android:textSize="12sp" />
     </LinearLayout>
 </LinearLayout>
