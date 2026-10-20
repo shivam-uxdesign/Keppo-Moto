@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,12 +69,30 @@ import com.ridetrack.telemetry.model.DataSourceKind
 import com.ridetrack.telemetry.model.Ride
 
 @Composable
-fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Unit, onShare: () -> Unit, onOpenMoment: (String) -> Unit, onMakeReel: () -> Unit = {}) {
+fun RideSummaryScreen(rideId: String, onDone: () -> Unit, onOpenDetail: () -> Unit, onShare: () -> Unit, onOpenMoment: (String) -> Unit, onMakeReel: () -> Unit = {}, onOpenAchievements: () -> Unit = {}) {
     val rt = LocalRtPalette.current
     val moments = rememberMoments(rideId)
     val vm = appViewModel(key = "summary-$rideId") { RideSummaryViewModel(it, rideId) }
     val s by vm.state.collectAsStateWithLifecycle()
     BackHandler(onBack = onDone)
+    // New badges from this ride: celebrated here, once each (never during the ride).
+    val container = com.ridetrack.app.ui.appContainer()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var badges by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<com.ridetrack.app.ui.profile.Achievement>>(emptyList()) }
+    androidx.compose.runtime.LaunchedEffect(rideId) {
+        kotlinx.coroutines.delay(1_200)
+        runCatching {
+            val list = com.ridetrack.app.ui.profile.Achievements.of(com.ridetrack.app.ui.profile.loadAchievementInputs(container, factsBudget = 2))
+            badges = com.ridetrack.app.ui.profile.BadgeSeen(context).fresh(list)
+        }
+    }
+    if (badges.isNotEmpty()) {
+        fun shown() {
+            com.ridetrack.app.ui.profile.BadgeSeen(context).markShown(badges)
+            badges = emptyList()
+        }
+        com.ridetrack.app.ui.profile.BadgeCelebration(badges, onSeeAll = { shown(); onOpenAchievements() }, onDone = { shown() })
+    }
 
     Column(
         Modifier

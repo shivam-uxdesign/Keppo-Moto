@@ -173,6 +173,21 @@ fun RideTrackNavHost(
         if (session.state.value.isActive) nav.navigate(Routes.LIVE) { launchSingleTop = true }
     }
 
+    // Badges earned off the bike (a Reel, a fill-up): a quiet note when the app opens.
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(4_000)
+        if (session.state.value.isActive) return@LaunchedEffect
+        runCatching {
+            val seen = com.ridetrack.app.ui.profile.BadgeSeen(context)
+            val fresh = seen.fresh(com.ridetrack.app.ui.profile.Achievements.of(com.ridetrack.app.ui.profile.loadAchievementInputs(container, factsBudget = 0)))
+            if (fresh.isNotEmpty()) {
+                seen.markShown(fresh)
+                val a = fresh.first()
+                Toast.makeText(context, "New badge: ${a.title}${a.tier?.let { " · ${it.label}" } ?: ""}${if (fresh.size > 1) " and ${fresh.size - 1} more" else ""} · Profile › Achievements", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     // Start a ride from the widget, shortcut, tile or the Assistant: a 3 s countdown, then the live screen.
     if (quickStart) {
         com.ridetrack.app.ui.home.QuickStartDialog(
@@ -344,6 +359,7 @@ fun RideTrackNavHost(
                         onShare = { nav.navigate(Routes.share(id)) },
                         onMakeReel = { nav.navigate(Routes.studioFor(id)) },
                         onOpenMoment = { nav.navigate(Routes.moments(id, it)) },
+                        onOpenAchievements = { nav.navigate(Routes.profilePage(com.ridetrack.app.ui.profile.ProfilePage.ACHIEVEMENTS)) },
                     )
                 }
                 composable(Routes.DETAIL, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
