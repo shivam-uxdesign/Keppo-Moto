@@ -14,6 +14,7 @@ import com.ridetrack.app.studio.storyboard.StoryboardEngine
 import com.ridetrack.app.studio.storyboard.Suggest
 import com.ridetrack.app.studio.storyboard.TemplateBuilder
 import com.ridetrack.app.studio.storyboard.ToFilm
+import com.ridetrack.app.studio.storyboard.VoiceLines
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
@@ -106,5 +107,27 @@ class StoryboardFillTest {
     @Test fun `a storyboard with no matches stays empty-handed`() {
         val b = Storyboard("Rain on the visor", match = MatchHints(words = listOf("rain")))
         assertTrue(Suggest.rank(b, listOf(Candidate("x", null, 3_000, emptySet(), setOf("sun"), "back", false))).isEmpty())
+    }
+
+    @Test fun `lines read in one go are cut at the taps, trimmed, and land where their shots start`() {
+        val said = script.copy(sections = script.sections.map { sec -> sec.copy(shots = sec.shots.map { if (it.id == "s2") it else it.copy(board = it.board!!.copy(say = "Line for ${it.id}")) }) })
+        assertEquals(listOf("s1" to "Line for s1", "s3" to "Line for s3"), VoiceLines.lines(said))
+        assertEquals(listOf(0L until 2_000L, 2_000L until 5_000L), VoiceLines.pieces(listOf(2_000), 5_000))
+        // A tap outside the recording is ignored.
+        assertEquals(1, VoiceLines.pieces(listOf(9_000), 5_000).size)
+
+        val rate = 1_000
+        val pcm = ShortArray(3_000).also { a -> for (i in 1_000 until 1_500) a[i] = 5_000 }
+        val kept = VoiceLines.trim(pcm, 0, 3_000, rate)
+        assertTrue(kept.first in 900..1_000 && kept.last in 1_500..1_600)
+        assertTrue(VoiceLines.trim(ShortArray(2_000), 0, 2_000, rate).isEmpty())
+
+        val plan = TemplateBuilder.plan(script, listOf("s1", "s2", "s3").associateWith { File("/tmp/ph-$it.png") }, Vibe.CINE, 0)
+        assertEquals(3_500L, VoiceLines.shotStart(plan, emptyMap(), "s3"))
+        assertEquals(3_000L, VoiceLines.shotLength(plan, emptyMap(), "s3"))
+        val bit = Bit("m9#0", "m9", 10_000, 0, 10_000, 0, emptyList(), 0.0, 5f)
+        val i = plan.segments.indexOfFirst { it is ClipSegment && TemplateBuilder.shotIdOf(it.bit) == "s1" }
+        val filled = ClipTools.replace(plan, i, bit)
+        assertEquals(0L, VoiceLines.shotStart(filled, mapOf("s1" to "m9"), "s1"))
     }
 }

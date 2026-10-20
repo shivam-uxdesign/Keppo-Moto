@@ -116,7 +116,7 @@ object ShotEdits {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ShotCardsScreen(chatId: String, onBack: () -> Unit, onFill: (templateId: String, shotId: String) -> Unit) {
+fun ShotCardsScreen(chatId: String, onBack: () -> Unit, onFill: (templateId: String, shotId: String) -> Unit, onReadLines: (templateId: String) -> Unit = {}) {
     val c = appContainer()
     val chats by c.storyboard.chats.collectAsStateWithLifecycle()
     val reels by c.reels.reels.collectAsStateWithLifecycle()
@@ -149,6 +149,20 @@ fun ShotCardsScreen(chatId: String, onBack: () -> Unit, onFill: (templateId: Str
                     modifier = Modifier.clip(RoundedCornerShape(50)).background(if (now) RtColors.Primary else RtColors.SurfaceRaised)
                         .clickable(role = Role.Button, onClickLabel = "Bring back version ${i + 1}") { if (!now) c.storyboard.update(chatId) { it.copy(versions = it.versions + v) } }
                         .padding(horizontal = 12.dp, vertical = 6.dp))
+            }
+        }
+        val lines = VoiceLines.lines(s)
+        if (template != null && lines.isNotEmpty()) {
+            Row(
+                Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface)
+                    .clickable(role = Role.Button) { onReadLines(template.id) }.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Read your lines", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+                    Text("${lines.size} voice-over line${if (lines.size > 1) "s" else ""} in one go; each lands on its shot" + if (template.takes.isNotEmpty()) " · recorded" else "", style = RtType.caption, color = RtColors.TextSecondary)
+                }
+                Text("›", style = RtType.headline, color = RtColors.TextTertiary)
             }
         }
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

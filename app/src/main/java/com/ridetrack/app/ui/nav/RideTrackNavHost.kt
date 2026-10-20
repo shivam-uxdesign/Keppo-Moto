@@ -132,6 +132,8 @@ object Routes {
     const val STORYBOARD_GEAR = "storyboard-gear"
     const val STORYBOARD_FILL = "storyboard-fill/{reelId}/{shotId}"
     fun storyboardFill(reelId: String, shotId: String) = "storyboard-fill/$reelId/$shotId"
+    const val STORYBOARD_LINES = "storyboard-lines/{reelId}"
+    fun storyboardLines(reelId: String) = "storyboard-lines/$reelId"
     const val MOMENTS = "moments/{rideId}/{momentId}"
     fun moments(rideId: String, momentId: String) = "moments/$rideId/$momentId"
     const val MOMENT_SHARE = "moment-share/{rideId}/{momentId}"
@@ -463,7 +465,10 @@ fun RideTrackNavHost(
                     DarkRoute { com.ridetrack.app.studio.storyboard.StoryboardChatScreen(id, onBack = { nav.popBackStack() }, onReview = { nav.navigate(Routes.storyboardShots(id)) }, onOpenTemplate = { nav.navigate(Routes.studioPhone(it, edit = true)) }) }
                 }
                 composable(Routes.STORYBOARD_SHOTS, arguments = listOf(navArgument("chatId") { type = NavType.StringType })) { entry ->
-                    DarkRoute { com.ridetrack.app.studio.storyboard.ShotCardsScreen(entry.arguments?.getString("chatId").orEmpty(), onBack = { nav.popBackStack() }, onFill = { reel, shot -> nav.navigate(Routes.storyboardFill(reel, shot)) }) }
+                    DarkRoute { com.ridetrack.app.studio.storyboard.ShotCardsScreen(entry.arguments?.getString("chatId").orEmpty(), onBack = { nav.popBackStack() }, onFill = { reel, shot -> nav.navigate(Routes.storyboardFill(reel, shot)) }, onReadLines = { nav.navigate(Routes.storyboardLines(it)) }) }
+                }
+                composable(Routes.STORYBOARD_LINES, arguments = listOf(navArgument("reelId") { type = NavType.StringType })) { entry ->
+                    DarkRoute { com.ridetrack.app.studio.storyboard.VoiceLinesScreen(entry.arguments?.getString("reelId").orEmpty(), onBack = { nav.popBackStack() }) }
                 }
                 composable(Routes.STORYBOARD_GEAR) {
                     DarkRoute { com.ridetrack.app.studio.storyboard.GearScreen(onBack = { nav.popBackStack() }) }
