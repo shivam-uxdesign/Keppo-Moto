@@ -54,7 +54,17 @@ class AudioEncoder(
     private val engineVad: SileroVad? = null,
     /** Each chunk with two mics: the engine side's voice probability (0..1). */
     private val onEngineVoice: ((Float) -> Unit)? = null,
+    /** The voice detector again on the voice mic with the wind rumble taken out: only for the trace. */
+    private val dewindVad: SileroVad? = null,
+    /** Each chunk, after all the others: the raw readings for the voice trace (tester builds). */
+    private val onTrace: ((TraceAudio) -> Unit)? = null,
 ) {
+    private val dewindWindows = VoiceWindows(SAMPLE_RATE)
+    // Wind roar sits mostly below 250 Hz; a voice hardly does.
+    private val dewindBand = VoiceBand(SAMPLE_RATE, 250.0, 7_000.0)
+    private var lastDewind = 0f
+    @Volatile private var lastLeftDb: Float? = null
+    @Volatile private var lastRightDb: Float? = null
     private val windows = VoiceWindows(SAMPLE_RATE)
     private var lastVoice = 0f
     private val engineWindows = VoiceWindows(SAMPLE_RATE)
@@ -162,13 +172,24 @@ class AudioEncoder(
                         val samples = read / 2
                         val at = (nowMicros + offsetMicros) / 1000
                         report(at, levelDb(inBuf, samples), samples * 1000L / SAMPLE_RATE, voice(inBuf, samples))
+                        var highDb = Float.NaN
                         onHigh?.let { high ->
                             val b = inBuf.duplicate().order(java.nio.ByteOrder.nativeOrder())
-                            high(at, voiceHigh.levelDb(samples) { i -> b.getShort(i * 2) / 32768.0 }, if (twoDifferent) lastEngineHigh else null)
+                            highDb = voiceHigh.levelDb(samples) { i -> b.getShort(i * 2) / 32768.0 }
+                            high(at, highDb, if (twoDifferent) lastEngineHigh else null)
                         }
+                        var clipped = 0
                         onClipping?.let { clip ->
                             val b = inBuf.duplicate().order(java.nio.ByteOrder.nativeOrder())
-                            clip(at, clipWatch.count({ i -> b.getShort(i * 2) }, samples), samples)
+                            clipped = clipWatch.count({ i -> b.getShort(i * 2) }, samples)
+                            clip(at, clipped, samples)
+                        }
+                        onTrace?.let { trace ->
+                            trace(TraceAudio(
+                                at, highDb, if (stereo) lastEngineHigh else null, dewind(inBuf, samples),
+                                if (stereo) twoMicCheck.independenceNow else null, clipped.toFloat() / samples,
+                                lastLeftDb, lastRightDb,
+                            ))
                         }
                     }
                     // pts = when the first sample of this chunk was captured.
@@ -215,6 +236,8 @@ class AudioEncoder(
         if (got <= 0) return got
         val n = got / 2
         val (lDb, rDb) = twoMicCheck.split(pcm, n, left, right, SAMPLE_RATE)
+        lastLeftDb = lDb
+        lastRightDb = rDb
         onChannels?.invoke(lDb, rDb)
         val voice = if (swap) right else left
         val engine = if (swap) left else right
@@ -270,6 +293,16 @@ class AudioEncoder(
         // A chunk too short to finish a window keeps the last reading.
         if (best >= 0f) lastVoice = best
         return lastVoice
+    }
+
+    /** The voice detector on the voice mic minus the wind rumble (trace only); null when it isn't run. */
+    private fun dewind(buf: java.nio.ByteBuffer, samples: Int): Float? {
+        val v = dewindVad ?: return null
+        val b = buf.duplicate().order(java.nio.ByteOrder.nativeOrder())
+        var best = -1f
+        dewindWindows.feed(samples, { i -> dewindBand.filter(b.getShort(i * 2) / 32768.0) }) { w -> best = maxOf(best, v.probability(w)) }
+        if (best >= 0f) lastDewind = best
+        return lastDewind
     }
 
     /** Loudness of [samples] 16-bit samples at the start of [buf], in the voice range (dBFS). */

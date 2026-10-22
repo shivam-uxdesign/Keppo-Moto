@@ -45,6 +45,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.Executors
+import com.ridetrack.app.BuildConfig
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ExecutionException
@@ -97,6 +98,10 @@ class MomentRecorder(
     }
     /** A second Silero for the engine side (two mics): tells whether the voice is on the side set as Voice. */
     private val engineVad: SileroVad? by lazy { if (!settings.voice || !settings.twoMics) null else SileroVad.load(context) }
+    /** Tester builds: every voice chunk's readings, exported with the ride, to replay and tune the speech rules. */
+    private val trace: VoiceTrace? = if (BuildConfig.TEST_BUILD && settings.voice) VoiceTrace(File(repo.dir(rideId), VoiceTrace.FILE_NAME)) else null
+    /** Tester builds: the voice detector on de-winded audio, logged in the trace only (never decides). */
+    private val dewindVad: SileroVad? by lazy { if (trace == null) null else SileroVad.load(context) }
     /** The mic [audio] records from. */
     private var audioMic: MicChoice? = null
     /** The headset dropped call mode: skip it until the camera next restarts (no retry loop). */
@@ -193,6 +198,8 @@ class MomentRecorder(
         context.getSystemService<AudioManager>()?.registerAudioDeviceCallback(deviceCallback, android.os.Handler(android.os.Looper.getMainLooper()))
         watchPower()
         hub.onLog = { log.log(it) }
+        hub.trace = trace
+        if (trace != null) log.log("voice trace on: ${VoiceTrace.FILE_NAME} (tester build)")
         hub.onReconnectMic = {
             scope.launch(Dispatchers.Main) {
                 log.log("reconnect mic pressed")
@@ -262,11 +269,14 @@ class MomentRecorder(
             powerReceiver = null
             hub.onReconnectMic = null
             hub.onLog = null
+            hub.trace = null
             micCheck?.cancel()
         }
         stopAudio()
         if (settings.voice) vad?.close()
         if (settings.voice && settings.twoMics) engineVad?.close()
+        if (trace != null) dewindVad?.close()
+        trace?.flush()
         analysisExecutor.shutdown()
         encoder?.release()
         encoder = null
@@ -507,6 +517,8 @@ class MomentRecorder(
                 engineVad = if (settings.twoMics && mic.type == MicType.USB) engineVad else null,
                 onEngineVoice = hub::reportEngineVoice,
                 onHigh = hub::reportHigh,
+                dewindVad = dewindVad,
+                onTrace = if (trace != null) hub::reportTrace else null,
                 // The engine mic's level, for revs and exhaust pops (only when the two mics really differ).
                 onChannels = { l, r ->
                     val enc = audio

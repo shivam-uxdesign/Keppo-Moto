@@ -486,6 +486,7 @@ class RideSessionManager(
      */
     private fun listenForSpeech(rec: Recorder, frame: TelemetryFrame) {
         val levels = momentsHub.drainLevels()
+        momentsHub.speedKmh = frame.speedMps?.let { (it * 3.6).toFloat() }
         val (on, sensitivity) = voiceSettings.value
         if (!rec.moments || !on || frame.offMount) {
             if (rec.speech.speaking) rec.speech.reset()

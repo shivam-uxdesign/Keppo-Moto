@@ -166,11 +166,15 @@ On a labelled set of real rides (several helmets, city and highway, with and wit
 
 ---
 
-## 5. Decisions for the rider
-1. **Phase 0 trace in exports:** OK to add (tester builds only, ~1 MB per hour of riding)?
-2. **Phase 5 cleanup:** mark and offer to delete (my pick), or delete videos with no talking automatically?
-3. **Phase 6 button:** want it? Which button do you have (DJI transmitter button, intercom, wired headset)?
-4. **Test rides:** can you do 3–5 more rides with the trace on, telling me roughly when you talked (or that you didn't)? Each one becomes part of the test set.
+## 5. Decisions (rider, 22 Oct)
+1. **Phase 0 trace in exports: yes.** Built.
+   - One row per audio chunk (about 20 a second) in `voice-trace.csv`, in the ride export, tester builds only.
+   - About 8 MB per hour on the phone, about 2 MB per hour zipped in the export.
+   - Includes a second voice-detector reading on de-winded audio. It's logged only, never used for decisions, so Phase 3.1 can be judged from test rides.
+   - Scorecard: `VoiceReplay` / `VoiceReplayTest` in core/telemetry; rides go in `src/test/resources/voice-rides/`.
+2. **Phase 5 after-ride cleanup: no.** Videos are never marked or deleted by the app. Phase 5 is dropped.
+3. **Phase 6 button: no.** Dropped.
+4. **Test rides: yes.** The rider will do 3–5 rides with the trace and say when they talked.
 
 ## 6. Order and size
 | Step | Size | Depends on |

@@ -66,6 +66,9 @@ class TwoMics {
      */
     val mono: Boolean get() = !everDiffer && sameMs >= MONO_MS
 
+    /** How independent the two sides sound now (0 = one mic copied, about 1 = two mics), for the trace. */
+    val independenceNow: Double get() = independence(cross, leftSq, rightSq)
+
     /** Enough sound has been heard to tell. */
     val known: Boolean get() = heardMs >= MIN_HEARD_MS
 

@@ -332,6 +332,19 @@ class MomentsHub {
 
     fun drainLevels(): List<VoiceChunk> = synchronized(levels) { levels.toList().also { levels.clear() } }
 
+    /** The voice trace (tester builds; set by the recorder while a ride runs), and what it needs from the session. */
+    @Volatile var trace: VoiceTrace? = null
+    @Volatile var speedKmh: Float? = null
+
+    /** From the audio thread, after the chunk's other reports: one row of the voice trace. */
+    fun reportTrace(a: TraceAudio) {
+        val t = trace ?: return
+        val chunk = synchronized(levels) { levels.lastOrNull() } ?: lastTraced
+        lastTraced = chunk
+        t.row(a, chunk, speedKmh, _wind.value, engineVoice, _twoMics.value?.kind, _speaking.value)
+    }
+    @Volatile private var lastTraced: VoiceChunk? = null
+
     fun clearLevel() {
         _micLevel.value = null
         _micHighLift.value = null

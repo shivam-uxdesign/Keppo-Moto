@@ -49,6 +49,9 @@ object ExportShare {
                     // Moments diagnostics: the capture log and what was saved (files themselves are not included).
                     val log = File(c.moments.dir(ride.id), MomentLog.FILE_NAME)
                     if (log.exists()) put("${folder}moments-log.txt", log.readText())
+                    // Tester builds: every voice chunk's readings, to replay the speech rules on this ride.
+                    val trace = File(c.moments.dir(ride.id), com.ridetrack.app.moments.VoiceTrace.FILE_NAME)
+                    if (trace.exists()) put("${folder}${com.ridetrack.app.moments.VoiceTrace.FILE_NAME}", trace.readText())
                     val moments = c.moments.forRide(ride.id)
                     if (moments.isNotEmpty() || log.exists()) put("${folder}moments.json", momentsJson(moments))
                 }
