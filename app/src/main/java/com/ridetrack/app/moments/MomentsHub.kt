@@ -249,6 +249,9 @@ class MomentsHub {
         out
     }
 
+    /** The crisp-band lift that counts as talking, from the rider's sensitivity (set each ride tick). */
+    @Volatile var highMinDb: Float = com.ridetrack.telemetry.moments.HighBandLift.SPEECH_DB
+
     private val _voiceLike = MutableStateFlow(true)
     /** The latest chunk passed the voice detector (the HUD says when loudness alone isn't enough). */
     val voiceLike: StateFlow<Boolean> = _voiceLike.asStateFlow()
@@ -321,7 +324,7 @@ class MomentsHub {
         }
         _wind.value = com.ridetrack.telemetry.moments.VoiceInWind.wind(chunk.backgroundDb)
         _voiceLike.value = voice >= com.ridetrack.telemetry.moments.VoiceInWind.voiceMin(_wind.value) ||
-            (chunk.highLiftDb ?: -99f) >= com.ridetrack.telemetry.moments.HighBandLift.SPEECH_DB
+            (chunk.highLiftDb ?: -99f) >= highMinDb
         _micHighLift.value = chunk.highLiftDb
         _micLift.value = chunk.liftDb
         _micLevel.value = chunk.aboveDb

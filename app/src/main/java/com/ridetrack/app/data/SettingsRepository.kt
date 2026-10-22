@@ -115,14 +115,26 @@ data class MomentSettings(
  * "Film when I speak": how many dB above the background noise (wind, engine) talking has to
  * be. On a bike anything looser lets the engine through, so these are the only two.
  */
-enum class VoiceSensitivity(val label: String, val marginDb: Float) {
-    NORMAL("Normal", 12f), STRICT("Strict", 16f);
+/**
+ * How readily talking starts a video, in five steps: helmets let in different amounts of wind.
+ * Each step moves every speech rule together: how far above the background a voice must be
+ * ([marginDb]), and with two mics how much the helmet mic must stand out from the engine mic,
+ * overall ([liftDb]) and in the voice's crisp band ([highDb]). The middle step (stored as STRICT,
+ * the old default) is what was measured on the 20 Oct ride.
+ */
+enum class VoiceSensitivity(val label: String, val marginDb: Float, val liftDb: Float, val highDb: Float) {
+    MOST("Most sensitive", 10f, 4f, 2f),
+    NORMAL("Sensitive", 12f, 5f, 2.5f),
+    STRICT("Balanced", 16f, 6f, 3f),
+    STRICTER("Strict", 18f, 7f, 5f),
+    STRICTEST("Strictest", 20f, 8f, 7f),
+    ;
 
     companion object {
-        /** Stored names, including the old Low (= Normal) and Medium / High (now Strict). */
+        /** Stored names, including the old Low (= Sensitive) and Medium / High (now Balanced). */
         fun of(name: String?): VoiceSensitivity = when (name) {
-            NORMAL.name, "LOW" -> NORMAL
-            else -> STRICT
+            "LOW" -> NORMAL
+            else -> entries.firstOrNull { it.name == name } ?: STRICT
         }
     }
 }

@@ -14,6 +14,7 @@ import com.ridetrack.app.moments.AudioEncoder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Box
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,7 +47,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -645,12 +649,26 @@ private fun VoiceLevel(sensitivity: VoiceSensitivity, mic: String?, rideActive: 
             Box(Modifier.offset(x = maxWidth * (sensitivity.marginDb / VOICE_METER_MAX)).width(2.dp).fillMaxHeight().background(RtColors.TextPrimary))
         }
         Spacer(Modifier.height(10.dp))
-        Text("Sensitivity", style = RtType.caption, color = RtColors.TextSecondary)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.xs)) {
-            VoiceSensitivity.entries.forEach { v -> Pick(v.label, sensitivity == v, true) { onSensitivity(v) } }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Sensitivity", style = RtType.caption, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
+            Text(sensitivity.label, style = RtType.caption, color = RtColors.TextPrimary)
         }
+        val steps = VoiceSensitivity.entries
+        androidx.compose.material3.Slider(
+            value = steps.indexOf(sensitivity).toFloat(),
+            onValueChange = { v -> steps[v.roundToInt().coerceIn(0, steps.lastIndex)].let { if (it != sensitivity) onSensitivity(it) } },
+            valueRange = 0f..steps.lastIndex.toFloat(),
+            steps = steps.size - 2,
+            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = RtColors.Primary, activeTrackColor = RtColors.Primary),
+            modifier = Modifier.semantics { stateDescription = sensitivity.label },
+        )
+        Row {
+            Text("Hears quieter talking", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.weight(1f))
+            Text("Fewer false starts", style = RtType.caption, color = RtColors.TextTertiary)
+        }
+        Spacer(Modifier.height(6.dp))
         Text(
-            "Strict needs clear, firm talking; Normal also hears quieter speech. Either way it has to sound like a voice, so horns, engines and wind don't film, and it keeps up with the wind as your speed changes.",
+            "Helmets let in different amounts of wind. Videos starting when you aren't talking: move it right. Talking not filmed: move it left. Balanced is the default. It moves every speech check together, including the helmet mic against the engine mic at speed.",
             style = RtType.caption,
             color = RtColors.TextTertiary,
         )

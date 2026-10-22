@@ -242,8 +242,8 @@ class HudController(
             // two mics the helmet mic standing out from the engine mic fills the bar too.
             micLevelDb = run {
                 val margin = VoiceInWind.margin(voice.value.second.marginDb, moments.wind.value)
-                val fromLift = moments.micLift.value?.let { it / VoiceInWind.LIFT_DB * margin }
-                val fromHigh = moments.micHighLift.value?.let { it / com.ridetrack.telemetry.moments.HighBandLift.SPEECH_DB * margin }
+                val fromLift = moments.micLift.value?.let { it / voice.value.second.liftDb * margin }
+                val fromHigh = moments.micHighLift.value?.let { it / voice.value.second.highDb * margin }
                 listOfNotNull(moments.micLevel.value, fromLift, fromHigh).maxOrNull()
             },
             voiceMarginDb = VoiceInWind.margin(voice.value.second.marginDb, moments.wind.value),

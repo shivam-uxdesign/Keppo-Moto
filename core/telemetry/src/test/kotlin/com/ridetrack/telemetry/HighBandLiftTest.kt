@@ -39,6 +39,29 @@ class HighBandLiftTest {
     }
 
     @Test
+    fun `a stricter setting never starts more false videos, and the most sensitive misses no talk`() {
+        fun run(highMin: Float): Pair<Int, Int> {
+            val lift = HighBandLift()
+            val gate = SpeechGate()
+            val starts = ArrayList<Long>()
+            val on = ArrayList<Long>()
+            ride().forEach { (ms, v, e) ->
+                val was = gate.speaking
+                val now = gate.onLevel(ms, aboveDb = -99f, chunkMillis = 50, marginDb = 16f, voice = 0f, highLiftDb = lift.onLevels(ms, v, e), highMinDb = highMin)
+                if (now && !was) starts += ms
+                if (now) on += ms
+            }
+            val falseStarts = starts.count { s -> talk.none { (a, b) -> s in (a - 1) * 1000L..(b + 5) * 1000L } }
+            val caught = talk.count { (a, b) -> on.any { it in a * 1000L until b * 1000L } }
+            return falseStarts to caught
+        }
+        // The slider's steps for the voice-at-speed check.
+        val results = listOf(2f, 2.5f, 3f, 5f, 7f).map { run(it) }
+        results.zipWithNext().forEach { (a, b) -> assertTrue(b.first <= a.first, "false starts by step: ${results.map { it.first }}") }
+        assertEquals(talk.size, results.first().second, "most sensitive caught")
+    }
+
+    @Test
     fun `wind and engine reaching both mics alike don't count, whatever their level`() {
         val lift = HighBandLift()
         var t = 0L

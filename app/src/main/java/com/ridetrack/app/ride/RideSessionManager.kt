@@ -493,6 +493,7 @@ class RideSessionManager(
             return
         }
         val margin = sensitivity.marginDb
+        momentsHub.highMinDb = sensitivity.highDb
         val wasSpeaking = rec.speech.speaking
         // In wind the margin and the voice bar come down (VoiceInWind); with two mics the helmet
         // mic standing out from the engine mic counts as loud too.
@@ -503,10 +504,12 @@ class RideSessionManager(
                 com.ridetrack.telemetry.moments.VoiceInWind.margin(margin, wind), c.voice,
                 com.ridetrack.telemetry.moments.VoiceInWind.voiceMin(wind), c.liftDb?.takeIf { rec.liftGuard.allowed(c.timeMillis) },
                 c.highLiftDb,
+                liftMinDb = sensitivity.liftDb,
+                highMinDb = sensitivity.highDb,
             )
             // The crisp-band lift is a voice in its own right (the detector reads 0 at speed): the
             // guard against "talking" with no voice in it mustn't count it as silence.
-            val voiceLike = if ((c.highLiftDb ?: -99f) >= com.ridetrack.telemetry.moments.HighBandLift.SPEECH_DB) 1f else c.voice
+            val voiceLike = if ((c.highLiftDb ?: -99f) >= sensitivity.highDb) 1f else c.voice
             if (rec.liftGuard.onChunk(c.timeMillis, voiceLike, speaking)) {
                 rec.speech.reset()
                 momentsHub.reportLiftDistrusted(c.timeMillis)
