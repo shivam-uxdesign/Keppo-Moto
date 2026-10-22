@@ -35,7 +35,7 @@ class ObdTest {
         val s = Elm327.supported("41 00 BE 3E B8 11", 0x00)
         assertTrue(0x0C in s && 0x0D in s && 0x05 in s && 0x11 in s, "$s")
         assertTrue(0x02 !in s && 0x0A !in s, "$s")
-        assertEquals(setOf(0x42, 0x46).filter { it in Elm327.supported("41 40 40 04 00 00", 0x40) }.toSet(), setOf(0x42, 0x46))
+        assertEquals(setOf(0x42, 0x46), Elm327.supported("41 40 44 00 00 00", 0x40))
     }
 
     @Test
