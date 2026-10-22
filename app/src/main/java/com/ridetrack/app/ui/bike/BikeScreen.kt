@@ -223,6 +223,8 @@ private fun BikeCard(
         Row {
             TextButton(onClick = onCalibrate) { Text(if (bike.calibration == null) "Calibrate manually" else "Recalibrate", color = RtColors.Primary) }
             TextButton(onClick = onEdit) { Text("Edit", color = RtColors.TextPrimary) }
+            val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
+            TextButton(onClick = { nav(com.ridetrack.app.ui.nav.Routes.obd(bike.id)) }) { Text("OBD", color = RtColors.TextPrimary) }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onDelete) { Text("Delete", color = RtColors.TextSecondary) }
         }

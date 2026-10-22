@@ -189,6 +189,9 @@ class AppContainer(context: Context) {
     /** The battery during a ride: time left, and when to charge. */
     val batteryWatch = BatteryWatch(appContext, battery, moments)
 
+    /** The bike's OBD adapter: engine data in rides, the test screen, alerts and fault codes. */
+    val obd = com.ridetrack.app.obd.ObdManager(appContext, settings, session, moments, errors, appScope)
+
     /** The rider's routines: when a ride starts, ends or arrives somewhere, do these. */
     val routines = com.ridetrack.app.routines.RoutineRunner(appContext, settings, session, errors)
 

@@ -291,6 +291,15 @@ class RideSessionManager(
     }
 
     /** Restarts the location request (e.g. after turning location back on). */
+    /** Engine data from the OBD adapter during the ride: RPM and the worked-out gear (either may be null). */
+    fun engine(rpm: Double?, gear: Int?) {
+        val now = SystemClock.elapsedRealtimeNanos()
+        scope.launch(recordingDispatcher) {
+            val rec = recorder ?: return@launch
+            rec.pendingEvents += rec.pipeline.process(com.ridetrack.telemetry.source.EngineReading(now, rpm, gear))
+        }
+    }
+
     fun retryGps() {
         val rec = recorder ?: return
         val source = phone ?: return

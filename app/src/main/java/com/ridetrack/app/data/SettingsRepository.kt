@@ -222,6 +222,11 @@ data class Settings(
     val fuelReadSms: Boolean = false,
     /** The rider's routines (when a ride starts, ends, or arrives somewhere: do these), as Routines.encode(). */
     val routines: String? = null,
+    /** OBD adapters per bike (and each bike's learned gears), as ObdAdapters.encode(). */
+    val obdAdapters: String? = null,
+    /** OBD alerts: engine hotter than this (°C), and battery under this with the engine running (tenths of a volt). */
+    val obdCoolantAlertC: Int = 105,
+    val obdLowVoltTenths: Int = 122,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -284,6 +289,9 @@ class SettingsRepository(private val context: Context) {
         val journalShareDemo = booleanPreferencesKey("journal_share_demo")
         val bikeCare = stringPreferencesKey("bike_care")
         val routines = stringPreferencesKey("routines")
+        val obdAdapters = stringPreferencesKey("obd_adapters")
+        val obdCoolantAlert = intPreferencesKey("obd_coolant_alert")
+        val obdLowVolt = intPreferencesKey("obd_low_volt")
         val homeDismissedRide = stringPreferencesKey("home_dismissed_ride")
         val fuelLog = stringPreferencesKey("fuel_log")
         val fuelPrompts = stringPreferencesKey("fuel_prompts")
@@ -370,6 +378,9 @@ class SettingsRepository(private val context: Context) {
             journalShareDemo = p[Keys.journalShareDemo] ?: false,
             bikeCare = p[Keys.bikeCare],
             routines = p[Keys.routines],
+            obdAdapters = p[Keys.obdAdapters],
+            obdCoolantAlertC = p[Keys.obdCoolantAlert] ?: 105,
+            obdLowVoltTenths = p[Keys.obdLowVolt] ?: 122,
             homeDismissedRide = p[Keys.homeDismissedRide],
             fuelLog = p[Keys.fuelLog],
             fuelPrompts = p[Keys.fuelPrompts],
@@ -430,6 +441,13 @@ class SettingsRepository(private val context: Context) {
     suspend fun setBikeCare(encoded: String) = context.dataStore.edit { it[Keys.bikeCare] = encoded }
 
     suspend fun setRoutines(encoded: String) = context.dataStore.edit { it[Keys.routines] = encoded }
+
+    suspend fun setObdAdapters(encoded: String) = context.dataStore.edit { it[Keys.obdAdapters] = encoded }
+
+    suspend fun setObdAlerts(coolantC: Int, lowVoltTenths: Int) = context.dataStore.edit {
+        it[Keys.obdCoolantAlert] = coolantC
+        it[Keys.obdLowVolt] = lowVoltTenths
+    }
     suspend fun setFuelLog(encoded: String) = context.dataStore.edit { it[Keys.fuelLog] = encoded }
     suspend fun setFuelPrompts(encoded: String) = context.dataStore.edit { it[Keys.fuelPrompts] = encoded }
     suspend fun setFuelReadSms(on: Boolean) = context.dataStore.edit { it[Keys.fuelReadSms] = on }

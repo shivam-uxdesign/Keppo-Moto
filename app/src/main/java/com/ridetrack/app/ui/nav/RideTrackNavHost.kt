@@ -146,6 +146,9 @@ object Routes {
     /** A bike's fuel: fill-ups, mileage, stops to confirm. */
     const val FUEL = "fuel/{bikeId}"
     fun fuel(bikeId: String) = "fuel/$bikeId"
+    /** Bike › OBD: pair the adapter, test the bike, fault codes, alerts. */
+    const val OBD = "obd/{bikeId}"
+    fun obd(bikeId: String) = "obd/$bikeId"
 }
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
@@ -551,6 +554,9 @@ fun RideTrackNavHost(
                 }
                 composable(Routes.CALIBRATE, arguments = listOf(navArgument("bikeId") { type = NavType.StringType })) { entry ->
                     CalibrationScreen(bikeId = entry.arguments?.getString("bikeId").orEmpty(), onDone = { nav.popBackStack() })
+                }
+                composable(Routes.OBD, arguments = listOf(navArgument("bikeId") { type = NavType.StringType })) { entry ->
+                    com.ridetrack.app.ui.bike.ObdScreen(bikeId = entry.arguments?.getString("bikeId").orEmpty(), onBack = { nav.popBackStack() })
                 }
                 composable(Routes.FUEL, arguments = listOf(navArgument("bikeId") { type = NavType.StringType })) { entry ->
                     com.ridetrack.app.ui.bike.FuelScreen(bikeId = entry.arguments?.getString("bikeId").orEmpty(), onBack = { nav.popBackStack() })

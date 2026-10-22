@@ -58,6 +58,8 @@ object ExportShare {
                     // Tester builds: every voice chunk's readings, to replay the speech rules on this ride.
                     val trace = File(c.moments.dir(ride.id), com.ridetrack.app.moments.VoiceTrace.FILE_NAME)
                     if (trace.exists()) put("${folder}${com.ridetrack.app.moments.VoiceTrace.FILE_NAME}", trace.readText())
+                    val obdLog = File(c.moments.dir(ride.id), com.ridetrack.app.obd.ObdManager.LOG_FILE)
+                    if (obdLog.exists()) put("${folder}${com.ridetrack.app.obd.ObdManager.LOG_FILE}", obdLog.readText())
                     val moments = c.moments.forRide(ride.id)
                     if (moments.isNotEmpty() || log.exists()) put("${folder}moments.json", momentsJson(moments))
                     // Tester builds: each video's sound on its own (voice mic, and the engine mic when kept),
