@@ -38,6 +38,12 @@ object ExportShare {
                     out.write(text.toByteArray(Charsets.UTF_8))
                     out.closeEntry()
                 }
+                val audioNames = HashSet<String>()
+                fun putFile(path: String, f: File) {
+                    out.putNextEntry(ZipEntry(path))
+                    f.inputStream().use { it.copyTo(out) }
+                    out.closeEntry()
+                }
                 rides.forEach { ride ->
                     val track = c.rides.track(ride.id)
                     val bike = bikes[ride.bikeId]
@@ -54,6 +60,19 @@ object ExportShare {
                     if (trace.exists()) put("${folder}${com.ridetrack.app.moments.VoiceTrace.FILE_NAME}", trace.readText())
                     val moments = c.moments.forRide(ride.id)
                     if (moments.isNotEmpty() || log.exists()) put("${folder}moments.json", momentsJson(moments))
+                    // Tester builds: each video's sound on its own (voice mic, and the engine mic when kept),
+                    // named by the time it started, so it can be heard without the videos.
+                    if (BuildConfig.TEST_BUILD) moments.filter { it.file.extension == "mp4" && it.file.isFile }.forEach { m ->
+                        val at = java.time.Instant.ofEpochMilli(m.timeMillis).atZone(java.time.ZoneId.systemDefault())
+                        val base = "${folder}audio/${AUDIO_TIME.format(at)} ${m.types.joinToString("+").ifEmpty { "MANUAL" }}"
+                        var stem = base
+                        var n = 2
+                        while (!audioNames.add(stem)) stem = "$base (${n++})"
+                        val voice = File(dir, "voice.m4a")
+                        if (runCatching { com.ridetrack.app.transcribe.ClipAudio.extract(m.file, voice) }.getOrDefault(false)) putFile("$stem voice.m4a", voice)
+                        voice.delete()
+                        if (m.engineFile.isFile) putFile("$stem engine.m4a", m.engineFile)
+                    }
                 }
                 put("rides_summary.csv", RideExporter.summaryCsv(rides.map { it to bikes[it.bikeId]?.displayName }))
             }
@@ -69,6 +88,8 @@ object ExportShare {
         context.startActivity(Intent.createChooser(send, "Share ride data").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         return zip.second
     }
+
+    private val AUDIO_TIME = java.time.format.DateTimeFormatter.ofPattern("HH-mm-ss")
 
     private fun momentsJson(list: List<Moment>): String = list.joinToString(",\n", "[\n", "\n]\n") { m ->
         "  {\"kind\": \"${m.kind}\", \"types\": \"${m.types.joinToString("+")}\", \"time\": \"${java.time.Instant.ofEpochMilli(m.timeMillis)}\", " +
