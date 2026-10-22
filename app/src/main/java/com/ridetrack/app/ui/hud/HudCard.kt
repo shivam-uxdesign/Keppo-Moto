@@ -241,12 +241,12 @@ private fun TwoMicMeter(m: com.ridetrack.app.moments.TwoMicLevels, c: HudColors)
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier.semantics(mergeDescendants = true) {
-            contentDescription = "Voice mic ${m.voiceDb.toInt()} dB, engine mic ${m.engineDb.toInt()} dB" + if (mono) ". Receiver on Mono: set it to Stereo" else ""
+            contentDescription = "Voice mic ${m.voiceDb.toInt()} dB, engine mic ${m.engineDb.toInt()} dB" + if (mono) ". One mic on both sides (receiver on Mono or Safety Track): set it to Stereo" else ""
         },
     ) {
         LevelRow("VOICE", m.voiceDb, DarkPalette.primary, c)
         LevelRow("ENGINE", m.engineDb, if (mono) c.muted.copy(alpha = 0.45f) else ENGINE_ORANGE, c)
-        if (mono) Text("Receiver on Mono · set it to Stereo", style = hudLabel, color = DarkPalette.warning, maxLines = 2)
+        if (mono) Text("One mic on both sides · set receiver to Stereo", style = hudLabel, color = DarkPalette.warning, maxLines = 2)
     }
 }
 

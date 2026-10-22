@@ -57,6 +57,33 @@ class TwoMicsTest {
         assertFalse(two.mono)
     }
 
+    // Wind-like noise, the same every run.
+    private val noise = java.util.Random(7).let { r -> DoubleArray(rate * 20) { r.nextGaussian() * 0.3 } }
+    private val other = java.util.Random(11).let { r -> DoubleArray(rate * 20) { r.nextGaussian() * 0.3 } }
+
+    @Test
+    fun `a receiver's backup copy of the same mic (Safety Track, -6 dB) is one mic, not two`() {
+        // 22 Oct: this read as two mics, and the two-mic voice rules heard "talking" all ride.
+        val m = TwoMics()
+        feed(m, 12, { noise[it] }, { 0.5 * noise[it] })
+        assertFalse(m.differ)
+        assertTrue(m.mono)
+    }
+
+    @Test
+    fun `the same mic with the louder side saturating in wind is still one mic`() {
+        val m = TwoMics()
+        feed(m, 12, { (noise[it] * 4).coerceIn(-0.9, 0.9) }, { 0.5 * noise[it] })
+        assertFalse(m.differ)
+    }
+
+    @Test
+    fun `two mics hearing different wind are two`() {
+        val m = TwoMics()
+        feed(m, 3, { noise[it] }, { 0.5 * other[it] })
+        assertTrue(m.differ)
+    }
+
     @Test
     fun `silence tells nothing`() {
         val m = TwoMics()

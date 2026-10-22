@@ -522,7 +522,7 @@ class MomentRecorder(
                     hub.reportTwo(voiceDb, engineDb, kind)
                     if (kind != twoMicLogged && kind != TwoMicKind.LISTENING) {
                         twoMicLogged = kind
-                        log.log(if (kind == TwoMicKind.TWO) "two mics: voice and engine differ, engine sound kept with each clip" else "two mics: receiver on Mono (both sides identical for 10 s): set it to Stereo for a separate engine sound; mic 2 is still kept")
+                        log.log(if (kind == TwoMicKind.TWO) "two mics: voice and engine differ, engine sound kept with each clip" else "two mics: both sides carry the same mic for 10 s (receiver on Mono or Safety Track): set it to Stereo for a separate engine sound and voice at speed; mic 2 is still kept")
                     }
                     if (kind == TwoMicKind.TWO) hub.reportEngine(System.currentTimeMillis(), engineDb, ENGINE_CHUNK_MS)
                 },
@@ -564,7 +564,7 @@ class MomentRecorder(
     private fun engineNote(kept: Boolean): String {
         val enc = audio
         return when {
-            kept -> "engine sound kept" + if (enc?.twoMono == true) " (same as the voice: receiver on Mono)" else ""
+            kept -> "engine sound kept" + if (enc?.twoMono == true) " (same mic as the voice: receiver on Mono or Safety Track)" else ""
             !settings.twoMics -> "no engine sound: Two mics is off"
             enc == null -> "no engine sound: no mic open"
             audioMic?.type != MicType.USB -> "no engine sound: recording with ${audioMic?.type?.label ?: "the phone mic"}, not the receiver"
@@ -580,7 +580,7 @@ class MomentRecorder(
         val format = enc.engineFormat ?: return log.log(engineNote(false))
         runCatching {
             val out = File(clip.parentFile, clip.nameWithoutExtension + ".engine.m4a")
-            if (ClipWriter.writeAudio(out, format, buffer.extraBetween(fromMicros, toMicros), fromMicros)) log.log("engine mic kept: ${out.name}" + if (enc.twoMono) " (same as the voice: receiver on Mono)" else "")
+            if (ClipWriter.writeAudio(out, format, buffer.extraBetween(fromMicros, toMicros), fromMicros)) log.log("engine mic kept: ${out.name}" + if (enc.twoMono) " (same mic as the voice: receiver on Mono or Safety Track)" else "")
         }.onFailure { log.error("engine mic sound couldn't be written", it) }
     }
 

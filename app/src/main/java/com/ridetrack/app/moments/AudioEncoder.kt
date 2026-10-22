@@ -164,7 +164,7 @@ class AudioEncoder(
                         report(at, levelDb(inBuf, samples), samples * 1000L / SAMPLE_RATE, voice(inBuf, samples))
                         onHigh?.let { high ->
                             val b = inBuf.duplicate().order(java.nio.ByteOrder.nativeOrder())
-                            high(at, voiceHigh.levelDb(samples) { i -> b.getShort(i * 2) / 32768.0 }, if (stereo) lastEngineHigh else null)
+                            high(at, voiceHigh.levelDb(samples) { i -> b.getShort(i * 2) / 32768.0 }, if (twoDifferent) lastEngineHigh else null)
                         }
                         onClipping?.let { clip ->
                             val b = inBuf.duplicate().order(java.nio.ByteOrder.nativeOrder())

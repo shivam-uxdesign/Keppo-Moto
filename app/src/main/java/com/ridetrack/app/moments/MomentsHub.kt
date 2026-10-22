@@ -210,8 +210,9 @@ class MomentsHub {
     /** From the audio thread: each mic's loudness (dBFS) and what's known about them. */
     fun reportTwo(voiceDb: Float, engineDb: Float, kind: TwoMicKind) {
         _twoMics.value = TwoMicLevels(voiceDb, engineDb, kind)
-        // The helmet mic against the engine mic says who's talking; not when the receiver mixes them.
-        val l = if (kind != TwoMicKind.MONO) twoMicLift.onLevels(System.currentTimeMillis(), voiceDb, engineDb) else null
+        // The helmet mic against the engine mic says who's talking; only once they're known to be two
+        // different mics (one mic on both sides, mixed or as a backup copy, only differs in noise).
+        val l = if (kind == TwoMicKind.TWO) twoMicLift.onLevels(System.currentTimeMillis(), voiceDb, engineDb) else null
         lift = if (_voiceOnEngineSide.value) null else l
     }
 
@@ -414,7 +415,7 @@ enum class TwoMicKind {
     LISTENING,
     /** Two different mics: the engine mic is kept as its own sound. */
     TWO,
-    /** Both sides carry the same mix for a while: the receiver is on Mono. Labels stay Voice and Engine. */
+    /** Both sides carry the same mic for a while: the receiver is on Mono or Safety Track. Labels stay Voice and Engine. */
     MONO,
 }
 

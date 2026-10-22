@@ -6,11 +6,16 @@ import kotlin.math.sqrt
 /**
  * A two-transmitter receiver (DJI Mic Mini in its mono setting) sends one mic on the left
  * channel and the other on the right. This splits a stereo chunk into the two, and tells
- * whether they really are two different mics (a single mic arrives the same on both sides).
+ * whether they really are two different mics. A single mic can arrive on both sides at any
+ * volume: the same on both (the receiver's Mono, mixing the transmitters) or a quieter backup
+ * copy (its Safety Track, -6 dB); either way one side is the other scaled, so it's measured
+ * independent of volume. (Comparing the sides sample by sample took a -6 dB copy, or one side
+ * saturating in wind, for two mics: 22 Oct, and the two-mic voice rules then heard "talking".)
  */
 class TwoMics {
-    private var diff = 0.0
-    private var total = 0.0
+    private var cross = 0.0
+    private var leftSq = 0.0
+    private var rightSq = 0.0
     private var heardMs = 0L
     /** Two different mics were heard once: they stay two for the rest of the session (mics don't move). */
     private var everDiffer = false
@@ -24,7 +29,7 @@ class TwoMics {
     fun split(pcm: ShortArray, frames: Int, left: ShortArray, right: ShortArray, sampleRate: Int): Pair<Float, Float> {
         var l2 = 0.0
         var r2 = 0.0
-        var d2 = 0.0
+        var lr = 0.0
         for (i in 0 until frames) {
             val l = pcm[2 * i]
             val r = pcm[2 * i + 1]
@@ -32,17 +37,17 @@ class TwoMics {
             right[i] = r
             l2 += l.toDouble() * l
             r2 += r.toDouble() * r
-            val d = l.toDouble() - r
-            d2 += d * d
+            lr += l.toDouble() * r
         }
         // Only sound counts: silence on both sides says nothing about how many mics there are.
         if (frames > 0 && maxOf(l2, r2) / frames > SILENCE) {
-            diff = diff * DECAY + d2
-            total = total * DECAY + (l2 + r2)
+            cross = cross * DECAY + lr
+            leftSq = leftSq * DECAY + l2
+            rightSq = rightSq * DECAY + r2
             val ms = frames * 1000L / sampleRate
             heardMs += ms
-            if (heardMs >= MIN_HEARD_MS && total > 0) {
-                if (diff / total > THRESHOLD) { everDiffer = true; sameMs = 0 } else sameMs += ms
+            if (heardMs >= MIN_HEARD_MS) {
+                if (independence(cross, leftSq, rightSq) > THRESHOLD) { everDiffer = true; sameMs = 0 } else sameMs += ms
             }
         }
         return db(l2, frames) to db(r2, frames)
@@ -55,8 +60,9 @@ class TwoMics {
     val differ: Boolean get() = everDiffer
 
     /**
-     * Both sides have carried the same sound for [MONO_MS] of sound and never differed: the
-     * receiver is mixing both transmitters (its Mono setting). Not decided from a moment.
+     * Both sides have carried the same mic for [MONO_MS] of sound and never differed: the
+     * receiver is mixing both transmitters (Mono) or copying one (Safety Track). Not decided
+     * from a moment.
      */
     val mono: Boolean get() = !everDiffer && sameMs >= MONO_MS
 
@@ -64,8 +70,15 @@ class TwoMics {
     val known: Boolean get() = heardMs >= MIN_HEARD_MS
 
     companion object {
-        /** Difference energy over both sides' energy: identical copies give 0, independent mics about 1. */
-        const val THRESHOLD = 0.15
+        /**
+         * Above this [independence] the sides are two mics. Measured: the 20 Oct helmet and jacket
+         * mics 0.96–1.0; a -6 dB copy 0.00; a copy with one side saturating 0.01 (0.22 at worst).
+         */
+        const val THRESHOLD = 0.5
+
+        /** 0 when one side is the other at any volume, about 1 for two independent mics. */
+        fun independence(lr: Double, l2: Double, r2: Double): Double =
+            if (l2 <= 0 || r2 <= 0) 1.0 else (1 - lr * lr / (l2 * r2)).coerceIn(0.0, 1.0)
         const val MIN_HEARD_MS = 1_500L
         const val MONO_MS = 10_000L
         private const val DECAY = 0.98
