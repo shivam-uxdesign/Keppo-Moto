@@ -144,10 +144,26 @@ fun ObdScreen(bikeId: String, onBack: () -> Unit) {
                     val v = state.values
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(RtDimens.sm), verticalArrangement = Arrangement.spacedBy(RtDimens.sm)) {
                         Tile("Battery", state.volts?.let { "%.1f".format(Locale.US, it) } ?: "–", "V")
-                        Tile("Engine", when (state.engine) { EngineWatch.State.RUNNING -> "Running"; EngineWatch.State.KEY_ON -> "Off"; else -> "–" }, null)
+                        Tile("Engine", when (state.engine) { EngineWatch.State.RUNNING -> "On"; EngineWatch.State.KEY_ON -> "Off"; else -> "–" }, null)
                         Tile("Gear", state.gear?.let { if (it == 0) "N" else "$it" } ?: "–", null)
                         (listOf(Elm327.Pid.RPM, Elm327.Pid.SPEED) + state.supported.filterNot { it == Elm327.Pid.RPM || it == Elm327.Pid.SPEED }).forEach { p ->
                             if (p in state.supported) Tile(p.label, v[p]?.let { fmt(p, it) } ?: "…", p.unit)
+                        }
+                    }
+                    if (state.phase == ObdState.Phase.NO_ECU || state.searching != null) {
+                        Spacer(Modifier.height(RtDimens.sm))
+                        val searching = state.searching
+                        if (searching != null) {
+                            Text(searching, style = RtType.body, color = RtColors.Primary)
+                            Text("Keep the key on. Each try takes up to 10 s.", style = RtType.caption, color = RtColors.TextSecondary)
+                        } else {
+                            Text(
+                                "Many bikes talk on the K-line, which the adapter's own search often misses. Try each way by hand: CAN at every speed, then K-line with each start-up and the usual ECU addresses. Whatever works is remembered.",
+                                style = RtType.caption,
+                                color = RtColors.TextSecondary,
+                            )
+                            Spacer(Modifier.height(RtDimens.xs))
+                            PrimaryButton("Try every protocol (about 2 min)", onClick = { c.obd.searchProtocols() })
                         }
                     }
                     Spacer(Modifier.height(6.dp))

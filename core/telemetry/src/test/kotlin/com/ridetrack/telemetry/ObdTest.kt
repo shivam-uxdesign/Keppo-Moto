@@ -19,6 +19,9 @@ class ObdTest {
         assertEquals(100.0, Elm327.value("41 11 FF", Elm327.Pid.THROTTLE))
         assertEquals(14.6, Elm327.value("41 42 39 08", Elm327.Pid.MODULE_VOLTAGE)!!, 0.01)
         assertNull(Elm327.value("NO DATA\r>", Elm327.Pid.RPM))
+        // K-line: the first answer starts with the wake-up; it's still the answer.
+        assertEquals(1726.0, Elm327.value("BUS INIT: ...OK\r41 0C 1A F8\r>", Elm327.Pid.RPM))
+        assertNull(Elm327.value("BUS INIT: ...ERROR\r>", Elm327.Pid.RPM))
         assertNull(Elm327.value("41 0C 1A", Elm327.Pid.RPM))
     }
 

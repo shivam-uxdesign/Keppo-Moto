@@ -83,9 +83,55 @@ class ObdClientTest {
         repeat(5) { c.read(Elm327.Pid.RPM) }
     }
 
+    /** A K-line bike on ECU address 11 that the adapter's own search misses. */
+    private class KLineBike : ObdLink {
+        override val kind = "Bluetooth classic"
+        val sent = ArrayList<String>()
+        private var proto = "0"
+        private var header = ""
+        override suspend fun open() = Unit
+        override fun close() = Unit
+        override suspend fun send(command: String, timeoutMs: Long): String {
+            sent += command
+            when {
+                command.startsWith("ATSP") -> proto = command.removePrefix("ATSP")
+                command.startsWith("ATSH") -> header = command.removePrefix("ATSH")
+            }
+            return when (command) {
+                "ATZ" -> "ELM327 v2.1\r"
+                "ATDP" -> "ISO 14230-4 (KWP FAST)\r"
+                "0100" -> if (proto == "5" && header == "8111F1") "BUS INIT: ...OK\r41 00 98 18 80 11\r" else if (proto == "5") "BUS INIT: ...OK\rNO DATA\r" else "UNABLE TO CONNECT\r"
+                "010C" -> if (proto == "5" && header == "8111F1") "41 0C 0F A0\r" else "NO DATA\r"
+                else -> "OK\r"
+            }
+        }
+    }
+
+    @Test
+    fun `trying every protocol finds a K-line bike on its own address, and next time goes straight there`() = runBlocking {
+        val bike = KLineBike()
+        val log = ArrayList<String>()
+        val c = ObdClient(bike) { log += it }
+        assertTrue(c.connect())
+        assertFalse(c.ecu)
+        val steps = ArrayList<String>()
+        val found = c.search { _, _, label -> steps += label }
+        assertEquals("K-line fast start, ECU 11", found?.label)
+        assertTrue(c.ecu)
+        assertEquals(1000.0, c.read(Elm327.Pid.RPM))
+        assertTrue(steps.first().startsWith("CAN"))
+        assertTrue(log.any { it.contains("try K-line fast start, any ECU: BUS INIT: ...OK NO DATA") })
+        // Remembered: the next connection uses it at once.
+        val next = KLineBike()
+        val c2 = ObdClient(next) {}
+        assertTrue(c2.connect(found!!.setup))
+        assertTrue(c2.ecu)
+        assertEquals(listOf("ATPC", "ATSP5", "ATSH8111F1", "0100"), next.sent.drop(6).take(4))
+    }
+
     @Test
     fun `adapters and learned gears survive saving`() {
-        val list = listOf(ObdAdapter("bike-1", "00:1D:A5:68:98:8B", "OBDII | v1.5", listOf(150.0, 105.0, 80.0)), ObdAdapter("b2", "AA:BB", "V-LINK"))
+        val list = listOf(ObdAdapter("bike-1", "00:1D:A5:68:98:8B", "OBDII | v1.5", listOf(150.0, 105.0, 80.0), listOf("ATPC", "ATSP5", "ATSH8111F1")), ObdAdapter("b2", "AA:BB", "V-LINK"))
         assertEquals(list, ObdAdapters.decode(ObdAdapters.encode(list)))
         assertEquals(listOf(list[1]), ObdAdapters.with(list, "bike-1", null))
     }

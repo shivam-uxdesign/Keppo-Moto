@@ -51,6 +51,8 @@ data class ObdState(
     val gearsLearned: Int = 0,
     val codes: List<String>? = null,
     val message: String? = null,
+    /** "Try every protocol" running: which try of how many. */
+    val searching: String? = null,
 ) {
     enum class Phase { IDLE, CONNECTING, CONNECTED, NO_ECU, FAILED }
 }
@@ -143,6 +145,29 @@ class ObdManager(
         if (ok) _state.value = _state.value.copy(codes = emptyList())
     }
 
+    /** "Try every protocol": when the adapter's own search found nothing. Remembers what works. */
+    fun searchProtocols() = scope.launch {
+        val c = client ?: return@launch
+        val bikeId = _state.value.bikeId ?: return@launch
+        val found = lock.withLock {
+            runCatching { c.search { i, n, label -> _state.value = _state.value.copy(searching = "Trying $i of $n: $label") } }
+                .onFailure { log("search stopped: ${it.message}") }.getOrNull()
+        }
+        if (found != null) {
+            val list = ObdAdapters.decode(settings.settings.first().obdAdapters)
+            list.firstOrNull { it.bikeId == bikeId }?.let { a -> settings.setObdAdapters(ObdAdapters.encode(ObdAdapters.with(list, bikeId, a.copy(setup = found.setup)))) }
+            _state.value = _state.value.copy(
+                searching = null, phase = ObdState.Phase.CONNECTED, protocol = c.protocol ?: found.label,
+                supported = Elm327.Pid.entries.filter { it.code in c.supported },
+                message = "Found: ${found.label}. Remembered for next time.",
+            )
+            restartPolling = true
+        } else {
+            _state.value = _state.value.copy(searching = null, message = "None of the ways answered. Share the test report so I can look at the answers.")
+        }
+    }
+    @Volatile private var restartPolling = false
+
     private fun start(bikeId: String) {
         if (job?.isActive == true && _state.value.bikeId == bikeId) return
         job?.cancel()
@@ -179,7 +204,7 @@ class ObdManager(
             var c: ObdClient? = null
             for (link in ObdLink.forDevice(context, device)) {
                 val tryClient = ObdClient(link, ::log)
-                if (tryClient.connect()) { c = tryClient; break }
+                if (tryClient.connect(adapter.setup)) { c = tryClient; break }
                 tryClient.close()
             }
             if (c == null) {
@@ -227,6 +252,8 @@ class ObdManager(
         var lowSince: Long? = null
         val warned = HashSet<String>()
         while (scope.isActive) {
+            // A protocol search found the bike: start over with what it reads.
+            if (restartPolling) { restartPolling = false; return poll(c) }
             val now = System.currentTimeMillis()
             val (rpm, speed) = lock.withLock { c.read(Elm327.Pid.RPM) to c.read(Elm327.Pid.SPEED) }
             var volts = _state.value.volts

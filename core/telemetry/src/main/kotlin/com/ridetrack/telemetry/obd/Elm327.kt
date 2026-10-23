@@ -42,6 +42,32 @@ object Elm327 {
         }
     }
 
+    /** Engine-ECU addresses bikes commonly answer on (K-line). */
+    val ECU_ADDRESSES = listOf("10", "11", "12", "13", "17", "18", "33")
+
+    /** One way of reaching the bike: the setup commands sent before asking it anything. */
+    data class Attempt(val label: String, val setup: List<String>)
+
+    /**
+     * Every way to try when the adapter's own search (ATSP0) finds nothing: each CAN speed, then
+     * K-line (what most Indian bikes use) with fast and slow start-up, addressed to everyone and to
+     * the usual engine-ECU addresses one by one, then ISO 9141. About 2 minutes in all.
+     */
+    val SEARCH: List<Attempt> = buildList {
+        add(Attempt("CAN 11-bit 500 kbit", listOf("ATPC", "ATSP6")))
+        add(Attempt("CAN 11-bit 250 kbit", listOf("ATPC", "ATSP8")))
+        add(Attempt("CAN 29-bit 500 kbit", listOf("ATPC", "ATSP7")))
+        add(Attempt("CAN 29-bit 250 kbit", listOf("ATPC", "ATSP9")))
+        add(Attempt("K-line fast start, any ECU", listOf("ATPC", "ATSP5", "ATSHC133F1")))
+        ECU_ADDRESSES.forEach { a -> add(Attempt("K-line fast start, ECU $a", listOf("ATPC", "ATSP5", "ATSH81${a}F1"))) }
+        add(Attempt("K-line slow start, any ECU", listOf("ATPC", "ATSP4", "ATIIA33", "ATSHC133F1")))
+        listOf("10", "11", "12").forEach { a -> add(Attempt("K-line slow start, ECU $a", listOf("ATPC", "ATSP4", "ATIIA$a", "ATSH81${a}F1"))) }
+        add(Attempt("ISO 9141", listOf("ATPC", "ATSP3", "ATSH686AF1")))
+    }
+
+    /** Whether a "0100" answer is a real answer from the bike. */
+    fun answered(raw: String): Boolean = bytes(raw, 0x00)?.let { it.size >= 4 } == true
+
     /** "Which readings do you have?": 0100 covers 01–20, 0120 covers 21–40, 0140 covers 41–60. */
     val SUPPORT_QUERIES = listOf(0x00, 0x20, 0x40)
 
@@ -49,6 +75,8 @@ object Elm327 {
     fun clean(raw: String): String? {
         val lines = raw.replace(">", "").split('\r', '\n').map { it.trim() }
             .filter { it.isNotEmpty() && !it.startsWith("SEARCHING", ignoreCase = true) && !it.equals("OK", ignoreCase = true) }
+            // K-line's first answer starts "BUS INIT: ...OK" (the bike woke up): news, not the answer.
+            .filterNot { it.startsWith("BUS INIT", ignoreCase = true) && it.endsWith("OK", ignoreCase = true) }
         if (lines.isEmpty()) return null
         if (lines.any { l -> NO_ANSWER.any { l.contains(it, ignoreCase = true) } }) return null
         return lines.joinToString("\n")
@@ -60,7 +88,7 @@ object Elm327 {
         return when {
             "UNABLE TO CONNECT" in t -> "The adapter can't reach the bike's ECU (key on? cable seated?)"
             "NO DATA" in t -> null // the bike doesn't have this reading: not a fault
-            "CAN ERROR" in t || "BUS ERROR" in t || "BUS INIT" in t -> "The bike's diagnostic line didn't answer (${raw.trim()})"
+            "CAN ERROR" in t || "BUS ERROR" in t || ("BUS INIT" in t && "ERROR" in t) -> "The bike's diagnostic line didn't answer (${raw.trim()})"
             "STOPPED" in t -> "The adapter was interrupted"
             t.trim() == "?" -> "The adapter didn't understand the command"
             else -> null
@@ -122,5 +150,6 @@ object Elm327 {
         return "$system${first and 3}${fourHex.substring(1)}"
     }
 
-    private val NO_ANSWER = listOf("NO DATA", "UNABLE TO CONNECT", "CAN ERROR", "BUS ERROR", "BUS INIT", "STOPPED", "ERROR")
+    // "BUS INIT: ...ERROR" is caught by ERROR; "BUS INIT: ...OK" is a good start (see clean).
+    private val NO_ANSWER = listOf("NO DATA", "UNABLE TO CONNECT", "CAN ERROR", "BUS ERROR", "STOPPED", "ERROR")
 }
