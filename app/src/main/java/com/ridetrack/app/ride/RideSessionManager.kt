@@ -504,6 +504,9 @@ class RideSessionManager(
         }
         val margin = sensitivity.marginDb
         momentsHub.highMinDb = sensitivity.highDb
+        momentsHub.marginDb = margin
+        momentsHub.liftMinDb = sensitivity.liftDb
+        momentsHub.liftAllowed = rec.liftGuard.allowed(frame.timeMillis)
         val wasSpeaking = rec.speech.speaking
         // In wind the margin and the voice bar come down (VoiceInWind); with two mics the helmet
         // mic standing out from the engine mic counts as loud too.

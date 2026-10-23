@@ -519,6 +519,7 @@ class MomentRecorder(
                 onHigh = hub::reportHigh,
                 dewindVad = dewindVad,
                 onTrace = if (trace != null) hub::reportTrace else null,
+                onSoundLost = { us -> log.log("mic sound lost: ${"%.1f".format(java.util.Locale.US, us / 1_000_000.0)} s in the last 10 s (the app fell behind; recordings have a hole there)") },
                 // The engine mic's level, for revs and exhaust pops (only when the two mics really differ).
                 onChannels = { l, r ->
                     val enc = audio
@@ -666,17 +667,19 @@ class MomentRecorder(
             if (settleMillis > 0) delay(settleMillis)
             val current = audioMic ?: return@launch
             val now = android.os.SystemClock.elapsedRealtime()
-            // Asked for the receiver but Android records from the phone mic (another app took the
-            // mic for a moment): reopen on the receiver while it's still connected.
+            // Asked for the receiver but Android records from the phone mic or a Bluetooth headset
+            // (another app or the headset took the mic for a moment): reopen on the receiver while
+            // it's still connected.
             val routed = audio?.routedDevice?.let(Microphones::typeOf)
             if (routed != null && routed != routedMic) {
                 routedMic = routed
                 hub.setMicType(routed)
             }
             if (routing.shouldReopen(current.type, routed, Microphones.find(context, current) != null, now)) {
-                log.log("phone mic used although ${current.label} is connected: reopened")
+                val other = if (routed == MicType.PHONE) "phone mic" else "${routed?.label} mic"
+                log.log("$other used although ${current.label} is connected: reopened")
                 if (routing.reopens == 1) runCatching {
-                    errors?.record("Moments", "Recording had moved to the phone mic although ${current.label} was connected; moved it back", warning = true)
+                    errors?.record("Moments", "Recording had moved to the $other although ${current.label} was connected; moved it back", warning = true)
                 }
                 restartAudio()
                 return@launch
@@ -828,7 +831,12 @@ class MomentRecorder(
                 clipStartMillis = clipStartMillis,
             ),
         )
-        log.log("clip saved: ${file.name} ${length / 1000}s ${file.length() / 1024}KB, ${video.size} frames, ${audioSamples.size} audio · mic: ${micNow()}")
+        val coverage = com.ridetrack.telemetry.moments.SoundCoverage().apply {
+            val first = video.first().wallMicros
+            video.forEach { onVideo(it.wallMicros - first) }
+            audioSamples.forEach { onSound(it.wallMicros - first) }
+        }
+        log.log("clip saved: ${file.name} ${length / 1000}s ${file.length() / 1024}KB, ${video.size} frames, ${audioSamples.size} audio · mic: ${micNow()} · ${coverage.summary()}")
         hub.onSaved()
         continueLast(r.rideId, clipStartMillis, clipStartMillis + length)
     }
@@ -1076,7 +1084,7 @@ class MomentRecorder(
                 camera = camera,
             ),
         )
-        log.log("video saved ($reason): ${file.name} ${length / 1000}s ${file.length() / 1024}KB · mic: ${micNow()} · " + engineNote(l.rec.engineFile.isFile))
+        log.log("video saved ($reason): ${file.name} ${length / 1000}s ${file.length() / 1024}KB · mic: ${micNow()} · " + engineNote(l.rec.engineFile.isFile) + " · " + l.rec.soundSummary())
         hub.onSaved()
         // Your own videos stay separate; event and voice videos continue the last clip.
         if (req.source != MomentSource.MANUAL) continueLast(req.rideId, start, start + length) else lastClip = null

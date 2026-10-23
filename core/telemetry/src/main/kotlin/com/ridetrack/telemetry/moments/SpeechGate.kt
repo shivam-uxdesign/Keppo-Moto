@@ -27,6 +27,10 @@ class SpeechGate(
     var speaking: Boolean = false
         private set
 
+    /** Which rules counted the last chunk as talking (empty = none). */
+    var lastRules: Set<Rule> = emptySet()
+        private set
+
     /** How long the sound had been going when speaking last started (for the log). */
     var sustainedMillis: Long = 0
         private set
@@ -52,11 +56,8 @@ class SpeechGate(
         liftMinDb: Float = VoiceInWind.LIFT_DB,
         highMinDb: Float = HighBandLift.SPEECH_DB,
     ): Boolean {
-        // Loud enough and voice-like; or, with two mics, the helmet mic standing out from the engine
-        // mic on its own (wind and traffic reach both mics; the voice detector gives up in wind).
-        val byLift = liftDb != null && liftDb >= liftMinDb
-        val byHigh = highLiftDb != null && highLiftDb >= highMinDb
-        val loud = (aboveDb >= marginDb && voice >= voiceMin) || byLift || byHigh
+        lastRules = rules(aboveDb, marginDb, voice, voiceMin, liftDb, highLiftDb, liftMinDb, highMinDb)
+        val loud = lastRules.isNotEmpty()
         recent.addLast(Triple(timeMillis, chunkMillis, loud))
         while (recent.isNotEmpty() && timeMillis - recent.first().first >= startMillis) recent.removeFirst()
         val last = lastLoud
@@ -81,9 +82,39 @@ class SpeechGate(
         return speaking
     }
 
+    /** The ways a chunk counts as talking; any one is enough. */
+    enum class Rule(val key: String) {
+        /** Loud enough over the background, and voice-like to the voice detector. */
+        VOICE("voice"),
+        /** Two mics: the helmet mic stands out from the engine mic ([TwoMicLift]). */
+        LIFT("lift"),
+        /** Two mics: the helmet mic's crisp band stands out over the last minute ([HighBandLift]). */
+        HIGH("high"),
+    }
+
     companion object {
         /** Silero's own default: at or above this, the chunk counts as a voice. */
         const val VOICE_MIN = 0.5f
+
+        /**
+         * Which rules count a chunk as talking: loud enough and voice-like; or, with two mics, the
+         * helmet mic standing out from the engine mic on its own (wind and traffic reach both mics;
+         * the voice detector gives up in wind), whole-band or in the crisp band. See [onLevel].
+         */
+        fun rules(
+            aboveDb: Float,
+            marginDb: Float,
+            voice: Float,
+            voiceMin: Float,
+            liftDb: Float?,
+            highLiftDb: Float?,
+            liftMinDb: Float,
+            highMinDb: Float,
+        ): Set<Rule> = buildSet {
+            if (aboveDb >= marginDb && voice >= voiceMin) add(Rule.VOICE)
+            if (liftDb != null && liftDb >= liftMinDb) add(Rule.LIFT)
+            if (highLiftDb != null && highLiftDb >= highMinDb) add(Rule.HIGH)
+        }
     }
 
     fun reset() {
@@ -92,5 +123,6 @@ class SpeechGate(
         lastLoud = null
         speaking = false
         lastSpeechMillis = null
+        lastRules = emptySet()
     }
 }

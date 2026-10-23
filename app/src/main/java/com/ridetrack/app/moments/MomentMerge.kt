@@ -114,8 +114,24 @@ class MomentMerger(private val context: Context, private val moments: MomentRepo
                 ),
             )
             ms.drop(1).forEach { m -> moments.remove(m) }
+            // Where each piece landed in the joined video, so its sound can be matched to the ride's clock.
+            var at = 0L
+            val map = pieces.joinToString(" | ") { (p, m) ->
+                val from = m.videoStartMillis + p.fromMillis
+                val line = "${clock(from)}–${clock(m.videoStartMillis + p.toMillis)} at ${position(at)}"
+                at += p.toMillis - p.fromMillis
+                line
+            }
+            MomentLog(File(dir, MomentLog.FILE_NAME)).apply {
+                log("joined ${pieces.size} into ${first.file.name} (${length / 1000}s): $map")
+                flush()
+            }
         }
     }
+
+    private fun clock(millis: Long) = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS").withZone(java.time.ZoneOffset.UTC).format(java.time.Instant.ofEpochMilli(millis))
+
+    private fun position(millis: Long) = "%d:%04.1f".format(java.util.Locale.US, millis / 60_000, millis % 60_000 / 1000.0)
 
     /** Captions and what Gemini saw, kept next to a clip (read again for the joined one). */
     private fun sidecars(clip: File) = listOf(StudioText.linesFile(clip), File(clip.parentFile, "${clip.name}.seen.json"))

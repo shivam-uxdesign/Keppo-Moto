@@ -58,6 +58,8 @@ class AudioEncoder(
     private val dewindVad: SileroVad? = null,
     /** Each chunk, after all the others: the raw readings for the voice trace (tester builds). */
     private val onTrace: ((TraceAudio) -> Unit)? = null,
+    /** µs of sound the mic dropped in the last 10 s, when the app fell behind (Android throws away what doesn't fit). */
+    private val onSoundLost: ((Long) -> Unit)? = null,
 ) {
     private val dewindWindows = VoiceWindows(SAMPLE_RATE)
     // Wind roar sits mostly below 250 Hz; a voice hardly does.
@@ -168,6 +170,7 @@ class AudioEncoder(
                     inBuf.clear()
                     val read = if (stereo) readStereo(inBuf) else record.read(inBuf, minOf(inBuf.capacity(), 4096))
                     val nowMicros = System.nanoTime() / 1000
+                    shortfall.onRead(nowMicros, read.coerceAtLeast(0) / 2)?.let { onSoundLost?.invoke(it) }
                     if (read > 0) onLevel?.let { report ->
                         val samples = read / 2
                         val at = (nowMicros + offsetMicros) / 1000
@@ -222,6 +225,7 @@ class AudioEncoder(
     }
 
     private val clipWatch = com.ridetrack.telemetry.moments.ClipWatch()
+    private val shortfall = com.ridetrack.telemetry.moments.SoundShortfall(SAMPLE_RATE)
     private val pcm = ShortArray(FRAMES * 2)
     private val left = ShortArray(FRAMES)
     private val right = ShortArray(FRAMES)

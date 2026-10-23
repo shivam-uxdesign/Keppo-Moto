@@ -48,7 +48,8 @@ class MicStability(
 /**
  * The mic Android really records from can differ from the one asked for: a preferred device is
  * only a preference, and another app taking the mic for a moment (the Assistant, a call) can
- * leave the recording on the phone mic while the receiver is still plugged in. Decides when to
+ * leave the recording on the phone mic, or on a Bluetooth headset (which then often sends
+ * silence), while the receiver is still plugged in. Decides when to
  * reopen on the asked-for mic, at most once per [minGapMillis]. Pure; times are monotonic millis.
  */
 class MicRouting(private val minGapMillis: Long = 30_000L) {
@@ -60,7 +61,7 @@ class MicRouting(private val minGapMillis: Long = 30_000L) {
     /** [routed] is the kind Android reports recording from (null = unknown). */
     fun shouldReopen(asked: MicType, routed: MicType?, askedConnected: Boolean, nowMillis: Long): Boolean {
         if (asked == MicType.PHONE || asked == MicType.AUTO) return false
-        if (routed != MicType.PHONE || !askedConnected) return false
+        if (routed == null || routed == asked || !askedConnected) return false
         lastReopen?.let { if (nowMillis - it < minGapMillis) return false }
         lastReopen = nowMillis
         reopens++

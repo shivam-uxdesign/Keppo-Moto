@@ -37,6 +37,10 @@ class LiveRecording(
     }
     private var wroteEngine = false
     private val engineInfo = MediaCodec.BufferInfo()
+    private val coverage = com.ridetrack.telemetry.moments.SoundCoverage()
+
+    /** Where the sound starts and ends against the picture, and its holes, for the log. */
+    @Synchronized fun soundSummary(): String = coverage.summary()
 
     /** Whether the engine mic is being recorded with this video. */
     val recordsEngine: Boolean get() = engineMuxer != null
@@ -67,6 +71,7 @@ class LiveRecording(
         val pts = if (isVideo) timeline.video(s.wallMicros, s.keyFrame) else if (audioTrack >= 0) timeline.audio(s.wallMicros) else null
         if (pts == null) return
         if (isVideo && firstFrameMillis == null) firstFrameMillis = s.wallMicros / 1000
+        if (isVideo) coverage.onVideo(pts) else coverage.onSound(pts)
         info.set(0, s.data.size, pts, if (s.keyFrame) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
         try {
             muxer.writeSampleData(if (isVideo) videoTrack else audioTrack, ByteBuffer.wrap(s.data), info)

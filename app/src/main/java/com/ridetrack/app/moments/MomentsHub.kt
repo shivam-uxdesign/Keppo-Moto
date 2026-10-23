@@ -335,13 +335,24 @@ class MomentsHub {
     /** The voice trace (tester builds; set by the recorder while a ride runs), and what it needs from the session. */
     @Volatile var trace: VoiceTrace? = null
     @Volatile var speedKmh: Float? = null
+    /** The rider's sensitivity, and whether the helmet-vs-engine rule is allowed now (set each ride tick), for the trace's rules column. */
+    @Volatile var marginDb: Float = 0f
+    @Volatile var liftMinDb: Float = com.ridetrack.telemetry.moments.VoiceInWind.LIFT_DB
+    @Volatile var liftAllowed: Boolean = true
 
     /** From the audio thread, after the chunk's other reports: one row of the voice trace. */
     fun reportTrace(a: TraceAudio) {
         val t = trace ?: return
         val chunk = synchronized(levels) { levels.lastOrNull() } ?: lastTraced
         lastTraced = chunk
-        t.row(a, chunk, speedKmh, _wind.value, engineVoice, _twoMics.value?.kind, _speaking.value)
+        val rules = chunk?.let { c ->
+            val wind = com.ridetrack.telemetry.moments.VoiceInWind.wind(c.backgroundDb)
+            com.ridetrack.telemetry.moments.SpeechGate.rules(
+                c.aboveDb, com.ridetrack.telemetry.moments.VoiceInWind.margin(marginDb, wind), c.voice,
+                com.ridetrack.telemetry.moments.VoiceInWind.voiceMin(wind), c.liftDb?.takeIf { liftAllowed }, c.highLiftDb, liftMinDb, highMinDb,
+            ).joinToString("+") { it.key }
+        }.orEmpty()
+        t.row(a, chunk, speedKmh, _wind.value, engineVoice, _twoMics.value?.kind, _speaking.value, rules)
     }
     @Volatile private var lastTraced: VoiceChunk? = null
 

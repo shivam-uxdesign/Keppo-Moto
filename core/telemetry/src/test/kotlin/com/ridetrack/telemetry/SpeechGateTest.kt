@@ -179,4 +179,14 @@ class SpeechGateTest {
         repeat(40) { w.onChunk(t, w.count({ loud[it] }, loud.size), loud.size); t += 46 }
         kotlin.test.assertTrue(w.overloaded)
     }
+
+    @Test
+    fun `each chunk says which rules counted it as talking`() {
+        val g = SpeechGate()
+        g.onLevel(0, 25f, 46, 20f, voice = 0.8f, highLiftDb = 9f, highMinDb = 7f)
+        assertEquals(setOf(SpeechGate.Rule.VOICE, SpeechGate.Rule.HIGH), g.lastRules)
+        g.onLevel(46, 25f, 46, 20f, voice = 0.1f, liftDb = 2f, highLiftDb = 3f, liftMinDb = 6f, highMinDb = 7f)
+        assertTrue(g.lastRules.isEmpty())
+        assertEquals(setOf(SpeechGate.Rule.LIFT), SpeechGate.rules(0f, 20f, 0f, 0.5f, 8f, null, 6f, 7f))
+    }
 }

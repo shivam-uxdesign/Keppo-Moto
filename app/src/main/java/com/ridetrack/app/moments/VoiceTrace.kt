@@ -47,6 +47,8 @@ class VoiceTrace(private val file: File) {
         engineVoice: Float?,
         twoKind: TwoMicKind?,
         speaking: Boolean,
+        /** Which rules counted this chunk as talking ("voice+high"; empty = none), see [com.ridetrack.telemetry.moments.SpeechGate.Rule]. */
+        rules: String = "",
     ) {
         fun f(v: Float?, d: Int = 1) = v?.takeIf { it.isFinite() }?.let { String.format(Locale.US, "%.${d}f", it) } ?: ""
         pending.append(a.timeMillis).append(',')
@@ -67,7 +69,8 @@ class VoiceTrace(private val file: File) {
             .append(f(chunk?.highLiftDb)).append(',')
             .append(f(wind, 2)).append(',')
             .append(f(a.clipped * 100f, 2)).append(',')
-            .append(if (speaking) 1 else 0).append('\n')
+            .append(if (speaking) 1 else 0).append(',')
+            .append(rules).append('\n')
         val now = a.timeMillis
         if (now - flushedAt >= FLUSH_EVERY_MILLIS) flush(now)
     }
@@ -86,6 +89,6 @@ class VoiceTrace(private val file: File) {
         const val FILE_NAME = "voice-trace.csv"
         private const val FLUSH_EVERY_MILLIS = 5_000L
         const val HEADER = "t_ms,chunk_ms,speed_kmh,level_db,background_db,voice,voice_dewind,high_db,engine_high_db," +
-            "left_db,right_db,engine_voice,two_mics,independence,lift_db,high_lift_db,wind,clipped_pct,speaking"
+            "left_db,right_db,engine_voice,two_mics,independence,lift_db,high_lift_db,wind,clipped_pct,speaking,rules"
     }
 }

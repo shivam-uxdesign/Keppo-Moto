@@ -95,6 +95,8 @@ object ExportShare {
 
     private fun momentsJson(list: List<Moment>): String = list.joinToString(",\n", "[\n", "\n]\n") { m ->
         "  {\"kind\": \"${m.kind}\", \"types\": \"${m.types.joinToString("+")}\", \"time\": \"${java.time.Instant.ofEpochMilli(m.timeMillis)}\", " +
+            // When the video's first frame was filmed (the audio files start there too); null for photos and older clips.
+            "\"clipStart\": ${m.clipStartMillis?.let { "\"${java.time.Instant.ofEpochMilli(it)}\"" } ?: "null"}, " +
             "\"file\": \"${m.file.name}\", \"bytes\": ${m.file.length()}, \"durationMs\": ${m.durationMillis ?: "null"}, " +
             "\"thumb\": ${m.thumb?.exists() == true}}"
     }

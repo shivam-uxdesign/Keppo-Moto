@@ -16,6 +16,12 @@ class MicRoutingTest {
     }
 
     @Test
+    fun `a Bluetooth headset taking over from the receiver is moved back too`() {
+        val r = MicRouting()
+        assertTrue(r.shouldReopen(MicType.USB, MicType.BLUETOOTH, askedConnected = true, nowMillis = 0))
+    }
+
+    @Test
     fun `nothing to do when the right mic records, the receiver is gone, or the phone mic was asked for`() {
         val r = MicRouting()
         assertFalse(r.shouldReopen(MicType.USB, MicType.USB, true, 0))
