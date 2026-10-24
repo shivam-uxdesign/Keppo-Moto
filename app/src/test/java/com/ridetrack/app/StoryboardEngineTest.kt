@@ -189,4 +189,23 @@ class StoryboardEngineTest {
                 }))
             }
         }).toString()
+
+    @Test fun `a fresh script from the rider replaces the current one, hand edits and all`() {
+        val base = StoryboardEngine.parse(first, null)!!.script!!
+        val edited = base.copy(sections = base.sections.map { sec -> sec.copy(shots = sec.shots.map { if (it.id == "s1") it.copy(board = it.board!!.copy(action = "My edit"), locked = setOf(ShotFields.ACTION)) else it }) })
+        val mine = """{"reply":"Built from your script.","fresh":true,"script":{"title":"Chai stop","format":"reel","sections":[{"kind":"hook","shots":[{"id":"s1","action":"Kettle steaming at the dhaba","sec":2}]}]}}"""
+        val r = StoryboardEngine.parse(mine, edited)!!
+        assertTrue(r.fresh)
+        val next = StoryboardEngine.next(edited, r)!!
+        assertEquals("Chai stop", next.title)
+        assertEquals("Kettle steaming at the dhaba", next.sections.single().shots.single().board!!.action)
+    }
+
+    @Test fun `the prompt keeps to this chat, with no example topics and no older scripts' text`() {
+        val style = com.ridetrack.app.studio.StyleContext(listOf("short punchy lines"), listOf(com.ridetrack.app.studio.StyleExample("Into the tunnel", "Tunnel time", null)))
+        val p = StoryboardEngine.prompt(StoryboardChat("c", "t", 0, 0), Gear(), style, "a reel about my chai stop", firstChat = false)
+        assertTrue("short punchy lines" in p)
+        assertTrue("tunnel" !in p.lowercase(), "an example or an old edit leaks a topic")
+        assertTrue("\"fresh\"" in p)
+    }
 }

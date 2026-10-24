@@ -86,6 +86,8 @@ data class StoryboardReply(
     val newVersion: Boolean? = null,
     /** What Gemini says it changed; checked against the real difference. */
     val claimed: List<String> = emptyList(),
+    /** The script replaces the current one (the rider gave their own script or a new idea): nothing is carried over. */
+    val fresh: Boolean = false,
 )
 
 /** A change to one shot: update some fields, insert a new shot after one, or delete it. */
@@ -118,20 +120,22 @@ object StoryboardEngine {
         appendLine("- Shots filmed while riding (\"riding\": true) use fixed mounts, never handheld.")
         appendLine("- Be specific enough that two people would film nearly the same shot: who, what moves, from where, what must be in frame.")
         appendLine("- Fill gaps sensibly (\"Step one: the ___\" becomes a fitting name) and say so in the reply.")
-        appendLine("- The rider's style below is the default; what they ask for in this chat wins (without changing the style).")
+        appendLine("- Work only from THIS chat: the rider's messages here and the current script below. Never bring in ideas, places, topics or shots from other chats, older scripts or the examples in these instructions.")
+        appendLine("- If the rider gives you their own script, or a new idea that replaces the current one, build the storyboard from what they gave, following it closely (their shots, order, lines). Set \"fresh\": true and give new shot ids; don't carry over anything from the current script unless they ask to keep it.")
+        appendLine("- The rider's style rules below are HOW they like things written (tone, pace, language), never WHAT a Reel is about. What they ask for in this chat wins.")
         appendLine("- Keep the reply short and friendly.")
         appendLine("- On-screen text can be anything (titles, step names, jokes): list it in \"texts\", each with the shot it starts on.")
         appendLine("- Story pieces may have a voice-over line per shot in \"say\", in the rider's own language (Hinglish in English letters, the way people text it).")
         appendLine("- Never change a field marked LOCKED unless the rider asks for that exact change; then list it in \"unlock\" (\"s3.action\").")
         appendLine("- The rider sees shots numbered #1, #2… in order. \"Shot 3\", \"clip 3\" or \"the third one\" means #3; find its id in the script below.")
-        appendLine("- To change the storyboard, ALWAYS return the whole updated \"script\": keep the id of every shot you keep, drop the ones removed, give new shots new ids. List what you changed in \"changes\" (\"Removed #3: the tunnel exit\"). If nothing in the storyboard changes, \"script\" is null and \"changes\" is empty.")
+        appendLine("- To change the storyboard, ALWAYS return the whole updated \"script\": keep the id of every shot you keep, drop the ones removed, give new shots new ids. List what you changed in \"changes\" (\"Removed #3: <what it showed>\"). If nothing in the storyboard changes, \"script\" is null and \"changes\" is empty.")
         appendLine("- Mentioned gear changes (\"I bought a GoPro\", \"no tripod any more\") go in \"memory\", each with a short confirm text.")
         appendLine()
         appendLine("RIDER'S GEAR: ${gear.describe()}")
         if (firstChat && !gear.asked) appendLine("This is the rider's first chat: if they haven't said their gear, ask about cameras, mounts and audio in one friendly question; meanwhile assume phone + handlebar mount.")
         style?.let { s ->
+            // Rules only: the rider's past edits quote older scripts, and their content leaked into new storyboards.
             if (s.rules.isNotEmpty()) appendLine("RIDER'S STYLE RULES: " + s.rules.joinToString("; "))
-            s.examples.takeIf { it.isNotEmpty() }?.let { ex -> appendLine("RECENT EDITS THE RIDER MADE: " + ex.joinToString(" | ") { "\"${it.before}\" → \"${it.after}\"" + (it.note?.let { n -> " ($n)" } ?: "") }) }
         }
         chat.script?.let { s ->
             appendLine()
@@ -148,15 +152,16 @@ object StoryboardEngine {
         appendLine("RIDER NOW: $text")
         appendLine()
         appendLine(
-            "Reply with JSON only: {\"reply\":\"...\",\"script\":SCRIPT or null,\"changes\":[\"...\"],\"memory\":[...],\"styleSuggestion\":null,\"needsClarification\":null,\"unlock\":[],\"newVersion\":null}. " +
+            "Reply with JSON only: {\"reply\":\"...\",\"script\":SCRIPT or null,\"changes\":[\"...\"],\"memory\":[...],\"styleSuggestion\":null,\"needsClarification\":null,\"unlock\":[],\"newVersion\":null,\"fresh\":false}. " +
                 "SCRIPT (the first draft, and the whole updated script after any change): {\"title\":\"...\",\"format\":\"reel|story|short\",\"musicNote\":\"...\"," +
                 "\"sections\":[{\"kind\":\"hook|setup|build|peak|turn|payoff|ending\",\"text\":\"on-screen text at its start or null\",\"shots\":[SHOT]}],\"texts\":[{\"text\":\"...\",\"shot\":\"s1\",\"sec\":2}]}. " +
                 "SHOT: {\"id\":\"s1\",\"action\":\"...\",\"framing\":\"extreme close-up|close-up|medium|wide\",\"angle\":\"...\",\"movement\":\"...\",\"mustShow\":\"...\"," +
                 "\"camera\":\"phone back|phone front|...\",\"mount\":\"handlebar|tripod at ...|handheld|...\",\"riding\":true,\"fallback\":{\"ideal\":\"...\",\"reason\":\"...\",\"using\":\"...\"} or null," +
                 "\"sec\":1.5,\"say\":\"voice-over line or null\",\"audio\":\"engine|music|voice\",\"transition\":\"cut|whip|fade|null\"," +
-                "\"match\":{\"events\":[\"strong acceleration\"],\"words\":[\"tunnel\"],\"minSec\":1,\"engine\":true,\"mustRecord\":false}}. " +
+                "\"match\":{\"events\":[\"strong acceleration\"],\"words\":[\"<a word the rider says>\"],\"minSec\":1,\"engine\":true,\"mustRecord\":false}}. " +
                 "MEMORY: {\"op\":\"add|update|remove\",\"kind\":\"camera|mount|audio|extra|helper\",\"name\":\"tripod\",\"detail\":\"...\",\"confirm\":\"Added: tripod\"}. " +
-                "needsClarification: {\"question\":\"...\",\"choices\":[\"...\"]}. newVersion: true when the rider asks for a new version or a different take, false when they ask to change this one.",
+                "needsClarification: {\"question\":\"...\",\"choices\":[\"...\"]}. newVersion: true when the rider asks for a new version or a different take, false when they ask to change this one. " +
+                "fresh: true when \"script\" replaces the current one entirely (the rider gave their own script or a new idea), false when it's the current one changed.",
         )
     }
 
@@ -205,6 +210,7 @@ object StoryboardEngine {
             unlock = o.optJSONArray("unlock")?.let { u -> (0 until u.length()).map { u.optString(it) }.toSet() }.orEmpty(),
             newVersion = if (o.has("newVersion") && !o.isNull("newVersion")) o.optBoolean("newVersion") else null,
             claimed = o.optJSONArray("changes")?.let { c -> (0 until c.length()).map { c.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
+            fresh = o.optBoolean("fresh", false),
         )
     }.getOrNull()
 
@@ -373,11 +379,12 @@ object StoryboardEngine {
     }
 
     /**
-     * The storyboard after a reply: the first draft; Gemini's whole updated script laid over the
-     * current one; or (older answers) patches applied. Null when the reply changes nothing.
+     * The storyboard after a reply: the first draft or a fresh one (the rider's own script or a
+     * new idea, with nothing carried over); Gemini's whole updated script laid over the current
+     * one; or (older answers) patches applied. Null when the reply changes nothing.
      */
     fun next(base: Script?, r: StoryboardReply): Script? = when {
-        r.script != null && base == null -> r.script
+        r.script != null && (base == null || r.fresh) -> r.script
         r.script != null && base != null -> merge(base, r.script, r.unlock)
         base != null && r.patches.isNotEmpty() -> apply(base, r.patches, r.unlock)
         else -> null

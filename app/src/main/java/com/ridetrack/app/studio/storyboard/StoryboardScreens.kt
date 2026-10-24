@@ -37,6 +37,7 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -89,6 +90,16 @@ fun StoryboardListScreen(onBack: () -> Unit, onOpen: (String) -> Unit, onGear: (
     val pro by c.entitlements.pro.collectAsStateWithLifecycle()
     val talk = remember { StoryboardTalk(c) }
     var note by remember { mutableStateOf<String?>(null) }
+    var deleting by remember { mutableStateOf<StoryboardChat?>(null) }
+    deleting?.let { ch ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete \u201c${ch.title}\u201d?") },
+            text = { Text("The chat and its script versions are deleted. Templates made from it stay in Your Reels.") },
+            confirmButton = { TextButton(onClick = { c.storyboard.delete(ch.id); deleting = null }) { Text("Delete", color = RtColors.Error) } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+        )
+    }
     Column(Modifier.fillMaxSize().background(RtColors.Background).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = RtColors.TextPrimary) }
@@ -134,7 +145,7 @@ fun StoryboardListScreen(onBack: () -> Unit, onOpen: (String) -> Unit, onGear: (
                             Text(if (left == 0) "All shots filled" else "${total - left} of $total shots filled", style = RtType.caption, color = if (left == 0) RtColors.Ok else RtColors.Warning)
                         }
                     }
-                    IconButton(onClick = { c.storyboard.delete(ch.id) }) { Icon(Icons.Rounded.Delete, "Delete the chat", tint = RtColors.TextTertiary) }
+                    IconButton(onClick = { deleting = ch }) { Icon(Icons.Rounded.Delete, "Delete the chat", tint = RtColors.TextTertiary) }
                 }
             }
         }
@@ -176,7 +187,7 @@ fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: (version:
 
     fun send(t: String) {
         if (t.isBlank() || busy != null) return
-        busy = "Studio is writing…"
+        busy = "Keppo is writing…"
         val ms = voiceMs
         text = ""; voiceMs = null
         scope.launch {
