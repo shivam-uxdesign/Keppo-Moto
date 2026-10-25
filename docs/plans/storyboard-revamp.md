@@ -2,6 +2,18 @@
 
 Status: plan only, nothing built. Asked for on 25 Oct: "very smart, functional and easy to use… a UX beast".
 
+## Decisions (25 Oct)
+
+| Question | Decision |
+|---|---|
+| Style learning | **Stop it everywhere for now**, in Storyboard and in ride Reels: "very hard to control what to learn". Nothing new is saved from edits, notes or "Ask for something", and saved rules are no longer sent to Gemini. The saved data is kept, hidden, so it can return later as an explicit feature. The "Your style" section leaves the Gear screen. |
+| Clip source | **Ask every time** shots would be filled (Make template, remake, entering Shoot): *Fresh only / Suggest from my rides / Auto-fill best matches*. A pinned rule from the chat ("no old clips") answers it without asking. |
+| Captions default | **Written** (suggested): the exact words and spelling from the script, timed to the take, with no transcription mistakes. *What I said* stays one tap away, per Reel and per shot. |
+| Shoot mode | **The app's own camera** with framing guide, countdown and teleprompter. |
+| Animatic voice | **No synthetic voice** (suggested): it would sound robotic and get the timing wrong. Unrecorded lines show as captions over a timed beat, estimated from the word count, and recorded takes play for real. |
+| Prototype first | **Yes** (suggested), for the Write board and the Ask Keppo sheet only: it's the biggest UX change and the cheapest to get wrong in code. P0 doesn't wait for it. |
+
+
 ## What's wrong today
 
 The rider's own reports (plan log #70–#72), plus a walk through the code:
@@ -180,7 +192,7 @@ The board and the Reel stay linked. Changing a shot's Say line on the board offe
 
 | Phase | What | Why first |
 |---|---|---|
-| **P0 quick fixes** | Storyboard stops using global style; clip-source switch (Fresh only / Suggest / Auto) honoured by Make template; voice-over takes get captions from the written words; captions choice Written / What I said | Fixes everything the rider hit, without the redesign |
+| **P0 quick fixes** | Style learning off everywhere (nothing saved, nothing sent; data kept hidden); clip source asked every time shots would be filled; voice-over takes get captions from the written words (default Written, What I said available) | Fixes everything the rider hit, without the redesign |
 | **P1 board** | Projects; Write board with inline editing, gestures, locks; Ask Keppo sheet with scoped asks; visible changes with Undo; versions row; pinned rules; four doors (own-script path kept word for word) | The new core |
 | **P2 words and preview** | Three word lanes per shot; health strip; Play animatic | Makes captions vs text obvious; see it before filming |
 | **P3 shoot** | Setup groups with Shoot buttons; Shoot mode (framing guide, teleprompter, keep/retake/next); voice-over booth with per-line retakes | Filming gets easy |
@@ -188,7 +200,7 @@ The board and the Reel stay linked. Changing a shot's Say line on the board offe
 
 Each phase ships as one build with tests (the board operations, intent routing, word-for-word check, caption timing, migration).
 
-## Questions for the rider
+## Questions for the rider (answered 25 Oct, see Decisions)
 
 1. Should the regular Reel Studio (Reels from rides) also stop learning rules from what you type, and should existing rules be cleared?
 2. Clip source default: Suggest (tap to use) or Fresh only?
