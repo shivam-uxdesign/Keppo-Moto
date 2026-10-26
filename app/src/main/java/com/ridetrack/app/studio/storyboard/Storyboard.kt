@@ -50,12 +50,31 @@ data class Storyboard(
     val audio: String = "music",
     val transition: String? = null,
     val match: MatchHints = MatchHints(),
+    /** The shot's captions: [Captions.SAY] the Say line, [Captions.CUSTOM] [captionText], or [Captions.OFF]. */
+    val caption: String = Captions.SAY,
+    /** The caption words when [caption] is custom. */
+    val captionText: String? = null,
 ) {
+    /** The words this shot's captions show (null = none). */
+    val captionWords: String? get() = when (caption) {
+        Captions.OFF -> null
+        Captions.CUSTOM -> captionText?.takeIf { it.isNotBlank() }
+        else -> say
+    }
+
     /** Off-bike shots (tripod, handheld, a helper) can be recorded with the phone's camera page. */
     val recordable: Boolean get() = !riding
 
     /** The framing icon's word: eye, head, rider or road. */
     val framingKind: Framing get() = Framing.of(framing)
+}
+
+/** A shot's caption modes. */
+object Captions {
+    const val SAY = "say"
+    const val CUSTOM = "custom"
+    const val OFF = "off"
+    fun of(raw: String?): String = when (raw?.trim()?.lowercase(Locale.US)) { CUSTOM -> CUSTOM; OFF, "none" -> OFF; else -> SAY }
 }
 
 enum class Framing(val label: String) {
@@ -85,7 +104,9 @@ object ShotFields {
     const val CAMERA = "camera"
     const val DURATION = "duration"
     const val SAY = "say"
-    val ALL = listOf(ACTION, FRAMING, MOUNT, CAMERA, DURATION, SAY, "angle", "movement", "mustShow", "audio", "transition", "riding", "fallback", "match")
+    const val CAPTION = "caption"
+    const val TEXT = "text"
+    val ALL = listOf(ACTION, FRAMING, MOUNT, CAMERA, DURATION, SAY, CAPTION, TEXT, "angle", "movement", "mustShow", "audio", "transition", "riding", "fallback", "match")
 }
 
 /** The storyboard parts of a script: shots with no clip yet, read and written alongside [com.ridetrack.app.studio.ScriptJson]. Pure, unit-tested. */
@@ -97,6 +118,7 @@ object StoryboardJson {
         .put("fallback", b.fallback?.let { JSONObject().put("ideal", it.ideal).put("reason", it.reason).put("using", it.using) } ?: JSONObject.NULL)
         .put("match", JSONObject().put("events", JSONArray(b.match.events)).put("words", JSONArray(b.match.words)).put("minMs", b.match.minMs)
             .put("engine", b.match.engine).put("mustRecord", b.match.mustRecord))
+        .put("caption", b.caption).put("captionText", b.captionText ?: JSONObject.NULL)
 
     fun read(o: JSONObject?): Storyboard? {
         if (o == null) return null
@@ -123,6 +145,8 @@ object StoryboardJson {
                 engine = m?.optBoolean("engine", false) ?: false,
                 mustRecord = m?.optBoolean("mustRecord", false) ?: false,
             ),
+            caption = Captions.of(o.optString("caption")),
+            captionText = o.optString("captionText").takeIf { !o.isNull("captionText") && it.isNotBlank() },
         )
     }
 

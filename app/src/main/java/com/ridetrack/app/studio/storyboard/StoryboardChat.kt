@@ -65,12 +65,38 @@ data class StoryboardChat(
     val current: Int = -1,
     /** Where footage may come from, when the rider said so in this chat; null = ask at Make template. */
     val clips: ClipSource? = null,
+    /** Rules the rider set for this Reel only ("Under 30 s", "Voice-over in Hinglish"): sent with every turn. */
+    val pins: List<String> = emptyList(),
+    /** The ride this Reel is built from ("From a ride"); its clips are the ones offered. */
+    val rideId: String? = null,
 ) {
     val currentIndex: Int get() = if (current in versions.indices) current else versions.lastIndex
     val script: Script? get() = versions.getOrNull(currentIndex)
 
     /** [s] as a new version, made the current one (older versions stay in the history). */
     fun withVersion(s: Script): StoryboardChat = copy(versions = versions + s, current = versions.size)
+
+    /** Whether version [i] (0-based) came from Keppo (a reply made it) rather than the rider's own edits. */
+    fun byKeppo(i: Int): Boolean = messages.any { it.version == i + 1 }
+
+    /**
+     * The rider's own edit: it goes into a "Your edits" version. Edits in a row on the newest such
+     * version change it in place, so typing doesn't make a version per word.
+     */
+    fun edited(s: Script): StoryboardChat {
+        val i = currentIndex
+        return if (i >= 1 && i == versions.lastIndex && !byKeppo(i)) copy(versions = versions.dropLast(1) + s, current = i)
+        else withVersion(s)
+    }
+
+    /** A version's name: what was asked for it, "Your edits", or "First draft". */
+    fun versionName(i: Int): String {
+        val made = messages.indexOfFirst { it.version == i + 1 }
+        if (made < 0) return if (i == 0) "First draft" else "Your edits"
+        if (i == 0) return "First draft"
+        val asked = messages.take(made).lastOrNull { it.fromRider }?.text?.trim().orEmpty()
+        return asked.split('\n').first().let { if (it.length > 28) it.take(26).trimEnd() + "…" else it }.ifBlank { "Keppo's change" }
+    }
 }
 
 /** What Gemini answered: the chat reply, a full script or patches, memory changes, one question. */
@@ -92,6 +118,10 @@ data class StoryboardReply(
     val fresh: Boolean = false,
     /** Where footage may come from, when the rider said it in this message ("don't use my old clips" = FRESH). */
     val clips: ClipSource? = null,
+    /** Rules for this Reel the rider just stated, to pin. */
+    val pins: List<String> = emptyList(),
+    /** What the message was: idea, own_script, change, rule, question or gear (Gemini's reading). */
+    val intent: String? = null,
 )
 
 /** A change to one shot: update some fields, insert a new shot after one, or delete it. */
@@ -108,7 +138,20 @@ object StoryboardEngine {
     const val FREE_CHATS_A_MONTH = 3
     private const val HISTORY = 10
 
-    fun prompt(chat: StoryboardChat, gear: Gear, style: StyleContext?, text: String, firstChat: Boolean): String = buildString {
+    /**
+     * [scope]: the shots the rider selected (only they may change); [ownScript]: [text] is the
+     * rider's own script, to keep word for word; [ride]: what's in the ride a Reel is built from.
+     */
+    fun prompt(
+        chat: StoryboardChat,
+        gear: Gear,
+        style: StyleContext?,
+        text: String,
+        firstChat: Boolean,
+        scope: List<String> = emptyList(),
+        ownScript: Boolean = false,
+        ride: String? = null,
+    ): String = buildString {
         appendLine("You are Keppo Studio's storyboard writer for a motorcycle rider's Instagram Reels and Stories.")
         appendLine("The rider describes a Reel idea; you turn it into a storyboard script: sections, and for each shot exactly what to film.")
         appendLine("SHAPE THE STORY TO THE IDEA:")
@@ -134,9 +177,13 @@ object StoryboardEngine {
         appendLine("- The rider sees shots numbered #1, #2… in order. \"Shot 3\", \"clip 3\" or \"the third one\" means #3; find its id in the script below.")
         appendLine("- To change the storyboard, ALWAYS return the whole updated \"script\": keep the id of every shot you keep, drop the ones removed, give new shots new ids. List what you changed in \"changes\" (\"Removed #3: <what it showed>\"). If nothing in the storyboard changes, \"script\" is null and \"changes\" is empty.")
         appendLine("- Storyboard never picks clips itself; the app fills shots. When the rider says which footage to use, set \"clips\": \"fresh\" (only new footage, \"don't use my old/previous clips\"), \"suggest\" (offer clips but let me pick) or \"auto\" (use my best clips). Otherwise null.")
+        appendLine("- Captions per shot: \"caption\": \"say\" shows the Say line (the default), \"custom\" shows \"captionText\" instead, \"off\" shows none. When the rider wants captions that differ from the voice-over, use custom; never put caption words in on-screen text.")
+        appendLine("- When the rider states a lasting rule for THIS Reel (a length limit, a language, a tone, no music, captions everywhere…), add it to \"pin\" as a short phrase (\"Under 30 s\"). Not for one-off changes.")
         appendLine("- Mentioned gear changes (\"I bought a GoPro\", \"no tripod any more\") go in \"memory\", each with a short confirm text.")
         appendLine()
         appendLine("RIDER'S GEAR: ${gear.describe()}")
+        if (chat.pins.isNotEmpty()) appendLine("RULES FOR THIS REEL (the rider pinned these; follow every one): " + chat.pins.joinToString("; "))
+        ride?.let { appendLine("THE RIDE TO BUILD FROM (plan shots its clips can fill; use its words and events in \"match\"): $it") }
         if (firstChat && !gear.asked) appendLine("This is the rider's first chat: if they haven't said their gear, ask about cameras, mounts and audio in one friendly question; meanwhile assume phone + handlebar mount.")
         style?.let { s ->
             // Rules only: the rider's past edits quote older scripts, and their content leaked into new storyboards.
@@ -153,16 +200,25 @@ object StoryboardEngine {
             appendLine("THE CHAT SO FAR:")
             recent.forEach { appendLine((if (it.fromRider) "Rider: " else "Studio: ") + it.text.replace('\n', ' ')) }
         }
+        chat.script?.takeIf { scope.isNotEmpty() }?.let { s ->
+            appendLine()
+            appendLine("THE RIDER SELECTED ONLY THESE SHOTS: " + scope.joinToString { id -> "#${Placeholders.number(s, id).trimStart('0')} (id $id)" } +
+                ". Change only them; every other shot stays exactly as it is. New shots you add go next to them.")
+        }
         appendLine()
-        appendLine("RIDER NOW: $text")
+        if (ownScript) {
+            appendLine("THE RIDER'S OWN SCRIPT FOLLOWS. Keep every word exactly as written: each spoken line becomes a shot's \"say\" (split a long passage only at sentence ends), a line starting TEXT: becomes on-screen text, a line starting SHOT: or in [brackets] says what to film. Don't rewrite, translate, shorten or drop any line; only add the filming details. Set \"fresh\": true and \"intent\": \"own_script\".")
+            appendLine("RIDER'S SCRIPT:")
+            appendLine(text)
+        } else appendLine("RIDER NOW: $text")
         appendLine()
         appendLine(
-            "Reply with JSON only: {\"reply\":\"...\",\"script\":SCRIPT or null,\"changes\":[\"...\"],\"memory\":[...],\"styleSuggestion\":null,\"needsClarification\":null,\"unlock\":[],\"newVersion\":null,\"fresh\":false,\"clips\":null}. " +
+            "Reply with JSON only: {\"reply\":\"...\",\"script\":SCRIPT or null,\"changes\":[\"...\"],\"memory\":[...],\"styleSuggestion\":null,\"needsClarification\":null,\"unlock\":[],\"newVersion\":null,\"fresh\":false,\"clips\":null,\"pin\":[],\"intent\":\"idea|own_script|change|rule|question|gear\"}. " +
                 "SCRIPT (the first draft, and the whole updated script after any change): {\"title\":\"...\",\"format\":\"reel|story|short\",\"musicNote\":\"...\"," +
                 "\"sections\":[{\"kind\":\"hook|setup|build|peak|turn|payoff|ending\",\"text\":\"on-screen text at its start or null\",\"shots\":[SHOT]}],\"texts\":[{\"text\":\"...\",\"shot\":\"s1\",\"sec\":2}]}. " +
                 "SHOT: {\"id\":\"s1\",\"action\":\"...\",\"framing\":\"extreme close-up|close-up|medium|wide\",\"angle\":\"...\",\"movement\":\"...\",\"mustShow\":\"...\"," +
                 "\"camera\":\"phone back|phone front|...\",\"mount\":\"handlebar|tripod at ...|handheld|...\",\"riding\":true,\"fallback\":{\"ideal\":\"...\",\"reason\":\"...\",\"using\":\"...\"} or null," +
-                "\"sec\":1.5,\"say\":\"voice-over line or null\",\"audio\":\"engine|music|voice\",\"transition\":\"cut|whip|fade|null\"," +
+                "\"sec\":1.5,\"say\":\"voice-over line or null\",\"audio\":\"engine|music|voice\",\"transition\":\"cut|whip|fade|null\",\"caption\":\"say|custom|off\",\"captionText\":null," +
                 "\"match\":{\"events\":[\"strong acceleration\"],\"words\":[\"<a word the rider says>\"],\"minSec\":1,\"engine\":true,\"mustRecord\":false}}. " +
                 "MEMORY: {\"op\":\"add|update|remove\",\"kind\":\"camera|mount|audio|extra|helper\",\"name\":\"tripod\",\"detail\":\"...\",\"confirm\":\"Added: tripod\"}. " +
                 "needsClarification: {\"question\":\"...\",\"choices\":[\"...\"]}. newVersion: true when the rider asks for a new version or a different take, false when they ask to change this one. " +
@@ -179,7 +235,9 @@ object StoryboardEngine {
                 val b = sh.board
                 if (b == null) appendLine("  ${sh.id ?: "-"}: filmed clip, ${sh.durMs / 1000.0} s (keep)")
                 else appendLine("  #${Placeholders.number(s, sh.id!!).trimStart('0')} id ${sh.id}: ${b.action} | ${b.framing} | ${b.camera} on ${b.mount} | ${b.durationMs / 1000.0} s" +
-                    (b.say?.let { " | say \"$it\"" } ?: "") + (if (sh.clip.isNotEmpty()) " | FILMED (keep)" else "") +
+                    (b.say?.let { " | say \"$it\"" } ?: "") +
+                    (when (b.caption) { Captions.OFF -> " | captions off"; Captions.CUSTOM -> " | captions \"${b.captionText.orEmpty()}\""; else -> "" }) +
+                    (if (sh.clip.isNotEmpty()) " | FILMED (keep)" else "") +
                     sh.locked.takeIf { it.isNotEmpty() }?.let { " | LOCKED: ${it.joinToString()}" }.orEmpty())
             }
         }
@@ -217,6 +275,8 @@ object StoryboardEngine {
             claimed = o.optJSONArray("changes")?.let { c -> (0 until c.length()).map { c.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
             fresh = o.optBoolean("fresh", false),
             clips = if (o.isNull("clips")) null else ClipSource.of(o.optString("clips")),
+            pins = o.optJSONArray("pin")?.let { a -> (0 until a.length()).map { a.optString(it).trim() }.filter { it.isNotEmpty() && it.length <= 60 } }.orEmpty(),
+            intent = o.optString("intent").takeIf { !o.isNull("intent") && it.isNotBlank() && "|" !in it },
         )
     }.getOrNull()
 
@@ -301,6 +361,8 @@ object StoryboardEngine {
                 engine = m?.optBoolean("engine", false) ?: false,
                 mustRecord = m?.optBoolean("mustRecord", false) ?: false,
             ),
+            caption = Captions.of(x.optString("caption")),
+            captionText = x.optString("captionText").takeIf { !x.isNull("captionText") && it.isNotBlank() && it != "null" },
         )
     }
 
@@ -378,6 +440,8 @@ object StoryboardEngine {
         if (f.has("audio") && can("audio")) n = n.copy(audio = f.optString("audio").let { if (it in listOf("engine", "music", "voice")) it else n.audio })
         if (f.has("riding") && can("riding")) n = n.copy(riding = f.optBoolean("riding", n.riding))
         if (f.has("transition") && can("transition")) n = n.copy(transition = f.optString("transition").takeIf { !f.isNull("transition") && it.isNotBlank() })
+        if (f.has("caption") && can(ShotFields.CAPTION)) n = n.copy(caption = Captions.of(f.optString("caption")))
+        if (f.has("captionText") && can(ShotFields.CAPTION)) n = n.copy(captionText = f.optString("captionText").takeIf { !f.isNull("captionText") && it.isNotBlank() })
         if (f.has("fallback") && can("fallback")) n = n.copy(fallback = f.optJSONObject("fallback")?.let { x -> GearFallback(x.optString("ideal"), x.optString("reason"), x.optString("using")) })
         // A filmed shot keeps its footage and length.
         if (sh.clip.isNotEmpty()) n = n.copy(durationMs = b.durationMs)
@@ -424,12 +488,17 @@ object StoryboardEngine {
                     camera = if (keep(ShotFields.CAMERA)) wb.camera else b.camera,
                     durationMs = if (keep(ShotFields.DURATION) || was.clip.isNotEmpty()) wb.durationMs else b.durationMs,
                     say = if (keep(ShotFields.SAY)) wb.say else b.say,
+                    caption = if (keep(ShotFields.CAPTION)) wb.caption else b.caption,
+                    captionText = if (keep(ShotFields.CAPTION)) wb.captionText else b.captionText,
                 )
                 sh.copy(board = n, locked = was.locked - unlock.filter { it.startsWith("${sh.id}.") }.map { it.substringAfter('.') }.toSet(),
                     clip = was.clip, inMs = if (was.clip.isNotEmpty()) was.inMs else 0, outMs = if (was.clip.isNotEmpty()) was.outMs else n.durationMs)
             })
         })
-        return fit(out)
+        // On-screen text the rider typed stays theirs too.
+        val mine = old.sections.flatMap { it.shots }.filter { ShotFields.TEXT in it.locked && "${it.id}.${ShotFields.TEXT}" !in unlock }.mapNotNull { it.id }.toSet()
+        val texts = new.texts.filter { it.shotId !in mine } + old.texts.filter { it.shotId in mine }
+        return fit(out.copy(texts = texts))
     }
 
     /** What changed from [a] to [b], in the rider's words and shot numbers. Empty = the same storyboard. */
@@ -454,6 +523,7 @@ object StoryboardEngine {
                 if (ob.camera != nb.camera || ob.mount != nb.mount) add("camera")
                 if (ob.durationMs != nb.durationMs) add(String.format(Locale.US, "%.1f s → %.1f s", ob.durationMs / 1000.0, nb.durationMs / 1000.0))
                 if (ob.say != nb.say) add(if (nb.say == null) "no voice-over" else "voice-over line")
+                if (ob.caption != nb.caption || ob.captionText != nb.captionText) add("captions")
                 if (ob.riding != nb.riding || ob.audio != nb.audio || ob.angle != nb.angle || ob.movement != nb.movement || ob.mustShow != nb.mustShow) add("details")
             }
             if (what.isNotEmpty()) out += "${num(b, n.id!!)}: ${what.joinToString(", ")}"
@@ -492,6 +562,57 @@ object StoryboardEngine {
     fun undo(gear: Gear, chip: MemoryChip): Gear {
         val item = chip.undo ?: return gear
         return if (chip.removed) gear.copy(items = gear.items + item) else gear.copy(items = gear.items.filter { !it.name.equals(item.name, ignoreCase = true) })
+    }
+
+    /**
+     * [next] kept to the rider's selection: only shots in [scope] change (or go), new shots land
+     * where Gemini put them next to them, and everything else stays exactly as in [base]. An empty
+     * scope changes nothing here.
+     */
+    fun scoped(base: Script, next: Script, scope: Collection<String>): Script {
+        if (scope.isEmpty()) return next
+        val nextShots = next.sections.flatMap { it.shots }
+        val nextById = nextShots.filter { it.id != null }.associateBy { it.id!! }
+        val baseIds = base.sections.flatMap { it.shots }.mapNotNull { it.id }.toSet()
+        // Shots Gemini added, each after the shot before it in its answer.
+        val added = nextShots.withIndex().filter { (_, sh) -> sh.id != null && sh.id !in baseIds }
+        val out = base.copy(sections = base.sections.map { sec ->
+            sec.copy(shots = sec.shots.mapNotNull { sh -> if (sh.id in scope) nextById[sh.id] else sh })
+        }.filter { it.shots.isNotEmpty() })
+        var result = out
+        added.forEach { (i, sh) ->
+            val before = nextShots.take(i).lastOrNull { prev -> result.sections.any { sec -> sec.shots.any { it.id == prev.id } } }?.id
+            result = if (before == null) result.copy(sections = result.sections.mapIndexed { k, sec -> if (k == 0) sec.copy(shots = listOf(sh) + sec.shots) else sec })
+            else result.copy(sections = result.sections.map { sec -> sec.copy(shots = sec.shots.flatMap { if (it.id == before) listOf(it, sh) else listOf(it) }) })
+        }
+        return fit(result)
+    }
+
+    /** Shots that are new or differ from [base] in [next] (for the glow on the board). */
+    fun changedIds(base: Script?, next: Script): Set<String> {
+        val before = base?.sections?.flatMap { it.shots }?.filter { it.id != null }?.associateBy { it.id!! }.orEmpty()
+        val textsBefore = base?.texts.orEmpty().groupBy { it.shotId }
+        val textsAfter = next.texts.groupBy { it.shotId }
+        return next.sections.flatMap { it.shots }.mapNotNull { sh ->
+            val id = sh.id ?: return@mapNotNull null
+            id.takeIf { before[id]?.board != sh.board || textsBefore[id] != textsAfter[id] }
+        }.toSet()
+    }
+
+    /** The lines of a rider's own script, as they'll be checked (blank lines and stage directions left out). */
+    fun scriptLines(text: String): List<String> = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        .filterNot { it.startsWith("SHOT:", ignoreCase = true) || (it.startsWith("[") && it.endsWith("]")) }
+        .map { it.removePrefix("TEXT:").removePrefix("Text:").trim() }.filter { it.isNotEmpty() }
+
+    /**
+     * Lines of the rider's script that didn't come back word for word in [s] (in a Say line,
+     * captions or on-screen text; case, spacing and punctuation aside).
+     */
+    fun missingLines(text: String, s: Script): List<String> {
+        fun norm(t: String) = t.lowercase(Locale.US).replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+        val heard = (Placeholders.shots(s).flatMap { (_, sh) -> listOfNotNull(sh.board?.say, sh.board?.captionText) } + s.texts.map { it.text } + s.sections.mapNotNull { it.text })
+            .joinToString(" | ") { norm(it) }
+        return scriptLines(text).filter { line -> norm(line).let { it.isNotEmpty() && it !in heard } }
     }
 
     /** The chat's title from its first message ("How to enter a tunnel 101"). */

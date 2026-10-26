@@ -31,9 +31,31 @@ class StoryboardStore(private val context: Context) {
 
     fun get(id: String): StoryboardChat? = _chats.value.firstOrNull { it.id == id }
 
+    private val _working = kotlinx.coroutines.flow.MutableStateFlow<Set<String>>(emptySet())
+    /** Projects Keppo is writing for right now (a turn started from the list keeps going after it closes). */
+    val working: kotlinx.coroutines.flow.StateFlow<Set<String>> = _working
+
+    fun setWorking(id: String, on: Boolean) {
+        _working.value = if (on) _working.value + id else _working.value - id
+    }
+
     fun newChat(): StoryboardChat {
         val now = System.currentTimeMillis()
         val c = StoryboardChat(UUID.randomUUID().toString().take(12), "New storyboard", now, now)
+        countStart()
+        _chats.value = listOf(c) + _chats.value
+        save()
+        return c
+    }
+
+    /** A copy of project [id] to make another like it: its current version, pins and footage choice; no chat or templates. */
+    fun duplicate(id: String): StoryboardChat? {
+        val src = get(id) ?: return null
+        val now = System.currentTimeMillis()
+        val c = StoryboardChat(
+            UUID.randomUUID().toString().take(12), src.title + " (copy)", now, now,
+            versions = listOfNotNull(src.script), clips = src.clips, pins = src.pins, rideId = src.rideId,
+        )
         countStart()
         _chats.value = listOf(c) + _chats.value
         save()
@@ -102,6 +124,8 @@ class StoryboardStore(private val context: Context) {
             .put("versions", JSONArray().apply { c.versions.forEach { put(ScriptJson.write(it)) } })
             .put("current", c.current)
             .put("clips", c.clips?.name ?: JSONObject.NULL)
+            .put("pins", JSONArray(c.pins))
+            .put("ride", c.rideId ?: JSONObject.NULL)
             .put("messages", JSONArray().apply {
                 c.messages.forEach { m ->
                     put(JSONObject().put("rider", m.fromRider).put("text", m.text).put("at", m.at)
@@ -126,6 +150,8 @@ class StoryboardStore(private val context: Context) {
                     versions = o.optJSONArray("versions")?.let { a -> (0 until a.length()).mapNotNull { ScriptJson.read(a.optJSONObject(it)) } }.orEmpty(),
                     current = o.optInt("current", -1),
                     clips = if (o.isNull("clips")) null else ClipSource.of(o.optString("clips")),
+                    pins = o.optJSONArray("pins").strings(),
+                    rideId = o.optString("ride").takeIf { !o.isNull("ride") && it.isNotBlank() },
                     messages = o.optJSONArray("messages")?.let { a ->
                         (0 until a.length()).mapNotNull { i ->
                             val m = a.optJSONObject(i) ?: return@mapNotNull null

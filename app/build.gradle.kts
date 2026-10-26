@@ -201,6 +201,9 @@ dependencies {
     implementation(libs.onnxruntime.android)
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
+    // Storyboard Shoot mode: the app's own camera with a framing guide and teleprompter.
+    implementation(libs.androidx.camera.video)
+    implementation(libs.androidx.camera.view)
     implementation(libs.androidx.media3.transformer)
     implementation(libs.androidx.media3.effect)
     implementation(libs.androidx.media3.common)

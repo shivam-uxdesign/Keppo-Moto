@@ -76,7 +76,9 @@ object TemplateFill {
             val start = p.plan.startOf(i)
             val delta = seg.durMs - old.durMs
             val texts = p.plan.texts.map { t -> if (t.startMs >= start + old.durMs) t.copy(startMs = t.startMs + delta, endMs = t.endMs + delta) else t }
-            val plan = TimelineEdits.normalize(p.plan.copy(segments = p.plan.segments.toMutableList().also { it[i] = seg.copy(section = old.section, hook = old.hook, text = old.text) }, texts = texts))
+            val b = p.script?.let { Placeholders.find(it, shotId)?.board }
+            val lines = b?.let { VoiceLines.segmentLines(it, seg.lines, seg.durMs) } ?: seg.lines
+            val plan = TimelineEdits.normalize(p.plan.copy(segments = p.plan.segments.toMutableList().also { it[i] = seg.copy(section = old.section, hook = old.hook, text = old.text, lines = lines) }, texts = texts))
             val info = p.template?.let { it.copy(suggested = if (suggested) it.suggested + shotId else it.suggested - shotId, filled = it.filled + (shotId to seg.bit.momentId)) }
             p.copy(plan = plan, durationMs = plan.totalMs, template = info)
         }

@@ -111,13 +111,32 @@ object VoiceLines {
         return written(line, take.durMs)
     }
 
+    /**
+     * The captions a shot's own picture carries in the template: none when captions are off or
+     * the voice-over carries them (its take has them), custom words over the shot when there's no
+     * voice-over, else what's said in the clip itself ([clipLines]).
+     */
+    fun segmentLines(b: Storyboard, clipLines: List<CaptionLine>, durMs: Long): List<CaptionLine> = when {
+        b.caption == Captions.OFF -> emptyList()
+        b.say != null -> emptyList()
+        b.caption == Captions.CUSTOM -> b.captionText?.let { written(it, durMs) }.orEmpty()
+        else -> clipLines
+    }
+
+    /** [take]'s captions for shot [b]: none when its captions are off, its own words when custom, else its Say line as [source] says. */
+    suspend fun captionsForShot(c: AppContainer, take: VoiceTake, b: Storyboard, source: CaptionSource): List<CaptionLine> = when (b.caption) {
+        Captions.OFF -> emptyList()
+        Captions.CUSTOM -> b.captionText?.let { written(it, take.durMs) }.orEmpty()
+        else -> b.say?.let { captionsFor(c, take, it, source) }.orEmpty()
+    }
+
     /** Switches template [reelId]'s voice-over captions to [source], captioning its lines' takes again. */
     suspend fun recaption(c: AppContainer, reelId: String, source: CaptionSource) {
         val p = c.reels.get(reelId) ?: return
         val s = p.script ?: return
         val filled = p.template?.filled.orEmpty()
-        val byStart = lines(s).mapNotNull { (id, line) -> shotStart(p.plan, filled, id)?.let { it to line } }.toMap()
-        val takes = c.reels.takes(p).map { t -> byStart[t.startMs]?.let { line -> t.copy(lines = captionsFor(c, t, line, source)) } ?: t }
+        val byStart = lines(s).mapNotNull { (id, _) -> shotStart(p.plan, filled, id)?.let { at -> Placeholders.find(s, id)?.board?.let { at to it } } }.toMap()
+        val takes = c.reels.takes(p).map { t -> byStart[t.startMs]?.let { b -> t.copy(lines = captionsForShot(c, t, b, source)) } ?: t }
         c.reels.update(reelId) { q ->
             q.copy(template = q.template?.copy(captions = source), takes = q.takes.zip(takes).map { (saved, t) -> saved.copy(lines = t.lines) })
         }
@@ -158,13 +177,14 @@ object VoiceLines {
 
     /**
      * Cuts the recording in [pcmFile] at [marks] and places each piece on its shot in template
-     * [reelId]. Earlier takes on other shots stay. Returns the shots whose line runs past the shot.
+     * [reelId] ([only]: a retake of that one shot's line). Earlier takes on other shots stay.
+     * Returns the shots whose line runs past the shot.
      */
-    suspend fun place(c: AppContainer, reelId: String, pcmFile: File, marks: List<Long>, totalMs: Long): List<String> = withContext(Dispatchers.IO) {
+    suspend fun place(c: AppContainer, reelId: String, pcmFile: File, marks: List<Long>, totalMs: Long, only: String? = null): List<String> = withContext(Dispatchers.IO) {
         val p = c.reels.get(reelId) ?: return@withContext emptyList()
         val s = p.script ?: return@withContext emptyList()
         val filled = p.template?.filled.orEmpty()
-        val said = lines(s)
+        val said = lines(s).filter { only == null || it.first == only }
         val raw = pcmFile.readBytes()
         val pcm = ShortArray(raw.size / 2).also { ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(it) }
         val rate = VoiceRecorder.RATE
@@ -184,7 +204,8 @@ object VoiceLines {
             out.writeBytes(bytes.array())
             val dur = (keep.last - keep.first + 1) * 1000L / rate
             val take = VoiceTake(start, dur, out)
-            placed += take.copy(lines = captionsFor(c, take, line.second, p.template?.captions ?: CaptionSource.WRITTEN))
+            val b = Placeholders.find(s, shotId)?.board
+            placed += take.copy(lines = b?.let { captionsForShot(c, take, it, p.template?.captions ?: CaptionSource.WRITTEN) }.orEmpty())
             if (dur > (shotLength(p.plan, filled, shotId) ?: Long.MAX_VALUE) + 300) long += shotId
         }
         // Takes already there that aren't on these shots' starts stay, copied aside first (save renames).
@@ -199,7 +220,10 @@ object VoiceLines {
     }
 }
 
-/** The lines to read, one highlighted at a time, with Start, Next and Done. */
+/**
+ * The voice-over booth: read every line in one go (Start, Next, Done), or record any one line
+ * again on its own. Each line shows its take's length against its shot.
+ */
 @Composable
 fun VoiceLinesScreen(reelId: String, onBack: () -> Unit) {
     val c = appContainer()
@@ -219,6 +243,25 @@ fun VoiceLinesScreen(reelId: String, onBack: () -> Unit) {
     LaunchedEffect(at) { if (at >= 0) list.animateScrollToItem(at) }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val pcm = remember { File(context.cacheDir, "voice-lines.pcm") }
+    var single by remember { mutableStateOf<String?>(null) }
+
+    /** Records [id]'s line on its own (tap again to stop), replacing its take. */
+    fun recordOne(id: String) {
+        if (single != null) { recorder.stop(); return }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            micPermission.launch(Manifest.permission.RECORD_AUDIO); return
+        }
+        single = id; note = null
+        scope.launch {
+            val one = File(context.cacheDir, "voice-line-one.pcm")
+            val ms = recorder.record(one)
+            busy = true
+            val long = runCatching { VoiceLines.place(c, reelId, one, emptyList(), ms, only = id) }
+            busy = false
+            single = null
+            note = long.fold({ l -> "Shot ${Placeholders.number(s, id)}: new take placed." + if (l.isNotEmpty()) " It's longer than the shot." else "" }, { "Couldn't place the take (${it.message ?: it.javaClass.simpleName})" })
+        }
+    }
 
     fun start() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -243,8 +286,8 @@ fun VoiceLinesScreen(reelId: String, onBack: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { recorder.stop(); onBack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = RtColors.TextPrimary) }
             Column(Modifier.weight(1f)) {
-                Text("Read your lines", style = RtType.bodyStrong, color = RtColors.TextPrimary)
-                Text("All in one go: tap Next between lines. Each goes on its shot.", style = RtType.caption, color = RtColors.TextSecondary)
+                Text("Voice-over booth", style = RtType.bodyStrong, color = RtColors.TextPrimary)
+                Text("All in one go (tap Next between lines), or tap Record on any line to redo just that one.", style = RtType.caption, color = RtColors.TextSecondary)
             }
         }
         // Whose words the captions show; switching captions the takes already there again.
@@ -272,9 +315,23 @@ fun VoiceLinesScreen(reelId: String, onBack: () -> Unit) {
         LazyColumn(Modifier.weight(1f), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             itemsIndexed(said) { i, (id, line) ->
                 val now = i == at
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (now) RtColors.SurfaceRaised else RtColors.Surface).padding(16.dp)) {
-                    Text("Shot ${Placeholders.number(s, id)} · ${String.format(Locale.US, "%.1f s", (VoiceLines.shotLength(p.plan, p.template?.filled.orEmpty(), id) ?: 0) / 1000.0)}", style = RtType.caption, color = if (now) RtColors.Primary else RtColors.TextTertiary)
-                    Text(line, style = if (now) RtType.headline else RtType.body, color = if (now || at < 0) RtColors.TextPrimary else RtColors.TextSecondary)
+                val filled = p.template?.filled.orEmpty()
+                val shotMs = VoiceLines.shotLength(p.plan, filled, id) ?: 0
+                val take = VoiceLines.shotStart(p.plan, filled, id)?.let { st -> p.takes.firstOrNull { it.startMs == st } }
+                val mine = single == id
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (now || mine) RtColors.SurfaceRaised else RtColors.Surface).padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Shot ${Placeholders.number(s, id)} · " + if (take != null) "take ${String.format(Locale.US, "%.1f", take.durMs / 1000.0)} s of ${String.format(Locale.US, "%.1f", shotMs / 1000.0)} s" else String.format(Locale.US, "%.1f s, not recorded", shotMs / 1000.0),
+                            style = RtType.caption, color = when { now || mine -> RtColors.Primary; take != null && take.durMs > shotMs + 300 -> RtColors.Warning; take != null -> RtColors.Ok; else -> RtColors.TextTertiary },
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (at < 0) Text(
+                            if (mine) "Stop" else "Record", style = RtType.button, color = if (mine) RtColors.Recording else RtColors.Primary,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button, enabled = !busy && (single == null || mine)) { recordOne(id) }.padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                    }
+                    Text(line, style = if (now || mine) RtType.headline else RtType.body, color = if (now || mine || at < 0) RtColors.TextPrimary else RtColors.TextSecondary)
                 }
             }
         }
@@ -282,7 +339,8 @@ fun VoiceLinesScreen(reelId: String, onBack: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             when {
                 busy -> Text(if (at < 0 && p.takes.isNotEmpty()) "Working on your captions…" else "Placing your lines…", style = RtType.body, color = RtColors.TextSecondary)
-                at < 0 -> PrimaryButton(if (p.takes.isEmpty()) "Start reading" else "Read them again", { start() }, Modifier.weight(1f))
+                single != null -> Text("Recording shot ${Placeholders.number(s, single!!)}… tap Stop when done", style = RtType.body, color = RtColors.Recording)
+                at < 0 -> PrimaryButton(if (p.takes.isEmpty()) "Read all in one go" else "Read them all again", { start() }, Modifier.weight(1f))
                 at < said.size - 1 -> {
                     SecondaryButton("Stop", { recorder.stop() }, Modifier.weight(1f))
                     PrimaryButton("Next line", { marks += System.currentTimeMillis() - startedAt; at++ }, Modifier.weight(1f))
