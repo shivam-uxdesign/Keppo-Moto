@@ -177,6 +177,7 @@ fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: (version:
     var text by remember { mutableStateOf("") }
     var voiceMs by remember { mutableStateOf<Long?>(null) }
     var busy by remember { mutableStateOf<String?>(null) }
+    var askClips by remember { mutableStateOf<Pair<com.ridetrack.app.studio.Script, Int>?>(null) }
     var making by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(false) }
@@ -216,6 +217,38 @@ fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: (version:
         }
     }
 
+    fun makeTemplate(s: com.ridetrack.app.studio.Script, v: Int, clips: ClipSource) {
+        making = true
+        scope.launch {
+            runCatching {
+                val p = TemplateBuilder.make(c, chatId, s, v, clips)
+                c.storyboard.update(chatId) { it.copy(templateIds = it.templateIds + p.id, messages = it.messages + ChatMessage(false, "Template made: ${s.title} (version $v) · ${clips.label}.", System.currentTimeMillis(), templateId = p.id)) }
+                ToFilmList.sync(c)
+            }.onFailure { e -> c.errors.record("Storyboard", "Couldn't make the template", e) }
+            making = false
+        }
+    }
+    askClips?.let { (s, v) ->
+        AlertDialog(
+            onDismissRequest = { askClips = null },
+            title = { Text("Footage for this Reel") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ClipSource.entries.forEach { src ->
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(RtColors.Surface)
+                                .clickable(role = Role.Button) { askClips = null; makeTemplate(s, v, src) }.padding(12.dp),
+                        ) {
+                            Text(src.label, style = RtType.bodyStrong, color = RtColors.TextPrimary)
+                            Text(src.detail, style = RtType.caption, color = RtColors.TextSecondary)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { askClips = null }) { Text("Cancel") } },
+        )
+    }
     Column(Modifier.fillMaxSize().background(RtColors.Background).statusBarsPadding().navigationBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = RtColors.TextPrimary) }
@@ -253,15 +286,9 @@ fun StoryboardChatScreen(chatId: String, onBack: () -> Unit, onReview: (version:
                         }
                         m.version?.let { v -> chat.versions.getOrNull(v - 1)?.let { s -> StoryboardCard(s, v, m.changes, current = v - 1 == chat.currentIndex, onUse = { c.storyboard.update(chatId) { it.copy(current = v - 1) } }, onReview = { onReview(v) }, making = making) {
                             if (making) return@StoryboardCard
-                            making = true
-                            scope.launch {
-                                runCatching {
-                                    val p = TemplateBuilder.make(c, chatId, s, v)
-                                    c.storyboard.update(chatId) { it.copy(templateIds = it.templateIds + p.id, messages = it.messages + ChatMessage(false, "Template made: ${s.title} (version $v).", System.currentTimeMillis(), templateId = p.id)) }
-                                    ToFilmList.sync(c)
-                                }.onFailure { e -> c.errors.record("Storyboard", "Couldn't make the template", e) }
-                                making = false
-                            }
+                            // Where the footage comes from: asked every time, unless said in this chat.
+                            val said = chat.clips
+                            if (said != null) makeTemplate(s, v, said) else askClips = s to v
                         } } }
                         m.templateId?.let { id -> TemplateTile(id, onOpenTemplate) }
                     }

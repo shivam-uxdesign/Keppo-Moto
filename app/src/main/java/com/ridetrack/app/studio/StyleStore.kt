@@ -25,8 +25,9 @@ class StyleStore(context: Context) {
 
     init { load() }
 
-    /** What goes with a script request: all rules, and the last [n] changes. */
+    /** What goes with a script request: all rules, and the last [n] changes; nothing while [LEARNING] is off. */
     fun context(n: Int = 4): StyleContext? {
+        if (!LEARNING) return null
         val r = _rules.value
         val ex = _log.value.takeLast(n).map { StyleExample(it.before, it.after, it.note) }
         return if (r.isEmpty() && ex.isEmpty()) null else StyleContext(r, ex)
@@ -34,6 +35,7 @@ class StyleStore(context: Context) {
 
     /** A change to a script; a note also becomes a rule (unless it's already one). */
     fun record(before: String, after: String, note: String?) {
+        if (!LEARNING) return
         if (before == after && note.isNullOrBlank()) return
         _log.value = (_log.value + StyleEntry(System.currentTimeMillis(), before, after, note?.trim()?.takeIf { it.isNotEmpty() })).takeLast(MAX_LOG)
         note?.trim()?.takeIf { it.isNotEmpty() }?.let { n -> if (_rules.value.none { it.equals(n, ignoreCase = true) }) _rules.value = (_rules.value + n).takeLast(MAX_RULES) }
@@ -84,7 +86,13 @@ class StyleStore(context: Context) {
         file.writeAtomically(o.toString())
     }
 
-    private companion object {
+    companion object {
+        /**
+         * Off for now (rider, 25 Oct): what was said for one Reel became a rule for every Reel, and
+         * there was no good way to control what's learned. Nothing is saved or sent; the saved data
+         * stays, unused, for a future explicit feature.
+         */
+        const val LEARNING = false
         const val MAX_LOG = 200
         const val MAX_RULES = 20
     }

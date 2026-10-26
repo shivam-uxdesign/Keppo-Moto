@@ -227,7 +227,8 @@ fun StudioSettingsScreen(onBack: () -> Unit) {
             }
             Group("Your look") {
                 LinkLine("Styles", "${styles.size}") { nav(Routes.STYLES) }
-                LinkLine("What Studio learned", "Your habits, from your edits") { nav(Routes.STUDIO_STYLE) }
+                // Hidden while learning is off (StyleStore.LEARNING).
+                if (StyleStore.LEARNING) LinkLine("What Studio learned", "Your habits, from your edits") { nav(Routes.STUDIO_STYLE) }
             }
             Group("Help") {
                 LinkLine("Error log", "What went wrong, to send") { nav(Routes.profilePage(ProfilePage.ERRORS)) }

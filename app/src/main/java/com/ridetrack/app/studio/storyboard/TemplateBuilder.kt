@@ -90,15 +90,20 @@ object TemplateBuilder {
         }
     }
 
-    /** Makes (or remakes, for [existing]) the template from [script]; the best suggestions fill their slots, marked to confirm. */
-    suspend fun make(c: AppContainer, chatId: String, script: Script, version: Int, existing: String? = null): ReelProject {
+    /**
+     * Makes (or remakes, for [existing]) the template from [script]. Footage per [clips]: the best
+     * matches fill their slots, marked to confirm (AUTO; FRESH only with footage filmed since the
+     * template was made), or nothing goes in by itself (SUGGEST).
+     */
+    suspend fun make(c: AppContainer, chatId: String, script: Script, version: Int, clips: ClipSource, existing: String? = null): ReelProject {
         val id = existing ?: c.reels.newId()
         val dir = c.reels.dir(id).apply { mkdirs() }
         dir.listFiles()?.filter { it.name.startsWith("ph-") }?.forEach { it.delete() }
         val pics = pictures(dir, script, 0xFF69C8CB.toInt())
         val now = System.currentTimeMillis()
         // The strongest matches go in at once, with a badge until the rider confirms them.
-        val cands = Candidates.all(c)
+        val made = c.reels.get(id)?.createdAt ?: now
+        val cands = if (clips.fillsByItself) Candidates.all(c, clips, made) else emptyList()
         val suggested = HashMap<String, ClipSegment>()
         Placeholders.shots(script).forEach { (_, sh) ->
             val b = sh.board ?: return@forEach
@@ -108,11 +113,11 @@ object TemplateBuilder {
         }
         val plan = plan(script, pics, c.studio.options.vibe, now, suggested)
         val p = ReelProject(
-            id = id, rideId = null, createdAt = c.reels.get(id)?.createdAt ?: now, updatedAt = now,
+            id = id, rideId = null, createdAt = made, updatedAt = now,
             title = script.title, series = "", episode = 0, hookLine = "", postCaption = "", story = script.musicNote?.let { "Music: $it" },
             options = c.studio.options.copy(outro = false, map = false), musicUri = null, musicName = null,
             plan = plan, takes = emptyList(), tips = emptyList(), durationMs = plan.totalMs, script = script,
-            template = TemplateInfo(chatId, version, Placeholders.shots(script).size, suggested.keys),
+            template = TemplateInfo(chatId, version, Placeholders.shots(script).size, suggested.keys, clips = clips),
         )
         val saved = c.reels.save(p, null, emptyList())
         // The cover: the first placeholder.
@@ -123,8 +128,11 @@ object TemplateBuilder {
 
 /** Clips from every ride, as candidates for a shot. */
 object Candidates {
-    suspend fun all(c: AppContainer): List<Candidate> = withContext(Dispatchers.IO) {
-        c.moments.allLive().filter { it.kind == MomentKind.CLIP && it.file.isFile && (it.durationMillis ?: 0) > 0 }.map { m ->
+    suspend fun all(c: AppContainer): List<Candidate> = all(c, ClipSource.AUTO, 0)
+
+    /** The clips [clips] allows for a template made at [madeMillis] (FRESH: only those filmed since). */
+    suspend fun all(c: AppContainer, clips: ClipSource, madeMillis: Long): List<Candidate> = withContext(Dispatchers.IO) {
+        c.moments.allLive().filter { it.kind == MomentKind.CLIP && it.file.isFile && (it.durationMillis ?: 0) > 0 && clips.allows(it.timeMillis, madeMillis) }.map { m ->
             val said = m.transcript.orEmpty().lowercase().split(Regex("[^a-z0-9']+")).filter { it.length >= 3 }
             Candidate(
                 momentId = m.id, rideId = m.rideId, durationMs = m.durationMillis ?: 0,

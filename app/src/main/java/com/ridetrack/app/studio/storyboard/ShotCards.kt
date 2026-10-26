@@ -137,7 +137,6 @@ fun ShotCardsScreen(chatId: String, version: Int? = null, onBack: () -> Unit, on
     fun save(n: Script, note: String?, before: String, after: String) {
         c.storyboard.update(chatId) { it.withVersion(n) }
         viewing = chat.versions.size
-        runCatching { c.style.record(before, after, note) }
     }
 
     Column(Modifier.fillMaxSize().background(RtColors.Background).statusBarsPadding().navigationBarsPadding()) {

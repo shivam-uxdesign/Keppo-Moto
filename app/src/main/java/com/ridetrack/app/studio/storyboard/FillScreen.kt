@@ -95,8 +95,11 @@ object TemplateFill {
     suspend fun suggestOpen(c: AppContainer) {
         val templates = c.reels.reels.value.filter { it.template != null && it.deletedAt == null && it.script != null && TemplateBuilder.placeholders(it.plan).isNotEmpty() }
         if (templates.isEmpty()) return
-        val cands = Candidates.all(c)
         templates.forEach { p ->
+            val clips = p.template!!.clips
+            // Suggest-only templates never fill themselves; fresh-only ones only with footage filmed since.
+            if (!clips.fillsByItself) return@forEach
+            val cands = Candidates.all(c, clips, p.createdAt)
             val used = p.plan.clips.map { it.bit.momentId }.toMutableSet()
             TemplateBuilder.placeholders(p.plan).forEach { id ->
                 val b = Placeholders.find(p.script!!, id)?.board ?: return@forEach
@@ -134,15 +137,17 @@ fun FillScreen(reelId: String, shotId: String, onBack: () -> Unit) {
     val script = project?.script
     val shot = script?.let { Placeholders.find(it, shotId) }
     val b = shot?.board
+    val clips = project?.template?.clips ?: ClipSource.AUTO
+    val made = project?.createdAt ?: 0L
     var cands by remember { mutableStateOf<List<Pair<Candidate, Double>>?>(null) }
     var all by remember { mutableStateOf<List<com.ridetrack.app.moments.Moment>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
     var countdown by remember { mutableIntStateOf(0) }
     LaunchedEffect(shotId) {
         if (b == null) return@LaunchedEffect
-        val list = Candidates.all(c)
+        val list = Candidates.all(c, clips, made)
         cands = Suggest.rank(b, list, 3)
-        all = withContext(Dispatchers.IO) { c.moments.allLive().filter { it.kind == com.ridetrack.app.moments.MomentKind.CLIP && it.file.isFile }.sortedByDescending { it.timeMillis }.take(60) }
+        all = withContext(Dispatchers.IO) { c.moments.allLive().filter { it.kind == com.ridetrack.app.moments.MomentKind.CLIP && it.file.isFile && clips.allows(it.timeMillis, made) }.sortedByDescending { it.timeMillis }.take(60) }
     }
     fun done() { busy = false; onBack() }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -207,7 +212,8 @@ fun FillScreen(reelId: String, shotId: String, onBack: () -> Unit) {
                 Text("CLOSEST FROM YOUR RIDES", style = RtType.label, color = RtColors.TextTertiary)
                 list.forEach { (cand, _) -> MomentRow(all.firstOrNull { it.id == cand.momentId }, "Fits this shot") { busy = true; scope.launch { Candidates.segment(c, cand, b)?.let { TemplateFill.apply(c, reelId, shotId, it) }; done() } } }
             }
-            Text("ALL YOUR MOMENTS", style = RtType.label, color = RtColors.TextTertiary)
+            Text(if (clips == ClipSource.FRESH) "FILMED SINCE YOU MADE THIS" else "ALL YOUR MOMENTS", style = RtType.label, color = RtColors.TextTertiary)
+            if (clips == ClipSource.FRESH && all.isEmpty()) Text("Fresh footage only: record this shot, or film it on a ride and it shows up here.", style = RtType.caption, color = RtColors.TextSecondary)
             all.forEach { m ->
                 MomentRow(m, Format.rideDate(m.timeMillis)) {
                     busy = true

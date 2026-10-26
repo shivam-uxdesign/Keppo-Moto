@@ -39,22 +39,19 @@ import com.ridetrack.app.ui.theme.RtColors
 import com.ridetrack.app.ui.theme.RtType
 
 /**
- * Gear & style: everything Storyboard plans with (cameras, mounts and which way they face, audio,
- * extras, whether someone can film), where each came from, and the style rules Studio follows.
- * Add, change or remove any of it.
+ * Your gear: everything Storyboard plans with (cameras, mounts and which way they face, audio,
+ * extras, whether someone can film), and where each came from. Add, change or remove any of it.
  */
 @Composable
 fun GearScreen(onBack: () -> Unit) {
     val c = appContainer()
     val gear by c.storyboard.gear.collectAsStateWithLifecycle()
-    val rules by c.style.rules.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<GearItem?>(null) }
     var adding by remember { mutableStateOf(false) }
-    var addingRule by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(RtColors.Background).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = RtColors.TextPrimary) }
-            Text("Gear & style", style = RtType.title, color = RtColors.TextPrimary)
+            Text("Your gear", style = RtType.title, color = RtColors.TextPrimary)
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("YOUR GEAR", style = RtType.label, color = RtColors.TextTertiary)
@@ -77,15 +74,6 @@ fun GearScreen(onBack: () -> Unit) {
                 }
                 Switch(gear.helper, { c.storyboard.setGear(gear.copy(helper = it)) })
             }
-            Text("YOUR STYLE", style = RtType.label, color = RtColors.TextTertiary, modifier = Modifier.padding(top = 14.dp))
-            Text("Studio follows these in every script and storyboard; what you ask for in a chat wins.", style = RtType.caption, color = RtColors.TextSecondary)
-            rules.forEach { r ->
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RtColors.Surface).padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(r, style = RtType.body, color = RtColors.TextPrimary, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { c.style.setRules(rules - r) }) { Icon(Icons.Rounded.Delete, "Remove the rule", tint = RtColors.TextTertiary) }
-                }
-            }
-            Text("Add a style rule", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { addingRule = true }.padding(vertical = 8.dp))
         }
     }
     if (adding || editing != null) {
@@ -118,16 +106,6 @@ fun GearScreen(onBack: () -> Unit) {
                 }) { Text("Save") }
             },
             dismissButton = { TextButton(onClick = { adding = false; editing = null }) { Text("Cancel") } },
-        )
-    }
-    if (addingRule) {
-        var rule by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { addingRule = false },
-            title = { Text("A style rule") },
-            text = { OutlinedTextField(rule, { rule = it }, placeholder = { Text("e.g. Keep hooks under 2 s; captions in Hinglish") }) },
-            confirmButton = { TextButton(onClick = { if (rule.isNotBlank()) c.style.setRules(rules + rule.trim()); addingRule = false }) { Text("Add") } },
-            dismissButton = { TextButton(onClick = { addingRule = false }) { Text("Cancel") } },
         )
     }
 }

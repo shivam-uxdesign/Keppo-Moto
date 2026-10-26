@@ -101,6 +101,7 @@ class StoryboardStore(private val context: Context) {
             .put("raw", JSONArray(c.raw.takeLast(20)))
             .put("versions", JSONArray().apply { c.versions.forEach { put(ScriptJson.write(it)) } })
             .put("current", c.current)
+            .put("clips", c.clips?.name ?: JSONObject.NULL)
             .put("messages", JSONArray().apply {
                 c.messages.forEach { m ->
                     put(JSONObject().put("rider", m.fromRider).put("text", m.text).put("at", m.at)
@@ -124,6 +125,7 @@ class StoryboardStore(private val context: Context) {
                     raw = o.optJSONArray("raw").strings(),
                     versions = o.optJSONArray("versions")?.let { a -> (0 until a.length()).mapNotNull { ScriptJson.read(a.optJSONObject(it)) } }.orEmpty(),
                     current = o.optInt("current", -1),
+                    clips = if (o.isNull("clips")) null else ClipSource.of(o.optString("clips")),
                     messages = o.optJSONArray("messages")?.let { a ->
                         (0 until a.length()).mapNotNull { i ->
                             val m = a.optJSONObject(i) ?: return@mapNotNull null

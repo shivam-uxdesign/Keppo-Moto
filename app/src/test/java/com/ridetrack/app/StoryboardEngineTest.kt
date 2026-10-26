@@ -208,4 +208,14 @@ class StoryboardEngineTest {
         assertTrue("tunnel" !in p.lowercase(), "an example or an old edit leaks a topic")
         assertTrue("\"fresh\"" in p)
     }
+
+    @Test fun `saying which footage to use is read, kept with the chat, and asked for in the prompt`() {
+        val r = StoryboardEngine.parse("""{"reply":"Got it, only new footage.","script":null,"clips":"fresh"}""", null)!!
+        assertEquals(com.ridetrack.app.studio.storyboard.ClipSource.FRESH, r.clips)
+        assertNull(StoryboardEngine.parse("""{"reply":"Ok","script":null,"clips":null}""", null)!!.clips)
+        val chat = StoryboardChat("c", "t", 0, 0, clips = com.ridetrack.app.studio.storyboard.ClipSource.FRESH)
+        assertEquals(chat.clips, StoryboardStore.readChat(StoryboardStore.writeChat(chat))!!.clips)
+        assertNull(StoryboardStore.readChat(StoryboardStore.writeChat(chat.copy(clips = null)))!!.clips)
+        assertTrue("\"clips\"" in StoryboardEngine.prompt(StoryboardChat("c", "t", 0, 0), Gear(), null, "no old clips", firstChat = false))
+    }
 }

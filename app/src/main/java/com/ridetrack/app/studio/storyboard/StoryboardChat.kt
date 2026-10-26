@@ -63,6 +63,8 @@ data class StoryboardChat(
     val raw: List<String> = emptyList(),
     /** The version being worked on (index into [versions]); -1 = the newest. Going back doesn't copy it. */
     val current: Int = -1,
+    /** Where footage may come from, when the rider said so in this chat; null = ask at Make template. */
+    val clips: ClipSource? = null,
 ) {
     val currentIndex: Int get() = if (current in versions.indices) current else versions.lastIndex
     val script: Script? get() = versions.getOrNull(currentIndex)
@@ -88,6 +90,8 @@ data class StoryboardReply(
     val claimed: List<String> = emptyList(),
     /** The script replaces the current one (the rider gave their own script or a new idea): nothing is carried over. */
     val fresh: Boolean = false,
+    /** Where footage may come from, when the rider said it in this message ("don't use my old clips" = FRESH). */
+    val clips: ClipSource? = null,
 )
 
 /** A change to one shot: update some fields, insert a new shot after one, or delete it. */
@@ -129,6 +133,7 @@ object StoryboardEngine {
         appendLine("- Never change a field marked LOCKED unless the rider asks for that exact change; then list it in \"unlock\" (\"s3.action\").")
         appendLine("- The rider sees shots numbered #1, #2… in order. \"Shot 3\", \"clip 3\" or \"the third one\" means #3; find its id in the script below.")
         appendLine("- To change the storyboard, ALWAYS return the whole updated \"script\": keep the id of every shot you keep, drop the ones removed, give new shots new ids. List what you changed in \"changes\" (\"Removed #3: <what it showed>\"). If nothing in the storyboard changes, \"script\" is null and \"changes\" is empty.")
+        appendLine("- Storyboard never picks clips itself; the app fills shots. When the rider says which footage to use, set \"clips\": \"fresh\" (only new footage, \"don't use my old/previous clips\"), \"suggest\" (offer clips but let me pick) or \"auto\" (use my best clips). Otherwise null.")
         appendLine("- Mentioned gear changes (\"I bought a GoPro\", \"no tripod any more\") go in \"memory\", each with a short confirm text.")
         appendLine()
         appendLine("RIDER'S GEAR: ${gear.describe()}")
@@ -152,7 +157,7 @@ object StoryboardEngine {
         appendLine("RIDER NOW: $text")
         appendLine()
         appendLine(
-            "Reply with JSON only: {\"reply\":\"...\",\"script\":SCRIPT or null,\"changes\":[\"...\"],\"memory\":[...],\"styleSuggestion\":null,\"needsClarification\":null,\"unlock\":[],\"newVersion\":null,\"fresh\":false}. " +
+            "Reply with JSON only: {\"reply\":\"...\",\"script\":SCRIPT or null,\"changes\":[\"...\"],\"memory\":[...],\"styleSuggestion\":null,\"needsClarification\":null,\"unlock\":[],\"newVersion\":null,\"fresh\":false,\"clips\":null}. " +
                 "SCRIPT (the first draft, and the whole updated script after any change): {\"title\":\"...\",\"format\":\"reel|story|short\",\"musicNote\":\"...\"," +
                 "\"sections\":[{\"kind\":\"hook|setup|build|peak|turn|payoff|ending\",\"text\":\"on-screen text at its start or null\",\"shots\":[SHOT]}],\"texts\":[{\"text\":\"...\",\"shot\":\"s1\",\"sec\":2}]}. " +
                 "SHOT: {\"id\":\"s1\",\"action\":\"...\",\"framing\":\"extreme close-up|close-up|medium|wide\",\"angle\":\"...\",\"movement\":\"...\",\"mustShow\":\"...\"," +
@@ -211,6 +216,7 @@ object StoryboardEngine {
             newVersion = if (o.has("newVersion") && !o.isNull("newVersion")) o.optBoolean("newVersion") else null,
             claimed = o.optJSONArray("changes")?.let { c -> (0 until c.length()).map { c.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
             fresh = o.optBoolean("fresh", false),
+            clips = if (o.isNull("clips")) null else ClipSource.of(o.optString("clips")),
         )
     }.getOrNull()
 

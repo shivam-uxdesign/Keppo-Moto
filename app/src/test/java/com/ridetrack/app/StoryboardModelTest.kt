@@ -71,4 +71,38 @@ class StoryboardModelTest {
         assertEquals(p.template, ReelJson.read(ReelJson.write(p))?.template)
         assertNull(ReelJson.read(ReelJson.write(p.copy(template = null)))?.template)
     }
+
+    @Test fun `a template keeps its footage and caption choices, older ones read as before`() {
+        val t = com.ridetrack.app.studio.TemplateInfo("chat1", 1, 3, clips = com.ridetrack.app.studio.storyboard.ClipSource.FRESH, captions = com.ridetrack.app.studio.storyboard.CaptionSource.SAID)
+        val p = com.ridetrack.app.studio.ReelProject(
+            id = "r1", rideId = null, createdAt = 1, updatedAt = 2, title = "Chai", series = "", episode = 0, hookLine = "", postCaption = "", story = null,
+            options = com.ridetrack.app.studio.StudioOptions(), musicUri = null, musicName = null,
+            plan = com.ridetrack.app.studio.StudioPlan(emptyList(), com.ridetrack.app.studio.Vibe.HYPE), takes = emptyList(), tips = emptyList(), durationMs = 0,
+            template = t,
+        )
+        assertEquals(t, ReelJson.read(ReelJson.write(p))?.template)
+        val old = JSONObject(ReelJson.write(p)).apply { getJSONObject("template").remove("clips"); getJSONObject("template").remove("captions") }
+        val read = ReelJson.read(old.toString())!!.template!!
+        assertEquals(com.ridetrack.app.studio.storyboard.ClipSource.AUTO, read.clips)
+        assertEquals(com.ridetrack.app.studio.storyboard.CaptionSource.WRITTEN, read.captions)
+    }
+
+    @Test fun `fresh footage only allows clips filmed after the template was made`() {
+        val fresh = com.ridetrack.app.studio.storyboard.ClipSource.FRESH
+        assertTrue(fresh.allows(clipMillis = 2_000, madeMillis = 1_000))
+        assertTrue(!fresh.allows(clipMillis = 500, madeMillis = 1_000))
+        assertTrue(com.ridetrack.app.studio.storyboard.ClipSource.SUGGEST.allows(500, 1_000))
+        assertTrue(!com.ridetrack.app.studio.storyboard.ClipSource.SUGGEST.fillsByItself)
+    }
+
+    @Test fun `written captions keep the words exactly, in short phrases timed across the take`() {
+        val lines = com.ridetrack.app.studio.storyboard.VoiceLines.written("Bhai, chai pe chalte hain. Lonavala ki baarish aur garam pakode!", 6_000)
+        assertEquals("Bhai, chai pe chalte hain. Lonavala ki baarish aur garam pakode!", lines.joinToString(" ") { it.text })
+        assertEquals("Bhai,", lines.first().text)
+        assertEquals(0L, lines.first().startMs)
+        assertTrue(lines.last().endMs in 5_990L..6_000L)
+        assertTrue(lines.zipWithNext().all { (a, b) -> a.endMs <= b.startMs + 1 })
+        assertTrue(lines.all { it.text.split(' ').size <= 6 })
+        assertTrue(com.ridetrack.app.studio.storyboard.VoiceLines.written("  ", 3_000).isEmpty())
+    }
 }

@@ -34,7 +34,7 @@ class StoryboardTalk(private val c: AppContainer) {
                 messages = ch.messages + ChatMessage(true, text, System.currentTimeMillis(), voiceMs),
             )
         }!!
-        val prompt = StoryboardEngine.prompt(before, store.gear.value, c.style.context(), text, firstChat = store.chats.value.size <= 1)
+        val prompt = StoryboardEngine.prompt(before, store.gear.value, null, text, firstChat = store.chats.value.size <= 1)
         val base = before.script
         var raw = ""
         var reply: StoryboardReply? = null
@@ -75,10 +75,12 @@ class StoryboardTalk(private val c: AppContainer) {
         val honest = if (base != null && r.claimed.isNotEmpty() && !changed)
             "I couldn't make that change to the storyboard, so it's the same as before. Try saying it another way, like \"remove shot 3\"."
         else r.reply
-        val (gear, chips) = StoryboardEngine.remember(store.gear.value, r.memory)
+        val (gear, gearChips) = StoryboardEngine.remember(store.gear.value, r.memory)
+        // Which footage to use, said in so many words: kept for this storyboard, shown as a chip.
+        val chips = gearChips + listOfNotNull(r.clips?.let { MemoryChip("Clips: ${it.label}", null, false) })
         if (r.memory.isNotEmpty() || !store.gear.value.asked) store.setGear(gear)
         chat = store.update(chatId) { ch ->
-            val n = if (changed) ch.withVersion(next!!) else ch
+            val n = (if (changed) ch.withVersion(next!!) else ch).let { if (r.clips != null) it.copy(clips = r.clips) else it }
             n.copy(
                 raw = ch.raw + raw,
                 messages = ch.messages + ChatMessage(
