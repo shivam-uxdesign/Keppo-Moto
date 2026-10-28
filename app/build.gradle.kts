@@ -11,7 +11,10 @@ plugins {
 }
 
 // Firebase (transcripts via AI Logic) needs app/google-services.json, which is kept out of git.
-// Without it the app still builds; "Write down what I say" then says it isn't available.
+// A fresh checkout (cloud session) gets it from the GOOGLE_SERVICES_JSON env var (the file's whole
+// text); the written file stays out of git. Without either, the app still builds and Gemini
+// features say they aren't available.
+System.getenv("GOOGLE_SERVICES_JSON")?.takeIf { it.isNotBlank() && !file("google-services.json").exists() }?.let { file("google-services.json").writeText(it) }
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
     // Crash reports (Crashlytics): uploads R8's mapping for release builds so stack traces read.
