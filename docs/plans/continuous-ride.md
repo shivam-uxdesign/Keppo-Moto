@@ -144,3 +144,7 @@ Each step: unit tests for the logic (scoring, detour picking, switching rules, g
 - **But Google's terms don't allow showing its routes and traffic on a non-Google map** ("no use with non-Google maps"). So if Google is the provider, the Keep moving ride screen must draw its map with the **Google Maps SDK**. That's free on Android, but it adds a second map engine (a bigger app, and a different look on that one screen).
 - **Alternative:** TomTom or HERE as the provider, drawn on MapTiler. Their terms and their Delhi NCR data quality need checking first (step 0 can log both side by side).
 - Google's terms also limit storing its data, so step 0's logs are for the comparison only and get deleted after it.
+
+## Decided (6 Nov): Google's map on the Keep moving screen only
+
+Google routes, traffic and map for Keep moving; MapTiler everywhere else. One Google key, restricted to **Routes API** and **Maps SDK for Android**, as `GOOGLE_ROUTES_KEY`. No TomTom.
