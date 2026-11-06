@@ -14,6 +14,17 @@ Status: plan only. Asked for on 6 Nov: "a route from A to B with zero traffic. I
 
 The honest promise is: **"The ride that keeps you moving: fewer stops, and it steers you around jams as they appear."** Not "zero traffic".
 
+## Decisions (6 Nov)
+
+| Question | Decision |
+|---|---|
+| Length cap | **Up to 3×** the normal route's length |
+| Red lights | Don't count as traffic, but **avoid when possible**: a small penalty per signal, so of two equally clear routes the one with fewer signals wins |
+| Roads with no traffic data | **Avoid**: they score like slow roads, so they're used only when nothing with data is clear |
+| Switching | **Automatic**, with a **10-second "Keep this road"** to cancel |
+| Guidance | **In the app**: turn arrows on the riding screen, voice through the headset |
+| Where | **Delhi NCR first, planned to scale** (see Scaling) |
+
 ## What the app has today
 
 - A map (MapLibre with MapTiler), GPS, speed and the riding screen.
@@ -36,7 +47,7 @@ The honest promise is: **"The ride that keeps you moving: fewer stops, and it st
    - the number of traffic signals (from OpenStreetMap; incomplete in India)
    - your own past rides through that area at that hour (see part 6)
    
-   It picks the clearest route within the length cap and shows it on the map, coloured by traffic.
+   It picks the clearest route within the length cap (3×; roads with no traffic data count as slow; each signal adds a small penalty) and shows it on the map, coloured by traffic.
 
 3. **Live watch.** Every 60 s, and as you approach each decision point, it re-reads the next 3–5 km.
    - When a jam appears ahead, it asks for routes from where you are now.
@@ -73,7 +84,24 @@ Steps 0–3 make a usable feature.
 - **A Google Cloud project with the Routes API turned on and billing enabled** (the free monthly allowance covers personal use). Add its key as an environment secret, never in chat.
 - Decisions, in the next section.
 
-## Questions
+## Scaling (beyond Delhi NCR and beyond one rider)
+
+What changes when it's more cities and many riders:
+
+1. **Keys never ship in the app.** A small Keppo server (or Firebase Functions, which the app already uses) calls the traffic provider. That way the key isn't in the APK, usage can be capped per rider, and the provider can be swapped without an app update. Needed before any public release; for testing on your phone, a key in the test build is fine.
+2. **Provider behind one interface.** "Routes with traffic" and "traffic ahead" are asked through one door in the app, so Google, TomTom or HERE can be used per country or per price.
+3. **Cost per ride, kept down:**
+   - Re-check less often when the road ahead is clear (every 2–3 min), more often near known trouble.
+   - Ask only about the next few km, not the whole route.
+   - Riders on the same roads share recent answers through the server cache (a minute or two old is fine).
+   - Rough cost at today's prices: a few rupees per hour of riding, before caching. Pro feature territory.
+4. **Shared traffic memory.** Riders who opt in contribute anonymous speed-by-road-by-hour from their rides. Two-wheeler speeds are a dataset no provider has, and it gets better with every rider in a city. Needs a privacy design: aggregated, never individual routes.
+5. **Own router when the numbers justify it:** OpenStreetMap roads per region plus live traffic tiles and the shared memory, on our server. Any detour, not just a provider's 3 routes, and cheaper per request at scale.
+6. **New cities:** check the provider's data quality there first (step 0 again), plus signals data from OpenStreetMap, which varies by city.
+
+The first version is built so none of this needs a rewrite: the provider interface and the scoring are separate from the screens, and the server can be put in front later.
+
+## Questions (answered 6 Nov, see Decisions)
 
 1. **Length cap:** how much longer may the clear route be? (Suggest 2×, or 30 min more; you can change it per ride.)
 2. **Traffic signals:** do red lights count as "traffic"? Avoiding them makes routes much longer in Delhi.
