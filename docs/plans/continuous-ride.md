@@ -1,4 +1,4 @@
-# Continuous ride
+# Keep moving (was: Continuous ride)
 
 Status: plan only. Asked for on 6 Nov: "a route from A to B with zero traffic. If there's traffic ahead, take another route; left, right, U-turn doesn't matter. Time and distance don't matter. The route needs to be clear."
 
@@ -109,3 +109,31 @@ The first version is built so none of this needs a rewrite: the provider interfa
 4. **Switching:** switch by itself with the 5-second "keep this road", or ask every time?
 5. **Guidance:** the app's own on the riding screen (recommended), or hand off to Google Maps?
 6. **Where:** mostly Delhi NCR? That decides which provider's data to check first in step 0.
+
+## Final plan (6 Nov)
+
+Name: **Keep moving**. **Pro** feature. Pricing to revisit once step 0 and the first rides show the real cost per hour. Options then: raise Pro; include N hours of Keep moving a month in Pro with an add-on pack; or lean on caching and the shared memory to cut provider calls.
+
+### You
+1. **Google Cloud:** in the Google Cloud console, open the **keppo-moto** project (the same one Firebase uses).
+2. **Billing:** Billing › link a billing account. Set a **budget alert** (e.g. ₹500 a month) so nothing surprises you.
+3. **Routes API:** APIs & Services › Library › **Routes API** › Enable.
+4. **Key:** APIs & Services › Credentials › Create credentials › API key. Edit it:
+   - **API restrictions:** Routes API only.
+   - **Application restrictions:** Android apps, package `com.keppo.moto`, SHA-1 `D5:7C:D7:F0:05:CA:19:90:BA:87:09:76:03:E0:4E:AC:94:EB:F5:0E` (the test builds' signing key).
+   - **Quotas** (Routes API › Quotas): cap it at about 2,000 requests a day.
+5. **Environment settings:** add `GOOGLE_ROUTES_KEY` (and `GOOGLE_SERVICES_JSON`, `APPCHECK_DEBUG_TOKEN`, `MAPTILER_KEY` if not added yet), then start a new session and ask for step 0.
+6. **Step 0 rides:** install the logger build, pick the destination of 2–3 usual routes, ride each 2–3 times at different hours, export, and tell me roughly where you got stuck.
+7. **Go / no-go:** read the step 0 report with me.
+8. **Try each build** after steps 1–3 and send feedback.
+9. **Pricing decision** with the real cost per hour.
+
+### Me
+0. **Logger (test builds):** set a destination; every 2 min during the ride, Google's two-wheeler route with traffic is fetched and saved (slow and jammed stretches, signals on it), exported with the ride. Then a report: what the data said vs your actual speed on the same road (stopped, crawling, moving). One build.
+1. **Plan the ride:** traffic provider interface with Google behind it; destination search (MapTiler) or long-press; up to 3 routes with traffic; clearness score (jams and slow by length, no-data roads as slow, small penalty per signal, cap 3×); the chosen route on the map coloured by traffic; Start.
+2. **Keep moving live:** re-check the next 3–5 km (every 2–3 min when clear, every 60 s near trouble); on a jam, routes from here plus forced detours (parallel roads left and right, a U-turn when behind is clear); automatic switch with a 10 s "Keep this road" on the riding screen; usage counter.
+3. **Directions:** next-turn arrow and distance on the riding screen and pop-up; voice through the headset (turns, "jam ahead, taking the left road"); off-route detection and re-plan; arrival.
+4. **Pro and cost controls:** Pro gate, monthly usage shown, request caching, a log of calls for the cost report.
+5. **Later, for scale:** the server in front of the provider (Firebase Functions), opt-in shared two-wheeler traffic memory, own router when the numbers justify it.
+
+Each step: unit tests for the logic (scoring, detour picking, switching rules, guidance), lint, logged in the plan log, one APK per step.
