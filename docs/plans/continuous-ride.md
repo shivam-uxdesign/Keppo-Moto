@@ -137,3 +137,10 @@ Name: **Keep moving**. **Pro** feature. Pricing to revisit once step 0 and the f
 5. **Later, for scale:** the server in front of the provider (Firebase Functions), opt-in shared two-wheeler traffic memory, own router when the numbers justify it.
 
 Each step: unit tests for the logic (scoring, detour picking, switching rules, guidance), lint, logged in the plan log, one APK per step.
+
+## Maps: MapTiler or Google? (6 Nov)
+
+- The app's map stays **MapTiler** everywhere. Google's routing is a web service: no Google Maps app or map needed to ask it.
+- **But Google's terms don't allow showing its routes and traffic on a non-Google map** ("no use with non-Google maps"). So if Google is the provider, the Keep moving ride screen must draw its map with the **Google Maps SDK**. That's free on Android, but it adds a second map engine (a bigger app, and a different look on that one screen).
+- **Alternative:** TomTom or HERE as the provider, drawn on MapTiler. Their terms and their Delhi NCR data quality need checking first (step 0 can log both side by side).
+- Google's terms also limit storing its data, so step 0's logs are for the comparison only and get deleted after it.
