@@ -34,6 +34,19 @@ class ObdClient(private val link: ObdLink, private val log: (String) -> Unit) {
             return false
         }
         log("link: connected over ${link.kind}")
+        // The link can drop while setting up (a BLE adapter going out of reach): that's a failed
+        // connect, tried again later, never a crash.
+        return try {
+            setUp(setup)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("link lost while setting up: ${e.message}")
+            false
+        }
+    }
+
+    private suspend fun setUp(setup: List<String>): Boolean {
         Elm327.INIT.forEach { cmd ->
             val r = runCatching { link.send(cmd, if (cmd == "ATZ") 4_000 else 2_000) }.getOrElse { return false.also { _ -> log("$cmd: link lost") } }
             if (cmd == "ATZ") adapter = Elm327.clean(r)?.lines()?.lastOrNull { it.contains("ELM", true) || it.isNotBlank() }

@@ -85,8 +85,19 @@ class ObdManager(
     private var testing = false
     private var rideFile: File? = null
 
+    /**
+     * The last guard: a link error that slips past the reconnect loop (Bluetooth adapters drop
+     * out at any moment) is logged, and OBD stops; it never takes the app down.
+     */
+    private val guard = kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
+        log("stopped: ${e.message}")
+        runCatching { errors.warn("OBD", "The OBD link stopped (${e.javaClass.simpleName}): reconnect from the bike's OBD screen", e) }
+        client = null
+        _state.value = _state.value.copy(phase = ObdState.Phase.CONNECTING, message = "Link lost")
+    }
+
     fun watch() {
-        scope.launch {
+        scope.launch(guard) {
             session.active.map { it?.rideId to it?.bikeId }.distinctUntilChanged().collect { (rideId, bikeId) ->
                 if (rideId != null && bikeId != null && adapterFor(bikeId) != null) {
                     rideFile = if (BuildConfig.TEST_BUILD) File(moments.dir(rideId), LOG_FILE) else null
@@ -132,13 +143,13 @@ class ObdManager(
         if (session.active.value?.bikeId != _state.value.bikeId) stop()
     }
 
-    fun readCodes() = scope.launch {
+    fun readCodes() = scope.launch(guard) {
         val c = client ?: return@launch
         val codes = lock.withLock { runCatching { c.codes() }.getOrNull() }
         _state.value = _state.value.copy(codes = codes ?: emptyList())
     }
 
-    fun clearCodes() = scope.launch {
+    fun clearCodes() = scope.launch(guard) {
         val c = client ?: return@launch
         val ok = lock.withLock { runCatching { c.clearCodes() }.getOrDefault(false) }
         note(if (ok) "Fault codes cleared" else "The bike didn't clear the codes")
@@ -146,7 +157,7 @@ class ObdManager(
     }
 
     /** "Try every protocol": when the adapter's own search found nothing. Remembers what works. */
-    fun searchProtocols() = scope.launch {
+    fun searchProtocols() = scope.launch(guard) {
         val c = client ?: return@launch
         val bikeId = _state.value.bikeId ?: return@launch
         val found = lock.withLock {
@@ -172,7 +183,7 @@ class ObdManager(
         if (job?.isActive == true && _state.value.bikeId == bikeId) return
         job?.cancel()
         _log.value = emptyList()
-        job = scope.launch { run(bikeId) }
+        job = scope.launch(guard) { run(bikeId) }
     }
 
     fun stop() {
@@ -204,8 +215,16 @@ class ObdManager(
             var c: ObdClient? = null
             for (link in ObdLink.forDevice(context, device)) {
                 val tryClient = ObdClient(link, ::log)
-                if (tryClient.connect(adapter.setup)) { c = tryClient; break }
-                tryClient.close()
+                val ok = try {
+                    tryClient.connect(adapter.setup)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log("link (${link.kind}): ${e.message}")
+                    false
+                }
+                if (ok) { c = tryClient; break }
+                runCatching { tryClient.close() }
             }
             if (c == null) {
                 watch.onLink(false)

@@ -83,6 +83,13 @@ class ObdClientTest {
         repeat(5) { c.read(Elm327.Pid.RPM) }
     }
 
+    @Test
+    fun `a link that drops while setting up is a failed connect, not a crash`() = runBlocking {
+        // INIT is 6 commands; the drop comes on the first question to the bike (14 Nov: BLE disconnected crashed the app).
+        assertEquals(false, ObdClient(FakeElm(dropAfter = 6)) {}.connect())
+        assertEquals(false, ObdClient(FakeElm(dropAfter = 2)) {}.connect(listOf("ATSP5", "ATSHC133F1")))
+    }
+
     /** A K-line bike on ECU address 11 that the adapter's own search misses. */
     private class KLineBike : ObdLink {
         override val kind = "Bluetooth classic"

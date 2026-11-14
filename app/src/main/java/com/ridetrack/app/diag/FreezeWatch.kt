@@ -11,7 +11,9 @@ import androidx.core.content.getSystemService
 /**
  * Freezes ("Keppo Moto isn't responding") aren't crashes, so nothing caught them. Two ways in:
  *  - a watchdog: the screen's thread is poked every second; when it hasn't answered for 4 s
- *    (Android asks "Close app / Wait" at 5 s), what it was doing is written to the error log;
+ *    (Android asks "Close app / Wait" at 5 s), what it was doing is written to the error log.
+ *    When the watchdog itself slept far longer than asked, the whole app was paused (Android
+ *    freezes apps in the background; the phone sleeps): that time isn't a freeze and is skipped;
  *  - on the next start, Android's own record of a freeze or a native crash (with its trace) is
  *    added to the error log once.
  */
@@ -27,7 +29,14 @@ class FreezeWatch(private val context: Context, private val errors: ErrorLog) {
                 val asked = System.currentTimeMillis()
                 main.post { answeredAt = System.currentTimeMillis() }
                 runCatching { Thread.sleep(POKE_MS) }.onFailure { return@Thread }
-                val stuck = System.currentTimeMillis() - answeredAt
+                val now = System.currentTimeMillis()
+                if (paused(now - asked)) {
+                    // The whole process stood still, this thread too: start counting afresh.
+                    answeredAt = now
+                    reported = false
+                    continue
+                }
+                val stuck = now - answeredAt
                 if (stuck >= FROZEN_MS && answeredAt < asked) {
                     if (!reported) {
                         reported = true
@@ -64,13 +73,18 @@ class FreezeWatch(private val context: Context, private val errors: ErrorLog) {
         exits.maxOfOrNull { it.timestamp }?.let { prefs.edit().putLong(SEEN, maxOf(it, seen)).apply() }
     }
 
-    private companion object {
+    companion object {
         const val POKE_MS = 1_000L
         const val FROZEN_MS = 4_000L
-        const val SEEN = "seen"
+        /** How much longer than asked the watchdog may sleep before it counts as the app being paused. */
+        const val PAUSE_SLACK_MS = 2_000L
+
+        /** The watchdog slept [sleptMs] for a 1 s nap: far longer means the app itself was paused, not frozen. */
+        fun paused(sleptMs: Long): Boolean = sleptMs > POKE_MS + PAUSE_SLACK_MS
+        private const val SEEN = "seen"
 
         /** The main thread's part of an ANR trace (the whole trace is long), or its start. */
-        fun mainThreadPart(trace: String): String {
+        internal fun mainThreadPart(trace: String): String {
             val at = trace.indexOf("\"main\"")
             if (at < 0) return trace.take(8_000)
             val end = trace.indexOf("\n\n", at).takeIf { it > at } ?: (at + 8_000)
