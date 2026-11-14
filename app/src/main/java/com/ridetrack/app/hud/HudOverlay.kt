@@ -51,6 +51,8 @@ internal class HudOverlay(
     private var buttonsTop = Float.MAX_VALUE
 
     val isShowing: Boolean get() = hudView != null
+    /** Still on screen: false once Android has taken the window away behind our back. */
+    val attached: Boolean get() = hudView?.isAttachedToWindow == true
 
     fun show(): Boolean {
         if (hudView != null) return true

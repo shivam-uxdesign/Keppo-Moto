@@ -23,6 +23,7 @@ import com.ridetrack.app.ui.hud.HudControlActions
 import com.ridetrack.telemetry.state.RideState
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -44,7 +45,9 @@ class HudController(
     private val shots: () -> List<String> = { emptyList() },
     /** The garage, for the pop-up's accent: the ridden bike's colour. */
     private val bikes: kotlinx.coroutines.flow.Flow<List<com.ridetrack.telemetry.model.Bike>> = kotlinx.coroutines.flow.emptyFlow(),
+    private val errors: com.ridetrack.app.diag.ErrorLog? = null,
 ) {
+    private val trail = HudTrail(HudTrail.prefs(context))
     private val scope = MainScope()
     private val appVisible = MutableStateFlow(true)
     /** The ride the rider hid the pop-up for; it stays hidden until that ride ends. */
@@ -112,16 +115,8 @@ class HudController(
         scope.launch {
             combine(session.state, session.active, appVisible, settings.settings, hiddenForRide) { state, active, visible, s, hidden ->
                 overlay.settings = s.hud
-                val riding = state.isActive && active != null && hidden != active.rideId
-                riding && !visible && s.hud.enabled
-            }.distinctUntilChanged().collect { wanted ->
-                if (wanted && canDrawOverlays()) {
-                    refreshData()
-                    if (!overlay.show()) Log.w(TAG, "Pop-up not shown")
-                } else {
-                    overlay.hide()
-                }
-            }
+                want(active?.rideId?.takeIf { state.isActive }, visible, s.hud.enabled, hidden)
+            }.distinctUntilChanged().collectLatest { w -> keepUp(w) }
         }
 
         scope.launch {
@@ -209,6 +204,21 @@ class HudController(
             session.state.collect { if (!it.isActive && it !is RideState.Saving) hiddenForRide.value = null }
         }
 
+        scope.launch {
+            // A ride that ends with the pop-up having gone away says why, in the error log.
+            var wasRiding = false
+            session.state.collect { s ->
+                if (wasRiding && !s.isActive) {
+                    val unexpected = trail.unexpected
+                    trail.ended()?.let { said ->
+                        Log.i(TAG, said)
+                        if (unexpected) runCatching { errors?.warn("Pop-up", said) }
+                    }
+                }
+                wasRiding = s.isActive
+            }
+        }
+
     }
 
     private fun refreshData() {
@@ -253,8 +263,59 @@ class HudController(
         )
     }
 
+    /** Whether the pop-up should be up, or why not. */
+    private data class Want(val rideId: String?, val why: HudTrail.Why?) {
+        val show: Boolean get() = rideId != null && why == null
+    }
+
+    private fun want(rideId: String?, appVisible: Boolean, enabled: Boolean, hiddenFor: String?) = Want(
+        rideId,
+        when {
+            rideId == null -> null
+            hiddenFor == rideId -> HudTrail.Why.DRAGGED
+            !enabled -> HudTrail.Why.TURNED_OFF
+            appVisible -> HudTrail.Why.APP_OPEN
+            else -> null
+        },
+    )
+
+    /**
+     * Shows or hides the pop-up for [w], and while it should be up keeps it up: a show Android refuses
+     * is tried again, and a pop-up Android removed is put back. Before, one refusal hid it for good.
+     */
+    private suspend fun keepUp(w: Want) {
+        val ride = w.rideId
+        if (ride != null) trail.riding(ride)
+        if (!w.show) {
+            if (overlay.isShowing && ride != null && w.why != null) trail.hid(ride, w.why)
+            overlay.hide()
+            return
+        }
+        ride!!
+        var said: HudTrail.Why? = null
+        while (true) {
+            val why = when {
+                !canDrawOverlays() -> HudTrail.Why.NO_PERMISSION
+                overlay.isShowing && !overlay.attached -> { overlay.hide(); HudTrail.Why.REMOVED }
+                overlay.isShowing -> null
+                else -> {
+                    refreshData()
+                    if (overlay.show()) { trail.shown(ride); null } else HudTrail.Why.NOT_SHOWN
+                }
+            }
+            if (why != null && why != said) {
+                Log.w(TAG, "Pop-up down: ${why.label}")
+                trail.hid(ride, why)
+            }
+            said = why
+            kotlinx.coroutines.delay(if (why == null) CHECK_MS else RETRY_MS)
+        }
+    }
+
     private fun hideForCurrentRide() {
-        hiddenForRide.value = session.active.value?.rideId
+        val ride = session.active.value?.rideId
+        if (ride != null && overlay.isShowing) trail.hid(ride, HudTrail.Why.DRAGGED)
+        hiddenForRide.value = ride
         overlay.hide()
     }
 
@@ -270,6 +331,10 @@ class HudController(
     companion object {
         private const val OVERLOAD_NOTE_EVERY_MS = 5 * 60_000L
         private const val TAG = "HudController"
+        /** While up: how often to check Android hasn't taken the pop-up away. */
+        private const val CHECK_MS = 5_000L
+        /** While it can't show: how soon to try again. */
+        private const val RETRY_MS = 3_000L
         private const val SAVED_NOTE_MILLIS = 2_500L
         /** The shot list shows for the ride's first 30 s, each shot for 6 s. */
         private const val SHOTS_MILLIS = 30_000L
