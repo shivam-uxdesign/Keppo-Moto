@@ -6,7 +6,7 @@ import com.ridetrack.app.moments.Microphones
 import com.ridetrack.telemetry.processing.BatteryWarnings
 
 /** What a readiness problem's button does. */
-enum class ReadyFix { LOCATION_SETTINGS, APP_SETTINGS, OVERLAY, SAFETY }
+enum class ReadyFix { LOCATION_SETTINGS, APP_SETTINGS, OVERLAY, SAFETY, KEEP_RUNNING }
 
 enum class CheckState { OK, WAIT, PROBLEM }
 
@@ -32,6 +32,8 @@ data class ReadyInputs(
     val cameraAllowed: Boolean = true,
     val hudOn: Boolean = false,
     val overlayAllowed: Boolean = true,
+    /** Left out of Android's battery saving, so the phone doesn't close the app mid-ride. */
+    val keepRunning: Boolean = true,
     val batteryPct: Int? = null,
     val charging: Boolean = false,
     val freeBytes: Long? = null,
@@ -70,6 +72,11 @@ object Readiness {
             list += if (i.overlayAllowed) ReadyCheck("Pop-up", CheckState.OK)
             else ReadyCheck("Pop-up", CheckState.PROBLEM, "Pop-up not allowed", "The ride pop-up can't show over your maps app.", "Allow pop-up", ReadyFix.OVERLAY)
         }
+        if (!i.demo && !i.keepRunning) list += ReadyCheck(
+            "Background", CheckState.PROBLEM, "Android may close Keppo Moto mid-ride",
+            "Battery saving is on for the app, so the phone can stop the recording and the pop-up. Let it run in the background.",
+            "Allow", ReadyFix.KEEP_RUNNING,
+        )
         i.batteryPct?.let { pct ->
             list += when {
                 i.charging -> ReadyCheck("Battery $pct% · charging", CheckState.OK)

@@ -339,6 +339,7 @@ private fun fix(context: Context, f: ReadyFix) {
         }
         ReadyFix.APP_SETTINGS -> Permissions.openAppSettings(context)
         ReadyFix.OVERLAY -> OverlayPermission.request(context)
+        ReadyFix.KEEP_RUNNING -> com.ridetrack.app.ride.KeepRunning.request(context)
         ReadyFix.SAFETY -> Unit
     }
 }

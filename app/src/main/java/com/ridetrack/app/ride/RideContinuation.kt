@@ -53,11 +53,11 @@ class RideContinuation(
      * On launch: why the app last stopped (crash, low memory, killed by the system…), written to
      * the unfinished ride's log so the export shows it. Only reasons not reported before.
      */
-    fun reportExit(lastReportedMillis: Long, rideId: String?): Long? {
+    fun reportExit(lastReportedMillis: Long, rideId: String?, rideLastMillis: Long? = null, warn: ((String) -> Unit)? = null): Long? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
         val am = context.getSystemService<ActivityManager>() ?: return null
         val info = runCatching { am.getHistoricalProcessExitReasons(context.packageName, 0, 5) }.getOrNull()
-            ?.filter { it.timestamp > lastReportedMillis }
+            ?.filter { it.timestamp > lastReportedMillis && it.processName == context.packageName }
             ?.maxByOrNull { it.timestamp } ?: return null
         val crash = File(context.filesDir, CRASH_FILE).takeIf { it.exists() }?.let { f ->
             runCatching { f.readText().lines().take(12).joinToString(" | ") }.getOrNull().also { f.delete() }
@@ -66,7 +66,14 @@ class RideContinuation(
             (info.description?.let { " ($it)" } ?: "") +
             " · importance ${info.importance} · memory ${info.pss / 1024} MB" +
             (crash?.let { " · crash: $it" } ?: "")
-        if (rideId != null) MomentLog.append(logFile(rideId), line)
+        if (rideId != null) {
+            MomentLog.append(logFile(rideId), line)
+            // Mid-ride, and not a crash (crashes have their own entry): say in the error log why Android closed it.
+            val crashed = info.reason == ApplicationExitInfo.REASON_CRASH || info.reason == ApplicationExitInfo.REASON_CRASH_NATIVE
+            if (!crashed && midRide(info.timestamp, rideLastMillis)) {
+                warn?.invoke("Closed mid-ride by Android: $line · battery saving ${if (KeepRunning.allowed(context)) "off" else "ON"}")
+            }
+        }
         return info.timestamp
     }
 
@@ -90,6 +97,9 @@ class RideContinuation(
     }
 
     companion object {
+        /** The app stopped while that ride was recording: its last point is moments before the exit (or after it, once carried on). */
+        fun midRide(exitMillis: Long, rideLastMillis: Long?): Boolean =
+            rideLastMillis != null && exitMillis >= rideLastMillis - RESTART_WINDOW_MILLIS && exitMillis - rideLastMillis < 2 * 60_000L
         /** The stack trace of an uncaught crash, written by the app's crash handler. */
         const val CRASH_FILE = "last-crash.txt"
         /** The service restarted by Android after the app was killed: carry on within this. */

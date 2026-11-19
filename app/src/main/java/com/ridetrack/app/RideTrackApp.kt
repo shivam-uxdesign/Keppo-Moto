@@ -95,8 +95,8 @@ class RideTrackApp : Application() {
         // Why the app last stopped, into the log of the ride it interrupted.
         container.appScope.launch {
             val prefs = getSharedPreferences(STATE_PREFS_NAME, MODE_PRIVATE)
-            val ride = container.continuation.latest()?.first?.id
-            container.continuation.reportExit(prefs.getLong(EXIT_REPORTED_KEY, 0L), ride)?.let { prefs.edit().putLong(EXIT_REPORTED_KEY, it).apply() }
+            val latest = container.continuation.latest()
+            container.continuation.reportExit(prefs.getLong(EXIT_REPORTED_KEY, 0L), latest?.first?.id, latest?.second) { runCatching { container.errors.warn("App", it) } }?.let { prefs.edit().putLong(EXIT_REPORTED_KEY, it).apply() }
         }
         container.appScope.launch {
             val b = container.settings.settings.first().backup

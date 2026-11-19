@@ -50,3 +50,21 @@ class HudTrailTest {
         HudTrail(d2).apply { riding("r2"); assertNull(ended()) }
     }
 }
+
+class KeepRunningTest {
+    @Test fun `a phone that may close the app mid-ride is a pre-ride problem with a fix`() {
+        val c = com.ridetrack.app.ui.home.Readiness.checks(com.ridetrack.app.ui.home.ReadyInputs(keepRunning = false))
+        val bg = c.first { it.label == "Background" }
+        assertEquals(com.ridetrack.app.ui.home.CheckState.PROBLEM, bg.state)
+        assertEquals(com.ridetrack.app.ui.home.ReadyFix.KEEP_RUNNING, bg.fix)
+        assertTrue(com.ridetrack.app.ui.home.Readiness.checks(com.ridetrack.app.ui.home.ReadyInputs()).none { it.label == "Background" })
+    }
+
+    @Test fun `an exit is mid-ride when the ride's last point is close to it`() {
+        val last = 1_000_000_000L
+        assertTrue(com.ridetrack.app.ride.RideContinuation.midRide(last + 5_000, last))
+        assertTrue(com.ridetrack.app.ride.RideContinuation.midRide(last - 30_000, last)) // carried on already
+        assertFalse(com.ridetrack.app.ride.RideContinuation.midRide(last + 10 * 60_000, last))
+        assertFalse(com.ridetrack.app.ride.RideContinuation.midRide(last, null))
+    }
+}
