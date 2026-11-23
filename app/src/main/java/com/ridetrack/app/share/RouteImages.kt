@@ -51,6 +51,10 @@ class RouteImages(private val context: Context, private val db: RideTrackDatabas
         cached(ride, sizePx)?.let { return it }
         val key = "${ride.id}/$sizePx"
         if (!online() || System.currentTimeMillis() - (failedAt[key] ?: 0) < RETRY_MILLIS) return null
+        // The map engine works on the main thread. In the background (a home-screen widget
+        // refreshing, Keppo Journal asking) Android starves it, and the wait made the app "not
+        // respond". Callers use the plain route line then; the map version is made when the app is open.
+        if (!foreground()) return null
         return lock.withLock {
             cached(ride, sizePx)?.let { return@withLock it }
             val data = ShareCardData.from(ride.toModel(), null, db.rideDao().samples(ride.id).map { it.toModel() })
@@ -122,6 +126,9 @@ class RouteImages(private val context: Context, private val db: RideTrackDatabas
         val m = bmp.width * 0.02f
         c.drawText(mapAttribution(), bmp.width - m, bmp.height - m, paint)
     }
+
+    private fun foreground(): Boolean =
+        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
 
     private fun online(): Boolean {
         val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
