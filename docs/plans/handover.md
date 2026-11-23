@@ -1,7 +1,7 @@
 # Handover (24 Nov, evening)
 
 Read this first in a new session. The full history of every question, bug and build is in
-`studio-feature-plan.md` (one row each, #1–#105; keep logging from the next number). This file is
+`studio-feature-plan.md` (one row each, #1–#106; keep logging from the next number). This file is
 the short version: how we work, what's open, and what's next.
 
 ## How we work
@@ -19,7 +19,7 @@ the short version: how we work, what's open, and what's next.
 
 ## Builds
 
-- `git fetch --unshallow` first: the version code counts commits (last sent: 431, c1e6c72).
+- `git fetch --unshallow` first: the version code counts commits (last sent: 442, a2c5e9c).
 - `./gradlew :app:assembleReleaseTest -PabiFilter=arm64-v8a`
 - Verify before sending: versionCode above the last; signing cert SHA-256 starts `140f5eab`
   (test builds use the committed `app/signing/debug.keystore`; its SHA-1 is
@@ -71,7 +71,7 @@ Studio for rides), #87/#92/#94 (keys and Gemini working).
 - #43 add friends
 - #46 WhatsApp instead of SMS for crash alerts (skipped)
 
-## Built since the last APK (c1e6c72), not yet in a build
+## In build a2c5e9c (sent 24 Nov, without the Routes key)
 
 - #99: Reel captions on the cheaper lite Gemini models; scripts stay on gemini-3.8-flash (a lite model
   remembered from transcripts no longer takes over script writing).
