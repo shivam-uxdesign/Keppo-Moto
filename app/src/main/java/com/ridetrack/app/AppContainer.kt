@@ -191,6 +191,8 @@ class AppContainer(context: Context) {
 
     /** The bike's OBD adapter: engine data in rides, the test screen, alerts and fault codes. */
     val obd = com.ridetrack.app.obd.ObdManager(appContext, settings, session, moments, errors, appScope)
+    /** Keep moving, step 0: Google's traffic to a destination logged during rides (test builds). */
+    val trafficLog = com.ridetrack.app.keepmoving.TrafficLogger(appContext, session, moments, appScope)
 
     /** The rider's routines: when a ride starts, ends or arrives somewhere, do these. */
     val routines = com.ridetrack.app.routines.RoutineRunner(appContext, settings, session, errors)

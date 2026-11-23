@@ -37,6 +37,7 @@ class RideTrackApp : Application() {
         com.ridetrack.app.widget.HomeWidgets.watch(this, container, container.appScope)
         container.routines.watch(container.appScope)
         container.obd.watch()
+        container.trafficLog.watch()
         // Storyboard shots still to film, on the shot list: kept in step with every template change.
         container.appScope.launch {
             container.reels.reels.collect { runCatching { com.ridetrack.app.studio.storyboard.ToFilmList.sync(container) } }

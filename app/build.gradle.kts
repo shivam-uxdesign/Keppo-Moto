@@ -30,6 +30,9 @@ val mapTilerKey: String = (localProperties.getProperty("MAPTILER_KEY") ?: System
 // Test builds: one fixed App Check debug token (registered once in Firebase), kept out of git,
 // so reinstalling the app doesn't make a new one that Firebase rejects.
 val appCheckDebugToken: String = (localProperties.getProperty("APPCHECK_DEBUG_TOKEN") ?: System.getenv("APPCHECK_DEBUG_TOKEN") ?: "").trim()
+// Keep moving (test builds only, for now): Google's Routes key. Never in a Play build: a key in the
+// APK can be pulled out; the public version goes through a server instead.
+val googleRoutesKey: String = (localProperties.getProperty("GOOGLE_ROUTES_KEY") ?: System.getenv("GOOGLE_ROUTES_KEY") ?: "").trim()
 
 // Which build this is, shown in Profile › About: git commit + build date (e.g. "ad42a92 · 2 Oct").
 val gitSha: String = providers.exec {
@@ -76,6 +79,7 @@ android {
         // anyone use the Gemini allowance from outside the app).
         buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"\"")
         buildConfigField("Boolean", "APPCHECK_DEBUG", "false")
+        buildConfigField("String", "GOOGLE_ROUTES_KEY", "\"\"")
         // Test builds (debug, releaseTest) show testing tools such as "Act as a free rider".
         buildConfigField("Boolean", "TEST_BUILD", "false")
         // Optional: `-PabiFilter=arm64-v8a` builds a smaller APK for modern phones only.
@@ -114,6 +118,7 @@ android {
         }
         debug {
             buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"$appCheckDebugToken\"")
+            buildConfigField("String", "GOOGLE_ROUTES_KEY", "\"$googleRoutesKey\"")
             buildConfigField("Boolean", "APPCHECK_DEBUG", "true")
             buildConfigField("Boolean", "TEST_BUILD", "true")
         }
@@ -132,6 +137,7 @@ android {
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
             buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"$appCheckDebugToken\"")
+            buildConfigField("String", "GOOGLE_ROUTES_KEY", "\"$googleRoutesKey\"")
             buildConfigField("Boolean", "APPCHECK_DEBUG", "true")
             buildConfigField("Boolean", "TEST_BUILD", "true")
         }

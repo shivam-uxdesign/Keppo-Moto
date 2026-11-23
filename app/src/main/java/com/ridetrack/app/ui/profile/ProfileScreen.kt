@@ -458,6 +458,8 @@ private fun DeveloperPage(s: ProfileUiState, vm: ProfileViewModel) {
         )
     }
     if (BuildConfig.DEBUG || BuildConfig.TEST_BUILD) BetaExportSection()
+    // Keep moving, step 0: Google's traffic logged on rides to a destination.
+    if (BuildConfig.TEST_BUILD) KeepMovingSection()
     if (BuildConfig.TEST_BUILD) {
         // Try the app as a free rider would see it (no Gemini, no automatic Reels).
         val ent = com.ridetrack.app.ui.appContainer().entitlements
