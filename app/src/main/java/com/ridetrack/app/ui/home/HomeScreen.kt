@@ -153,88 +153,31 @@ fun HomeScreen(
         Header(s, onOpenProfile)
         Spacer(Modifier.height(16.dp))
 
-        // Riders in the EU, EEA, UK and Switzerland are asked once about crash reports.
-        val reports = com.ridetrack.app.ui.appContainer().crashReports
-        val reportChoice by reports.choice.collectAsStateWithLifecycle()
-        if (reportChoice == null && reports.needsAsking) {
-            CrashReportsCard(onChoose = reports::set)
-            Spacer(Modifier.height(RtDimens.md))
-        }
-        fuel.prompt?.let { p ->
-            FuelPromptCard(p, onAdd = { fillUp = p }, onDismiss = { vm.dismissFuel(p) }, modifier = Modifier.riseIn(0))
-            Spacer(Modifier.height(RtDimens.md))
-        }
-        val nudge = fuel.nudge
-        val nudgeBike = fuel.nudgeBikeId
-        if (fuel.prompt == null && nudge != null && nudgeBike != null) {
-            FuelNudgeCard(
-                nudge,
-                onAdd = { fillUp = com.ridetrack.app.fuel.FuelPrompt("", nudgeBike, System.currentTimeMillis(), "Fuel stop", null, sure = true, how = "nudge") },
-                onNotYet = { vm.snoozeNudge(nudgeBike, nudge.sinceKm) },
+        // The order (24 Nov): Before you ride, the bike, bike care and milestones lead, always.
+        // Then what's waiting for an answer, then the last ride, today's post, shots to film, the week.
+        val bike = s.bike
+        val last = s.lastRide
+
+        // 1. Before you ride: the checks, then Moments and voice for this ride.
+        if (bike != null && !s.rideState.isActive) {
+            ReadinessCard(s.checks, onFix = { if (it == ReadyFix.SAFETY) onOpenSafety() else fix(context, it) }, Modifier.riseIn(0))
+            Spacer(Modifier.height(10.dp))
+            MomentsToggles(
+                moments = s.momentsOn,
+                voice = s.voiceOn,
+                onMoments = { on ->
+                    val missing = listOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+                        .filter { ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }
+                    if (on && missing.isNotEmpty()) momentsPermission.launch(missing.toTypedArray()) else vm.setMoments(on)
+                },
+                onVoice = vm::setVoice,
                 modifier = Modifier.riseIn(0),
             )
-            Spacer(Modifier.height(RtDimens.md))
-        }
-        s.unfinished?.let { ride ->
-            UnfinishedRideCard(
-                ride,
-                recent = s.unfinishedRecent,
-                onSave = { vm.saveUnfinished(ride) },
-                onDiscard = { confirmDiscard = ride },
-                onContinue = { vm.continueUnfinished(onRideStarted) },
-            )
-            Spacer(Modifier.height(RtDimens.md))
+            Spacer(Modifier.height(14.dp))
         }
 
-        val last = s.lastRide
-        val lastCard: @Composable (Int) -> Unit = { order ->
-            if (last != null) {
-                LastRideCard(
-                    last = last,
-                    bikeName = s.bikes.firstOrNull { it.id == last.ride.bikeId }?.displayName,
-                    fuelLine = fuel.lastRide,
-                    routeColor = s.bikes.firstOrNull { it.id == last.ride.bikeId }?.let { BikeColors.of(it, s.bikes) } ?: BikeColors.PALETTE[0],
-                    justRode = s.justRode,
-                    onOpen = { onOpenRide(last.ride.id) },
-                    onShare = { onShareRide(last.ride.id) },
-                    onReel = { onMakeReel(last.ride.id) },
-                    onClose = { vm.dismissJustRode(last.ride.id) },
-                    modifier = Modifier.riseIn(order),
-                )
-                Spacer(Modifier.height(14.dp))
-            }
-        }
-        // Just after a ride, the ride and what it set lead; otherwise readiness and Start do.
-        if (s.justRode) {
-            lastCard(0)
-            if (s.milestones.isNotEmpty()) {
-                MilestonesCard(s.milestones, Modifier.riseIn(0), onOpen = onOpenAchievements)
-                Spacer(Modifier.height(14.dp))
-            }
-        }
-
-        val bike = s.bike
         if (bike != null) {
-            if (!s.rideState.isActive) {
-                ReadinessCard(s.checks, onFix = { if (it == ReadyFix.SAFETY) onOpenSafety() else fix(context, it) }, Modifier.riseIn(0))
-                Spacer(Modifier.height(10.dp))
-                MomentsToggles(
-                    moments = s.momentsOn,
-                    voice = s.voiceOn,
-                    onMoments = { on ->
-                        val missing = listOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
-                            .filter { ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }
-                        if (on && missing.isNotEmpty()) momentsPermission.launch(missing.toTypedArray()) else vm.setMoments(on)
-                    },
-                    onVoice = vm::setVoice,
-                    modifier = Modifier.riseIn(0),
-                )
-                Spacer(Modifier.height(10.dp))
-                if (container.studio.shots.collectAsStateWithLifecycle().value.isNotEmpty()) {
-                    com.ridetrack.app.studio.ShotListCard(container.studio, Modifier.riseIn(0))
-                    Spacer(Modifier.height(10.dp))
-                }
-            }
+            // 2. The bike, with slide to ride.
             GarageStack(
                 bikes = s.bikes,
                 selected = bike,
@@ -247,34 +190,91 @@ fun HomeScreen(
                 onStart = ::go,
                 onReturnToRide = onReturnToRide,
                 onEditBike = onEditBike,
-                modifier = Modifier.riseIn(0),
+                modifier = Modifier.riseIn(1),
             )
-            // Below the bike: one ready video to post today.
-            if (!s.rideState.isActive) {
-                com.ridetrack.app.studio.TodayPostCard(Modifier.padding(top = 14.dp).riseIn(1))
-            }
+            Spacer(Modifier.height(14.dp))
+            // 3. Bike care.
+            BikeCareCard(bike.displayName, s.odometers[bike.id], s.care, onOpenBike, Modifier.riseIn(2))
+            Spacer(Modifier.height(14.dp))
         } else if (!s.loading) {
             if (s.offerRestore) {
                 RestoreCard(onRestore = onOpenProfile, onDismiss = vm::dismissRestore, modifier = Modifier.riseIn(0))
                 Spacer(Modifier.height(RtDimens.md))
             }
             AddBikeCard(onAddBike, Modifier.riseIn(0))
+            Spacer(Modifier.height(14.dp))
+        }
+
+        // 4. Milestones.
+        if (!s.loading && s.milestones.isNotEmpty()) {
+            MilestonesCard(s.milestones, Modifier.riseIn(3), onOpen = onOpenAchievements)
+            Spacer(Modifier.height(14.dp))
+        }
+
+        // Waiting for an answer: a ride left unfinished, a fill-up, the crash-report question.
+        s.unfinished?.let { ride ->
+            UnfinishedRideCard(
+                ride,
+                recent = s.unfinishedRecent,
+                onSave = { vm.saveUnfinished(ride) },
+                onDiscard = { confirmDiscard = ride },
+                onContinue = { vm.continueUnfinished(onRideStarted) },
+            )
+            Spacer(Modifier.height(14.dp))
+        }
+        fuel.prompt?.let { p ->
+            FuelPromptCard(p, onAdd = { fillUp = p }, onDismiss = { vm.dismissFuel(p) }, modifier = Modifier.riseIn(4))
+            Spacer(Modifier.height(14.dp))
+        }
+        val nudge = fuel.nudge
+        val nudgeBike = fuel.nudgeBikeId
+        if (fuel.prompt == null && nudge != null && nudgeBike != null) {
+            FuelNudgeCard(
+                nudge,
+                onAdd = { fillUp = com.ridetrack.app.fuel.FuelPrompt("", nudgeBike, System.currentTimeMillis(), "Fuel stop", null, sure = true, how = "nudge") },
+                onNotYet = { vm.snoozeNudge(nudgeBike, nudge.sinceKm) },
+                modifier = Modifier.riseIn(4),
+            )
+            Spacer(Modifier.height(14.dp))
+        }
+        // Riders in the EU, EEA, UK and Switzerland are asked once about crash reports.
+        val reports = com.ridetrack.app.ui.appContainer().crashReports
+        val reportChoice by reports.choice.collectAsStateWithLifecycle()
+        if (reportChoice == null && reports.needsAsking) {
+            CrashReportsCard(onChoose = reports::set)
+            Spacer(Modifier.height(14.dp))
         }
 
         if (!s.loading) {
-            Spacer(Modifier.height(14.dp))
-            if (!s.justRode) lastCard(1)
-            if (bike != null) {
-                BikeCareCard(bike.displayName, s.odometers[bike.id], s.care, onOpenBike, Modifier.riseIn(2))
+            // The last ride.
+            if (last != null) {
+                LastRideCard(
+                    last = last,
+                    bikeName = s.bikes.firstOrNull { it.id == last.ride.bikeId }?.displayName,
+                    fuelLine = fuel.lastRide,
+                    routeColor = s.bikes.firstOrNull { it.id == last.ride.bikeId }?.let { BikeColors.of(it, s.bikes) } ?: BikeColors.PALETTE[0],
+                    justRode = s.justRode,
+                    onOpen = { onOpenRide(last.ride.id) },
+                    onShare = { onShareRide(last.ride.id) },
+                    onReel = { onMakeReel(last.ride.id) },
+                    onClose = { vm.dismissJustRode(last.ride.id) },
+                    modifier = Modifier.riseIn(5),
+                )
                 Spacer(Modifier.height(14.dp))
             }
-            if (!s.justRode && s.milestones.isNotEmpty()) {
-                MilestonesCard(s.milestones, Modifier.riseIn(3), onOpen = onOpenAchievements)
-                Spacer(Modifier.height(14.dp))
+            if (bike != null && !s.rideState.isActive) {
+                // One ready video to post today, then the shots still to film.
+                // (It draws nothing on days without one, so it carries its own gap.)
+                com.ridetrack.app.studio.TodayPostCard(Modifier.padding(bottom = 14.dp).riseIn(6))
+                if (container.studio.shots.collectAsStateWithLifecycle().value.isNotEmpty()) {
+                    com.ridetrack.app.studio.ShotListCard(container.studio, Modifier.riseIn(6))
+                    Spacer(Modifier.height(14.dp))
+                }
             }
+            // The week so far.
             val week = s.week
             if (s.totals != null && week != null) {
-                WeekLine(week, Modifier.riseIn(3))
+                WeekLine(week, Modifier.riseIn(7))
             } else if (s.hasBikes && last == null) {
                 EmptyState(
                     title = "No rides yet",
