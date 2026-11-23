@@ -153,10 +153,44 @@ fun HomeScreen(
         Header(s, onOpenProfile)
         Spacer(Modifier.height(16.dp))
 
-        // The order (24 Nov): Before you ride, the bike, bike care and milestones lead, always.
-        // Then what's waiting for an answer, then the last ride, today's post, shots to film, the week.
+        // The order (24 Nov): alerts waiting for an answer, then Before you ride, the bike, bike care
+        // and milestones, always; then the last ride, today's post, shots to film, the week.
         val bike = s.bike
         val last = s.lastRide
+
+        // 0. Alerts, waiting for an answer: a ride left unfinished, a fill-up, the crash-report question.
+        s.unfinished?.let { ride ->
+            UnfinishedRideCard(
+                ride,
+                recent = s.unfinishedRecent,
+                onSave = { vm.saveUnfinished(ride) },
+                onDiscard = { confirmDiscard = ride },
+                onContinue = { vm.continueUnfinished(onRideStarted) },
+            )
+            Spacer(Modifier.height(14.dp))
+        }
+        fuel.prompt?.let { p ->
+            FuelPromptCard(p, onAdd = { fillUp = p }, onDismiss = { vm.dismissFuel(p) }, modifier = Modifier.riseIn(0))
+            Spacer(Modifier.height(14.dp))
+        }
+        val nudge = fuel.nudge
+        val nudgeBike = fuel.nudgeBikeId
+        if (fuel.prompt == null && nudge != null && nudgeBike != null) {
+            FuelNudgeCard(
+                nudge,
+                onAdd = { fillUp = com.ridetrack.app.fuel.FuelPrompt("", nudgeBike, System.currentTimeMillis(), "Fuel stop", null, sure = true, how = "nudge") },
+                onNotYet = { vm.snoozeNudge(nudgeBike, nudge.sinceKm) },
+                modifier = Modifier.riseIn(0),
+            )
+            Spacer(Modifier.height(14.dp))
+        }
+        // Riders in the EU, EEA, UK and Switzerland are asked once about crash reports.
+        val reports = com.ridetrack.app.ui.appContainer().crashReports
+        val reportChoice by reports.choice.collectAsStateWithLifecycle()
+        if (reportChoice == null && reports.needsAsking) {
+            CrashReportsCard(onChoose = reports::set)
+            Spacer(Modifier.height(14.dp))
+        }
 
         // 1. Before you ride: the checks, then Moments and voice for this ride.
         if (bike != null && !s.rideState.isActive) {
@@ -208,40 +242,6 @@ fun HomeScreen(
         // 4. Milestones.
         if (!s.loading && s.milestones.isNotEmpty()) {
             MilestonesCard(s.milestones, Modifier.riseIn(3), onOpen = onOpenAchievements)
-            Spacer(Modifier.height(14.dp))
-        }
-
-        // Waiting for an answer: a ride left unfinished, a fill-up, the crash-report question.
-        s.unfinished?.let { ride ->
-            UnfinishedRideCard(
-                ride,
-                recent = s.unfinishedRecent,
-                onSave = { vm.saveUnfinished(ride) },
-                onDiscard = { confirmDiscard = ride },
-                onContinue = { vm.continueUnfinished(onRideStarted) },
-            )
-            Spacer(Modifier.height(14.dp))
-        }
-        fuel.prompt?.let { p ->
-            FuelPromptCard(p, onAdd = { fillUp = p }, onDismiss = { vm.dismissFuel(p) }, modifier = Modifier.riseIn(4))
-            Spacer(Modifier.height(14.dp))
-        }
-        val nudge = fuel.nudge
-        val nudgeBike = fuel.nudgeBikeId
-        if (fuel.prompt == null && nudge != null && nudgeBike != null) {
-            FuelNudgeCard(
-                nudge,
-                onAdd = { fillUp = com.ridetrack.app.fuel.FuelPrompt("", nudgeBike, System.currentTimeMillis(), "Fuel stop", null, sure = true, how = "nudge") },
-                onNotYet = { vm.snoozeNudge(nudgeBike, nudge.sinceKm) },
-                modifier = Modifier.riseIn(4),
-            )
-            Spacer(Modifier.height(14.dp))
-        }
-        // Riders in the EU, EEA, UK and Switzerland are asked once about crash reports.
-        val reports = com.ridetrack.app.ui.appContainer().crashReports
-        val reportChoice by reports.choice.collectAsStateWithLifecycle()
-        if (reportChoice == null && reports.needsAsking) {
-            CrashReportsCard(onChoose = reports::set)
             Spacer(Modifier.height(14.dp))
         }
 
