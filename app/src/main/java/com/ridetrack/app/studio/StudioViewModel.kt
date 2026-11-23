@@ -235,6 +235,9 @@ class StudioViewModel(
                 c.studio.takePending().takeIf { it.isNotEmpty() }?.let { addPhoneVideos(it).join() }
                 if (openReelId == null && phone.isNotEmpty()) loadPlan()
                 openReelId?.let { id -> c.reels.get(id)?.let { open(it); if (editNow) edit() } }
+                // New Reel from the phone's videos: straight in the editor, the app's plain cut of them.
+                if (openReelId == null) startOwnWay()
+                _state.update { it.copy(opened = true) }
                 return@launch
             }
             val talking = clips.count { likelyTalking(it) }
@@ -272,7 +275,7 @@ class StudioViewModel(
         val s = _state.value
         val sc = engine.localPieces(footage(), "Your own way", s.title).firstOrNull()?.copy(title = OWN_WAY)
         val piece = sc?.let { engine.pieces(listOf(it), s.options).firstOrNull()?.copy(key = OWN_WAY_KEY) }
-            ?: return say("Studio needs at least 2 clips from this ride")
+            ?: return say(if (phoneOnly) "Studio needs at least 2 videos: pick more from your phone" else "Studio needs at least 2 clips from this ride")
         _state.update { it.copy(pieces = listOf(piece) + it.pieces.filter { p -> p.key != OWN_WAY_KEY }) }
         editIdea(OWN_WAY_KEY)
     }
@@ -353,16 +356,6 @@ class StudioViewModel(
         if (missed > 0) say("$missed couldn't be opened")
     }
 
-    /** Leaves a clip out of what Studio picks from (or puts it back). */
-    fun toggleExclude(id: String) {
-        _state.update { it.copy(excluded = if (id in it.excluded) it.excluded - id else it.excluded + id) }
-        engine.excluded = _state.value.excluded
-        viewModelScope.launch {
-            engine.refreshBits()
-            refreshSources()
-        }
-    }
-
     // ---- suggested content ---------------------------------------------------------------------
 
     /** Loads the saved suggestions, or asks for them the first time the ride's Studio opens. */
@@ -383,12 +376,6 @@ class StudioViewModel(
         } finally {
             _state.update { it.copy(planning = null) }
         }
-    }
-
-    /** Looks for an episode of [seriesId] in this ride again (the rider asked). */
-    fun findEpisode(seriesId: String) {
-        if (job?.isActive == true || _state.value.planning != null) return
-        job = viewModelScope.launch { findEpisodes(seriesId) }
     }
 
     private suspend fun showPieces(scripts: List<Script>) {
@@ -474,27 +461,10 @@ class StudioViewModel(
         }
     }
 
-    /** Try again now (the rider tapped it). */
-    fun retryGemini() {
-        retries = 0
-        suggest()
-    }
-
     /** Every story, reaction, line and fast stretch Gemini can find in the ride (one more request). */
     fun suggestAll() {
         retries = 0
         suggest(all = true)
-    }
-
-    /** Suggestions the app makes itself, when the rider doesn't want to wait for Gemini. */
-    fun suggestWithoutGemini() {
-        viewModelScope.launch {
-            val fs = withContext(Dispatchers.Default) { footage() }
-            val scripts = localPieces(fs, "Made by the app, without Gemini")
-            savePlan(scripts, "Asked for without Gemini")
-            showPieces(scripts)
-            _state.update { it.copy(geminiIssue = null) }
-        }
     }
 
     /**
@@ -660,54 +630,6 @@ class StudioViewModel(
         c.reelMaker.enqueue(jobs)
         say(if (jobs.isEmpty()) "All suggestions are made already" else "Making ${jobs.size} in the background. They'll be in Your Reels.")
     }
-
-    /**
-     * "Try something else with this": Gemini writes another take on the card's moment, from the
-     * same clips. It goes under the card as a variation, and the card shows it.
-     */
-    fun tryAnother(g: IdeaGroup<ContentPiece>) {
-        if (job?.isActive == true || _state.value.planning != null) return
-        val cd = card ?: return
-        val base = shown(g).script
-        job = viewModelScope.launch {
-            _state.update { it.copy(planning = "Gemini is trying something else with \u201c${base.title.take(40)}\u201d", geminiIssue = null) }
-            val fs = withContext(Dispatchers.Default) { footage() }
-            val takes = g.all.map { "${it.script.format.label} · ${it.script.title}" }
-            val sc = try {
-                gemini().scripts(ScriptWriter.variationPrompt(cd.title, cd.subtitle, fs, style(), base, takes, ScriptWriter.keys(fs), c.styles.forSuggestions()), fs) { raw ->
-                    c.errors.record("Studio variation", "Gemini's answer couldn't be read", null, raw.take(4_000))
-                }.firstOrNull()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                c.errors.record("Studio variation", "Gemini couldn't try something else", e)
-                _state.update {
-                    it.copy(geminiIssue = when {
-                        com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e) -> com.ridetrack.app.transcribe.GeminiNet.message(e)
-                        e is FirebaseTranscriber.Busy -> "Gemini's free limit is used up, so it can't try something else now."
-                        else -> "Gemini couldn't try something else (${e.message?.take(60)})."
-                    })
-                }
-                null
-            } finally {
-                _state.update { it.copy(planning = null) }
-            }
-            if (sc == null) return@launch
-            // A new title, so it's told apart from the takes already on the card.
-            val titles = _state.value.pieces.map { it.script.title }.toSet()
-            val title = generateSequence(sc.title) { "$it ·" }.first { it !in titles }
-            val v = sc.copy(title = title, variationOf = g.main.script.title, every = false)
-            // Right after the card's last take, so it's listed with them.
-            val scripts = _state.value.pieces.map { it.script }.toMutableList()
-            val at = scripts.indexOfLast { t -> g.all.any { it.script.title == t.title } } + 1
-            scripts.add(at.coerceIn(0, scripts.size), v)
-            savePlan(scripts)
-            showPieces(scripts)
-            _state.update { it.copy(picks = it.picks + (g.main.script.title to title)) }
-        }
-    }
-
-    fun cancelMakeAll() = c.reelMaker.cancelAll()
 
 
     // ---- saved Reels -----------------------------------------------------------------------
@@ -913,13 +835,6 @@ class StudioViewModel(
         if (_state.value.otherBits.isEmpty()) viewModelScope.launch { loadOtherRides() }
     }
 
-    /** Opens a suggestion in the Script view to read (story, what was said, captions) and change before it's made. */
-    fun openPiece(key: String) {
-        val piece = _state.value.pieces.firstOrNull { it.key == key } ?: return
-        _state.update { it.copy(step = StudioStep.SCRIPT, draft = piece.script, scriptPiece = key, note = "", footage = footage()) }
-        if (_state.value.otherBits.isEmpty()) viewModelScope.launch { loadOtherRides() }
-    }
-
     fun editDraft(f: (Script) -> Script) = _state.update { s -> s.draft?.let { s.copy(draft = f(it)) } ?: s }
 
     /** A caption's new words ("" hides it); [startMs] is where the line starts in its clip. */
@@ -1120,10 +1035,6 @@ class StudioViewModel(
         }
     }
 
-    fun openSaved(id: String) {
-        viewModelScope.launch { c.reels.get(id)?.let { open(it) } }
-    }
-
     // ---- choices ---------------------------------------------------------------------------
 
     /**
@@ -1144,17 +1055,6 @@ class StudioViewModel(
         if ((before.jumpCuts != _state.value.options.jumpCuts || before.english != _state.value.options.english) && _state.value.pieces.isNotEmpty()) {
             viewModelScope.launch { showPieces(_state.value.pieces.map { it.script }) }
         }
-    }
-
-    fun setMusic(uri: Uri?) {
-        val name = uri?.let { u ->
-            runCatching {
-                c.appContext.contentResolver.query(u, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cur -> if (cur.moveToFirst()) cur.getString(0) else null }
-            }.getOrNull()?.substringBeforeLast('.') ?: "Your song"
-        }
-        uri?.let { runCatching { c.appContext.contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
-        _state.update { it.copy(musicUri = uri, musicName = name) }
-        c.studio.music = uri?.let { it.toString() to (name ?: "Your song") }
     }
 
     fun back() = _state.update {
@@ -1858,12 +1758,6 @@ class StudioViewModel(
             }.onSuccess { say("Saved · Your Reels › Saved clips") }
                 .onFailure { e -> c.errors.record("Studio saved clips", "Couldn't save the clip", e); say("Couldn't save the clip") }
         }
-    }
-
-    /** Saves the whole clip from the strip. */
-    fun saveSource(id: String) {
-        val src = _state.value.sources.firstOrNull { it.id == id } ?: return
-        saveClip(id, 0, src.durationMs, src.uri.toString())
     }
 
     /** Saves exactly the part the edit uses of the clip at [index]. */

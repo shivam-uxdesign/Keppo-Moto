@@ -1,7 +1,7 @@
 # Handover (24 Nov, evening)
 
 Read this first in a new session. The full history of every question, bug and build is in
-`studio-feature-plan.md` (one row each, #1–#101; keep logging from the next number). This file is
+`studio-feature-plan.md` (one row each, #1–#102; keep logging from the next number). This file is
 the short version: how we work, what's open, and what's next.
 
 ## How we work
@@ -46,11 +46,7 @@ test builds only, never a Play build). Check them without printing values.
    2–3 times at different hours, and sends the ride exports. Then write the report: Google's slow and
    jammed stretches (`traffic-log.jsonl`) against the rider's actual speed on the same roads. Plan in
    `continuous-ride.md`; Keep moving is the rider's focus.
-2. **Reel from your videos on the feed** (task in progress): phone videos not from a ride still open the
-   old Studio setup page (`Setup` in `StudioScreen.kt`, `PhoneStudioScreen`). Do as #96 did for rides:
-   picked videos open straight in the editor with the app's plain cut (own way), then delete `Setup` and
-   its helpers (Suggestions, IdeaCard, AskFor, ClipStrip, PhoneReels, StudioSettings…; keep what the
-   compiler says is still used). Gemini's ideas stay in the editor's Ideas sheet.
+2. ~~Reel from your videos on the feed~~: done (#102).
 3. **#12 Ask across all rides**: plan first, then build.
 4. OBD auto-start (#61, #62, #64): last, by the rider's choice.
 
@@ -81,3 +77,4 @@ Studio for rides), #87/#92/#94 (keys and Gemini working).
   remembered from transcripts no longer takes over script writing).
 - #100: Keep moving step 0, the traffic logger (needs the Routes key in the build).
 - #101: a volume line on each clip's own sound, in the clip's Sound menu.
+- #102: no more Studio setup page: new phone-video Reels open straight in the editor.
