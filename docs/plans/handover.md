@@ -1,7 +1,7 @@
 # Handover (24 Nov, evening)
 
 Read this first in a new session. The full history of every question, bug and build is in
-`studio-feature-plan.md` (one row each, #1–#102; keep logging from the next number). This file is
+`studio-feature-plan.md` (one row each, #1–#103; keep logging from the next number). This file is
 the short version: how we work, what's open, and what's next.
 
 ## How we work
@@ -47,7 +47,7 @@ test builds only, never a Play build). Check them without printing values.
    jammed stretches (`traffic-log.jsonl`) against the rider's actual speed on the same roads. Plan in
    `continuous-ride.md`; Keep moving is the rider's focus.
 2. ~~Reel from your videos on the feed~~: done (#102).
-3. **#12 Ask across all rides**: plan first, then build.
+3. **#12 Ask across all rides**: planned in `ask-all-rides-plan.md` (#103); build once the rider answers its 3 questions.
 4. OBD auto-start (#61, #62, #64): last, by the rider's choice.
 
 ## Open: waiting on the rider
