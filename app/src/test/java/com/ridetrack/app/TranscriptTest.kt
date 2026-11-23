@@ -111,4 +111,17 @@ class TranscriptTest {
         val e = IllegalStateException("x").apply { addSuppressed(java.net.UnknownHostException("h")) }
         kotlin.test.assertTrue(n.isUnreachable(e))
     }
+
+    @Test
+    fun `the model that worked last goes first, once, and captions start with the lite models`() {
+        val main = FirebaseTranscriber.MODELS
+        assertEquals(main, com.ridetrack.app.studio.modelOrder(main, null))
+        val order = com.ridetrack.app.studio.modelOrder(main, "gemini-3-flash-preview")
+        assertEquals("gemini-3-flash-preview", order.first())
+        assertEquals(main.size, order.size)
+        // Captions: the cheaper lite models before the main ones.
+        val captions = com.ridetrack.app.studio.modelOrder(FirebaseTranscriber.LITE + main, null)
+        assertEquals(FirebaseTranscriber.LITE.first(), captions.first())
+        assertTrue(captions.indexOf("gemini-3.8-flash") > captions.indexOf("gemini-3.1-flash-lite"))
+    }
 }

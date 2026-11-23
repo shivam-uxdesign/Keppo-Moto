@@ -48,7 +48,8 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
     /** The clip's speech as timed lines; empty when nothing clear was said. */
     suspend fun captions(audio: File, mime: String = "audio/mp4"): List<CaptionLine> {
         val bytes = audio.readBytes()
-        val text = call(json = true, timeoutMs = timeoutFor(bytes.size.toLong())) { m ->
+        // Hearing words needs no big model: the lite ones first (cheaper, a bigger free allowance).
+        val text = call(json = true, models = FirebaseTranscriber.LITE + FirebaseTranscriber.MODELS, timeoutMs = timeoutFor(bytes.size.toLong())) { m ->
             m.generateContent(content { inlineData(bytes, mime); text(StudioText.CAPTIONS_PROMPT) }).text.orEmpty()
         }
         return StudioText.parseLines(text) ?: emptyList()
@@ -200,8 +201,9 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
         tools: List<com.google.firebase.ai.type.Tool>? = null,
         block: suspend (GenerativeModel) -> String,
     ): String {
-        val order = (if (models === FirebaseTranscriber.MODELS) listOfNotNull(preferred()) else emptyList()) + models
-        val queue = ArrayDeque(order.distinct())
+        val main = models === FirebaseTranscriber.MODELS
+        // A lite model remembered from before (captions used to set it) doesn't jump ahead for scripts.
+        val queue = ArrayDeque(modelOrder(models, if (main) preferred()?.takeIf { it !in FirebaseTranscriber.LITE } else null))
         val tried = HashSet<String>()
         var remoteTried = false
         var last: Exception? = null
@@ -233,7 +235,9 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
             try {
                 // Sent again through dropped connections; a hung request would leave Studio waiting forever.
                 val reply = steady(timeoutMs) { block(model) }
-                return reply.also { onWorking(name) }
+                // Only the main list's answer is remembered: a lite model hearing captions mustn't
+                // become the one that writes scripts.
+                return reply.also { if (main) onWorking(name) }
             } catch (e: QuotaExceededException) {
                 // Each model has its own free allowance: remember this one is spent, try the next.
                 GeminiQuota.block(name, e.message)
@@ -518,3 +522,6 @@ object StudioText {
 
     fun load(clip: File): List<CaptionLine>? = linesFile(clip).takeIf { it.isFile }?.let { parseLines(it.readText()) }
 }
+
+/** The models to try, in order: the one that worked last ([preferred], main list only) first, then [models]. */
+internal fun modelOrder(models: List<String>, preferred: String?): List<String> = (listOfNotNull(preferred) + models).distinct()
