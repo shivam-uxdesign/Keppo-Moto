@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -63,6 +64,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -345,6 +347,8 @@ fun StudioHomeScreen(
     startRide: String? = null,
     onBack: (() -> Unit)? = null,
     onOpenStoryboard: () -> Unit = {},
+    /** A saved Reel in the editor (an ask across all rides opens its result there). */
+    onOpenSaved: (rideId: String, reelId: String) -> Unit = { _, _ -> },
 ) {
     val c = com.ridetrack.app.ui.appContainer()
     val pro by c.entitlements.pro.collectAsStateWithLifecycle()
@@ -355,7 +359,7 @@ fun StudioHomeScreen(
     val consent by c.aiConsent.given.collectAsStateWithLifecycle()
     Box(Modifier.fillMaxSize()) {
         Box(if (locked || !consent) Modifier.fillMaxSize().blur(18.dp) else Modifier.fillMaxSize()) {
-            StudioHomeBody(onOwnWay, onOpenPhone, onOpenReels, onOpenStyles, onOpenSearch, onOpenSettings, onOpenIdea, startRide, onBack)
+            StudioHomeBody(onOwnWay, onOpenPhone, onOpenReels, onOpenStyles, onOpenSearch, onOpenSettings, onOpenIdea, startRide, onBack, onOpenSaved)
         }
         if (!consent) com.ridetrack.app.ui.pro.AiConsentCard(onNotNow = null)
         else if (locked) com.ridetrack.app.ui.pro.StudioLocked(com.ridetrack.app.pro.FreeReelRule.nextAt(usedAt, now), onOpenPaywall, onOpenReels = onOpenReels)
@@ -378,8 +382,13 @@ private fun StudioHomeBody(
     onOpenIdea: (rideId: String, title: String, make: Boolean) -> Unit,
     startRide: String?,
     onBack: (() -> Unit)?,
+    onOpenSaved: (rideId: String, reelId: String) -> Unit,
 ) {
     val vm = appViewModel { StudioHomeViewModel(it) }
+    // Asking across all rides: its own screen over the feed.
+    val askAll = appViewModel { AskAllViewModel(it) }
+    val asking by askAll.state.collectAsStateWithLifecycle()
+    val askNote by askAll.note.collectAsStateWithLifecycle()
     val rides by vm.rides.collectAsStateWithLifecycle()
     val hidden by vm.hidden.collectAsStateWithLifecycle()
     val reels by com.ridetrack.app.ui.appContainer().reels.reels.collectAsStateWithLifecycle()
@@ -392,7 +401,11 @@ private fun StudioHomeBody(
         startRide = startRide,
         onBack = onBack,
         working = working,
+        askAll = askAll::ask,
+        message = askNote,
+        onMessageShown = { askAll.note.value = null },
     )
+    if (asking != null) AskAllSheet(askAll, onOpenReel = onOpenSaved, onNote = { askAll.note.value = it })
 }
 
 /** The Studio tab itself, drawn from [rides]; [pill] and [makingSheet] are the background-making parts. */
@@ -418,6 +431,11 @@ internal fun StudioHomeContent(
     onBack: (() -> Unit)? = null,
     /** Rides Gemini is working on here (finding ideas, writing an ask): ride id → what it's doing. */
     working: Map<String, String> = emptyMap(),
+    /** Asks across all rides (null: the switch shows, sending does nothing, as in screenshots). */
+    askAll: ((String) -> Unit)? = null,
+    /** A note from elsewhere to show at the bottom ("Making … in the background"), once. */
+    message: String? = null,
+    onMessageShown: () -> Unit = {},
 ) {
     val haptics = LocalHapticFeedback.current
     // An idea Gemini wrote opens in the editor only while the feed is on screen (not after leaving it).
@@ -433,6 +451,9 @@ internal fun StudioHomeContent(
     var making by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(note) { if (note != null) { delay(3_000); note = null } }
+    LaunchedEffect(message) { message?.let { note = it; onMessageShown() } }
+    // Where the Ask box looks: this ride, or every ride.
+    var everyRide by rememberSaveable { mutableStateOf(false) }
     var allRides by remember { mutableStateOf(false) }
     var quick by remember { mutableStateOf<IdeaCard?>(null) }
     var undo by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -508,7 +529,7 @@ internal fun StudioHomeContent(
             val shownRides = list.take(12).let { top -> if (top.any { it.id == ride.id }) top else top + ride }
             val rideRow = androidx.compose.foundation.lazy.rememberLazyListState()
             LaunchedEffect(ride.id) { shownRides.indexOfFirst { it.id == ride.id }.takeIf { it > 0 }?.let { rideRow.animateScrollToItem(it) } }
-            LazyRow(state = rideRow, horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 8.dp)) {
+            LazyRow(state = rideRow, modifier = Modifier.alpha(if (everyRide) 0.4f else 1f), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 8.dp)) {
                 items(shownRides, key = { it.id }) { r ->
                     val on = r.id == ride.id
                     val bg by animateColorAsState(if (on) RtColors.PrimaryContainer else RtColors.Surface, label = "ride")
@@ -543,7 +564,7 @@ internal fun StudioHomeContent(
                 color = RtColors.TextSecondary,
             )
             Spacer(Modifier.height(8.dp))
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box(Modifier.weight(1f).fillMaxWidth().alpha(if (everyRide) 0.4f else 1f)) {
                 if (ideas.isEmpty()) {
                     Column(
                         Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp)).border(1.dp, RtColors.Outline, RoundedCornerShape(22.dp)).padding(24.dp),
@@ -597,7 +618,9 @@ internal fun StudioHomeContent(
             val busy = working[ride.id]
             val send = {
                 val t = ask.trim()
-                if (t.isNotEmpty() && busy == null) {
+                if (t.isNotEmpty() && everyRide) {
+                    askAll?.let { ask = ""; it(t) }
+                } else if (t.isNotEmpty() && busy == null) {
                     val rideId = ride.id
                     ask = ""
                     vm.ask(rideId, t, say = { note = it }) { title ->
@@ -612,9 +635,33 @@ internal fun StudioHomeContent(
                     Text(busy, style = RtType.caption, color = RtColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
+            // Where the ask looks: this ride (as before) or every ride.
+            Row(
+                Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(12.dp)).background(RtColors.Surface)
+                    .border(1.dp, RtColors.Outline, RoundedCornerShape(12.dp)).padding(3.dp).semantics { contentDescription = "Where the ask looks" },
+            ) {
+                listOf(false to "This ride", true to "All rides").forEach { (all, label) ->
+                    val on = everyRide == all
+                    Text(
+                        label,
+                        style = RtType.button,
+                        color = if (on) RtColors.Primary else RtColors.TextSecondary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(9.dp)).background(if (on) RtColors.PrimaryContainer else Color.Transparent)
+                            .clickable(role = Role.RadioButton) { everyRide = all }.padding(vertical = 9.dp),
+                    )
+                }
+            }
+            if (everyRide) {
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("all my downshifts", "every time I said Tooooo", "the rainy bits", "hard braking last month").forEach { ex ->
+                        Choice(ex, false) { ask = ex }
+                    }
+                }
+            }
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 10.dp).heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(RtColors.Surface)
-                    .border(1.dp, RtColors.Outline, RoundedCornerShape(24.dp)).padding(start = 16.dp, end = 6.dp),
+                    .border(1.dp, if (everyRide) RtColors.Primary else RtColors.Outline, RoundedCornerShape(24.dp)).padding(start = 16.dp, end = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -630,10 +677,10 @@ internal fun StudioHomeContent(
                         imeAction = androidx.compose.ui.text.input.ImeAction.Send,
                     ),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { send() }),
-                    modifier = Modifier.weight(1f).padding(vertical = 12.dp).semantics { contentDescription = "Ask for something for this ride" },
+                    modifier = Modifier.weight(1f).padding(vertical = 12.dp).semantics { contentDescription = if (everyRide) "Ask across all rides" else "Ask for something for this ride" },
                     decorationBox = { field ->
                         Box {
-                            if (ask.isEmpty()) Text("Ask for something, e.g. \"15 s, funny, the water\"", style = RtType.body, color = RtColors.TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (ask.isEmpty()) Text(if (everyRide) "Ask across all rides, e.g. \"all my downshifts\"" else "Ask for something, e.g. \"15 s, funny, the water\"", style = RtType.body, color = RtColors.TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             field()
                         }
                     },

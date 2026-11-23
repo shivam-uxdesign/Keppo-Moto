@@ -1,7 +1,7 @@
 # Handover (24 Nov, evening)
 
 Read this first in a new session. The full history of every question, bug and build is in
-`studio-feature-plan.md` (one row each, #1–#104; keep logging from the next number). This file is
+`studio-feature-plan.md` (one row each, #1–#105; keep logging from the next number). This file is
 the short version: how we work, what's open, and what's next.
 
 ## How we work
@@ -47,7 +47,7 @@ test builds only, never a Play build). Check them without printing values.
    jammed stretches (`traffic-log.jsonl`) against the rider's actual speed on the same roads. Plan in
    `continuous-ride.md`; Keep moving is the rider's focus.
 2. ~~Reel from your videos on the feed~~: done (#102).
-3. **#12 Ask across all rides**: planned in `ask-all-rides-plan.md` (#103), prototype approved 24 Nov (#104, https://claude.ai/artifact/DPJmjvu6N2iqzJRqZ6UQhn) with the recommended answers: a This ride / All rides switch on the Ask box, open in the editor first, at most two questions back. Ready to build, steps 1–5 of the plan.
+3. ~~#12 Ask across all rides~~: built (#105), in the next APK.
 4. OBD auto-start (#61, #62, #64): last, by the rider's choice.
 
 ## Open: waiting on the rider
@@ -78,3 +78,4 @@ Studio for rides), #87/#92/#94 (keys and Gemini working).
 - #100: Keep moving step 0, the traffic logger (needs the Routes key in the build).
 - #101: a volume line on each clip's own sound, in the clip's Sound menu.
 - #102: no more Studio setup page: new phone-video Reels open straight in the editor.
+- #105: ask across all rides (Studio feed › All rides).

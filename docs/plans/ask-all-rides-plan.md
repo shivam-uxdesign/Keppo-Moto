@@ -1,6 +1,6 @@
 # Ask across all rides (#12): plan
 
-Planned 24 Nov. **Not built.** Prototype with the recommended answers: https://claude.ai/artifact/DPJmjvu6N2iqzJRqZ6UQhn (#104).
+Planned 24 Nov. **Built (#105).** Prototype with the recommended answers: https://claude.ai/artifact/DPJmjvu6N2iqzJRqZ6UQhn (#104).
 
 ## What the rider gets
 

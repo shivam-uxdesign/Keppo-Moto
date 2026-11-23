@@ -294,6 +294,7 @@ fun RideTrackNavHost(
                     // Dark like the rest of Studio (and the prototype), whatever the phone's theme.
                     DarkRoute { com.ridetrack.app.studio.StudioHomeScreen(
                         onOwnWay = { nav.navigate(Routes.ownWay(it)) },
+                        onOpenSaved = { ride, reel -> nav.navigate(Routes.savedReel(ride, reel, edit = true)) },
                         onOpenIdea = { ride, title, make -> nav.navigate(Routes.idea(ride, title, make)) },
                         onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
                         onOpenReels = { nav.navigate(Routes.REELS) },
@@ -307,6 +308,7 @@ fun RideTrackNavHost(
                 composable(Routes.STUDIO_FOR, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
                     DarkRoute { com.ridetrack.app.studio.StudioHomeScreen(
                         onOwnWay = { nav.navigate(Routes.ownWay(it)) },
+                        onOpenSaved = { ride, reel -> nav.navigate(Routes.savedReel(ride, reel, edit = true)) },
                         onOpenIdea = { ride, title, make -> nav.navigate(Routes.idea(ride, title, make)) },
                         onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
                         onOpenReels = { nav.navigate(Routes.REELS) },

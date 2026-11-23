@@ -90,6 +90,10 @@ class StudioGemini(private val preferred: () -> String?, private val onWorking: 
     }
 
     /** Storyboard: one chat turn, JSON back (see StoryboardEngine). */
+    /** Ask across all rides: the ask read into a search (JSON, see [AskPrompt]). One text request. */
+    suspend fun askFilter(prompt: String): String =
+        call(json = true, temperature = 0.2f) { m -> m.generateContent(prompt).text.orEmpty() }
+
     suspend fun storyboard(prompt: String): String =
         call(json = true, temperature = 0.7f, timeoutMs = 150_000) { m -> m.generateContent(prompt).text.orEmpty() }
 

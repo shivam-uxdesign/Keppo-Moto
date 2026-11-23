@@ -113,11 +113,24 @@ object Compilations {
      */
     suspend fun make(c: AppContainer, t: Theme): Boolean {
         val host = t.hits.maxByOrNull { it.atMillis }?.rideId ?: return false
+        val engine = hosted(c, host, t.hits.map { it.momentId }) ?: return false
+        val s = StudioState(title = t.title, options = c.studio.options, musicUri = c.studio.music?.first?.let(android.net.Uri::parse), musicName = c.studio.music?.second)
+        val pc = engine.pieces(listOf(Themes.script(t))).firstOrNull() ?: return false
+        val job = engine.job(pc, s) ?: return false
+        c.reelMaker.enqueue(listOf(job))
+        return true
+    }
+
+    /**
+     * Studio for [host], with the clips [momentIds] from other rides borrowed in (each keeps its
+     * ride's name), so a Reel can mix rides. Null when the ride can't be loaded.
+     */
+    suspend fun hosted(c: AppContainer, host: String, momentIds: List<String>): StudioEngine? {
         val engine = StudioEngine(c, host)
-        if (engine.load() != null) return false
+        if (engine.load() != null) return null
         val all = c.moments.all().associateBy { it.id }
         val rides = c.rides.observeCompleted().first().associateBy { it.id }
-        t.hits.map { it.momentId }.distinct().forEach { id ->
+        momentIds.distinct().forEach { id ->
             val m: Moment = all[id] ?: return@forEach
             if (engine.clips.any { it.id == id }) return@forEach
             engine.borrowed[id] = m
@@ -129,10 +142,6 @@ object Compilations {
             )
         }
         engine.refreshBits()
-        val s = StudioState(title = t.title, options = c.studio.options, musicUri = c.studio.music?.first?.let(android.net.Uri::parse), musicName = c.studio.music?.second)
-        val pc = engine.pieces(listOf(Themes.script(t))).firstOrNull() ?: return false
-        val job = engine.job(pc, s) ?: return false
-        c.reelMaker.enqueue(listOf(job))
-        return true
+        return engine
     }
 }
