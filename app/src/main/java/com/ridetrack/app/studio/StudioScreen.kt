@@ -108,13 +108,11 @@ internal val VibeFonts = mapOf(
 
 /** Share ride › Reel: Keppo Studio turns the ride's clips into a 30–60 s Reel. */
 @Composable
-fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? = null, idea: String? = null, makeNow: Boolean = false, editNow: Boolean = false, onLeave: () -> Unit = {}, onStep: (StudioStep) -> Unit = {}) {
-    val vm = appViewModel(key = "studio-$rideId-${reelId.orEmpty()}-${idea ?: ""}-$makeNow-$editNow") { StudioViewModel(it, rideId, reelId, idea, makeNow, editNow) }
+fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? = null, idea: String? = null, makeNow: Boolean = false, editNow: Boolean = false, ownWay: Boolean = false, onLeave: () -> Unit = {}, onStep: (StudioStep) -> Unit = {}) {
+    val vm = appViewModel(key = "studio-$rideId-${reelId.orEmpty()}-${idea ?: ""}-$makeNow-$editNow-$ownWay") { StudioViewModel(it, rideId, reelId, idea, makeNow, editNow, ownWay) }
     val s by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(s.leave) { if (s.leave) onLeave() }
     LaunchedEffect(s.step) { onStep(s.step) }
-    // Asked for on the Studio tab: it runs as soon as this ride's Studio has loaded.
-    LaunchedEffect(s.loading) { if (!s.loading) vm.runPendingAsk() }
     // Making a video takes a while: keep the screen on so the phone doesn't sleep through it.
     val view = LocalView.current
     DisposableEffect(s.step) {
@@ -127,7 +125,8 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
             Text(s.blocked!!, style = RtType.body, color = RtColors.TextSecondary)
         }
         else -> when (s.step) {
-            StudioStep.SETUP -> Setup(vm, s, modifier)
+            // Phone videos only keep their setup page; a ride's ideas are on the Studio feed instead.
+            StudioStep.SETUP -> if (s.phoneOnly) Setup(vm, s, modifier) else RideLanding(vm, s, modifier, onLeave)
             StudioStep.WORKING -> Working(vm, s, modifier)
             StudioStep.READY -> Ready(vm, s, modifier)
             StudioStep.EDIT -> androidx.compose.runtime.key(s.piece?.key, s.reelId) { TimelineEditor(vm, s, modifier) }
@@ -139,9 +138,9 @@ fun StudioPanel(rideId: String, modifier: Modifier = Modifier, reelId: String? =
 }
 
 /** Studio for gallery videos only (from the Studio tab, when they aren't from a recorded ride). */
-/** A ride's own Studio page (from the Studio tab, the ride, or the after-ride notification). */
+/** A ride's Studio in the editor: one of its ideas, a saved Reel, or its clips your own way (its ideas are on the Studio feed). */
 @Composable
-fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: String? = null, makeNow: Boolean = false, editNow: Boolean = false, onUnlock: () -> Unit = {}) {
+fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: String? = null, makeNow: Boolean = false, editNow: Boolean = false, ownWay: Boolean = false, onUnlock: () -> Unit = {}) {
     val c = com.ridetrack.app.ui.appContainer()
     // A new Reel needs the free rider's weekly one (Reels already made still open). Decided on the
     // way in, so the Reel being made isn't taken away when it's saved.
@@ -158,7 +157,7 @@ fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: 
     var name by remember(rideId) { mutableStateOf("Studio") }
     LaunchedEffect(rideId) { name = c.rides.get(rideId)?.name?.let { "Studio · $it" } ?: "Studio" }
     // The editor has its own top bar: the page's title goes while it's open.
-    var step by remember { mutableStateOf(if ((idea != null && !makeNow) || editNow) StudioStep.EDIT else StudioStep.SETUP) }
+    var step by remember { mutableStateOf(if ((idea != null && !makeNow) || editNow || ownWay) StudioStep.EDIT else StudioStep.SETUP) }
     Column(
         Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = com.ridetrack.app.ui.theme.RtDimens.screenPadding),
     ) {
@@ -166,7 +165,7 @@ fun RideStudioScreen(rideId: String, reelId: String?, onBack: () -> Unit, idea: 
             com.ridetrack.app.ui.components.ScreenHeader(name, onBack = onBack)
             Spacer(Modifier.height(12.dp))
         }
-        StudioPanel(rideId, Modifier.weight(1f), reelId, idea, makeNow, editNow, onLeave = onBack, onStep = { step = it })
+        StudioPanel(rideId, Modifier.weight(1f), reelId, idea, makeNow, editNow, ownWay, onLeave = onBack, onStep = { step = it })
     }
 }
 
@@ -218,7 +217,25 @@ private fun StudioLockedPage(title: String, onBack: () -> Unit, onUnlock: () -> 
     }
 }
 
-// ---- 1. Setup ---------------------------------------------------------------------------------
+/**
+ * A ride's Studio between screens: opening what was asked for, or what went wrong (a video that
+ * couldn't be made). Back in it with nothing to say, it goes back to the Studio feed.
+ */
+@Composable
+private fun RideLanding(vm: StudioViewModel, s: StudioState, modifier: Modifier, onLeave: () -> Unit) {
+    // A message from opening it ("That idea isn't here any more"), not one left over from the editor.
+    val problem = s.error ?: s.toast?.takeIf { s.piece == null && s.reelId == null }
+    when {
+        !s.opened -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp) }
+        problem != null -> Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)) {
+            if (s.error != null) ErrorBox(vm, s.error!!) else Text(problem, style = RtType.body, color = RtColors.TextSecondary)
+            Button("Back to Studio", primary = true, modifier = Modifier.fillMaxWidth(), onClick = onLeave)
+        }
+        else -> LaunchedEffect(Unit) { onLeave() }
+    }
+}
+
+// ---- 1. Setup (phone videos only) -------------------------------------------------------------
 
 @Composable
 private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
@@ -226,7 +243,7 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
     val c = com.ridetrack.app.ui.appContainer()
     val all by c.reels.reels.collectAsStateWithLifecycle()
     val maker by c.reelMaker.state.collectAsStateWithLifecycle()
-    val made = all.filter { it.deletedAt == null && (it.rideId == vm.rideId || (s.phoneOnly && it.rideId == null)) }.mapNotNull { it.idea }.toSet()
+    val made = all.filter { it.deletedAt == null && it.rideId == null }.mapNotNull { it.idea }.toSet()
     val toMake = remember(s.pieces, s.picks, made) { vm.toMake(made).size }
     Column(modifier) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -246,17 +263,7 @@ private fun Setup(vm: StudioViewModel, s: StudioState, modifier: Modifier) {
             if (startWithClips) ClipStrip(vm, s, compact = false)
             Suggestions(vm, s, made)
             AskFor(vm, s)
-            if (!s.phoneOnly) {
-                // This ride's videos waiting to be posted: watch them full screen, share one by one.
-                val ready = all.count { it.rideId == vm.rideId && it.deletedAt == null && !it.posted }
-                if (ready > 0) {
-                    val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
-                    Button("Watch $ready ready to post", primary = false) { nav(com.ridetrack.app.ui.nav.Routes.review(ride = vm.rideId)) }
-                }
-                RideReels(vm.rideId, onSendAll = vm::sendAllToJournal) { vm.openSaved(it) }
-            } else {
-                PhoneReels { vm.openSaved(it) }
-            }
+            PhoneReels { vm.openSaved(it) }
             if (!startWithClips) ClipStrip(vm, s, compact = true)
             s.error?.let { ErrorBox(vm, it) }
             Text(
@@ -1053,7 +1060,7 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Reads like a note: the title, the story, then each part.
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("‹ Video", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button) { vm.back() }.padding(vertical = 6.dp, horizontal = 4.dp))
+                Text(if (s.scriptFromEditor) "‹ Editor" else "‹ Video", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button) { vm.back() }.padding(vertical = 6.dp, horizontal = 4.dp))
                 Spacer(Modifier.weight(1f))
                 Text("${draft.format.label} · ${Format.clock(vm.draftLengthMs())} · ${(draft.vibe ?: s.options.vibe).label}", style = RtType.caption, color = RtColors.TextSecondary)
             }
@@ -1174,14 +1181,25 @@ private fun ScriptView(vm: StudioViewModel, s: StudioState, modifier: Modifier) 
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                Text("Edit on the timeline", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.edit() }.padding(vertical = 6.dp))
+                if (!s.scriptFromEditor) Text("Edit on the timeline", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { vm.edit() }.padding(vertical = 6.dp))
                 val nav = com.ridetrack.app.ui.nav.LocalNavigate.current
                 Text("Your style", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button) { nav(com.ridetrack.app.ui.nav.Routes.STUDIO_STYLE) }.padding(vertical = 6.dp))
             }
             s.toast?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary) }
         }
         Spacer(Modifier.height(12.dp))
-        Button(if (s.scriptPiece != null) "Make this" else "Make it again", primary = true, modifier = Modifier.fillMaxWidth()) { vm.applyDraft() }
+        Button(
+            when {
+                s.scriptFromEditor -> "Use this script"
+                s.scriptPiece != null -> "Make this"
+                else -> "Make it again"
+            },
+            primary = true,
+            modifier = Modifier.fillMaxWidth(),
+        ) { vm.applyDraft() }
+        if (s.scriptFromEditor) {
+            Text("It replaces the edit on the timeline. Undo in the editor takes it back.", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.padding(top = 6.dp))
+        }
         Spacer(Modifier.height(12.dp))
     }
 }
@@ -1250,25 +1268,6 @@ private fun ScriptAddClip(vm: StudioViewModel, s: StudioState, onPick: (Bit) -> 
                 }
             }
             if (all.isEmpty()) Text("No other clips yet", style = RtType.caption, color = RtColors.TextTertiary)
-        }
-    }
-}
-
-/** This ride's saved Reels, newest first; tap one to open it. */
-@Composable
-private fun RideReels(rideId: String, onSendAll: () -> Unit, onOpen: (String) -> Unit) {
-    val all by com.ridetrack.app.ui.appContainer().reels.reels.collectAsStateWithLifecycle()
-    val list = all.filter { it.rideId == rideId && it.deletedAt == null }
-    if (list.isEmpty()) return
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("THIS RIDE'S REELS", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.weight(1f))
-            if (list.size > 1 && list.any { !it.inJournal }) {
-                Text("Send all to Journal", style = RtType.button, color = RtColors.Primary, modifier = Modifier.clickable(role = Role.Button, onClick = onSendAll).padding(vertical = 4.dp))
-            }
-        }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            list.forEach { p -> ReelTile(p, Modifier.width(96.dp)) { onOpen(p.id) } }
         }
     }
 }

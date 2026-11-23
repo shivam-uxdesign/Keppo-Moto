@@ -52,6 +52,8 @@ data class WorkStep(val label: String, val state: Int /* 0 waiting, 1 running, 2
 
 data class StudioState(
     val loading: Boolean = true,
+    /** What was asked for on the way in (an idea, a Reel, your own way) has been opened, or tried. */
+    val opened: Boolean = false,
     /** The quality picked in the editor's top bar, used when the video is made and shared. */
     val quality: Quality = Quality(),
     /** Why there's nothing to make (no clips, ride missing); null when ready. */
@@ -115,6 +117,8 @@ data class StudioState(
     val leave: Boolean = false,
     /** The suggestion open in the Script view before it's made (its key); null otherwise. */
     val scriptPiece: String? = null,
+    /** The Script view was opened from the editor: back returns there, and its script goes back onto the timeline. */
+    val scriptFromEditor: Boolean = false,
     /** Every clip Studio can pick from (moments and phone videos), in filming order. */
     val sources: List<StudioSource> = emptyList(),
     /** Clips the rider left out (long-press in the strip). */
@@ -187,6 +191,8 @@ class StudioViewModel(
     private val makeNow: Boolean = false,
     /** With [openReelId]: open it straight in the editor. */
     private val editNow: Boolean = false,
+    /** The ride's clips straight in the editor, made your own way (no idea to start from). */
+    private val ownWay: Boolean = false,
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         StudioState(
@@ -253,7 +259,22 @@ class StudioViewModel(
                 val piece = _state.value.pieces.firstOrNull { it.script.title == title }
                 if (piece == null) say("That idea isn't here any more") else if (makeNow) makePiece(piece.key) else editIdea(piece.key)
             }
+            if (ownWay) startOwnWay()
+            _state.update { it.copy(opened = true) }
         }
+    }
+
+    /**
+     * Your own way: the ride's clips (and any phone videos just added) straight in the editor, the
+     * app's plain cut of them to start from. Nothing is asked of Gemini, and it isn't saved as an idea.
+     */
+    private fun startOwnWay() {
+        val s = _state.value
+        val sc = engine.localPieces(footage(), "Your own way", s.title).firstOrNull()?.copy(title = OWN_WAY)
+        val piece = sc?.let { engine.pieces(listOf(it), s.options).firstOrNull()?.copy(key = OWN_WAY_KEY) }
+            ?: return say("Studio needs at least 2 clips from this ride")
+        _state.update { it.copy(pieces = listOf(piece) + it.pieces.filter { p -> p.key != OWN_WAY_KEY }) }
+        editIdea(OWN_WAY_KEY)
     }
 
     /**
@@ -505,11 +526,8 @@ class StudioViewModel(
             } finally {
                 _state.update { it.copy(planning = null) }
             }
-            val piece = sc?.let { engine.pieces(listOf(it), s.options).firstOrNull() } ?: return@launch say("Gemini couldn't change it. Try saying it another way.")
+            if (sc == null || !putInEditor(sc, "Change: ${t.take(24)}")) return@launch say("Gemini couldn't change it. Try saying it another way.")
             c.style.record(before.describe(fs), sc.describe(fs), t)
-            history?.apply(TimelineEdits.liftTexts(piece.plan) { newTextId() }, "Change: ${t.take(24)}")
-            _state.update { it.copy(script = sc, pick = null) }
-            publish(reload = true)
             say("Changed · Undo takes it back")
         }
     }
@@ -517,41 +535,25 @@ class StudioViewModel(
     /** Whether Gemini can be asked for a new idea here (a ride's Studio, not phone videos only). */
     val canAsk: Boolean get() = card != null
 
-    /** An ask typed on the Studio tab for this ride: run once the ride's Studio is ready. */
-    fun runPendingAsk() {
-        if (_state.value.loading || card == null || job?.isActive == true) return
-        c.studio.takePendingAsk(rideId)?.let { ask(it) }
-    }
-
     /** Asks Gemini for [text]; the new idea is made, or with [open] opened in the editor instead. */
     fun ask(text: String, open: Boolean = false) {
         val t = text.trim()
         if (t.isEmpty() || job?.isActive == true) return
-        val cd = card ?: return
+        if (card == null) return
         viewModelScope.launch {
             _state.update { it.copy(planning = "Gemini is writing \u201c${t.take(40)}\u201d", geminiIssue = null) }
-            val fs = withContext(Dispatchers.Default) { footage() }
             val sc = try {
-                gemini().scripts(ScriptWriter.askPrompt(cd.title, cd.subtitle, fs, style(), t, c.styles.forSuggestions()), fs) { raw ->
-                    c.errors.record("Studio ask", "Gemini's answer couldn't be read", null, raw.take(4_000))
-                }.firstOrNull()
+                engine.ask(t)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 c.errors.record("Studio ask", "Gemini couldn't write what you asked for", e)
-                _state.update {
-                    it.copy(geminiIssue = when {
-                        com.ridetrack.app.transcribe.GeminiNet.isUnreachable(e) -> com.ridetrack.app.transcribe.GeminiNet.message(e)
-                        e is FirebaseTranscriber.Busy -> "Gemini's free limit is used up, so it can't write that now."
-                        else -> "Gemini couldn't write that (${e.message?.take(60)})."
-                    })
-                }
+                _state.update { it.copy(geminiIssue = StudioEngine.askProblem(e)) }
                 null
             } finally {
                 _state.update { it.copy(planning = null) }
             }
             if (sc == null) return@launch
-            c.style.record("(asked for)", sc.describe(fs), t)
             val scripts = listOf(sc) + _state.value.pieces.map { it.script }
             savePlan(scripts)
             showPieces(scripts)
@@ -903,8 +905,11 @@ class StudioViewModel(
     /** Opens the Script view: the sections as they were made, to change and make again. */
     fun scriptView() {
         val s = _state.value
-        val sc = s.script ?: s.plan?.let { ScriptEdits.fromPlan(it, s.title) } ?: return
-        _state.update { it.copy(step = StudioStep.SCRIPT, draft = sc, note = "", footage = footage()) }
+        val inEditor = s.step == StudioStep.EDIT
+        // From the editor, once the timeline has been changed: the script of the edit as it is now.
+        val edited = history?.current?.takeIf { inEditor && s.canUndo }?.let { ScriptEdits.fromPlan(it, s.title) }
+        val sc = edited ?: s.script ?: s.plan?.let { ScriptEdits.fromPlan(it, s.title) } ?: return
+        _state.update { it.copy(step = StudioStep.SCRIPT, draft = sc, note = "", footage = footage(), scriptFromEditor = inEditor) }
         if (_state.value.otherBits.isEmpty()) viewModelScope.launch { loadOtherRides() }
     }
 
@@ -976,6 +981,15 @@ class StudioViewModel(
     fun applyDraft() {
         val s = _state.value
         val draft = s.draft ?: return
+        if (s.scriptFromEditor) {
+            // Back onto the editor's timeline (one undo step) instead of making a video.
+            viewModelScope.launch {
+                val result = rewritten(draft, s.note.trim(), s)
+                _state.update { it.copy(step = StudioStep.EDIT, draft = null, note = "", scriptFromEditor = false) }
+                say(if (putInEditor(result, "Script")) "Script used · Undo takes it back" else "Couldn't fit that script to your clips")
+            }
+            return
+        }
         val piece = s.scriptPiece?.let { k -> s.pieces.firstOrNull { it.key == k } }
         if (piece != null) {
             // Unchanged: made in the background like any suggestion.
@@ -994,20 +1008,33 @@ class StudioViewModel(
         val before = piece?.script ?: s.script ?: ScriptEdits.fromPlan(s.plan ?: return, s.title)
         val note = s.note.trim()
         viewModelScope.launch {
-            var result = draft
-            if (note.isNotEmpty() && c.transcripts.available) {
-                _state.update { it.copy(toast = "Gemini is rewriting the script…") }
-                val fs = s.footage
-                runCatching { gemini().scripts(ScriptWriter.revisePrompt(card?.title ?: s.title, fs, style(), draft, note, ScriptWriter.keys(fs)), fs).firstOrNull() }
-                    .onFailure { c.errors.record("Studio script", "Gemini couldn't rewrite the script", it) }
-                    .getOrNull()?.let { result = it.copy(lengthSec = it.lengthSec.coerceAtLeast(draft.lengthSec / 2)) }
-                    ?: say("Gemini couldn't rewrite it, so your own changes were used")
-            }
+            val result = rewritten(draft, note, s)
             c.style.record(before.describe(s.footage), result.describe(s.footage), note.ifEmpty { null })
             pendingScript = result
             _state.update { it.copy(draft = null, note = "") }
             make()
         }
+    }
+
+    /** [draft] rewritten by Gemini with the rider's [note] ("fewer cuts"); [draft] itself when there's no note or Gemini can't. */
+    private suspend fun rewritten(draft: Script, note: String, s: StudioState): Script {
+        if (note.isEmpty() || !c.transcripts.available) return draft
+        _state.update { it.copy(toast = "Gemini is rewriting the script…") }
+        val fs = s.footage
+        return runCatching { gemini().scripts(ScriptWriter.revisePrompt(card?.title ?: s.title, fs, style(), draft, note, ScriptWriter.keys(fs)), fs).firstOrNull() }
+            .onFailure { c.errors.record("Studio script", "Gemini couldn't rewrite the script", it) }
+            .getOrNull()?.let { it.copy(lengthSec = it.lengthSec.coerceAtLeast(draft.lengthSec / 2)) }
+            ?: draft.also { say("Gemini couldn't rewrite it, so your own changes were used") }
+    }
+
+    /** [sc] becomes the editor's timeline, as one undo step named [label]; false when it doesn't fit the clips. */
+    private fun putInEditor(sc: Script, label: String): Boolean {
+        val h = history ?: return false
+        val piece = engine.pieces(listOf(sc), _state.value.options).firstOrNull() ?: return false
+        h.apply(TimelineEdits.liftTexts(piece.plan) { newTextId() }, label)
+        _state.update { it.copy(script = sc, pick = null) }
+        publish(reload = true)
+        return true
     }
 
     /** Goes back to an earlier version of this Reel (the current one is kept as a version). */
@@ -1025,13 +1052,6 @@ class StudioViewModel(
     fun sendToJournal() {
         val id = _state.value.reelId ?: return
         viewModelScope.launch { sendToJournal(listOf(id)) }
-    }
-
-    /** Sends all of this ride's Reels; the newest one's cover becomes the entry's cover. */
-    fun sendAllToJournal() {
-        val ids = c.reels.reels.value.filter { it.rideId == rideId && it.deletedAt == null }.map { it.id }
-        if (ids.isEmpty()) return
-        viewModelScope.launch { sendToJournal(ids) }
     }
 
     private suspend fun sendToJournal(ids: List<String>) {
@@ -1138,6 +1158,7 @@ class StudioViewModel(
     }
 
     fun back() = _state.update {
+        if (it.step == StudioStep.SCRIPT && it.scriptFromEditor) return@update it.copy(step = StudioStep.EDIT, draft = null, note = "", scriptFromEditor = false)
         it.copy(
             step = if (it.step in setOf(StudioStep.EDIT, StudioStep.VOICE, StudioStep.COVER, StudioStep.SCRIPT) && it.scriptPiece == null && it.video != null) StudioStep.READY else StudioStep.SETUP,
             error = null, draft = null, scriptPiece = null,
@@ -2113,4 +2134,9 @@ class StudioViewModel(
         recorder.stop()
     }
 
+    private companion object {
+        /** Your own way's title in the editor (and its unsaved edit's name), and its key among the ideas. */
+        const val OWN_WAY = "Your own way"
+        const val OWN_WAY_KEY = "own"
+    }
 }

@@ -412,6 +412,26 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
     }
 
     /**
+     * The rider asks for a piece in their words ("a 15 s funny one about the water"): Gemini
+     * writes it (one request). Throws when Gemini can't; [askProblem] says why in plain words.
+     * Call [load] first. Nothing is saved: [putFirst] adds it to the ride's ideas.
+     */
+    suspend fun ask(text: String): Script {
+        val cd = card ?: error("The ride isn't loaded")
+        val fs = withContext(Dispatchers.Default) { footage() }
+        val sc = gemini().scripts(ScriptWriter.askPrompt(cd.title, cd.subtitle, fs, style(), text, c.styles.forSuggestions()), fs) { raw ->
+            c.errors.record("Studio ask", "Gemini's answer couldn't be read", null, raw.take(4_000))
+        }.firstOrNull() ?: error("Gemini's answer couldn't be read")
+        c.style.record("(asked for)", sc.describe(fs), text)
+        return sc
+    }
+
+    /** [sc] at the front of the ride's saved ideas (an older idea with the same title gives way). */
+    suspend fun putFirst(sc: Script) {
+        savePlan(listOf(sc) + loadPlan().orEmpty().filter { it.title != sc.title })
+    }
+
+    /**
      * Show all: after Gemini's ideas, a piece for every other part of the clips (each take of
      * what was said, each riding shot as a caption clip). Gemini writes the caption clips' lines
      * in one more request; without it they're listed with no text, to write by hand.
@@ -554,10 +574,17 @@ class StudioEngine(private val c: AppContainer, val rideId: String) {
         )
     }
 
-    private companion object {
+    companion object {
         /** Clips read per Gemini request. */
-        const val BATCH = 8
-        const val METERED_BATCH = 4
-        const val MAX_AUDIO_BYTES = 14L * 1024 * 1024
+        private const val BATCH = 8
+        private const val METERED_BATCH = 4
+        private const val MAX_AUDIO_BYTES = 14L * 1024 * 1024
+
+        /** Why Gemini couldn't do what was asked, in the rider's words. */
+        fun askProblem(e: Throwable): String = when {
+            GeminiNet.isUnreachable(e) -> GeminiNet.message(e)
+            e is FirebaseTranscriber.Busy -> "Gemini's free limit is used up, so it can't write that now."
+            else -> "Gemini couldn't write that (${e.message?.take(60)})."
+        }
     }
 }

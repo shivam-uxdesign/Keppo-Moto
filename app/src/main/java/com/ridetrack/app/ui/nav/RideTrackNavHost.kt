@@ -94,9 +94,10 @@ object Routes {
     /** The Studio feed with this ride picked: where every "Studio" for a ride lands, as the tab does. */
     const val STUDIO_FOR = "studio-feed/{rideId}"
     fun studioFor(id: String) = "studio-feed/$id"
-    /** A ride's own Studio page: finding ideas, an ask, making it your own way. */
-    const val RIDE_STUDIO = "studio/{rideId}?reel={reel}&idea={idea}&make={make}&edit={edit}"
-    fun reel(id: String) = "studio/$id"
+    /** A ride's Studio in the editor: one of its ideas, a saved Reel, or its clips your own way. */
+    const val RIDE_STUDIO = "studio/{rideId}?reel={reel}&idea={idea}&make={make}&edit={edit}&own={own}"
+    /** A ride's clips straight in the editor, made your own way (no idea to start from). */
+    fun ownWay(id: String) = "studio/$id?own=true"
     /** One of a ride's ideas, straight in the editor (or made now, in the background). */
     fun idea(rideId: String, title: String, make: Boolean = false) = "studio/$rideId?idea=${android.net.Uri.encode(title)}" + if (make) "&make=true" else ""
     /** A saved Reel, opened in its ride's Studio. */
@@ -292,7 +293,7 @@ fun RideTrackNavHost(
                 composable(Routes.STUDIO) {
                     // Dark like the rest of Studio (and the prototype), whatever the phone's theme.
                     DarkRoute { com.ridetrack.app.studio.StudioHomeScreen(
-                        onOpenRide = { nav.navigate(Routes.reel(it)) },
+                        onOwnWay = { nav.navigate(Routes.ownWay(it)) },
                         onOpenIdea = { ride, title, make -> nav.navigate(Routes.idea(ride, title, make)) },
                         onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
                         onOpenReels = { nav.navigate(Routes.REELS) },
@@ -305,7 +306,7 @@ fun RideTrackNavHost(
                 }
                 composable(Routes.STUDIO_FOR, arguments = listOf(navArgument("rideId") { type = NavType.StringType })) { entry ->
                     DarkRoute { com.ridetrack.app.studio.StudioHomeScreen(
-                        onOpenRide = { nav.navigate(Routes.reel(it)) },
+                        onOwnWay = { nav.navigate(Routes.ownWay(it)) },
                         onOpenIdea = { ride, title, make -> nav.navigate(Routes.idea(ride, title, make)) },
                         onOpenPhone = { reel -> nav.navigate(Routes.studioPhone(reel)) },
                         onOpenReels = { nav.navigate(Routes.REELS) },
@@ -548,6 +549,7 @@ fun RideTrackNavHost(
                         navArgument("idea") { type = NavType.StringType; nullable = true; defaultValue = null },
                         navArgument("make") { type = NavType.StringType; nullable = true; defaultValue = null },
                         navArgument("edit") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("own") { type = NavType.StringType; nullable = true; defaultValue = null },
                     ),
                 ) { entry ->
                     DarkRoute {
@@ -557,6 +559,7 @@ fun RideTrackNavHost(
                             idea = entry.arguments?.getString("idea"),
                             makeNow = entry.arguments?.getString("make") == "true",
                             editNow = entry.arguments?.getString("edit") == "true",
+                            ownWay = entry.arguments?.getString("own") == "true",
                             onBack = { nav.popBackStack() },
                             onUnlock = { nav.navigate(Routes.PAYWALL) },
                         )

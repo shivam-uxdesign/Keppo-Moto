@@ -25,6 +25,8 @@ class StudioShots {
         override fun makeAll(rideId: String, done: (Int) -> Unit) = Unit
         override fun sendAllToJournal(rideId: String, done: (Int) -> Unit) = Unit
         override fun picked(uris: List<Uri>, openRide: (String) -> Unit, openPhone: () -> Unit) = Unit
+        override fun findIdeas(rideId: String, say: (String) -> Unit) = Unit
+        override fun ask(rideId: String, text: String, say: (String) -> Unit, written: (String) -> Unit) = Unit
     }
 
     private val day = 86_400_000L
@@ -46,6 +48,20 @@ class StudioShots {
     }
 
     @Test fun home() = captureRoboImage("build/shots/home-dark.png") { Home(true) }
+
+    /** A ride with no ideas yet, Gemini finding them right on the feed (no other page opens). */
+    @Test fun findingIdeas() = captureRoboImage("build/shots/home-finding-ideas.png") {
+        RideTrackTheme(dark = true) {
+            StudioHomeContent(none, rides, emptySet(), 3, {}, {}, {}, {}, {}, {}, { _, _, _ -> }, startRide = "r2", working = mapOf("r2" to "Gemini is suggesting what to make"))
+        }
+    }
+
+    /** Ideas on screen while an ask is being written: a line above the ask field says so. */
+    @Test fun asking() = captureRoboImage("build/shots/home-asking.png") {
+        RideTrackTheme(dark = true) {
+            StudioHomeContent(none, rides, emptySet(), 3, {}, {}, {}, {}, {}, {}, { _, _, _ -> }, working = mapOf("r1" to "Gemini is writing “15 s, funny, the water”"))
+        }
+    }
 
     @Test fun homeLight() = captureRoboImage("build/shots/home-light.png") { Home(false) }
 }

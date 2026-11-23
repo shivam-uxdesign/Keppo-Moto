@@ -1802,6 +1802,8 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
         StudioSheet(ideasOpen, { ideasOpen = false }, "Ideas") {
             var changeThis by remember { mutableStateOf(true) }
             var wish by remember { mutableStateOf("") }
+            // The script of this edit to read and change line by line: what's said, the text on the video, the shots, the vibe.
+            SheetRow("The script", "Read it and change any line, the text on the video, the vibe") { ideasOpen = false; vm.scriptView() }
             if (vm.canAsk) {
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(RtColors.SurfaceRaised).padding(3.dp)) {
                     listOf(true to "Change this one", false to "Make a new one").forEach { (k, label) ->

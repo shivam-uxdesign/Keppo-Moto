@@ -1,6 +1,6 @@
 package com.ridetrack.app.studio
 
-/** One card on a ride's Studio page: the idea shown first, and other takes on the same moment. */
+/** One card of a ride's ideas: the idea shown first, and other takes on the same moment. */
 data class IdeaGroup<T>(val main: T, val variations: List<T>) {
     val all: List<T> get() = listOf(main) + variations
 }

@@ -167,7 +167,7 @@ fun ShareRideScreen(rideId: String, onBack: () -> Unit, startMode: String? = nul
     val style = choices[pager.currentPage]
     LaunchedEffect(pager.settledPage, s.loading) { if (!s.loading) vm.select(choices[pager.settledPage]) }
     var toast by remember { mutableStateOf<String?>(null) }
-    // Story card or 3D video (Reels are made in the ride's Studio page).
+    // Story card or 3D video (Reels are made in Studio).
     var mode by rememberSaveable { mutableStateOf(if (startMode == "video") ShareMode.VIDEO else ShareMode.CARD) }
     LaunchedEffect(toast) {
         if (toast != null) {

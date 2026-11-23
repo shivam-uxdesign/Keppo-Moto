@@ -141,6 +141,10 @@ internal interface StudioHomeActions {
     fun makeAll(rideId: String, done: (Int) -> Unit)
     fun sendAllToJournal(rideId: String, done: (Int) -> Unit)
     fun picked(uris: List<android.net.Uri>, openRide: (String) -> Unit, openPhone: () -> Unit)
+    /** Gemini suggests what to make from the ride, right here; [say] gets what went wrong. */
+    fun findIdeas(rideId: String, say: (String) -> Unit)
+    /** Gemini writes [text] for the ride; it goes first in the ride's ideas and [written] gets its title. */
+    fun ask(rideId: String, text: String, say: (String) -> Unit, written: (String) -> Unit)
 }
 
 class StudioHomeViewModel(private val c: AppContainer) : ViewModel(), StudioHomeActions {
@@ -149,8 +153,14 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel(), StudioHome
     /** Ideas the rider swiped away: "rideId|title". */
     val hidden: StateFlow<Set<String>> = _hidden.asStateFlow()
 
+    /** Bumped when a ride's saved ideas change here (found or asked for), so the feed reads them again. */
+    private val plansChanged = MutableStateFlow(0)
+    private val _working = MutableStateFlow<Map<String, String>>(emptyMap())
+    /** Rides Gemini is working on here: ride id → what it's doing ("Reading what you said"). */
+    val working: StateFlow<Map<String, String>> = _working.asStateFlow()
+
     /** Rides with at least 2 clips, newest first; null while loading. */
-    val rides: StateFlow<List<StudioRide>?> = kotlinx.coroutines.flow.combine(c.rides.observeCompleted(), c.reels.reels) { rides, reels -> rides to reels }.map { (rides, reels) ->
+    val rides: StateFlow<List<StudioRide>?> = kotlinx.coroutines.flow.combine(c.rides.observeCompleted(), c.reels.reels, plansChanged) { rides, reels, _ -> rides to reels }.map { (rides, reels) ->
         val clips = c.moments.all().filter { it.kind == MomentKind.CLIP && it.file.isFile && (it.durationMillis ?: 0) >= 1_500 }.groupBy { it.rideId }
         val now = System.currentTimeMillis()
         val geminiAt = com.ridetrack.app.transcribe.GeminiQuota.freeAt(com.ridetrack.app.transcribe.GeminiQuota.STORY)?.takeIf { it > now }
@@ -161,7 +171,7 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel(), StudioHome
             val thumbOf = ms.associate { it.id to it.thumb?.takeIf(File::isFile) }
             val fileOf = ms.associate { it.id to it.file }
             val drafts = File(c.appContext.filesDir, "studio-drafts")
-            // One card per moment: other takes on it are on the ride's own page, under its card.
+            // One card per moment: other takes on it are in the editor's Ideas (every idea of the ride).
             val ideas = IdeaGroups.group(planOf(r.id)) { it }.map { it.main }.map { sc ->
                 val first = sc.sections.firstOrNull { it.shots.isNotEmpty() }?.shots?.first()
                 IdeaCard(
@@ -226,6 +236,68 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel(), StudioHome
         }
     }
 
+    override fun findIdeas(rideId: String, say: (String) -> Unit) = work(rideId, "Getting the ride ready", say) { engine ->
+        val gemini = c.transcripts.available
+        if (gemini && c.studio.options.captions && kotlinx.coroutines.withContext(Dispatchers.IO) { engine.unreadCount() } > 0) {
+            status(rideId, "Reading what you said")
+            val read = engine.readCaptions(onProgress = { d -> status(rideId, "Reading what you said · $d") })
+            read.unreachable?.let { return@work say(com.ridetrack.app.transcribe.GeminiNet.message(it)) }
+        }
+        status(rideId, if (gemini) "Gemini is suggesting what to make" else "Finding ideas")
+        when (val r = engine.suggest(engine.card?.title.orEmpty())) {
+            is Suggested.Unreachable -> say(com.ridetrack.app.transcribe.GeminiNet.message(r.error))
+            Suggested.Busy -> say("Gemini's free limit is used up, so it can't suggest now.")
+            is Suggested.Scripts -> if (r.scripts.isEmpty()) say("No ideas came back. Try again in a bit.")
+        }
+    }
+
+    override fun ask(rideId: String, text: String, say: (String) -> Unit, written: (String) -> Unit) {
+        val t = text.trim()
+        if (t.isEmpty()) return
+        if (!c.transcripts.available) return say("Gemini isn't in this build")
+        c.studio.rememberAsk(t)
+        work(rideId, "Gemini is writing “${t.take(40)}”", say) { engine ->
+            val sc = try {
+                engine.ask(t)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                c.errors.record("Studio ask", "Gemini couldn't write what you asked for", e)
+                return@work say(StudioEngine.askProblem(e))
+            }
+            engine.putFirst(sc)
+            plansChanged.value++
+            written(sc.title)
+        }
+    }
+
+    /** One Gemini job for a ride at a time, its status shown on the feed while it runs. */
+    private fun work(rideId: String, first: String, say: (String) -> Unit, block: suspend (StudioEngine) -> Unit) {
+        if (rideId in _working.value) return
+        // As the ride's Studio was: a free rider whose weekly Reel is made waits (or goes Pro).
+        if (!c.studioOpen()) return say("This week's free Reel is made. Pro finds ideas any time.")
+        status(rideId, first)
+        viewModelScope.launch {
+            try {
+                val engine = StudioEngine(c, rideId)
+                engine.load()?.let { return@launch say(it) }
+                block(engine)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                c.errors.record("Studio ideas", "Couldn't find ideas", e)
+                say("Couldn't find ideas (${e.message?.take(60) ?: e.javaClass.simpleName})")
+            } finally {
+                _working.value = _working.value - rideId
+                plansChanged.value++
+            }
+        }
+    }
+
+    private fun status(rideId: String, text: String) {
+        _working.value = _working.value + (rideId to text)
+    }
+
     override fun hide(rideId: String, title: String) = setHidden(_hidden.value + "$rideId|$title")
     override fun unhide(rideId: String, title: String) = setHidden(_hidden.value - "$rideId|$title")
     private fun setHidden(v: Set<String>) {
@@ -261,13 +333,14 @@ class StudioHomeViewModel(private val c: AppContainer) : ViewModel(), StudioHome
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun StudioHomeScreen(
-    onOpenRide: (String) -> Unit,
+    /** A ride's clips straight in the editor, made your own way (no idea to start from). */
+    onOwnWay: (String) -> Unit,
     onOpenPhone: (reelId: String?) -> Unit,
     onOpenReels: () -> Unit,
     onOpenStyles: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
-    onOpenIdea: (rideId: String, title: String, make: Boolean) -> Unit = { r, _, _ -> onOpenRide(r) },
+    onOpenIdea: (rideId: String, title: String, make: Boolean) -> Unit = { r, _, _ -> onOwnWay(r) },
     onOpenPaywall: () -> Unit = {},
     startRide: String? = null,
     onBack: (() -> Unit)? = null,
@@ -282,7 +355,7 @@ fun StudioHomeScreen(
     val consent by c.aiConsent.given.collectAsStateWithLifecycle()
     Box(Modifier.fillMaxSize()) {
         Box(if (locked || !consent) Modifier.fillMaxSize().blur(18.dp) else Modifier.fillMaxSize()) {
-            StudioHomeBody(onOpenRide, onOpenPhone, onOpenReels, onOpenStyles, onOpenSearch, onOpenSettings, onOpenIdea, startRide, onBack)
+            StudioHomeBody(onOwnWay, onOpenPhone, onOpenReels, onOpenStyles, onOpenSearch, onOpenSettings, onOpenIdea, startRide, onBack)
         }
         if (!consent) com.ridetrack.app.ui.pro.AiConsentCard(onNotNow = null)
         else if (locked) com.ridetrack.app.ui.pro.StudioLocked(com.ridetrack.app.pro.FreeReelRule.nextAt(usedAt, now), onOpenPaywall, onOpenReels = onOpenReels)
@@ -296,7 +369,7 @@ fun StudioHomeScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StudioHomeBody(
-    onOpenRide: (String) -> Unit,
+    onOwnWay: (String) -> Unit,
     onOpenPhone: (reelId: String?) -> Unit,
     onOpenReels: () -> Unit,
     onOpenStyles: () -> Unit,
@@ -310,13 +383,15 @@ private fun StudioHomeBody(
     val rides by vm.rides.collectAsStateWithLifecycle()
     val hidden by vm.hidden.collectAsStateWithLifecycle()
     val reels by com.ridetrack.app.ui.appContainer().reels.reels.collectAsStateWithLifecycle()
+    val working by vm.working.collectAsStateWithLifecycle()
     StudioHomeContent(
         vm, rides, hidden, reels.count { it.deletedAt == null },
-        onOpenRide, onOpenPhone, onOpenReels, onOpenStyles, onOpenSearch, onOpenSettings, onOpenIdea,
+        onOwnWay, onOpenPhone, onOpenReels, onOpenStyles, onOpenSearch, onOpenSettings, onOpenIdea,
         pill = { open -> MakingPill(Modifier.fillMaxWidth(), open) },
         makingSheet = { visible, close -> MakingSheet(visible, close) },
         startRide = startRide,
         onBack = onBack,
+        working = working,
     )
 }
 
@@ -328,7 +403,7 @@ internal fun StudioHomeContent(
     rides: List<StudioRide>?,
     hidden: Set<String>,
     made: Int,
-    onOpenRide: (String) -> Unit,
+    onOwnWay: (String) -> Unit,
     onOpenPhone: (reelId: String?) -> Unit,
     onOpenReels: () -> Unit,
     onOpenStyles: () -> Unit,
@@ -341,10 +416,14 @@ internal fun StudioHomeContent(
     startRide: String? = null,
     /** Set when opened from outside the tab: a back arrow in the top bar. */
     onBack: (() -> Unit)? = null,
+    /** Rides Gemini is working on here (finding ideas, writing an ask): ride id → what it's doing. */
+    working: Map<String, String> = emptyMap(),
 ) {
     val haptics = LocalHapticFeedback.current
+    // An idea Gemini wrote opens in the editor only while the feed is on screen (not after leaving it).
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia(20)) { uris ->
-        if (uris.isNotEmpty()) vm.picked(uris, onOpenRide) { onOpenPhone(null) }
+        if (uris.isNotEmpty()) vm.picked(uris, onOwnWay) { onOpenPhone(null) }
     }
     var picked by rememberSaveable { mutableStateOf(startRide) }
     var newReel by remember { mutableStateOf(false) }
@@ -472,13 +551,22 @@ internal fun StudioHomeContent(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text("No ideas for this ride yet", style = RtType.headline, color = RtColors.TextPrimary)
-                        Text(ride.waiting ?: "${ride.clips} clips. Gemini reads them and suggests what to make.", style = RtType.body, color = RtColors.TextSecondary)
-                        Text(
-                            "Find ideas",
-                            style = RtType.button,
-                            color = RtColors.OnPrimary,
-                            modifier = Modifier.clip(RoundedCornerShape(24.dp)).background(RtColors.Primary).clickable(role = Role.Button) { onOpenRide(ride.id) }.padding(horizontal = 22.dp, vertical = 12.dp),
-                        )
+                        val doing = working[ride.id]
+                        if (doing != null) {
+                            // Found right here: the cards appear when Gemini answers.
+                            CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
+                            Text(doing, style = RtType.body, color = RtColors.TextSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            Text("You can leave this screen: the ideas will be here.", style = RtType.caption, color = RtColors.TextTertiary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        } else {
+                            Text(ride.waiting ?: "${ride.clips} clips. Gemini reads them and suggests what to make.", style = RtType.body, color = RtColors.TextSecondary)
+                            Text(
+                                "Find ideas",
+                                style = RtType.button,
+                                color = RtColors.OnPrimary,
+                                modifier = Modifier.clip(RoundedCornerShape(24.dp)).background(RtColors.Primary)
+                                    .clickable(role = Role.Button) { vm.findIdeas(ride.id) { note = it } }.padding(horizontal = 22.dp, vertical = 12.dp),
+                            )
+                        }
                     }
                 } else {
                     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -503,18 +591,25 @@ internal fun StudioHomeContent(
             }
             if (ideas.isNotEmpty()) Text("Swipe up for the next idea · left to hide · hold for options", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp))
             // ---- ask for something
-            // Typed right here; sending opens this ride's Studio, which runs it straight away.
-            // The app's prefs only when sending (drawing the field needs nothing from the app).
-            val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+            // Typed right here: Gemini writes it, it goes first in the ride's ideas and opens in the
+            // editor (if the feed is still on screen).
             var ask by remember(ride.id) { mutableStateOf("") }
+            val busy = working[ride.id]
             val send = {
                 val t = ask.trim()
-                val studioPrefs = (appContext as? com.ridetrack.app.RideTrackApp)?.container?.studio
-                if (t.isNotEmpty() && studioPrefs != null) {
-                    studioPrefs.rememberAsk(t)
-                    studioPrefs.setPendingAsk(ride.id, t)
+                if (t.isNotEmpty() && busy == null) {
+                    val rideId = ride.id
                     ask = ""
-                    onOpenRide(ride.id)
+                    vm.ask(rideId, t, say = { note = it }) { title ->
+                        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) onOpenIdea(rideId, title, false)
+                    }
+                }
+            }
+            // What Gemini is doing for this ride, while there are ideas on screen (the empty card says it otherwise).
+            if (busy != null && ideas.isNotEmpty()) {
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
+                    Text(busy, style = RtType.caption, color = RtColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             Row(
@@ -569,7 +664,7 @@ internal fun StudioHomeContent(
                 pick.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.VideoOnly))
             }
             SheetRow("From Saved clips") { newReel = false; onOpenReels() }
-            list?.firstOrNull { it.id == picked }?.let { r -> SheetRow("From ${r.name}'s clips, your own way") { newReel = false; onOpenRide(r.id) } }
+            list?.firstOrNull { it.id == picked }?.let { r -> SheetRow("From ${r.name}'s clips, your own way") { newReel = false; onOwnWay(r.id) } }
         }
         StudioSheet(more, { more = false }) {
             SheetRow("Styles", "Your looks, the brand kit") { more = false; onOpenStyles() }
