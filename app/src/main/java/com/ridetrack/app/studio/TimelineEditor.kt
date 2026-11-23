@@ -1403,8 +1403,25 @@ internal fun TimelineEditor(vm: StudioViewModel, s: StudioState, modifier: Modif
                     listOf(
                         leaf(Icons.Rounded.ContentCut, "Split") { vm.change("Split") { TimelineEdits.split(it, pos) } },
                         if (seg?.still == null) leaf(Icons.Rounded.Speed, "Speed") { clipTab = ClipTab.SPEED } else leaf(Icons.Rounded.AcUnit, "Freeze") { vm.freeze() },
-                        parent(if (v == 0f) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, "Sound", listOf(
+                        parent(if (v == 0f) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, "Sound", listOfNotNull(
                             slider(Icons.AutoMirrored.Rounded.VolumeUp, "Volume", v, 0f..1.5f, pct, { x -> vm.drag { TimelineEdits.volume(it, i, x) } }, { vm.endDrag("Sound") }),
+                            // The clip's own sound over time: the same volume line as every other sound.
+                            seg?.takeIf { it.still == null }?.let { c ->
+                                val clipStart = plan.startOf(i)
+                                TNode(Icons.Rounded.ShowChart, "Volume line", panel = {
+                                    VolumeLinePanel(
+                                        "clip-$i", c.curve, c.durMs, { t -> c.volume * VolumeCurve.at(c.curve, t) }, pos - clipStart,
+                                        onAdd = { at, level -> vm.change("Volume point") { TimelineEdits.addClipPoint(it, i, at, level) } },
+                                        onMove = { k, at, level -> vm.drag { TimelineEdits.moveClipPoint(it, i, k, at, level) } },
+                                        onMoveEnd = { vm.endDrag("Volume point") },
+                                        onDelete = { k -> vm.change("Delete point") { TimelineEdits.deleteClipPoint(it, i, k) } },
+                                        onEase = { k, e -> vm.change("Ease: ${e.label}") { TimelineEdits.easeClipPoint(it, i, k, e) } },
+                                    )
+                                })
+                            },
+                            leaf(Icons.AutoMirrored.Rounded.VolumeDown, "Dip here") { vm.change("Volume point") { TimelineEdits.addClipPoint(it, i, pos - plan.startOf(i), 0.3f) } },
+                            leaf(Icons.AutoMirrored.Rounded.VolumeUp, "Full here") { vm.change("Volume point") { TimelineEdits.addClipPoint(it, i, pos - plan.startOf(i), 1f) } },
+                            if (seg?.curve?.isNotEmpty() == true) leaf(Icons.Rounded.ClearAll, "Clear points") { vm.change("Clear points") { TimelineEdits.clearClipCurve(it, i) } } else null,
                             leaf(if (v == 0f) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff, if (v == 0f) "Unmute" else "Mute", on = v == 0f) { vm.change(if (v == 0f) "Unmute" else "Mute") { TimelineEdits.volume(it, i, if (v == 0f) 1f else 0f) } },
                             leaf(Icons.AutoMirrored.Rounded.CallSplit, "Detach") { vm.detach(i) },
                         )),
@@ -2808,10 +2825,25 @@ private fun VolumeLinePanel(
     onMoveEnd: () -> Unit,
     onDelete: (Int) -> Unit,
     onEase: (Int, Ease) -> Unit,
+) = VolumeLinePanel(a.id, a.curve, a.durMs, { TrackEdits.levelAt(a, it) }, playheadMs, onAdd, onMove, onMoveEnd, onDelete, onEase)
+
+/** The same, for any volume line: [points] over [durMs], drawn at [levelAt] (with fades and the item's volume). */
+@Composable
+private fun VolumeLinePanel(
+    key: String,
+    points: List<VolumePoint>,
+    durMs: Long,
+    levelAt: (Long) -> Float,
+    playheadMs: Long,
+    onAdd: (atMs: Long, level: Float) -> Unit,
+    onMove: (k: Int, atMs: Long, level: Float) -> Unit,
+    onMoveEnd: () -> Unit,
+    onDelete: (Int) -> Unit,
+    onEase: (Int, Ease) -> Unit,
 ) {
-    var picked by remember(a.id) { mutableStateOf<Int?>(null) }
-    val curve by rememberUpdatedState(a.curve)
-    val dur = a.durMs.coerceAtLeast(1)
+    var picked by remember(key) { mutableStateOf<Int?>(null) }
+    val curve by rememberUpdatedState(points)
+    val dur = durMs.coerceAtLeast(1)
     val accent = RtColors.Primary
     val faint = RtColors.TextTertiary
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2826,13 +2858,13 @@ private fun VolumeLinePanel(
                 ?.takeIf { k -> kotlin.math.abs(x(curve[k].atMs) - o.x) < 48f && kotlin.math.abs(y(curve[k].level) - o.y) < 48f }
             androidx.compose.foundation.Canvas(
                 Modifier.fillMaxSize()
-                    .pointerInput(a.id) {
+                    .pointerInput(key) {
                         detectTapGestures(
                             onTap = { o -> val k = hit(o); if (k != null) picked = k else onAdd(ms(o.x), level(o.y)) },
                             onLongPress = { o -> hit(o)?.let { k -> onDelete(k); picked = null } },
                         )
                     }
-                    .pointerInput(a.id, "drag") {
+                    .pointerInput(key, "drag") {
                         var k: Int? = null
                         detectDragGestures(
                             onDragStart = { o -> k = hit(o); picked = k },
@@ -2853,7 +2885,7 @@ private fun VolumeLinePanel(
                 val steps = 120
                 for (j in 0..steps) {
                     val t = dur * j / steps
-                    val pt = androidx.compose.ui.geometry.Offset(x(t), y(TrackEdits.levelAt(a, t) / a.volume.coerceAtLeast(0.01f) * a.volume))
+                    val pt = androidx.compose.ui.geometry.Offset(x(t), y(levelAt(t)))
                     prev?.let { drawLine(accent, it, pt, strokeWidth = 3f) }
                     prev = pt
                 }
@@ -2862,11 +2894,11 @@ private fun VolumeLinePanel(
                 }
             }
         }
-        val k = picked?.takeIf { it < a.curve.size }
-        if (k != null && k < a.curve.size - 1) {
+        val k = picked?.takeIf { it < points.size }
+        if (k != null && k < points.size - 1) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Ease.entries.forEach { e ->
-                    val on = a.curve[k].ease == e
+                    val on = points[k].ease == e
                     Text(
                         e.label, style = RtType.caption, color = if (on) RtColors.Background else RtColors.TextPrimary,
                         modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) RtColors.Primary else RtColors.Surface)
@@ -2876,7 +2908,7 @@ private fun VolumeLinePanel(
             }
         } else {
             Text(
-                if (a.curve.isEmpty()) "Tap the line to add a point · drag it up or down" else "Tap a point to choose how it eases into the next · hold to delete",
+                if (points.isEmpty()) "Tap the line to add a point · drag it up or down" else "Tap a point to choose how it eases into the next · hold to delete",
                 style = RtType.caption, color = RtColors.TextSecondary,
             )
         }

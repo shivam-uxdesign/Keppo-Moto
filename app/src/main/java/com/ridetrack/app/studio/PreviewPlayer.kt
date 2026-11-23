@@ -52,6 +52,8 @@ class EditorPreview(context: Context) {
     private var lengths: List<Long> = emptyList()
     private var sources: List<Long> = emptyList()
     private var volumes: List<Float> = emptyList()
+    /** Each segment's own volume line (empty: steady). */
+    private var curves: List<List<VolumePoint>> = emptyList()
     private var images: List<Boolean> = emptyList()
     private var tries = 0
     private var level = 1f
@@ -88,8 +90,16 @@ class EditorPreview(context: Context) {
         val i = player.currentMediaItemIndex
         val speed = if (images.getOrElse(i) { false }) 1f else (sources.getOrElse(i) { 1L }.toFloat() / lengths.getOrElse(i) { 1L }.coerceAtLeast(1)).coerceIn(0.1f, 8f)
         player.playbackParameters = PlaybackParameters(speed)
-        player.volume = volumes.getOrElse(i) { 1f } * level
+        applyLevel()
         if (!images.getOrElse(i) { false }) still = null
+    }
+
+    /** The current clip's level: its volume, its volume line where the playhead is, and the screen's level. */
+    private fun applyLevel() {
+        val i = player.currentMediaItemIndex
+        val curve = curves.getOrNull(i).orEmpty()
+        val line = if (curve.isEmpty()) 1f else VolumeCurve.at(curve, positionMs() - starts.getOrElse(i) { 0L })
+        player.volume = (volumes.getOrElse(i) { 1f } * line * level).coerceIn(0f, 1f)
     }
 
     /** Loads [p] and goes to [atMs] (Reel time). */
@@ -99,6 +109,7 @@ class EditorPreview(context: Context) {
         val srcs = ArrayList<Long>()
         val vols = ArrayList<Float>()
         val imgs = ArrayList<Boolean>()
+        val crvs = ArrayList<List<VolumePoint>>()
         val first = p.clips.firstOrNull() ?: return
         val last = p.clips.last()
         for (seg in p.segments) {
@@ -126,6 +137,7 @@ class EditorPreview(context: Context) {
             lens += dur
             srcs += src
             imgs += stillFile != null
+            crvs += cs?.curve.orEmpty()
             vols += if (cs != null && stillFile == null && reversed == null) ((if (cs.lines.isNotEmpty()) 1f else CLIP_RIDING) * cs.volume * p.mix.gain(TrackKind.CLIPS)).coerceIn(0f, 1f) else 0f
         }
         plan = p
@@ -134,6 +146,7 @@ class EditorPreview(context: Context) {
         lengths = lens
         sources = srcs
         volumes = vols
+        curves = crvs
         images = imgs
         val (i, local) = TimelineEdits.at(p, atMs.coerceIn(0, p.totalMs))
         player.setMediaItems(items, i, sourceMs(i, local))
@@ -174,6 +187,8 @@ class EditorPreview(context: Context) {
 
     /** Keeps the sound tracks with the picture (call often while playing); [force] jumps it there now. */
     fun syncSound(force: Boolean = false) {
+        // The clip's volume line follows the playhead (called often enough to sound smooth).
+        if (curves.getOrNull(player.currentMediaItemIndex)?.isNotEmpty() == true) applyLevel()
         if (sound.mediaItemCount == 0) return
         val at = positionMs()
         if (force || abs(sound.currentPosition - at) > DRIFT_MS) sound.seekTo(at)
@@ -182,7 +197,7 @@ class EditorPreview(context: Context) {
     /** All sound at [v] of its level (quiet while the rider records a voice-over). */
     fun setLevel(v: Float) {
         level = v
-        player.volume = volumes.getOrElse(player.currentMediaItemIndex) { 1f } * v
+        applyLevel()
         sound.volume = v
     }
 

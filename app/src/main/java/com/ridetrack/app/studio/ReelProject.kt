@@ -244,9 +244,20 @@ object ReelJson {
             .put("frame", JSONArray().apply { s.frame.forEach { k -> put(JSONObject().put("at", k.atMs).put("z", k.zoom.toDouble()).put("x", k.x.toDouble()).put("y", k.y.toDouble())) } })
             .put("color", JSONObject().put("exp", s.color.exposure.toDouble()).put("con", s.color.contrast.toDouble()).put("sat", s.color.saturation.toDouble()).put("warm", s.color.warmth.toDouble()).put("look", s.color.look))
             .put("transition", s.transition?.let { LookJson.transition(it) } ?: JSONObject.NULL)
+            .apply { if (s.curve.isNotEmpty()) put("curve", curve(s.curve)) }
         is TitleSegment -> JSONObject().put("type", "title").put("dur", s.durMs)
         is StatsSegment -> JSONObject().put("type", "stats").put("dur", s.durMs)
     }
+
+    /** A volume line as saved: points with their level and ease. */
+    private fun curve(points: List<VolumePoint>): JSONArray = JSONArray().apply {
+        points.forEach { p -> put(JSONObject().put("at", p.atMs).put("l", p.level.toDouble()).put("ease", p.ease.name)) }
+    }
+
+    /** A saved volume line (none in projects saved before there was one). */
+    private fun readCurve(a: JSONArray?): List<VolumePoint> = a?.let {
+        (0 until it.length()).map { i -> it.getJSONObject(i).let { p -> VolumePoint(p.getLong("at"), p.getDouble("l").toFloat(), Ease.entries.firstOrNull { e -> e.name == p.optString("ease") } ?: Ease.LINEAR) } }
+    }.orEmpty()
 
     private fun readSegment(o: JSONObject): Segment? = when (o.optString("type")) {
         "clip" -> ClipSegment(
@@ -263,6 +274,7 @@ object ReelJson {
             frame = o.optJSONArray("frame")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { k -> FrameKey(k.getLong("at"), k.getDouble("z").toFloat(), k.getDouble("x").toFloat(), k.getDouble("y").toFloat()) } } }.orEmpty(),
             color = o.optJSONObject("color")?.let { c -> ClipColor(c.optDouble("exp", 0.0).toFloat(), c.optDouble("con", 0.0).toFloat(), c.optDouble("sat", 0.0).toFloat(), c.optDouble("warm", 0.0).toFloat(), c.optBoolean("look", true)) } ?: ClipColor(),
             transition = o.optJSONObject("transition")?.let { LookJson.transition(it) },
+            curve = readCurve(o.optJSONArray("curve")),
         )
         "title" -> TitleSegment(o.getLong("dur"))
         "stats" -> StatsSegment(o.getLong("dur"))
@@ -324,13 +336,13 @@ object ReelJson {
         .put("volume", a.volume.toDouble()).put("fadeIn", a.fadeInMs).put("fadeOut", a.fadeOutMs).put("file", a.file ?: JSONObject.NULL)
         .put("name", a.name ?: JSONObject.NULL)
         .put("noise", JSONObject().apply { a.noise.forEach { (k, v) -> put(k.toString(), v.name) } })
-        .put("curve", JSONArray().apply { a.curve.forEach { p -> put(JSONObject().put("at", p.atMs).put("l", p.level.toDouble()).put("ease", p.ease.name)) } })
+        .put("curve", curve(a.curve))
         .put("fadeShape", a.fadeShape.name)
 
     private fun readAudio(o: JSONObject) = AudioItem(
         id = o.getString("id"), kind = TrackKind.valueOf(o.getString("kind")), bit = readBit(o.getJSONObject("bit")), inMs = o.getLong("in"), startMs = o.getLong("start"), durMs = o.getLong("dur"),
         volume = o.optDouble("volume", 1.0).toFloat(), fadeInMs = o.optLong("fadeIn"), fadeOutMs = o.optLong("fadeOut"), file = o.optStringOrNull("file"), name = o.optStringOrNull("name"),
-        curve = o.optJSONArray("curve")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { p -> VolumePoint(p.getLong("at"), p.getDouble("l").toFloat(), Ease.entries.firstOrNull { it.name == p.optString("ease") } ?: Ease.LINEAR) } } }.orEmpty(),
+        curve = readCurve(o.optJSONArray("curve")),
         fadeShape = FadeShape.entries.firstOrNull { it.name == o.optString("fadeShape") } ?: FadeShape.LINEAR,
         noise = o.optJSONObject("noise")?.let { n ->
             n.keys().asSequence().mapNotNull { k -> k.toLongOrNull()?.let { at -> NoiseChoice.entries.firstOrNull { it.name == n.optString(k) }?.let { at to it } } }.toMap()

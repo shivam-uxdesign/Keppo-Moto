@@ -48,7 +48,9 @@ object TimelineEdits {
         val shift = ((newIn - s.inMs) * f).toLong()
         val dur = s.durMs - shift
         val lines = s.lines.map { it.copy(startMs = it.startMs - shift, endMs = it.endMs - shift) }.filter { it.endMs > 0 && it.startMs < dur }
-        return normalize(with(plan, i, s.copy(inMs = newIn, durMs = dur, lines = lines)))
+        // The volume line stays with the sound: what's cut off goes, what's added keeps the edge's level.
+        val curve = if (shift >= 0) VolumeCurve.cut(s.curve, shift, s.durMs) else VolumeCurve.shift(s.curve, -shift)
+        return normalize(with(plan, i, s.copy(inMs = newIn, durMs = dur, lines = lines, curve = curve)))
     }
 
     /** Moves a clip's end by [deltaMs] (positive = longer), never past the end of the clip. */
@@ -56,7 +58,8 @@ object TimelineEdits {
         val s = clip(plan, i) ?: return plan
         val max = if (s.still != null) 10_000 else ((s.bit.clipDurationMs - s.inMs) * Speed.outPerSource(s.speed, s.steps)).toLong()
         val dur = (s.durMs + deltaMs).coerceIn(MIN_MS, max.coerceAtLeast(MIN_MS))
-        return normalize(with(plan, i, s.copy(durMs = dur, lines = s.lines.filter { it.startMs < dur })))
+        val curve = if (dur < s.durMs) VolumeCurve.cut(s.curve, 0, dur) else s.curve
+        return normalize(with(plan, i, s.copy(durMs = dur, lines = s.lines.filter { it.startMs < dur }, curve = curve)))
     }
 
     /**
@@ -84,6 +87,7 @@ object TimelineEdits {
                 durMs = b - a,
                 lines = s.lines.filter { it.endMs > a && it.startMs < b }.map { it.copy(startMs = (it.startMs - a).coerceAtLeast(0), endMs = (it.endMs - a).coerceAtMost(b - a)) },
                 transition = if (k == 0) s.transition else null,
+                curve = VolumeCurve.cut(s.curve, a, b),
             )
         }
         return normalize(plan.copy(segments = plan.segments.toMutableList().also { it.removeAt(i); it.addAll(i, parts) }))
@@ -96,7 +100,8 @@ object TimelineEdits {
         val f = Speed.outPerSource(s.speed, s.steps)
         val dur = (s.bit.clipDurationMs * f).toLong().coerceAtLeast(MIN_MS)
         val lines = s.bit.lines.map { it.copy(startMs = (it.startMs * f).toLong(), endMs = (it.endMs * f).toLong()) }.filter { it.startMs < dur }
-        return normalize(with(plan, i, s.copy(inMs = 0, durMs = dur, lines = lines)))
+        // The volume line stays on the same sound, now further in.
+        return normalize(with(plan, i, s.copy(inMs = 0, durMs = dur, lines = lines, curve = VolumeCurve.shift(s.curve, (s.inMs * f).toLong()))))
     }
 
     /** Cuts the clip under [atMs] in two (each part at least [MIN_MS]). */
@@ -104,12 +109,13 @@ object TimelineEdits {
         val (i, local) = at(plan, atMs)
         val s = clip(plan, i) ?: return plan
         if (local < MIN_MS || local > s.durMs - MIN_MS) return plan
-        val a = s.copy(durMs = local, lines = s.lines.filter { it.startMs < local }.map { it.copy(endMs = minOf(it.endMs, local)) })
+        val a = s.copy(durMs = local, lines = s.lines.filter { it.startMs < local }.map { it.copy(endMs = minOf(it.endMs, local)) }, curve = VolumeCurve.cut(s.curve, 0, local))
         val srcLocal = if (s.still != null) 0L else (local / Speed.outPerSource(s.speed, s.steps)).toLong()
         val b = s.copy(
             inMs = s.inMs + srcLocal, durMs = s.durMs - local, hook = false, text = null, transition = Transition(TransitionKind.CUT),
             frame = s.frame.filter { it.atMs >= local }.map { it.copy(atMs = it.atMs - local) },
             lines = s.lines.filter { it.endMs > local }.map { it.copy(startMs = (it.startMs - local).coerceAtLeast(0), endMs = it.endMs - local) },
+            curve = VolumeCurve.cut(s.curve, local, s.durMs),
         )
         return normalize(plan.copy(segments = plan.segments.toMutableList().also { it[i] = a; it.add(i + 1, b) }))
     }
@@ -131,6 +137,20 @@ object TimelineEdits {
         val s = clip(plan, i) ?: return plan
         return with(plan, i, s.copy(volume = v.coerceIn(0f, 1.5f)))
     }
+
+    // ---- a clip's own sound over time (its volume line) ----------------------------------------
+
+    private fun curve(plan: StudioPlan, i: Int, f: (ClipSegment) -> List<VolumePoint>): StudioPlan {
+        val s = clip(plan, i) ?: return plan
+        return with(plan, i, s.copy(curve = f(s)))
+    }
+
+    /** A point [atMs] after the clip starts (one within 100 ms gives way). */
+    fun addClipPoint(plan: StudioPlan, i: Int, atMs: Long, level: Float, ease: Ease = Ease.SMOOTH) = curve(plan, i) { VolumeCurve.add(it.curve, atMs, level, ease, it.durMs) }
+    fun moveClipPoint(plan: StudioPlan, i: Int, k: Int, atMs: Long, level: Float) = curve(plan, i) { VolumeCurve.move(it.curve, k, atMs, level, it.durMs) }
+    fun deleteClipPoint(plan: StudioPlan, i: Int, k: Int) = curve(plan, i) { s -> s.curve.filterIndexed { j, _ -> j != k } }
+    fun easeClipPoint(plan: StudioPlan, i: Int, k: Int, ease: Ease) = curve(plan, i) { s -> s.curve.mapIndexed { j, p -> if (j == k) p.copy(ease = ease) else p } }
+    fun clearClipCurve(plan: StudioPlan, i: Int) = curve(plan, i) { emptyList() }
 
     /** Puts [bit] in after the clip under [atMs]. */
     fun insert(plan: StudioPlan, bit: Bit, atMs: Long): StudioPlan {

@@ -99,6 +99,8 @@ data class ClipSegment(
     val color: ClipColor = ClipColor(),
     /** The transition into this clip; null = the style's own. */
     val transition: Transition? = null,
+    /** Its own sound's volume over time: points from the clip's start on the Reel (empty = steady at [volume]). */
+    val curve: List<VolumePoint> = emptyList(),
 ) : Segment {
     /** How much of the clip this plays, in its own ms (more than [durMs] when sped up). */
     val sourceMs: Long get() = if (still != null) 0 else Speed.sourceMs(durMs, speed, steps)
@@ -431,6 +433,51 @@ enum class Ease(val label: String) {
             OUT -> 1 - (1 - x) * (1 - x)
             HOLD -> if (x < 1f) 0f else 1f
         }
+    }
+}
+
+/** A volume line: its level at a moment, and the line kept right when the sound is cut or trimmed. */
+object VolumeCurve {
+    /** The line's level [ms] in (1 when there are no points; flat before the first and after the last). */
+    fun at(curve: List<VolumePoint>, ms: Long): Float = when {
+        curve.isEmpty() -> 1f
+        ms <= curve.first().atMs -> curve.first().level
+        ms >= curve.last().atMs -> curve.last().level
+        else -> {
+            val b = curve.indexOfFirst { it.atMs >= ms }
+            val p1 = curve[b - 1]
+            val p2 = curve[b]
+            // The point's ease decides how the line gets to the next one.
+            p1.level + (p2.level - p1.level) * p1.ease.of((ms - p1.atMs).toFloat() / (p2.atMs - p1.atMs).coerceAtLeast(1))
+        }
+    }
+
+    /**
+     * The part of the line from [from] to [to], starting at 0: the points inside, plus a point at
+     * each new end where the line went on past it, so the level there stays what it was.
+     */
+    fun cut(curve: List<VolumePoint>, from: Long, to: Long): List<VolumePoint> {
+        if (curve.isEmpty() || to <= from) return emptyList()
+        val inside = curve.filter { it.atMs in from..to }.map { it.copy(atMs = it.atMs - from) }
+        val before = curve.lastOrNull { it.atMs < from }
+        val start = if (before != null && inside.firstOrNull()?.atMs != 0L) VolumePoint(0, at(curve, from), before.ease) else null
+        val end = if (curve.last().atMs > to && inside.lastOrNull()?.atMs != to - from) VolumePoint(to - from, at(curve, to), Ease.LINEAR) else null
+        return listOfNotNull(start) + inside + listOfNotNull(end)
+    }
+
+    /** Every point [byMs] later (earlier when negative). */
+    fun shift(curve: List<VolumePoint>, byMs: Long): List<VolumePoint> = curve.map { it.copy(atMs = it.atMs + byMs) }
+
+    /** A point at [atMs] (one within 100 ms gives way), the line in order. */
+    fun add(curve: List<VolumePoint>, atMs: Long, level: Float, ease: Ease, durMs: Long): List<VolumePoint> {
+        val t = atMs.coerceIn(0, durMs)
+        return (curve.filter { kotlin.math.abs(it.atMs - t) > 100 } + VolumePoint(t, level.coerceIn(0f, 1.5f), ease)).sortedBy { it.atMs }
+    }
+
+    /** Point [k] moved to [atMs] and [level], the line in order. */
+    fun move(curve: List<VolumePoint>, k: Int, atMs: Long, level: Float, durMs: Long): List<VolumePoint> {
+        val p = curve.getOrNull(k) ?: return curve
+        return (curve.filterIndexed { j, _ -> j != k } + p.copy(atMs = atMs.coerceIn(0, durMs), level = level.coerceIn(0f, 1.5f))).sortedBy { it.atMs }
     }
 }
 

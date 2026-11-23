@@ -139,9 +139,10 @@ object TrackEdits {
         val s = clip(plan, i) ?: return plan
         if (s.volume == 0f && plan.audio.any { it.kind == TrackKind.DETACHED && it.bit.momentId == s.bit.momentId && it.inMs == s.inMs }) return plan
         val level = (if (s.lines.isNotEmpty()) 1f else 0.55f) * s.volume.coerceAtLeast(0.01f)
-        val item = AudioItem(id, TrackKind.DETACHED, s.bit, s.inMs, plan.startOf(i), s.durMs, volume = level)
+        // Its volume line goes with the sound.
+        val item = AudioItem(id, TrackKind.DETACHED, s.bit, s.inMs, plan.startOf(i), s.durMs, volume = level, curve = s.curve)
         return plan.copy(
-            segments = plan.segments.toMutableList().also { it[i] = s.copy(volume = 0f) },
+            segments = plan.segments.toMutableList().also { it[i] = s.copy(volume = 0f, curve = emptyList()) },
             audio = plan.audio + item,
         )
     }
@@ -221,16 +222,14 @@ object TrackEdits {
 
     /** A volume point [atMs] after the sound starts (replaces one within 100 ms). */
     fun addVolumePoint(plan: StudioPlan, id: String, atMs: Long, level: Float, ease: Ease = Ease.LINEAR) = audio(plan, id) { a ->
-        val t = atMs.coerceIn(0, a.durMs)
-        a.copy(curve = (a.curve.filter { abs(it.atMs - t) > 100 } + VolumePoint(t, level.coerceIn(0f, 1.5f), ease)).sortedBy { it.atMs })
+        a.copy(curve = VolumeCurve.add(a.curve, atMs, level, ease, a.durMs))
     }
 
     fun clearCurve(plan: StudioPlan, id: String) = audio(plan, id) { it.copy(curve = emptyList()) }
 
     /** Moves a volume point (index [k]) to [atMs] and [level], keeping the points in order. */
     fun moveVolumePoint(plan: StudioPlan, id: String, k: Int, atMs: Long, level: Float) = audio(plan, id) { a ->
-        val p = a.curve.getOrNull(k) ?: return@audio a
-        a.copy(curve = (a.curve.filterIndexed { j, _ -> j != k } + p.copy(atMs = atMs.coerceIn(0, a.durMs), level = level.coerceIn(0f, 1.5f))).sortedBy { it.atMs })
+        a.copy(curve = VolumeCurve.move(a.curve, k, atMs, level, a.durMs))
     }
 
     fun deleteVolumePoint(plan: StudioPlan, id: String, k: Int) = audio(plan, id) { a -> a.copy(curve = a.curve.filterIndexed { j, _ -> j != k }) }
@@ -245,19 +244,7 @@ object TrackEdits {
 
     /** The level of [a] at [localMs]: its volume, its curve, and its fades. */
     fun levelAt(a: AudioItem, localMs: Long): Float {
-        val curve = a.curve
-        val c = when {
-            curve.isEmpty() -> 1f
-            localMs <= curve.first().atMs -> curve.first().level
-            localMs >= curve.last().atMs -> curve.last().level
-            else -> {
-                val b = curve.indexOfFirst { it.atMs >= localMs }
-                val p1 = curve[b - 1]
-                val p2 = curve[b]
-                // The point's ease decides how the line gets to the next one.
-                p1.level + (p2.level - p1.level) * p1.ease.of((localMs - p1.atMs).toFloat() / (p2.atMs - p1.atMs).coerceAtLeast(1))
-            }
-        }
+        val c = VolumeCurve.at(a.curve, localMs)
         val fadeIn = if (a.fadeInMs > 0) a.fadeShape.of(localMs.toFloat() / a.fadeInMs) else 1f
         val fadeOut = if (a.fadeOutMs > 0) a.fadeShape.of((a.durMs - localMs).toFloat() / a.fadeOutMs) else 1f
         return a.volume * c * fadeIn * fadeOut

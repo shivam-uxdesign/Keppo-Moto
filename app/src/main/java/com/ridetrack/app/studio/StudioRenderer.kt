@@ -462,7 +462,9 @@ class StudioRenderer(private val context: Context) {
         }
         val underVoice = GainProcessor.ducking(voiceRanges(input).map { (it.first - segStart)..(it.last - segStart) }, 0.3f)
         val g = plan.mix.gain(TrackKind.CLIPS)
-        val audio = GainProcessor { us -> level * g * fade(us / 1000, dur, 60) * underVoice(us) }
+        // The clip's own volume line, if the rider drew one.
+        val curve = (seg as? ClipSegment)?.curve.orEmpty()
+        val audio = GainProcessor { us -> level * g * VolumeCurve.at(curve, us / 1000) * fade(us / 1000, dur, 60) * underVoice(us) }
         // A still or a reversed copy has no sound of its own (silence fills in).
         val silent = cs?.still != null || (cs?.reverse != null && File(cs.reverse).isFile)
         if (!sound || silent) {
