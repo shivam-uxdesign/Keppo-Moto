@@ -46,7 +46,7 @@ class KeepMovingGuide(
     private val memory: () -> Map<Memory.Cell, Memory.Stat> = { emptyMap() },
 ) {
     /** A clearer road on offer; switched to at [atMs] unless the rider keeps theirs. */
-    data class Offer(val route: Ranked, val atMs: Long, val savedJamM: Int, val savedSlowM: Int, val declined: Reroute.Declined)
+    data class Offer(val route: Ranked, val atMs: Long, val savedJamM: Int, val savedSlowM: Int, val declined: Reroute.Declined, val via: List<LatLon> = emptyList())
 
     /** A warning on screen (and said once per stage). */
     data class Warning(val title: String, val detail: String, val stage: Int)
@@ -67,6 +67,20 @@ class KeepMovingGuide(
 
     var destination: Destination? = null
         private set
+
+    /** This ride is a Keep moving ride with directions (routines then don't open other maps apps). */
+    @Volatile var directionsThisRide = false
+        private set
+
+    /** Where this ride is going and in which mode, for "Resume directions" if they stop. */
+    var resumeTo: Pair<Destination, KeepMode>? = null
+        private set
+
+    /** Call before starting a ride with directions to [dest]. */
+    fun expect(dest: Destination, mode: KeepMode) {
+        directionsThisRide = true
+        resumeTo = dest to mode
+    }
     var mode: KeepMode = KeepMode.LESS_TRAFFIC
         private set
 
@@ -90,6 +104,10 @@ class KeepMovingGuide(
         // The ride ended: so do its directions.
         scope.launch {
             session.active.map { it != null }.distinctUntilChanged().collect { riding ->
+                if (!riding) {
+                    directionsThisRide = false
+                    resumeTo = null
+                }
                 if (!riding && _active.value) withContext(Dispatchers.Main) { stop("Ride ended: directions stopped") }
             }
         }
@@ -117,16 +135,20 @@ class KeepMovingGuide(
         navigator = nav
         destination = dest
         this.mode = mode
+        expect(dest, mode)
         via.clear()
         option?.via?.let { via += it }
         ways = knownWays + (option?.via.orEmpty())
         warned.clear()
         looked.clear()
         declined.clear()
-        val status = follow(nav, dest, option?.ranked?.route?.takeIf { mode.scored }, via)
+        val status = runCatching { follow(nav, dest, option?.ranked?.route?.takeIf { mode.scored }, via) }
+            .getOrElse { e -> return "Directions couldn't start (${e.message ?: e.javaClass.simpleName})" }
         if (status != Navigator.RouteStatus.OK) return "Google couldn't start directions (${status.name.lowercase().replace('_', ' ')})"
-        nav.setAudioGuidance(Navigator.AudioGuidance.VOICE_ALERTS_AND_GUIDANCE)
-        nav.startGuidance()
+        runCatching {
+            nav.setAudioGuidance(Navigator.AudioGuidance.VOICE_ALERTS_AND_GUIDANCE)
+            nav.startGuidance()
+        }.onFailure { e -> return "Directions couldn't start (${e.message ?: e.javaClass.simpleName})" }
         // The next turn for the top bar on the app's other screens.
         runCatching {
             nav.registerServiceForNavUpdates(
@@ -146,6 +168,37 @@ class KeepMovingGuide(
         // down ever pay for a look (Normal is purely Google's route).
         watch = scope.launch { watchAhead() }
         return null
+    }
+
+    /**
+     * Started before the search finished (24 Nov: "allow users to start riding while it looks for a
+     * perfect route"): directions began on Google's own route; when [plan] is ready and its clearest
+     * road is clearly better than Google's, it's offered like any clearer road (5 s, Keep this road).
+     */
+    fun offerWhenPlanned(plan: kotlinx.coroutines.Deferred<Planner.Plan>) {
+        scope.launch {
+            val p = runCatching { plan.await() }.getOrNull() ?: return@launch
+            if (!_active.value || _offer.value != null) return@launch
+            val best = p.options.firstOrNull { !it.ranked.tooLong } ?: return@launch
+            val google = p.google ?: return@launch
+            if (best.ranked.route === google.route || best.ranked.route.routeToken == null) return@launch
+            val better = best.ranked.cost <= google.cost * mode.betterShare && google.cost - best.ranked.cost >= mode.minGain
+            if (!better) {
+                _note.value = "Search done: you're already on the clearest road"
+                return@launch
+            }
+            _offer.value = Offer(
+                best.ranked,
+                atMs = System.currentTimeMillis() + Reroute.COUNTDOWN_MS,
+                savedJamM = (google.colours.jamM - best.ranked.colours.jamM).coerceAtLeast(0),
+                savedSlowM = (google.colours.slowM - best.ranked.colours.slowM).coerceAtLeast(0),
+                declined = Reroute.Declined(TrafficRoutes.decodePolyline(best.ranked.route.polyline), best.ranked.cost),
+                via = best.via,
+            )
+            say(RideWatch.SWITCH_VOICE)
+            delay(Reroute.COUNTDOWN_MS)
+            _offer.value?.let { if (System.currentTimeMillis() >= it.atMs) switchTo(it) }
+        }
     }
 
     /** Arrivals, and the rider's own turns, from the navigator (set up once). */
@@ -208,11 +261,20 @@ class KeepMovingGuide(
         val travel = if (log.lastMode == TrafficRoutes.DRIVE) RoutingOptions.TravelMode.DRIVING else RoutingOptions.TravelMode.TWO_WHEELER
         val token = route?.routeToken
         val future = withContext(Dispatchers.Main) {
-            if (token != null) {
-                // The same waypoints the token was made with (the Navigation SDK 7.2 asks for them).
-                nav.setDestinations(stops + target, CustomRoutesOptions.builder().setRouteToken(token).setTravelMode(travel).build())
-            } else {
+            val viaToken = token?.let {
+                // 24 Nov crash: Navigation SDK 7.2 refuses two-wheeler here ("Unsupported travel mode:
+                // 3"). The travel mode inside the token wins on Google's side for every SDK version
+                // (Google, 23 Oct 2026), so the SDK is told "driving" and still follows the token's
+                // two-wheeler route. If even that is refused, guide through the same detour points.
+                runCatching {
+                    // The same waypoints the token was made with (the Navigation SDK 7.2 asks for them).
+                    nav.setDestinations(stops + target, CustomRoutesOptions.builder().setRouteToken(it).setTravelMode(RoutingOptions.TravelMode.DRIVING).build())
+                }.onFailure { e -> android.util.Log.w("KeepMoving", "Route token refused, guiding through the detour points", e) }.getOrNull()
+            }
+            viaToken ?: if (stops.isEmpty()) {
                 nav.setDestination(target, RoutingOptions().travelMode(travel))
+            } else {
+                nav.setDestinations(stops + target, RoutingOptions().travelMode(travel))
             }
         }
         return suspendCancellableCoroutine { c -> future.setOnResultListener { s -> if (c.isActive) c.resume(s) } }
@@ -297,7 +359,8 @@ class KeepMovingGuide(
         val nav = navigator ?: return
         val dest = destination ?: return
         via.clear()
-        val status = follow(nav, dest, o.route.route, emptyList())
+        via += o.via
+        val status = runCatching { follow(nav, dest, o.route.route, o.via) }.getOrDefault(Navigator.RouteStatus.ROUTE_CANCELED)
         _note.value = if (status == Navigator.RouteStatus.OK) {
             "Switched to a clearer road" + listOfNotNull(
                 Planner.km(o.savedJamM).takeIf { o.savedJamM > 0 }?.let { "$it less jam" },

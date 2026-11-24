@@ -202,7 +202,7 @@ class AppContainer(context: Context) {
     val planner = com.ridetrack.app.keepmoving.Planner(appContext, trafficLog, trafficMemory::snapshot)
 
     /** The rider's routines: when a ride starts, ends or arrives somewhere, do these. */
-    val routines = com.ridetrack.app.routines.RoutineRunner(appContext, settings, session, errors)
+    val routines = com.ridetrack.app.routines.RoutineRunner(appContext, settings, session, errors, keepMovingDirections = { keepMoving.directionsThisRide }, note = { hud.showNote(it) })
 
     /** Unfinished rides: carry on, or save; and why the app last stopped. */
     val continuation = RideContinuation(appContext, rides, bikes, moments, session)

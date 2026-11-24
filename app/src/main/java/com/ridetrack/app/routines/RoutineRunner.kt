@@ -39,6 +39,10 @@ class RoutineRunner(
     private val settings: SettingsRepository,
     private val session: RideSessionManager,
     private val errors: ErrorLog,
+    /** Keep moving is giving directions this ride: opening another maps app would fight them. */
+    private val keepMovingDirections: () -> Boolean = { false },
+    /** Tells the rider a step was skipped (the HUD's note). */
+    private val note: (String) -> Unit = {},
 ) {
     private var arrival = ArrivalWatch()
     private var volumeBefore: Int? = null
@@ -105,6 +109,11 @@ class RoutineRunner(
     /** True when the step did what it says (as far as Android lets us know). */
     private suspend fun step(a: RoutineAction, remember: Boolean): Boolean {
         val audio = context.getSystemService<AudioManager>()
+        // 24 Nov: a routine opened Google Maps on top of Keep moving's directions and they were lost.
+        if (keepMovingDirections() && opensNavigation(a)) {
+            note("Keep moving is giving directions: \"${a.label}\" skipped")
+            return true
+        }
         return when (a) {
             RoutineAction.ResumeMusic -> mediaKey(audio, KeyEvent.KEYCODE_MEDIA_PLAY)
             RoutineAction.PauseMusic -> mediaKey(audio, KeyEvent.KEYCODE_MEDIA_PAUSE)
@@ -188,7 +197,13 @@ class RoutineRunner(
         return info.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
     }
 
+    /** Opening this app would put another map or navigation over Keep moving's directions. */
+    private fun opensNavigation(a: RoutineAction) = a == RoutineAction.OpenMaps ||
+        (a is RoutineAction.OpenApp && a.pkg in NAVIGATION_APPS)
+
     companion object {
+        /** Maps and navigation apps riders use in India. */
+        val NAVIGATION_APPS = setOf("com.google.android.apps.maps", "com.waze", "com.mmi.maps", "com.here.app.maps")
         const val MAPS = "com.google.android.apps.maps"
         private const val GAP_MILLIS = 1_200L
         private const val NOTICE_ID = 7_300

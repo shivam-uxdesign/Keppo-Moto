@@ -366,6 +366,15 @@ class KeepMovingTest {
         }
     }
 
+    @Test
+    fun `signals load for the box around the trip, small enough for one fetch`() {
+        val b = Planner.box(LatLon(28.459, 77.026), LatLon(28.495, 77.088))
+        assertTrue(b[0].lat < 28.459 && b[1].lon > 77.088)
+        // A 20 km trip's box is within OpenStreetMap's tile limit.
+        assertTrue(Signals.tiles(b).isNotEmpty())
+        assertTrue(Planner.SIGNALS_WAIT_MS <= 4_000L)
+    }
+
     /** A straight route north of [n] steps of about 111 m, with [intervals]; Google's distance is the line's. */
     private fun route(n: Int, vararg intervals: SpeedInterval, lon: Double = 77.0): TrafficRoute {
         val pts = (0..n).map { LatLon(28.0 + it * 0.001, lon) }

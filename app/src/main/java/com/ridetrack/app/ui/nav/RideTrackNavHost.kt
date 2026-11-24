@@ -93,9 +93,10 @@ object Routes {
     fun recentlyDeleted(rideId: String? = null) = if (rideId == null) "recently-deleted" else "recently-deleted?rideId=$rideId"
     const val RIDES_MAP = "rides-map"
     /** Keep moving: plan the clearest route and start the ride (test builds). */
-    const val KEEP_MOVING = "keep-moving?auto={auto}"
-    /** Where to? then the plan; [autoSeconds]: a hands-free start rides plain if nothing is tapped. */
-    fun keepMoving(autoSeconds: Int? = null) = "keep-moving" + (autoSeconds?.let { "?auto=$it" } ?: "")
+    const val KEEP_MOVING = "keep-moving?auto={auto}&resume={resume}"
+    /** Where to? then the plan; [autoSeconds]: a hands-free start rides plain if nothing is tapped; [resume]: this ride's destination. */
+    fun keepMoving(autoSeconds: Int? = null, resume: Boolean = false) = "keep-moving?" +
+        listOfNotNull(autoSeconds?.let { "auto=$it" }, "resume=true".takeIf { resume }).joinToString("&")
     /** Keep moving › Your roads: what your own rides taught it (step 4). */
     const val YOUR_ROADS = "keep-moving-roads"
     /** Keep moving's directions (Google's navigation) during a ride. */
@@ -357,10 +358,17 @@ fun RideTrackNavHost(
                 composable(Routes.RIDES_MAP) {
                     RidesMapScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) })
                 }
-                composable(Routes.KEEP_MOVING, arguments = listOf(navArgument("auto") { type = NavType.StringType; nullable = true; defaultValue = null })) { entry ->
+                composable(
+                    Routes.KEEP_MOVING,
+                    arguments = listOf(
+                        navArgument("auto") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("resume") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    ),
+                ) { entry ->
                     // Dark like the other riding screens, whatever the phone's theme (its map is dark too).
                     DarkRoute { com.ridetrack.app.ui.keepmoving.KeepMovingScreen(
                         autoStartSeconds = entry.arguments?.getString("auto")?.toIntOrNull(),
+                        resume = entry.arguments?.getString("resume") == "true",
                         onBack = { nav.popBackStack() },
                         onStarted = { nav.navigate(Routes.LIVE) { popUpTo(Routes.KEEP_MOVING) { inclusive = true }; launchSingleTop = true } },
                         onGuiding = { nav.navigate(Routes.KEEP_MOVING_NAV) { popUpTo(Routes.KEEP_MOVING) { inclusive = true }; launchSingleTop = true } },
@@ -422,8 +430,12 @@ fun RideTrackNavHost(
                         },
                         onExit = { nav.navigate(Routes.HOME) { popUpTo(Routes.HOME) { inclusive = true } } },
                         onDirections = if (com.ridetrack.app.BuildConfig.TEST_BUILD && container.trafficLog.available) ({
-                            if (container.keepMoving.active.value) nav.navigate(Routes.KEEP_MOVING_NAV) { launchSingleTop = true }
-                            else nav.navigate(Routes.keepMoving()) { launchSingleTop = true }
+                            when {
+                                container.keepMoving.active.value -> nav.navigate(Routes.KEEP_MOVING_NAV) { launchSingleTop = true }
+                                // Directions stopped this ride: straight back to this ride's destination.
+                                container.keepMoving.resumeTo != null -> nav.navigate(Routes.keepMoving(resume = true)) { launchSingleTop = true }
+                                else -> nav.navigate(Routes.keepMoving()) { launchSingleTop = true }
+                            }
                         }) else null,
                     ) }
                 }

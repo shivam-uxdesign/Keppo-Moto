@@ -87,6 +87,7 @@ import com.ridetrack.app.ui.theme.RtDimens
 import com.ridetrack.app.ui.theme.RtType
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlin.math.roundToInt
 
 /**
@@ -135,14 +136,20 @@ private fun LatLon.g() = LatLng(lat, lon)
  * navigation plans it when you start.
  */
 @Composable
-fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit, onGuiding: () -> Unit = onStarted, autoStartSeconds: Int? = null) {
+fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit, onGuiding: () -> Unit = onStarted, autoStartSeconds: Int? = null, resume: Boolean = false) {
     val c = appContainer()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val log = c.trafficLog
     val mode by c.keepMovingPrefs.mode.collectAsStateWithLifecycle()
 
-    var dest by remember { mutableStateOf<Destination?>(null) }
+    // "Resume directions": this ride's destination, straight to the plan (24 Nov: directions were
+    // lost and the Directions button asked where to again).
+    var dest by remember { mutableStateOf(if (resume) c.keepMoving.resumeTo?.first else null) }
+    /** The search, run outside this screen so it can finish after Start now. */
+    var planJob by remember { mutableStateOf<kotlinx.coroutines.Deferred<Planner.Plan>?>(null) }
+    var handedOver by remember { mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { if (!handedOver) planJob?.cancel() } }
     var here by remember { mutableStateOf<LatLon?>(null) }
     var allowed by remember { mutableStateOf(MyLocation.allowed(context)) }
     var refresh by remember { mutableIntStateOf(0) }
@@ -165,9 +172,11 @@ fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit, onGuiding: () ->
     LaunchedEffect(Unit) { ownRides = Destinations.ridePoints(c.rides) }
 
     /** Starts the ride: plain (no destination), or with directions along [option] to [d]. */
-    fun ride(d: Destination?, option: Planner.Option?) {
+    fun ride(d: Destination?, option: Planner.Option?, stillSearching: kotlinx.coroutines.Deferred<Planner.Plan>? = null) {
         if (starting) return
         starting = true
+        // Before the ride starts: its routines mustn't open another maps app over the directions.
+        if (d != null) c.keepMoving.expect(d, mode)
         scope.launch {
             val bike = QuickStart.bike(c.bikes.observeBikes().first(), c.settings.settings.first().selectedBikeId)
             if (d != null) {
@@ -191,6 +200,8 @@ fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit, onGuiding: () ->
             val ways = plan?.options.orEmpty().filter { it !== option }.flatMap { it.via }
             val why = if (activity != null) c.keepMoving.start(activity, d, option, mode, ways) else "Directions couldn't start here"
             if (why == null) {
+                // Started before the search finished: its clearest road is offered when it's ready.
+                stillSearching?.let { handedOver = true; c.keepMoving.offerWhenPlanned(it) }
                 onGuiding()
             } else {
                 android.widget.Toast.makeText(context, "$why. Riding without directions.", android.widget.Toast.LENGTH_LONG).show()
@@ -216,7 +227,10 @@ fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit, onGuiding: () ->
         progress = null
         if (!mode.scored) return@LaunchedEffect
         planning = true
-        val p = c.planner.plan(from, d0.at, mode, ownRides) { progress = it }
+        planJob?.cancel()
+        val job = c.appScope.async { c.planner.plan(from, d0.at, mode, ownRides) { progress = it } }
+        planJob = job
+        val p = runCatching { job.await() }.getOrNull() ?: return@LaunchedEffect
         planning = false
         plan = p
         problem = p.problem
@@ -340,10 +354,17 @@ fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit, onGuiding: () ->
             }
         }
         PrimaryButton(
-            if (starting) "Starting…" else "Start with directions",
-            enabled = !starting && here != null && (!mode.scored || picked != null || problem != null),
+            when {
+                starting -> "Starting…"
+                planning -> "Start now · keep searching"
+                else -> "Start with directions"
+            },
+            enabled = !starting && here != null && (!mode.scored || planning || picked != null || problem != null),
             large = true,
-            onClick = { ride(d0, picked.takeIf { mode.scored }) },
+            onClick = {
+                // While the search runs: ride now on Google's route; a clearer road is offered when it's found.
+                if (planning) ride(d0, null, stillSearching = planJob) else ride(d0, picked.takeIf { mode.scored })
+            },
             modifier = Modifier.fillMaxWidth().padding(horizontal = RtDimens.screenPadding).padding(bottom = 12.dp).navigationBarsPadding(),
         )
     }
