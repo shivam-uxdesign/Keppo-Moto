@@ -1,0 +1,6117 @@
+{
+ "rides": 49,
+ "firstRide": "2026-10-03",
+ "lastRide": "2026-11-24",
+ "km": 535.8,
+ "hoursRiding": 19.6,
+ "hoursMoving": 14.6,
+ "longestRideKm": 45.4,
+ "topSpeedKmh": 121.1,
+ "deepestLeanDeg": 40.5,
+ "events": {
+  "brakeEvents": 54,
+  "accelEvents": 364,
+  "leanEvents": 49,
+  "stops": 349,
+  "leftTurns": 142,
+  "rightTurns": 123
+ },
+ "breakHours": 0.5,
+ "moments": {
+  "total": 735,
+  "byKind": {
+   "CLIP": 607,
+   "PHOTO": 128
+  },
+  "byTrigger": {
+   "STRONG_ACCELERATION": 55,
+   "MANUAL": 144,
+   "HARD_BRAKE": 28,
+   "SIGNIFICANT_LEAN": 119,
+   "GPS_LOST": 6,
+   "VOICE": 401,
+   "ENGINE_REV": 217,
+   "GPS_SIGNAL_LOST": 8
+  },
+  "minutesFilmed": 517.6
+ },
+ "ridesWithVoiceLog": 0,
+ "appVersions": [],
+ "showcase": {
+  "name": "20 October ride",
+  "date": "2026-10-20",
+  "distanceKm": 45.4,
+  "points": [
+   {
+    "x": 0,
+    "y": 0,
+    "t": 0.0,
+    "kmh": 17.2,
+    "lean": 2.8,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": -35,
+    "y": 2,
+    "t": 0.035,
+    "kmh": 19.5,
+    "lean": 6.3,
+    "longG": -0.17,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": -62,
+    "y": 39,
+    "t": 0.084,
+    "kmh": 33.9,
+    "lean": -4.4,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": -77,
+    "y": 95,
+    "t": 0.142,
+    "kmh": 28.5,
+    "lean": -4.9,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": -93,
+    "y": 148,
+    "t": 0.199,
+    "kmh": 32.5,
+    "lean": -3.3,
+    "longG": 0.27,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": -116,
+    "y": 219,
+    "t": 0.273,
+    "kmh": 38.0,
+    "lean": 2.8,
+    "longG": -0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": -132,
+    "y": 279,
+    "t": 0.336,
+    "kmh": 48.4,
+    "lean": 9.3,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": -158,
+    "y": 362,
+    "t": 0.423,
+    "kmh": 47.2,
+    "lean": -1.5,
+    "longG": -0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": -165,
+    "y": 415,
+    "t": 0.478,
+    "kmh": 19.6,
+    "lean": 7.8,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": -134,
+    "y": 433,
+    "t": 0.515,
+    "kmh": 27.7,
+    "lean": 3.7,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": -68,
+    "y": 448,
+    "t": 0.582,
+    "kmh": 39.4,
+    "lean": 2.3,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8,
+    "y": 471,
+    "t": 0.662,
+    "kmh": 62.5,
+    "lean": 0.2,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 126,
+    "y": 506,
+    "t": 0.785,
+    "kmh": 74.8,
+    "lean": 1.3,
+    "longG": -0.17,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 207,
+    "y": 529,
+    "t": 0.869,
+    "kmh": 37.8,
+    "lean": 3.0,
+    "longG": 0.19,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 294,
+    "y": 552,
+    "t": 0.959,
+    "kmh": 60.3,
+    "lean": -11.8,
+    "longG": -0.16,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 397,
+    "y": 586,
+    "t": 1.068,
+    "kmh": 77.4,
+    "lean": -2.7,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 530,
+    "y": 623,
+    "t": 1.206,
+    "kmh": 89.7,
+    "lean": -9.6,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 663,
+    "y": 666,
+    "t": 1.345,
+    "kmh": 66.1,
+    "lean": 5.2,
+    "longG": -0.34,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 749,
+    "y": 693,
+    "t": 1.435,
+    "kmh": 58.9,
+    "lean": -0.4,
+    "longG": 0.17,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 857,
+    "y": 727,
+    "t": 1.549,
+    "kmh": 75.4,
+    "lean": -0.3,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 991,
+    "y": 769,
+    "t": 1.689,
+    "kmh": 91.5,
+    "lean": -8.5,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1097,
+    "y": 832,
+    "t": 1.813,
+    "kmh": 47.4,
+    "lean": -11.1,
+    "longG": -0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1136,
+    "y": 913,
+    "t": 1.904,
+    "kmh": 68.7,
+    "lean": -7.7,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1148,
+    "y": 1040,
+    "t": 2.033,
+    "kmh": 78.0,
+    "lean": 1.3,
+    "longG": -0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1163,
+    "y": 1142,
+    "t": 2.137,
+    "kmh": 51.8,
+    "lean": 4.0,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1199,
+    "y": 1248,
+    "t": 2.249,
+    "kmh": 79.5,
+    "lean": -1.7,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1260,
+    "y": 1380,
+    "t": 2.396,
+    "kmh": 93.0,
+    "lean": 9.7,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1330,
+    "y": 1501,
+    "t": 2.536,
+    "kmh": 70.5,
+    "lean": -1.4,
+    "longG": -0.26,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1381,
+    "y": 1573,
+    "t": 2.625,
+    "kmh": 62.1,
+    "lean": 2.5,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1470,
+    "y": 1650,
+    "t": 2.743,
+    "kmh": 77.4,
+    "lean": 6.4,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1579,
+    "y": 1733,
+    "t": 2.88,
+    "kmh": 85.4,
+    "lean": -2.0,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1696,
+    "y": 1819,
+    "t": 3.026,
+    "kmh": 87.0,
+    "lean": 1.9,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1818,
+    "y": 1887,
+    "t": 3.167,
+    "kmh": 66.0,
+    "lean": 2.6,
+    "longG": -0.27,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 1919,
+    "y": 1920,
+    "t": 3.273,
+    "kmh": 77.9,
+    "lean": -6.8,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2052,
+    "y": 2018,
+    "t": 3.44,
+    "kmh": 91.9,
+    "lean": 0.7,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2150,
+    "y": 2127,
+    "t": 3.588,
+    "kmh": 80.9,
+    "lean": -5.5,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2237,
+    "y": 2224,
+    "t": 3.719,
+    "kmh": 75.4,
+    "lean": 7.1,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2346,
+    "y": 2281,
+    "t": 3.842,
+    "kmh": 74.0,
+    "lean": -18.9,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2412,
+    "y": 2358,
+    "t": 3.945,
+    "kmh": 40.6,
+    "lean": -1.0,
+    "longG": -0.2,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2452,
+    "y": 2419,
+    "t": 4.018,
+    "kmh": 58.7,
+    "lean": -9.1,
+    "longG": 0.14,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2517,
+    "y": 2524,
+    "t": 4.141,
+    "kmh": 82.8,
+    "lean": 0.1,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2586,
+    "y": 2631,
+    "t": 4.269,
+    "kmh": 74.2,
+    "lean": -5.1,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2636,
+    "y": 2752,
+    "t": 4.401,
+    "kmh": 83.7,
+    "lean": -2.1,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2683,
+    "y": 2885,
+    "t": 4.543,
+    "kmh": 88.1,
+    "lean": -7.1,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2726,
+    "y": 3032,
+    "t": 4.697,
+    "kmh": 95.1,
+    "lean": 7.9,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2772,
+    "y": 3190,
+    "t": 4.863,
+    "kmh": 101.3,
+    "lean": 2.1,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2820,
+    "y": 3351,
+    "t": 5.032,
+    "kmh": 92.7,
+    "lean": -0.5,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2855,
+    "y": 3488,
+    "t": 5.174,
+    "kmh": 74.7,
+    "lean": 1.9,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2882,
+    "y": 3600,
+    "t": 5.289,
+    "kmh": 63.9,
+    "lean": -1.4,
+    "longG": -0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2900,
+    "y": 3687,
+    "t": 5.378,
+    "kmh": 45.9,
+    "lean": -0.5,
+    "longG": -0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2909,
+    "y": 3736,
+    "t": 5.429,
+    "kmh": 9.7,
+    "lean": 5.9,
+    "longG": -0.23,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2910,
+    "y": 3738,
+    "t": 5.431,
+    "kmh": 0.0,
+    "lean": 1.9,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2910,
+    "y": 3738,
+    "t": 5.431,
+    "kmh": 0.0,
+    "lean": 1.9,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2910,
+    "y": 3738,
+    "t": 5.431,
+    "kmh": 0.0,
+    "lean": 0.4,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2910,
+    "y": 3738,
+    "t": 5.431,
+    "kmh": 0.0,
+    "lean": 0.7,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2910,
+    "y": 3738,
+    "t": 5.431,
+    "kmh": 0.0,
+    "lean": 0.1,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2911,
+    "y": 3739,
+    "t": 5.433,
+    "kmh": 9.2,
+    "lean": -3.8,
+    "longG": 0.23,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2920,
+    "y": 3783,
+    "t": 5.478,
+    "kmh": 36.5,
+    "lean": 0.8,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2941,
+    "y": 3879,
+    "t": 5.577,
+    "kmh": 71.2,
+    "lean": -8.1,
+    "longG": 0.15,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 2969,
+    "y": 4005,
+    "t": 5.707,
+    "kmh": 76.8,
+    "lean": 22.0,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3046,
+    "y": 4122,
+    "t": 5.848,
+    "kmh": 87.8,
+    "lean": -0.4,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3132,
+    "y": 4249,
+    "t": 6.002,
+    "kmh": 95.5,
+    "lean": -1.6,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3224,
+    "y": 4378,
+    "t": 6.16,
+    "kmh": 87.1,
+    "lean": -1.1,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3300,
+    "y": 4492,
+    "t": 6.298,
+    "kmh": 77.0,
+    "lean": 2.5,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3365,
+    "y": 4585,
+    "t": 6.412,
+    "kmh": 44.2,
+    "lean": -1.0,
+    "longG": -0.27,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3396,
+    "y": 4631,
+    "t": 6.468,
+    "kmh": 41.9,
+    "lean": 0.3,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3450,
+    "y": 4708,
+    "t": 6.562,
+    "kmh": 61.6,
+    "lean": 1.5,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3503,
+    "y": 4783,
+    "t": 6.654,
+    "kmh": 47.1,
+    "lean": 0.6,
+    "longG": -0.28,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3531,
+    "y": 4813,
+    "t": 6.696,
+    "kmh": 15.8,
+    "lean": -9.1,
+    "longG": -0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": 1.4,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": -0.4,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": -0.4,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": -0.3,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": 3.2,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": -0.6,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": -1.2,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": -1.0,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": 0.7,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": 1.2,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": 0.2,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": 0.4,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": 1.9,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": -1.6,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": 3.2,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": 0.2,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": 2.1,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": 0.6,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3537,
+    "y": 4820,
+    "t": 6.705,
+    "kmh": 0.0,
+    "lean": -1.4,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3556,
+    "y": 4841,
+    "t": 6.734,
+    "kmh": 30.9,
+    "lean": 13.3,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3626,
+    "y": 4838,
+    "t": 6.808,
+    "kmh": 54.3,
+    "lean": 1.3,
+    "longG": 0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3730,
+    "y": 4821,
+    "t": 6.913,
+    "kmh": 68.5,
+    "lean": 0.1,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3844,
+    "y": 4802,
+    "t": 7.029,
+    "kmh": 67.2,
+    "lean": 1.1,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 3960,
+    "y": 4787,
+    "t": 7.146,
+    "kmh": 71.2,
+    "lean": 0.1,
+    "longG": -0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 4075,
+    "y": 4779,
+    "t": 7.261,
+    "kmh": 71.1,
+    "lean": -2.9,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 4197,
+    "y": 4779,
+    "t": 7.383,
+    "kmh": 75.2,
+    "lean": -1.2,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 4339,
+    "y": 4772,
+    "t": 7.525,
+    "kmh": 69.5,
+    "lean": -2.5,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 4455,
+    "y": 4778,
+    "t": 7.641,
+    "kmh": 71.9,
+    "lean": -0.9,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 4571,
+    "y": 4777,
+    "t": 7.757,
+    "kmh": 70.0,
+    "lean": -0.0,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 4689,
+    "y": 4774,
+    "t": 7.874,
+    "kmh": 68.9,
+    "lean": 2.8,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 4806,
+    "y": 4774,
+    "t": 7.991,
+    "kmh": 76.9,
+    "lean": -1.4,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 4938,
+    "y": 4772,
+    "t": 8.123,
+    "kmh": 78.4,
+    "lean": -0.5,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5060,
+    "y": 4771,
+    "t": 8.245,
+    "kmh": 52.6,
+    "lean": -0.8,
+    "longG": -0.28,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5110,
+    "y": 4777,
+    "t": 8.297,
+    "kmh": 19.0,
+    "lean": -11.8,
+    "longG": 0.15,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5103,
+    "y": 4823,
+    "t": 8.343,
+    "kmh": 25.6,
+    "lean": -0.2,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5098,
+    "y": 4857,
+    "t": 8.378,
+    "kmh": 12.0,
+    "lean": 1.6,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5098,
+    "y": 4871,
+    "t": 8.392,
+    "kmh": 4.0,
+    "lean": 6.4,
+    "longG": -0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 2.6,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": -4.2,
+    "longG": -0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 2.6,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 2.8,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 2.6,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 2.7,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 2.6,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 0.3,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 6.9,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 0.5,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 1.0,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 0.8,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 0.5,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 0.8,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 0.6,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 0.8,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 0.5,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 0.7,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 1.0,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 0.9,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": -1.7,
+    "longG": -0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": -2.6,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": -2.3,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": -1.8,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": -2.7,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": -2.5,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": -0.8,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 1.0,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 14.0,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 13.9,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 13.9,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 14.1,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 15.1,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": 5.6,
+    "longG": 0.2,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5097,
+    "y": 4872,
+    "t": 8.394,
+    "kmh": 0.0,
+    "lean": -45.2,
+    "longG": -0.17,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5108,
+    "y": 4871,
+    "t": 8.405,
+    "kmh": 0.0,
+    "lean": -50.1,
+    "longG": -0.4,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5108,
+    "y": 4870,
+    "t": 8.405,
+    "kmh": 0.0,
+    "lean": -37.9,
+    "longG": -0.19,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5108,
+    "y": 4870,
+    "t": 8.405,
+    "kmh": 0.0,
+    "lean": -39.4,
+    "longG": -0.19,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5108,
+    "y": 4870,
+    "t": 8.405,
+    "kmh": 0.0,
+    "lean": 12.6,
+    "longG": 0.33,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5108,
+    "y": 4870,
+    "t": 8.405,
+    "kmh": 0.0,
+    "lean": 2.6,
+    "longG": 0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5108,
+    "y": 4870,
+    "t": 8.405,
+    "kmh": 0.0,
+    "lean": 3.0,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5108,
+    "y": 4870,
+    "t": 8.405,
+    "kmh": 0.0,
+    "lean": 2.2,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5108,
+    "y": 4870,
+    "t": 8.405,
+    "kmh": 0.0,
+    "lean": 1.7,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5108,
+    "y": 4870,
+    "t": 8.405,
+    "kmh": 0.0,
+    "lean": 1.3,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5108,
+    "y": 4870,
+    "t": 8.405,
+    "kmh": 0.0,
+    "lean": 3.6,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5115,
+    "y": 4867,
+    "t": 8.413,
+    "kmh": 6.6,
+    "lean": -2.3,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5117,
+    "y": 4826,
+    "t": 8.454,
+    "kmh": 31.7,
+    "lean": -1.7,
+    "longG": 0.15,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5128,
+    "y": 4798,
+    "t": 8.488,
+    "kmh": 0.0,
+    "lean": -1.4,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5128,
+    "y": 4798,
+    "t": 8.488,
+    "kmh": 0.0,
+    "lean": 3.2,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5128,
+    "y": 4798,
+    "t": 8.488,
+    "kmh": 0.0,
+    "lean": 2.7,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5128,
+    "y": 4798,
+    "t": 8.488,
+    "kmh": 0.0,
+    "lean": 12.1,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5138,
+    "y": 4783,
+    "t": 8.507,
+    "kmh": 15.7,
+    "lean": -3.1,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5175,
+    "y": 4771,
+    "t": 8.547,
+    "kmh": 40.6,
+    "lean": -1.8,
+    "longG": 0.19,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5272,
+    "y": 4769,
+    "t": 8.644,
+    "kmh": 67.8,
+    "lean": 4.2,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5387,
+    "y": 4767,
+    "t": 8.759,
+    "kmh": 69.2,
+    "lean": 3.7,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5501,
+    "y": 4768,
+    "t": 8.872,
+    "kmh": 58.2,
+    "lean": -3.9,
+    "longG": -0.14,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5583,
+    "y": 4767,
+    "t": 8.954,
+    "kmh": 53.1,
+    "lean": -1.0,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5704,
+    "y": 4761,
+    "t": 9.076,
+    "kmh": 68.2,
+    "lean": 3.1,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5817,
+    "y": 4756,
+    "t": 9.188,
+    "kmh": 68.0,
+    "lean": 6.3,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 5940,
+    "y": 4748,
+    "t": 9.312,
+    "kmh": 77.9,
+    "lean": 0.8,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6052,
+    "y": 4745,
+    "t": 9.423,
+    "kmh": 40.8,
+    "lean": -2.4,
+    "longG": -0.54,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6090,
+    "y": 4744,
+    "t": 9.462,
+    "kmh": 19.3,
+    "lean": -1.2,
+    "longG": -0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6098,
+    "y": 4741,
+    "t": 9.472,
+    "kmh": 0.0,
+    "lean": 0.0,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6098,
+    "y": 4741,
+    "t": 9.472,
+    "kmh": 0.0,
+    "lean": -0.8,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6098,
+    "y": 4741,
+    "t": 9.472,
+    "kmh": 0.0,
+    "lean": -0.1,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6098,
+    "y": 4741,
+    "t": 9.472,
+    "kmh": 0.0,
+    "lean": -0.1,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6098,
+    "y": 4741,
+    "t": 9.472,
+    "kmh": 0.0,
+    "lean": 0.2,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6098,
+    "y": 4741,
+    "t": 9.472,
+    "kmh": 0.0,
+    "lean": 0.4,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6112,
+    "y": 4741,
+    "t": 9.487,
+    "kmh": 21.7,
+    "lean": -6.0,
+    "longG": 0.15,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6172,
+    "y": 4742,
+    "t": 9.547,
+    "kmh": 43.7,
+    "lean": -5.3,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6260,
+    "y": 4750,
+    "t": 9.635,
+    "kmh": 60.4,
+    "lean": 1.5,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6369,
+    "y": 4759,
+    "t": 9.744,
+    "kmh": 69.5,
+    "lean": 0.2,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6489,
+    "y": 4769,
+    "t": 9.864,
+    "kmh": 75.3,
+    "lean": -0.5,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6627,
+    "y": 4784,
+    "t": 10.003,
+    "kmh": 66.6,
+    "lean": -1.1,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6742,
+    "y": 4793,
+    "t": 10.118,
+    "kmh": 69.0,
+    "lean": 2.8,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6868,
+    "y": 4806,
+    "t": 10.245,
+    "kmh": 75.4,
+    "lean": -1.3,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6986,
+    "y": 4824,
+    "t": 10.364,
+    "kmh": 70.2,
+    "lean": 2.9,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7096,
+    "y": 4838,
+    "t": 10.475,
+    "kmh": 63.5,
+    "lean": 1.7,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7200,
+    "y": 4846,
+    "t": 10.579,
+    "kmh": 60.6,
+    "lean": 0.6,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7290,
+    "y": 4846,
+    "t": 10.669,
+    "kmh": 49.6,
+    "lean": 0.0,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7365,
+    "y": 4849,
+    "t": 10.743,
+    "kmh": 38.8,
+    "lean": 0.1,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7421,
+    "y": 4853,
+    "t": 10.8,
+    "kmh": 30.8,
+    "lean": 1.4,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7453,
+    "y": 4854,
+    "t": 10.832,
+    "kmh": 9.6,
+    "lean": 1.5,
+    "longG": -0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7454,
+    "y": 4855,
+    "t": 10.835,
+    "kmh": 0.0,
+    "lean": -0.2,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7454,
+    "y": 4855,
+    "t": 10.835,
+    "kmh": 0.0,
+    "lean": -0.4,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7454,
+    "y": 4855,
+    "t": 10.835,
+    "kmh": 0.0,
+    "lean": 0.6,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7454,
+    "y": 4855,
+    "t": 10.835,
+    "kmh": 0.0,
+    "lean": -12.2,
+    "longG": -0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7464,
+    "y": 4880,
+    "t": 10.864,
+    "kmh": 28.1,
+    "lean": 2.8,
+    "longG": 0.17,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7451,
+    "y": 4949,
+    "t": 10.934,
+    "kmh": 52.8,
+    "lean": -1.1,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7425,
+    "y": 5068,
+    "t": 11.057,
+    "kmh": 68.6,
+    "lean": 2.0,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7397,
+    "y": 5182,
+    "t": 11.175,
+    "kmh": 74.9,
+    "lean": 10.9,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7381,
+    "y": 5306,
+    "t": 11.303,
+    "kmh": 71.0,
+    "lean": -7.6,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7349,
+    "y": 5418,
+    "t": 11.421,
+    "kmh": 67.0,
+    "lean": -5.2,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7320,
+    "y": 5524,
+    "t": 11.531,
+    "kmh": 62.4,
+    "lean": -0.7,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7282,
+    "y": 5633,
+    "t": 11.648,
+    "kmh": 76.1,
+    "lean": -5.9,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7254,
+    "y": 5727,
+    "t": 11.747,
+    "kmh": 55.9,
+    "lean": 0.4,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7230,
+    "y": 5824,
+    "t": 11.847,
+    "kmh": 58.4,
+    "lean": -4.8,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7204,
+    "y": 5907,
+    "t": 11.935,
+    "kmh": 38.8,
+    "lean": -1.7,
+    "longG": -0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7195,
+    "y": 5949,
+    "t": 11.978,
+    "kmh": 13.2,
+    "lean": 3.9,
+    "longG": -0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7193,
+    "y": 5965,
+    "t": 11.994,
+    "kmh": 15.4,
+    "lean": -4.5,
+    "longG": 0.2,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7173,
+    "y": 6033,
+    "t": 12.066,
+    "kmh": 49.6,
+    "lean": 2.9,
+    "longG": -0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7154,
+    "y": 6103,
+    "t": 12.139,
+    "kmh": 45.6,
+    "lean": -1.5,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7133,
+    "y": 6196,
+    "t": 12.235,
+    "kmh": 62.8,
+    "lean": 0.3,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7109,
+    "y": 6300,
+    "t": 12.343,
+    "kmh": 63.0,
+    "lean": -1.6,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7084,
+    "y": 6405,
+    "t": 12.45,
+    "kmh": 65.3,
+    "lean": 0.4,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7059,
+    "y": 6500,
+    "t": 12.55,
+    "kmh": 54.2,
+    "lean": -9.2,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7034,
+    "y": 6582,
+    "t": 12.636,
+    "kmh": 50.3,
+    "lean": 1.4,
+    "longG": -0.14,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7009,
+    "y": 6673,
+    "t": 12.73,
+    "kmh": 68.5,
+    "lean": 0.4,
+    "longG": 0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6978,
+    "y": 6795,
+    "t": 12.858,
+    "kmh": 74.8,
+    "lean": -2.7,
+    "longG": -0.23,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6955,
+    "y": 6886,
+    "t": 12.952,
+    "kmh": 37.4,
+    "lean": -1.4,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6937,
+    "y": 6952,
+    "t": 13.021,
+    "kmh": 36.1,
+    "lean": 0.3,
+    "longG": -0.17,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6925,
+    "y": 6996,
+    "t": 13.067,
+    "kmh": 23.9,
+    "lean": 0.6,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6914,
+    "y": 7045,
+    "t": 13.116,
+    "kmh": 40.0,
+    "lean": 0.0,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6896,
+    "y": 7111,
+    "t": 13.186,
+    "kmh": 37.9,
+    "lean": -1.2,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6881,
+    "y": 7173,
+    "t": 13.251,
+    "kmh": 50.0,
+    "lean": -3.7,
+    "longG": 0.15,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6858,
+    "y": 7259,
+    "t": 13.34,
+    "kmh": 46.7,
+    "lean": 0.7,
+    "longG": -0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6847,
+    "y": 7326,
+    "t": 13.408,
+    "kmh": 44.3,
+    "lean": -6.7,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6824,
+    "y": 7419,
+    "t": 13.505,
+    "kmh": 67.4,
+    "lean": -0.2,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6790,
+    "y": 7552,
+    "t": 13.642,
+    "kmh": 92.3,
+    "lean": -2.2,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6753,
+    "y": 7717,
+    "t": 13.813,
+    "kmh": 108.3,
+    "lean": -2.7,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6710,
+    "y": 7890,
+    "t": 13.992,
+    "kmh": 108.9,
+    "lean": 1.4,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6663,
+    "y": 8058,
+    "t": 14.167,
+    "kmh": 96.7,
+    "lean": 0.9,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6629,
+    "y": 8195,
+    "t": 14.309,
+    "kmh": 72.9,
+    "lean": 0.5,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6614,
+    "y": 8301,
+    "t": 14.417,
+    "kmh": 53.3,
+    "lean": -3.6,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6599,
+    "y": 8407,
+    "t": 14.525,
+    "kmh": 73.7,
+    "lean": -3.0,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6571,
+    "y": 8526,
+    "t": 14.647,
+    "kmh": 66.2,
+    "lean": -3.1,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6539,
+    "y": 8625,
+    "t": 14.753,
+    "kmh": 66.8,
+    "lean": 5.7,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6509,
+    "y": 8748,
+    "t": 14.88,
+    "kmh": 74.2,
+    "lean": 0.4,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6488,
+    "y": 8863,
+    "t": 14.997,
+    "kmh": 67.8,
+    "lean": 1.5,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6471,
+    "y": 8982,
+    "t": 15.119,
+    "kmh": 77.2,
+    "lean": 3.1,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6458,
+    "y": 9108,
+    "t": 15.246,
+    "kmh": 70.5,
+    "lean": 0.4,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6443,
+    "y": 9236,
+    "t": 15.375,
+    "kmh": 57.8,
+    "lean": -1.9,
+    "longG": -0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6427,
+    "y": 9317,
+    "t": 15.459,
+    "kmh": 48.3,
+    "lean": 2.3,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6417,
+    "y": 9401,
+    "t": 15.544,
+    "kmh": 51.4,
+    "lean": 2.1,
+    "longG": 0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6412,
+    "y": 9487,
+    "t": 15.63,
+    "kmh": 54.6,
+    "lean": 1.9,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6403,
+    "y": 9571,
+    "t": 15.716,
+    "kmh": 49.0,
+    "lean": -4.6,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6390,
+    "y": 9632,
+    "t": 15.778,
+    "kmh": 19.3,
+    "lean": -2.6,
+    "longG": -0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6389,
+    "y": 9640,
+    "t": 15.787,
+    "kmh": 0.0,
+    "lean": 10.0,
+    "longG": 0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6389,
+    "y": 9640,
+    "t": 15.787,
+    "kmh": 0.0,
+    "lean": 1.3,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6389,
+    "y": 9640,
+    "t": 15.787,
+    "kmh": 0.0,
+    "lean": 2.7,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6389,
+    "y": 9640,
+    "t": 15.787,
+    "kmh": 0.0,
+    "lean": 2.5,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6389,
+    "y": 9640,
+    "t": 15.787,
+    "kmh": 0.0,
+    "lean": -3.3,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6389,
+    "y": 9640,
+    "t": 15.787,
+    "kmh": 0.0,
+    "lean": -3.7,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6389,
+    "y": 9640,
+    "t": 15.787,
+    "kmh": 0.0,
+    "lean": 3.0,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6386,
+    "y": 9655,
+    "t": 15.803,
+    "kmh": 21.2,
+    "lean": -2.0,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6373,
+    "y": 9697,
+    "t": 15.847,
+    "kmh": 19.2,
+    "lean": 0.5,
+    "longG": -0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6368,
+    "y": 9719,
+    "t": 15.87,
+    "kmh": 10.8,
+    "lean": -1.0,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6391,
+    "y": 9740,
+    "t": 15.904,
+    "kmh": 27.9,
+    "lean": -3.8,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6449,
+    "y": 9746,
+    "t": 15.961,
+    "kmh": 44.6,
+    "lean": -6.6,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6533,
+    "y": 9769,
+    "t": 16.048,
+    "kmh": 62.1,
+    "lean": -5.6,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6633,
+    "y": 9819,
+    "t": 16.16,
+    "kmh": 64.5,
+    "lean": -5.6,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6712,
+    "y": 9887,
+    "t": 16.265,
+    "kmh": 62.0,
+    "lean": 2.7,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6787,
+    "y": 9960,
+    "t": 16.37,
+    "kmh": 63.0,
+    "lean": 7.0,
+    "longG": -0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6868,
+    "y": 10040,
+    "t": 16.484,
+    "kmh": 58.5,
+    "lean": -3.1,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6926,
+    "y": 10107,
+    "t": 16.574,
+    "kmh": 39.9,
+    "lean": -0.5,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 6991,
+    "y": 10182,
+    "t": 16.672,
+    "kmh": 76.9,
+    "lean": -3.3,
+    "longG": 0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7067,
+    "y": 10275,
+    "t": 16.793,
+    "kmh": 66.0,
+    "lean": 2.6,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7145,
+    "y": 10364,
+    "t": 16.912,
+    "kmh": 76.5,
+    "lean": -3.2,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7229,
+    "y": 10463,
+    "t": 17.042,
+    "kmh": 74.9,
+    "lean": 5.6,
+    "longG": -0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7311,
+    "y": 10557,
+    "t": 17.168,
+    "kmh": 82.6,
+    "lean": 2.9,
+    "longG": 0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7396,
+    "y": 10658,
+    "t": 17.299,
+    "kmh": 74.3,
+    "lean": -3.1,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7484,
+    "y": 10762,
+    "t": 17.436,
+    "kmh": 87.1,
+    "lean": 1.0,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7579,
+    "y": 10875,
+    "t": 17.584,
+    "kmh": 89.2,
+    "lean": 1.0,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7674,
+    "y": 10984,
+    "t": 17.73,
+    "kmh": 84.1,
+    "lean": -0.0,
+    "longG": -0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7762,
+    "y": 11084,
+    "t": 17.863,
+    "kmh": 83.3,
+    "lean": 3.9,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7851,
+    "y": 11191,
+    "t": 18.002,
+    "kmh": 80.7,
+    "lean": 1.5,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7914,
+    "y": 11266,
+    "t": 18.1,
+    "kmh": 57.3,
+    "lean": -1.3,
+    "longG": 0.22,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 7989,
+    "y": 11359,
+    "t": 18.22,
+    "kmh": 80.2,
+    "lean": 1.3,
+    "longG": -0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8071,
+    "y": 11457,
+    "t": 18.348,
+    "kmh": 76.7,
+    "lean": 1.7,
+    "longG": -0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8141,
+    "y": 11542,
+    "t": 18.459,
+    "kmh": 52.2,
+    "lean": -1.6,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8205,
+    "y": 11615,
+    "t": 18.556,
+    "kmh": 61.3,
+    "lean": -1.7,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8270,
+    "y": 11686,
+    "t": 18.653,
+    "kmh": 53.5,
+    "lean": -4.6,
+    "longG": 0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8332,
+    "y": 11769,
+    "t": 18.756,
+    "kmh": 66.9,
+    "lean": 2.9,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8409,
+    "y": 11854,
+    "t": 18.871,
+    "kmh": 70.8,
+    "lean": 5.1,
+    "longG": -0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8481,
+    "y": 11941,
+    "t": 18.984,
+    "kmh": 70.9,
+    "lean": 0.7,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8553,
+    "y": 12042,
+    "t": 19.11,
+    "kmh": 79.9,
+    "lean": 6.4,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8633,
+    "y": 12179,
+    "t": 19.269,
+    "kmh": 77.5,
+    "lean": -5.3,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8712,
+    "y": 12277,
+    "t": 19.396,
+    "kmh": 74.9,
+    "lean": -2.0,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8811,
+    "y": 12370,
+    "t": 19.531,
+    "kmh": 86.7,
+    "lean": 5.8,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8921,
+    "y": 12463,
+    "t": 19.675,
+    "kmh": 87.7,
+    "lean": -2.8,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9030,
+    "y": 12563,
+    "t": 19.823,
+    "kmh": 88.8,
+    "lean": -1.0,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9130,
+    "y": 12652,
+    "t": 19.958,
+    "kmh": 72.2,
+    "lean": -0.9,
+    "longG": -0.14,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9210,
+    "y": 12722,
+    "t": 20.064,
+    "kmh": 57.1,
+    "lean": 0.3,
+    "longG": -0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9277,
+    "y": 12791,
+    "t": 20.161,
+    "kmh": 69.9,
+    "lean": 6.2,
+    "longG": 0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9377,
+    "y": 12881,
+    "t": 20.296,
+    "kmh": 87.9,
+    "lean": -1.3,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9489,
+    "y": 12979,
+    "t": 20.445,
+    "kmh": 90.1,
+    "lean": -3.8,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9603,
+    "y": 13077,
+    "t": 20.595,
+    "kmh": 90.7,
+    "lean": -2.0,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9715,
+    "y": 13175,
+    "t": 20.744,
+    "kmh": 82.9,
+    "lean": -0.6,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9817,
+    "y": 13268,
+    "t": 20.883,
+    "kmh": 85.3,
+    "lean": -1.7,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9920,
+    "y": 13362,
+    "t": 21.022,
+    "kmh": 83.4,
+    "lean": -2.2,
+    "longG": -0.18,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10005,
+    "y": 13446,
+    "t": 21.142,
+    "kmh": 73.5,
+    "lean": -4.5,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10093,
+    "y": 13544,
+    "t": 21.274,
+    "kmh": 80.9,
+    "lean": 1.5,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10182,
+    "y": 13648,
+    "t": 21.411,
+    "kmh": 84.2,
+    "lean": 1.9,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10274,
+    "y": 13752,
+    "t": 21.551,
+    "kmh": 85.1,
+    "lean": 0.8,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10360,
+    "y": 13854,
+    "t": 21.684,
+    "kmh": 80.6,
+    "lean": -0.2,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10448,
+    "y": 13958,
+    "t": 21.821,
+    "kmh": 84.5,
+    "lean": 0.7,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10538,
+    "y": 14067,
+    "t": 21.962,
+    "kmh": 86.5,
+    "lean": -2.1,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10630,
+    "y": 14181,
+    "t": 22.109,
+    "kmh": 88.5,
+    "lean": -1.3,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10736,
+    "y": 14310,
+    "t": 22.277,
+    "kmh": 80.1,
+    "lean": 5.8,
+    "longG": -0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10804,
+    "y": 14386,
+    "t": 22.379,
+    "kmh": 59.6,
+    "lean": -3.6,
+    "longG": 0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10881,
+    "y": 14474,
+    "t": 22.496,
+    "kmh": 79.2,
+    "lean": -1.4,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10974,
+    "y": 14582,
+    "t": 22.639,
+    "kmh": 90.3,
+    "lean": -3.2,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11069,
+    "y": 14696,
+    "t": 22.788,
+    "kmh": 89.9,
+    "lean": 3.2,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11166,
+    "y": 14803,
+    "t": 22.933,
+    "kmh": 87.1,
+    "lean": -0.8,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11252,
+    "y": 14907,
+    "t": 23.068,
+    "kmh": 74.6,
+    "lean": 1.2,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11339,
+    "y": 15013,
+    "t": 23.206,
+    "kmh": 88.3,
+    "lean": -2.4,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11436,
+    "y": 15124,
+    "t": 23.354,
+    "kmh": 90.2,
+    "lean": -3.2,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11537,
+    "y": 15239,
+    "t": 23.507,
+    "kmh": 92.9,
+    "lean": -1.8,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11636,
+    "y": 15356,
+    "t": 23.66,
+    "kmh": 91.8,
+    "lean": -0.0,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11732,
+    "y": 15473,
+    "t": 23.812,
+    "kmh": 90.0,
+    "lean": -1.0,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11825,
+    "y": 15590,
+    "t": 23.962,
+    "kmh": 90.8,
+    "lean": 1.6,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11920,
+    "y": 15709,
+    "t": 24.115,
+    "kmh": 91.4,
+    "lean": -0.5,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12014,
+    "y": 15829,
+    "t": 24.267,
+    "kmh": 91.0,
+    "lean": 4.2,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12106,
+    "y": 15951,
+    "t": 24.421,
+    "kmh": 91.1,
+    "lean": 1.8,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12196,
+    "y": 16070,
+    "t": 24.571,
+    "kmh": 89.9,
+    "lean": -1.2,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12286,
+    "y": 16194,
+    "t": 24.724,
+    "kmh": 93.0,
+    "lean": -3.0,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12371,
+    "y": 16330,
+    "t": 24.885,
+    "kmh": 98.5,
+    "lean": -9.1,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12402,
+    "y": 16488,
+    "t": 25.049,
+    "kmh": 94.7,
+    "lean": -5.9,
+    "longG": -0.21,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12380,
+    "y": 16599,
+    "t": 25.164,
+    "kmh": 46.7,
+    "lean": -4.9,
+    "longG": 0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12331,
+    "y": 16685,
+    "t": 25.263,
+    "kmh": 69.4,
+    "lean": 1.2,
+    "longG": 0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12274,
+    "y": 16791,
+    "t": 25.384,
+    "kmh": 71.5,
+    "lean": -3.0,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12213,
+    "y": 16910,
+    "t": 25.518,
+    "kmh": 65.1,
+    "lean": 2.5,
+    "longG": -0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12182,
+    "y": 16999,
+    "t": 25.613,
+    "kmh": 49.4,
+    "lean": 6.6,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12172,
+    "y": 17073,
+    "t": 25.688,
+    "kmh": 31.4,
+    "lean": 0.8,
+    "longG": -0.27,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12180,
+    "y": 17113,
+    "t": 25.729,
+    "kmh": 37.9,
+    "lean": 5.7,
+    "longG": 0.32,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12196,
+    "y": 17210,
+    "t": 25.828,
+    "kmh": 66.7,
+    "lean": 4.2,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12230,
+    "y": 17307,
+    "t": 25.932,
+    "kmh": 60.8,
+    "lean": 3.8,
+    "longG": -0.19,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12272,
+    "y": 17387,
+    "t": 26.023,
+    "kmh": 63.3,
+    "lean": -1.5,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12330,
+    "y": 17490,
+    "t": 26.141,
+    "kmh": 80.9,
+    "lean": -9.8,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12408,
+    "y": 17620,
+    "t": 26.294,
+    "kmh": 100.4,
+    "lean": 7.3,
+    "longG": 0.15,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12499,
+    "y": 17760,
+    "t": 26.461,
+    "kmh": 88.5,
+    "lean": -0.4,
+    "longG": -0.26,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12567,
+    "y": 17879,
+    "t": 26.598,
+    "kmh": 88.7,
+    "lean": 0.0,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12653,
+    "y": 18016,
+    "t": 26.761,
+    "kmh": 100.7,
+    "lean": -3.8,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12733,
+    "y": 18155,
+    "t": 26.922,
+    "kmh": 78.5,
+    "lean": 1.7,
+    "longG": -0.14,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12796,
+    "y": 18260,
+    "t": 27.044,
+    "kmh": 79.1,
+    "lean": -1.0,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12864,
+    "y": 18377,
+    "t": 27.18,
+    "kmh": 79.8,
+    "lean": -3.7,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12934,
+    "y": 18499,
+    "t": 27.322,
+    "kmh": 87.6,
+    "lean": -1.3,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13004,
+    "y": 18620,
+    "t": 27.462,
+    "kmh": 76.5,
+    "lean": 0.2,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13073,
+    "y": 18729,
+    "t": 27.592,
+    "kmh": 80.0,
+    "lean": 4.5,
+    "longG": 0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13145,
+    "y": 18847,
+    "t": 27.731,
+    "kmh": 86.5,
+    "lean": -1.1,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13217,
+    "y": 18970,
+    "t": 27.874,
+    "kmh": 83.3,
+    "lean": 1.8,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13301,
+    "y": 19104,
+    "t": 28.032,
+    "kmh": 71.1,
+    "lean": -1.1,
+    "longG": -0.23,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13356,
+    "y": 19192,
+    "t": 28.136,
+    "kmh": 59.9,
+    "lean": -7.1,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13406,
+    "y": 19274,
+    "t": 28.233,
+    "kmh": 60.2,
+    "lean": 4.8,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13478,
+    "y": 19346,
+    "t": 28.335,
+    "kmh": 59.0,
+    "lean": 0.6,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13561,
+    "y": 19403,
+    "t": 28.436,
+    "kmh": 60.5,
+    "lean": -3.8,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13648,
+    "y": 19457,
+    "t": 28.539,
+    "kmh": 68.0,
+    "lean": -3.9,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13746,
+    "y": 19521,
+    "t": 28.655,
+    "kmh": 61.7,
+    "lean": 1.4,
+    "longG": -0.14,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13788,
+    "y": 19567,
+    "t": 28.723,
+    "kmh": 26.3,
+    "lean": -17.4,
+    "longG": 0.29,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13694,
+    "y": 19594,
+    "t": 28.822,
+    "kmh": 66.5,
+    "lean": 2.8,
+    "longG": 0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13576,
+    "y": 19625,
+    "t": 28.943,
+    "kmh": 76.9,
+    "lean": 1.0,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13451,
+    "y": 19666,
+    "t": 29.075,
+    "kmh": 78.7,
+    "lean": -1.9,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13325,
+    "y": 19699,
+    "t": 29.205,
+    "kmh": 78.6,
+    "lean": -7.9,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13198,
+    "y": 19722,
+    "t": 29.333,
+    "kmh": 73.1,
+    "lean": 3.5,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 13073,
+    "y": 19749,
+    "t": 29.461,
+    "kmh": 80.3,
+    "lean": 1.2,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12936,
+    "y": 19775,
+    "t": 29.6,
+    "kmh": 87.5,
+    "lean": -1.9,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12793,
+    "y": 19802,
+    "t": 29.745,
+    "kmh": 88.3,
+    "lean": 2.9,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12650,
+    "y": 19834,
+    "t": 29.891,
+    "kmh": 86.6,
+    "lean": -7.5,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12510,
+    "y": 19855,
+    "t": 30.033,
+    "kmh": 85.1,
+    "lean": 3.5,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12371,
+    "y": 19878,
+    "t": 30.173,
+    "kmh": 81.5,
+    "lean": 2.5,
+    "longG": -0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12253,
+    "y": 19903,
+    "t": 30.294,
+    "kmh": 62.7,
+    "lean": 0.9,
+    "longG": -0.19,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12187,
+    "y": 19918,
+    "t": 30.362,
+    "kmh": 20.3,
+    "lean": 0.4,
+    "longG": -0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12175,
+    "y": 19922,
+    "t": 30.374,
+    "kmh": 0.0,
+    "lean": -0.8,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12175,
+    "y": 19922,
+    "t": 30.374,
+    "kmh": 0.0,
+    "lean": 1.7,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12175,
+    "y": 19922,
+    "t": 30.374,
+    "kmh": 0.0,
+    "lean": 0.9,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12175,
+    "y": 19922,
+    "t": 30.374,
+    "kmh": 0.0,
+    "lean": 1.1,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12175,
+    "y": 19922,
+    "t": 30.374,
+    "kmh": 0.0,
+    "lean": 0.7,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12175,
+    "y": 19922,
+    "t": 30.374,
+    "kmh": 0.0,
+    "lean": -0.4,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12175,
+    "y": 19922,
+    "t": 30.374,
+    "kmh": 0.0,
+    "lean": -0.9,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12175,
+    "y": 19922,
+    "t": 30.374,
+    "kmh": 0.0,
+    "lean": 1.5,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12174,
+    "y": 19920,
+    "t": 30.376,
+    "kmh": 11.1,
+    "lean": -3.4,
+    "longG": 0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 12111,
+    "y": 19941,
+    "t": 30.443,
+    "kmh": 63.1,
+    "lean": -5.4,
+    "longG": 0.22,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11987,
+    "y": 19967,
+    "t": 30.569,
+    "kmh": 86.0,
+    "lean": -4.2,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11830,
+    "y": 19984,
+    "t": 30.726,
+    "kmh": 102.5,
+    "lean": 2.0,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11656,
+    "y": 20018,
+    "t": 30.903,
+    "kmh": 110.4,
+    "lean": -1.1,
+    "longG": 0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11469,
+    "y": 20059,
+    "t": 31.094,
+    "kmh": 117.2,
+    "lean": 5.4,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11281,
+    "y": 20121,
+    "t": 31.292,
+    "kmh": 119.9,
+    "lean": 3.0,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 11098,
+    "y": 20196,
+    "t": 31.49,
+    "kmh": 109.8,
+    "lean": -6.4,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10941,
+    "y": 20253,
+    "t": 31.656,
+    "kmh": 90.8,
+    "lean": 0.7,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10789,
+    "y": 20295,
+    "t": 31.813,
+    "kmh": 97.0,
+    "lean": 2.2,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10637,
+    "y": 20333,
+    "t": 31.97,
+    "kmh": 85.4,
+    "lean": -2.2,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10507,
+    "y": 20366,
+    "t": 32.104,
+    "kmh": 74.5,
+    "lean": -0.5,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10402,
+    "y": 20394,
+    "t": 32.212,
+    "kmh": 56.5,
+    "lean": -0.4,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10323,
+    "y": 20413,
+    "t": 32.294,
+    "kmh": 37.3,
+    "lean": 0.1,
+    "longG": -0.32,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": 1.0,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": 0.6,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": 0.5,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": 1.2,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": 0.9,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": 2.1,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": 0.4,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": 2.7,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": 2.2,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": 2.0,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": 1.6,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": 0.2,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10300,
+    "y": 20419,
+    "t": 32.317,
+    "kmh": 0.0,
+    "lean": -1.2,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10268,
+    "y": 20429,
+    "t": 32.351,
+    "kmh": 31.1,
+    "lean": -0.1,
+    "longG": 0.15,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10194,
+    "y": 20447,
+    "t": 32.427,
+    "kmh": 55.0,
+    "lean": 2.0,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 10092,
+    "y": 20471,
+    "t": 32.532,
+    "kmh": 70.1,
+    "lean": -0.9,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9958,
+    "y": 20497,
+    "t": 32.667,
+    "kmh": 92.8,
+    "lean": 6.9,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9798,
+    "y": 20536,
+    "t": 32.833,
+    "kmh": 104.3,
+    "lean": -1.9,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9624,
+    "y": 20581,
+    "t": 33.011,
+    "kmh": 110.2,
+    "lean": -4.2,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9444,
+    "y": 20629,
+    "t": 33.197,
+    "kmh": 112.1,
+    "lean": 0.6,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9272,
+    "y": 20677,
+    "t": 33.376,
+    "kmh": 102.6,
+    "lean": -3.7,
+    "longG": -0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9124,
+    "y": 20715,
+    "t": 33.528,
+    "kmh": 81.5,
+    "lean": 1.2,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8986,
+    "y": 20777,
+    "t": 33.679,
+    "kmh": 99.3,
+    "lean": 8.0,
+    "longG": -0.15,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8819,
+    "y": 20894,
+    "t": 33.883,
+    "kmh": 108.1,
+    "lean": -12.1,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8679,
+    "y": 20973,
+    "t": 34.044,
+    "kmh": 86.5,
+    "lean": 1.5,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8557,
+    "y": 21049,
+    "t": 34.188,
+    "kmh": 86.6,
+    "lean": 13.4,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8457,
+    "y": 21145,
+    "t": 34.327,
+    "kmh": 82.3,
+    "lean": 5.9,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8398,
+    "y": 21245,
+    "t": 34.445,
+    "kmh": 51.0,
+    "lean": 20.2,
+    "longG": -0.19,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8402,
+    "y": 21274,
+    "t": 34.474,
+    "kmh": 35.7,
+    "lean": 3.6,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8611,
+    "y": 21423,
+    "t": 34.732,
+    "kmh": 80.5,
+    "lean": 2.3,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8696,
+    "y": 21520,
+    "t": 34.861,
+    "kmh": 74.2,
+    "lean": -0.7,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8756,
+    "y": 21601,
+    "t": 34.962,
+    "kmh": 45.1,
+    "lean": -0.9,
+    "longG": -0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8781,
+    "y": 21633,
+    "t": 35.003,
+    "kmh": 10.4,
+    "lean": 2.2,
+    "longG": -0.21,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8782,
+    "y": 21634,
+    "t": 35.006,
+    "kmh": 0.0,
+    "lean": 1.7,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8782,
+    "y": 21634,
+    "t": 35.006,
+    "kmh": 0.0,
+    "lean": 1.7,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8782,
+    "y": 21634,
+    "t": 35.006,
+    "kmh": 0.0,
+    "lean": -1.3,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8782,
+    "y": 21634,
+    "t": 35.006,
+    "kmh": 0.0,
+    "lean": 1.1,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8782,
+    "y": 21634,
+    "t": 35.006,
+    "kmh": 0.0,
+    "lean": 0.8,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8782,
+    "y": 21634,
+    "t": 35.006,
+    "kmh": 0.0,
+    "lean": 1.4,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8786,
+    "y": 21644,
+    "t": 35.018,
+    "kmh": 21.4,
+    "lean": -6.0,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8829,
+    "y": 21697,
+    "t": 35.086,
+    "kmh": 50.4,
+    "lean": -0.6,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8888,
+    "y": 21776,
+    "t": 35.184,
+    "kmh": 61.6,
+    "lean": -0.3,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8947,
+    "y": 21857,
+    "t": 35.285,
+    "kmh": 58.1,
+    "lean": -0.1,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9001,
+    "y": 21929,
+    "t": 35.375,
+    "kmh": 51.0,
+    "lean": -2.3,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9053,
+    "y": 22001,
+    "t": 35.464,
+    "kmh": 55.7,
+    "lean": -0.5,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9115,
+    "y": 22083,
+    "t": 35.568,
+    "kmh": 67.9,
+    "lean": -2.2,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9187,
+    "y": 22179,
+    "t": 35.688,
+    "kmh": 75.0,
+    "lean": 3.1,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9261,
+    "y": 22273,
+    "t": 35.807,
+    "kmh": 69.9,
+    "lean": 0.2,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9320,
+    "y": 22414,
+    "t": 35.964,
+    "kmh": 90.7,
+    "lean": -8.7,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9308,
+    "y": 22572,
+    "t": 36.126,
+    "kmh": 99.2,
+    "lean": -14.8,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9250,
+    "y": 22697,
+    "t": 36.264,
+    "kmh": 52.3,
+    "lean": -9.4,
+    "longG": -0.32,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9231,
+    "y": 22720,
+    "t": 36.297,
+    "kmh": 0.0,
+    "lean": -2.0,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9231,
+    "y": 22719,
+    "t": 36.298,
+    "kmh": 0.0,
+    "lean": -2.0,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9231,
+    "y": 22719,
+    "t": 36.298,
+    "kmh": 0.0,
+    "lean": -2.1,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9231,
+    "y": 22719,
+    "t": 36.298,
+    "kmh": 0.0,
+    "lean": -1.3,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9231,
+    "y": 22719,
+    "t": 36.298,
+    "kmh": 0.0,
+    "lean": -1.7,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9231,
+    "y": 22719,
+    "t": 36.298,
+    "kmh": 0.0,
+    "lean": -3.9,
+    "longG": 0.17,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9198,
+    "y": 22746,
+    "t": 36.341,
+    "kmh": 42.7,
+    "lean": 1.6,
+    "longG": 0.2,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9110,
+    "y": 22811,
+    "t": 36.45,
+    "kmh": 73.1,
+    "lean": -2.0,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9028,
+    "y": 22872,
+    "t": 36.553,
+    "kmh": 52.1,
+    "lean": -0.3,
+    "longG": -0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8975,
+    "y": 22913,
+    "t": 36.619,
+    "kmh": 26.9,
+    "lean": -1.2,
+    "longG": -0.19,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8963,
+    "y": 22923,
+    "t": 36.635,
+    "kmh": 0.0,
+    "lean": 2.9,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8963,
+    "y": 22923,
+    "t": 36.636,
+    "kmh": 0.0,
+    "lean": 2.9,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8963,
+    "y": 22923,
+    "t": 36.636,
+    "kmh": 0.0,
+    "lean": 3.3,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8963,
+    "y": 22923,
+    "t": 36.636,
+    "kmh": 0.0,
+    "lean": 4.7,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8963,
+    "y": 22923,
+    "t": 36.636,
+    "kmh": 0.0,
+    "lean": 7.8,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8963,
+    "y": 22923,
+    "t": 36.636,
+    "kmh": 0.0,
+    "lean": -12.0,
+    "longG": -0.15,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8963,
+    "y": 22923,
+    "t": 36.636,
+    "kmh": 0.0,
+    "lean": -12.1,
+    "longG": -0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8963,
+    "y": 22923,
+    "t": 36.636,
+    "kmh": 0.0,
+    "lean": -12.1,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8963,
+    "y": 22923,
+    "t": 36.636,
+    "kmh": 0.0,
+    "lean": -12.4,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8963,
+    "y": 22923,
+    "t": 36.636,
+    "kmh": 0.0,
+    "lean": -12.8,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8963,
+    "y": 22923,
+    "t": 36.636,
+    "kmh": 0.0,
+    "lean": -1.4,
+    "longG": 0.31,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8961,
+    "y": 22961,
+    "t": 36.678,
+    "kmh": 38.0,
+    "lean": -1.1,
+    "longG": 0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9015,
+    "y": 23032,
+    "t": 36.766,
+    "kmh": 63.5,
+    "lean": -1.9,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9079,
+    "y": 23118,
+    "t": 36.874,
+    "kmh": 63.9,
+    "lean": 1.6,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9146,
+    "y": 23205,
+    "t": 36.984,
+    "kmh": 67.2,
+    "lean": -1.5,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9207,
+    "y": 23289,
+    "t": 37.088,
+    "kmh": 58.3,
+    "lean": -2.6,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9277,
+    "y": 23382,
+    "t": 37.205,
+    "kmh": 64.0,
+    "lean": 4.1,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9356,
+    "y": 23487,
+    "t": 37.337,
+    "kmh": 71.0,
+    "lean": 2.1,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9429,
+    "y": 23581,
+    "t": 37.456,
+    "kmh": 74.0,
+    "lean": 3.2,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9480,
+    "y": 23664,
+    "t": 37.555,
+    "kmh": 38.8,
+    "lean": -18.3,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9448,
+    "y": 23725,
+    "t": 37.627,
+    "kmh": 44.2,
+    "lean": 1.0,
+    "longG": 0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9363,
+    "y": 23794,
+    "t": 37.737,
+    "kmh": 70.5,
+    "lean": 0.1,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9261,
+    "y": 23874,
+    "t": 37.866,
+    "kmh": 82.1,
+    "lean": -3.0,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9147,
+    "y": 23956,
+    "t": 38.007,
+    "kmh": 84.3,
+    "lean": 0.6,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9033,
+    "y": 24043,
+    "t": 38.15,
+    "kmh": 86.9,
+    "lean": 0.0,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8904,
+    "y": 24145,
+    "t": 38.314,
+    "kmh": 75.8,
+    "lean": 0.8,
+    "longG": -0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8813,
+    "y": 24212,
+    "t": 38.427,
+    "kmh": 57.6,
+    "lean": -1.0,
+    "longG": -0.22,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8773,
+    "y": 24242,
+    "t": 38.479,
+    "kmh": 4.2,
+    "lean": 3.9,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8773,
+    "y": 24242,
+    "t": 38.48,
+    "kmh": 0.0,
+    "lean": -0.9,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8773,
+    "y": 24242,
+    "t": 38.48,
+    "kmh": 0.0,
+    "lean": -1.0,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8773,
+    "y": 24242,
+    "t": 38.48,
+    "kmh": 0.0,
+    "lean": -0.5,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8773,
+    "y": 24242,
+    "t": 38.48,
+    "kmh": 0.0,
+    "lean": -0.4,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8773,
+    "y": 24242,
+    "t": 38.48,
+    "kmh": 0.0,
+    "lean": -5.1,
+    "longG": 0.23,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8754,
+    "y": 24271,
+    "t": 38.517,
+    "kmh": 26.1,
+    "lean": 13.4,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8785,
+    "y": 24326,
+    "t": 38.58,
+    "kmh": 52.8,
+    "lean": -0.8,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8848,
+    "y": 24406,
+    "t": 38.683,
+    "kmh": 69.7,
+    "lean": 0.1,
+    "longG": -0.48,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8897,
+    "y": 24469,
+    "t": 38.763,
+    "kmh": 47.0,
+    "lean": -1.9,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8951,
+    "y": 24541,
+    "t": 38.853,
+    "kmh": 56.5,
+    "lean": -0.7,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9014,
+    "y": 24624,
+    "t": 38.957,
+    "kmh": 68.9,
+    "lean": -1.9,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9081,
+    "y": 24710,
+    "t": 39.067,
+    "kmh": 56.8,
+    "lean": 1.3,
+    "longG": -0.21,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9110,
+    "y": 24750,
+    "t": 39.116,
+    "kmh": 16.5,
+    "lean": 3.7,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9119,
+    "y": 24762,
+    "t": 39.132,
+    "kmh": 4.5,
+    "lean": 0.8,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9120,
+    "y": 24765,
+    "t": 39.135,
+    "kmh": 0.0,
+    "lean": -17.8,
+    "longG": -0.37,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9133,
+    "y": 24766,
+    "t": 39.147,
+    "kmh": 11.8,
+    "lean": -18.3,
+    "longG": -0.18,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9134,
+    "y": 24766,
+    "t": 39.152,
+    "kmh": 0.0,
+    "lean": -18.3,
+    "longG": -0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9136,
+    "y": 24767,
+    "t": 39.154,
+    "kmh": 0.0,
+    "lean": -18.3,
+    "longG": -0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9136,
+    "y": 24767,
+    "t": 39.154,
+    "kmh": 0.0,
+    "lean": -18.3,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9136,
+    "y": 24767,
+    "t": 39.154,
+    "kmh": 0.0,
+    "lean": -18.3,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9136,
+    "y": 24767,
+    "t": 39.154,
+    "kmh": 0.0,
+    "lean": -18.3,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9136,
+    "y": 24767,
+    "t": 39.154,
+    "kmh": 0.0,
+    "lean": -18.3,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9136,
+    "y": 24767,
+    "t": 39.154,
+    "kmh": 0.0,
+    "lean": -18.4,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9136,
+    "y": 24767,
+    "t": 39.154,
+    "kmh": 0.0,
+    "lean": -18.4,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9136,
+    "y": 24767,
+    "t": 39.154,
+    "kmh": 0.0,
+    "lean": -9.0,
+    "longG": 0.57,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9152,
+    "y": 24791,
+    "t": 39.184,
+    "kmh": 29.6,
+    "lean": -2.7,
+    "longG": 0.38,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9210,
+    "y": 24874,
+    "t": 39.285,
+    "kmh": 70.5,
+    "lean": 2.1,
+    "longG": 0.24,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9284,
+    "y": 24980,
+    "t": 39.415,
+    "kmh": 80.3,
+    "lean": -0.2,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9358,
+    "y": 25079,
+    "t": 39.539,
+    "kmh": 74.3,
+    "lean": -0.9,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9425,
+    "y": 25170,
+    "t": 39.652,
+    "kmh": 62.8,
+    "lean": 0.7,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9470,
+    "y": 25247,
+    "t": 39.742,
+    "kmh": 49.0,
+    "lean": -14.4,
+    "longG": -0.23,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9442,
+    "y": 25318,
+    "t": 39.823,
+    "kmh": 52.0,
+    "lean": 0.5,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9366,
+    "y": 25380,
+    "t": 39.921,
+    "kmh": 59.9,
+    "lean": -5.3,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9286,
+    "y": 25445,
+    "t": 40.024,
+    "kmh": 52.2,
+    "lean": 3.0,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9207,
+    "y": 25505,
+    "t": 40.123,
+    "kmh": 65.1,
+    "lean": -1.9,
+    "longG": -0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9159,
+    "y": 25539,
+    "t": 40.182,
+    "kmh": 9.0,
+    "lean": -1.5,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9160,
+    "y": 25539,
+    "t": 40.183,
+    "kmh": 0.0,
+    "lean": 0.3,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9160,
+    "y": 25539,
+    "t": 40.183,
+    "kmh": 0.0,
+    "lean": 1.3,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9160,
+    "y": 25539,
+    "t": 40.183,
+    "kmh": 0.0,
+    "lean": -2.4,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9149,
+    "y": 25542,
+    "t": 40.196,
+    "kmh": 13.7,
+    "lean": -0.6,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9118,
+    "y": 25573,
+    "t": 40.24,
+    "kmh": 44.4,
+    "lean": -1.3,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 9051,
+    "y": 25617,
+    "t": 40.32,
+    "kmh": 60.5,
+    "lean": 7.2,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8966,
+    "y": 25680,
+    "t": 40.426,
+    "kmh": 64.8,
+    "lean": 3.3,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8879,
+    "y": 25747,
+    "t": 40.536,
+    "kmh": 65.3,
+    "lean": 6.0,
+    "longG": -0.17,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8804,
+    "y": 25800,
+    "t": 40.628,
+    "kmh": 46.0,
+    "lean": 1.2,
+    "longG": -0.27,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8776,
+    "y": 25821,
+    "t": 40.663,
+    "kmh": 5.2,
+    "lean": 1.7,
+    "longG": -0.2,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -2.6,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -5.2,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -5.4,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -5.3,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -5.1,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -3.3,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -1.4,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -1.4,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -1.8,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -1.6,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -2.8,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -2.2,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -2.1,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -2.6,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -3.3,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8775,
+    "y": 25821,
+    "t": 40.664,
+    "kmh": 0.0,
+    "lean": -0.9,
+    "longG": 0.19,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8740,
+    "y": 25849,
+    "t": 40.709,
+    "kmh": 36.5,
+    "lean": -3.2,
+    "longG": 0.28,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8664,
+    "y": 25908,
+    "t": 40.805,
+    "kmh": 65.2,
+    "lean": 1.6,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8564,
+    "y": 25983,
+    "t": 40.929,
+    "kmh": 79.4,
+    "lean": 0.0,
+    "longG": 0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8456,
+    "y": 26065,
+    "t": 41.066,
+    "kmh": 80.6,
+    "lean": -2.0,
+    "longG": -0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8351,
+    "y": 26144,
+    "t": 41.196,
+    "kmh": 76.8,
+    "lean": -3.0,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8257,
+    "y": 26214,
+    "t": 41.314,
+    "kmh": 64.1,
+    "lean": 2.2,
+    "longG": -0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8182,
+    "y": 26269,
+    "t": 41.407,
+    "kmh": 49.8,
+    "lean": 0.4,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8120,
+    "y": 26318,
+    "t": 41.486,
+    "kmh": 54.1,
+    "lean": -1.9,
+    "longG": 0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8054,
+    "y": 26367,
+    "t": 41.569,
+    "kmh": 41.3,
+    "lean": -1.4,
+    "longG": -0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8026,
+    "y": 26387,
+    "t": 41.604,
+    "kmh": 0.0,
+    "lean": -2.7,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8026,
+    "y": 26387,
+    "t": 41.604,
+    "kmh": 0.0,
+    "lean": -2.8,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8026,
+    "y": 26387,
+    "t": 41.604,
+    "kmh": 0.0,
+    "lean": -0.2,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8026,
+    "y": 26387,
+    "t": 41.604,
+    "kmh": 0.0,
+    "lean": 1.2,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8026,
+    "y": 26387,
+    "t": 41.604,
+    "kmh": 0.0,
+    "lean": -0.4,
+    "longG": 0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8016,
+    "y": 26395,
+    "t": 41.617,
+    "kmh": 14.5,
+    "lean": -2.3,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8000,
+    "y": 26430,
+    "t": 41.658,
+    "kmh": 29.2,
+    "lean": 13.8,
+    "longG": 0.18,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8063,
+    "y": 26509,
+    "t": 41.76,
+    "kmh": 77.3,
+    "lean": 2.0,
+    "longG": 0.15,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8144,
+    "y": 26618,
+    "t": 41.896,
+    "kmh": 79.7,
+    "lean": 0.2,
+    "longG": -0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8211,
+    "y": 26709,
+    "t": 42.01,
+    "kmh": 59.8,
+    "lean": -1.6,
+    "longG": -0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8244,
+    "y": 26757,
+    "t": 42.069,
+    "kmh": 0.0,
+    "lean": 7.5,
+    "longG": -0.21,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8243,
+    "y": 26757,
+    "t": 42.071,
+    "kmh": 0.0,
+    "lean": 0.7,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8243,
+    "y": 26757,
+    "t": 42.071,
+    "kmh": 0.0,
+    "lean": -0.7,
+    "longG": 0.0,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8243,
+    "y": 26757,
+    "t": 42.071,
+    "kmh": 0.0,
+    "lean": 5.8,
+    "longG": 0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8243,
+    "y": 26757,
+    "t": 42.071,
+    "kmh": 0.0,
+    "lean": 0.6,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8243,
+    "y": 26757,
+    "t": 42.071,
+    "kmh": 0.0,
+    "lean": 0.7,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8243,
+    "y": 26757,
+    "t": 42.071,
+    "kmh": 0.0,
+    "lean": 1.2,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8243,
+    "y": 26757,
+    "t": 42.071,
+    "kmh": 0.0,
+    "lean": -0.3,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8258,
+    "y": 26772,
+    "t": 42.091,
+    "kmh": 14.8,
+    "lean": -0.8,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8282,
+    "y": 26795,
+    "t": 42.125,
+    "kmh": 31.5,
+    "lean": -0.7,
+    "longG": 0.22,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8325,
+    "y": 26849,
+    "t": 42.194,
+    "kmh": 47.6,
+    "lean": 4.9,
+    "longG": 0.27,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8366,
+    "y": 26907,
+    "t": 42.265,
+    "kmh": 32.4,
+    "lean": -1.4,
+    "longG": 0.24,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8422,
+    "y": 26981,
+    "t": 42.358,
+    "kmh": 60.5,
+    "lean": 0.7,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8479,
+    "y": 27057,
+    "t": 42.453,
+    "kmh": 52.7,
+    "lean": -0.9,
+    "longG": -0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8519,
+    "y": 27112,
+    "t": 42.522,
+    "kmh": 31.1,
+    "lean": -3.8,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8545,
+    "y": 27148,
+    "t": 42.567,
+    "kmh": 14.4,
+    "lean": -6.4,
+    "longG": -0.14,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8553,
+    "y": 27156,
+    "t": 42.578,
+    "kmh": 0.0,
+    "lean": 4.4,
+    "longG": -0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8554,
+    "y": 27157,
+    "t": 42.58,
+    "kmh": 0.0,
+    "lean": -9.3,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8554,
+    "y": 27157,
+    "t": 42.58,
+    "kmh": 0.0,
+    "lean": -9.1,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8554,
+    "y": 27157,
+    "t": 42.58,
+    "kmh": 0.0,
+    "lean": -8.7,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8554,
+    "y": 27157,
+    "t": 42.58,
+    "kmh": 0.0,
+    "lean": -8.9,
+    "longG": -0.03,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8554,
+    "y": 27157,
+    "t": 42.58,
+    "kmh": 0.0,
+    "lean": -8.3,
+    "longG": -0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8554,
+    "y": 27157,
+    "t": 42.58,
+    "kmh": 0.0,
+    "lean": -9.1,
+    "longG": 0.01,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8554,
+    "y": 27157,
+    "t": 42.58,
+    "kmh": 0.0,
+    "lean": 4.2,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8557,
+    "y": 27162,
+    "t": 42.585,
+    "kmh": 6.7,
+    "lean": -4.6,
+    "longG": 0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8591,
+    "y": 27168,
+    "t": 42.625,
+    "kmh": 39.6,
+    "lean": 7.6,
+    "longG": 0.09,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8665,
+    "y": 27108,
+    "t": 42.72,
+    "kmh": 68.8,
+    "lean": 3.6,
+    "longG": 0.11,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8762,
+    "y": 27040,
+    "t": 42.839,
+    "kmh": 61.8,
+    "lean": 2.4,
+    "longG": -0.17,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8823,
+    "y": 26995,
+    "t": 42.914,
+    "kmh": 29.5,
+    "lean": -28.5,
+    "longG": -0.22,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8835,
+    "y": 27007,
+    "t": 42.938,
+    "kmh": 14.6,
+    "lean": -1.3,
+    "longG": -0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8835,
+    "y": 27028,
+    "t": 42.958,
+    "kmh": 6.4,
+    "lean": 0.2,
+    "longG": 0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8832,
+    "y": 27040,
+    "t": 42.971,
+    "kmh": 8.3,
+    "lean": -0.0,
+    "longG": -0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8833,
+    "y": 27054,
+    "t": 42.985,
+    "kmh": 16.5,
+    "lean": -2.7,
+    "longG": 0.1,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8835,
+    "y": 27093,
+    "t": 43.025,
+    "kmh": 24.3,
+    "lean": 4.1,
+    "longG": 0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8834,
+    "y": 27135,
+    "t": 43.067,
+    "kmh": 22.5,
+    "lean": -2.7,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8835,
+    "y": 27178,
+    "t": 43.11,
+    "kmh": 31.3,
+    "lean": 2.3,
+    "longG": 0.07,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8838,
+    "y": 27238,
+    "t": 43.17,
+    "kmh": 29.1,
+    "lean": -10.8,
+    "longG": 0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8838,
+    "y": 27289,
+    "t": 43.222,
+    "kmh": 23.1,
+    "lean": 3.2,
+    "longG": -0.06,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8840,
+    "y": 27320,
+    "t": 43.254,
+    "kmh": 15.5,
+    "lean": 5.1,
+    "longG": -0.02,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8839,
+    "y": 27338,
+    "t": 43.272,
+    "kmh": 14.0,
+    "lean": -1.0,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8839,
+    "y": 27357,
+    "t": 43.292,
+    "kmh": 10.8,
+    "lean": 1.5,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8839,
+    "y": 27375,
+    "t": 43.31,
+    "kmh": 11.8,
+    "lean": -3.3,
+    "longG": 0.04,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8838,
+    "y": 27406,
+    "t": 43.341,
+    "kmh": 24.9,
+    "lean": 3.0,
+    "longG": -0.08,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8839,
+    "y": 27426,
+    "t": 43.361,
+    "kmh": 6.6,
+    "lean": -0.4,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8838,
+    "y": 27451,
+    "t": 43.387,
+    "kmh": 17.0,
+    "lean": -7.1,
+    "longG": -0.12,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8840,
+    "y": 27473,
+    "t": 43.409,
+    "kmh": 18.4,
+    "lean": -4.7,
+    "longG": 0.13,
+    "gear": null,
+    "rpm": null
+   },
+   {
+    "x": 8840,
+    "y": 27515,
+    "t": 43.452,
+    "kmh": 23.1,
+    "lean": 0.6,
+    "longG": -0.05,
+    "gear": null,
+    "rpm": null
+   }
+  ]
+ }
+}
