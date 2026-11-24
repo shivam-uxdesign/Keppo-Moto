@@ -247,6 +247,42 @@ input[type=range]{width:100%;accent-color:var(--teal)}
 footer{padding-block:96px 110px;border-top:1px solid var(--hair)}
 footer h2{font-size:clamp(40px,7vw,84px)}
 
+
+/* options strip */
+.opts{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(200px,1fr);gap:14px;overflow-x:auto;padding:16px 2px 8px;scroll-snap-type:x mandatory}
+.opt{margin:0;scroll-snap-align:start;display:flex;flex-direction:column;gap:10px}
+.opt img{width:100%;aspect-ratio:390/844;object-fit:cover;border-radius:22px;border:5px solid #1a1a1d;background:#000;display:block}
+.opt.won img{border-color:var(--teal)}
+.opt figcaption b{display:block;font-weight:600;font-size:15px}
+.opt figcaption span{display:block;font-size:13.5px;color:var(--muted);line-height:1.4;margin-top:2px}
+.opt.won figcaption b{color:var(--teal)}
+/* killed */
+.kills{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:36px}
+.kill{background:var(--surface);border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:8px}
+.kill s{font:600 17px/1.3 var(--sans);color:var(--text);text-decoration-color:var(--err);text-decoration-thickness:2px}
+.kill p{color:var(--body);font-size:14.5px}
+@media (max-width:900px){.kills{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.kills{grid-template-columns:1fr}}
+/* economics */
+.eco{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:16px;margin-top:36px}
+.ecoCard{background:var(--surface);border-radius:24px;padding:24px;display:flex;flex-direction:column;gap:14px}
+.ecoBars{display:flex;flex-direction:column;gap:16px}
+.ecoBars>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px;align-items:center}
+.ecoBars span{grid-column:1/-1}
+.eb{height:14px;border-radius:7px;background:#26262a;position:relative;overflow:hidden}
+.eb i{position:absolute;left:0;top:0;bottom:0;border-radius:7px}
+.ecoBars b{font:300 26px/1 var(--sans);letter-spacing:-.02em}
+.ecoList{margin:0;padding-left:18px;color:var(--body);font-size:15px;display:flex;flex-direction:column;gap:6px}
+.ecoRow{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--hair);font-size:15px}
+.ecoRow span{color:var(--muted)} .ecoRow b{font-weight:500;text-align:right}
+@media (max-width:900px){.eco{grid-template-columns:1fr}}
+/* beta */
+.beta{margin-top:20px;background:linear-gradient(135deg,#11191a,#141416);border:1px solid rgba(105,200,203,.35);border-radius:24px;padding:24px;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:24px;align-items:center}
+.betaNums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.betaNums b{display:block;font:300 34px/1 var(--sans);letter-spacing:-.03em}
+.betaNums span{display:block;font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.3}
+@media (max-width:900px){.beta{grid-template-columns:1fr}.betaNums{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
 @media (prefers-reduced-motion:no-preference){
   .rise.in{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
   @keyframes rise{from{transform:translateY(18px)}to{transform:none}}
@@ -266,7 +302,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
       <a href="#ride">One ride</a>
       <a href="#problems">Hard problems</a>
       <a href="#decisions">Decisions</a>
-      <a href="#system">System</a>
+      <a href="#economics">Business</a>
       <a href="#built">How it got built</a>
       <a class="keep" href="tldr.html">TL;DR</a>
     </nav>
@@ -292,6 +328,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
         <span class="pill tnum">30+ screens</span>
         <span class="pill">Works offline</span>
         <span class="pill tnum">622 automated tests</span>
+        <span class="pill" style="background:var(--teal-fill);color:var(--teal)"><span class="dot"></span>In beta with 4 riders</span>
       </div>
     </div>
     <div class="hud" role="img" aria-label="A live ride HUD: speed, gear, revs, lean and three mic bars, moving as if riding">
@@ -394,7 +431,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
             <li>Warnings come from traffic data already on screen, for free. A new route request (about ₹1.3) is the last resort.</li>
           </ul></div>
           <p class="why"><b>Decision:</b> silent. No voice, no vibration: the phone is on a mount, so warnings are an amber banner and a thin coloured edge.</p>
-          <div class="chPhoneInline"><div class="phone sm"><div class="ui" data-ui="jam"></div></div></div>
+          <div class="chPhoneInline"><div class="phone sm"><img src="img/c2-jam.webp" alt="Directions with the amber jam warning under Google's turn banner" loading="lazy"></div></div>
         </article>
 
         <article class="ch" data-layer="5">
@@ -455,7 +492,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
           <div class="layer" aria-hidden="true"><img src="img/hud.webp" alt="The floating HUD, riding and filming"></div>
           <div class="layer" aria-hidden="true"><img src="img/share-hud.webp" alt="A moment with the HUD overlay: 72 km/h, 38 degrees lean"></div>
           <div class="layer" aria-hidden="true"><div class="ui" data-ui="voice"></div></div>
-          <div class="layer" aria-hidden="true"><div class="ui" data-ui="jam"></div></div>
+          <div class="layer" aria-hidden="true"><img src="img/c2-jam.webp" alt="Directions with the amber jam warning under Google's turn banner"></div>
           <div class="layer" aria-hidden="true"><div class="ui" data-ui="fuel"></div></div>
           <div class="layer" aria-hidden="true"><div class="ph"><b>Shot 4 · ride summary</b><span>Right after the ride ends.</span></div></div>
           <div class="layer" aria-hidden="true"><img src="img/studio-feed.webp" alt="Studio feed with Reel ideas"></div>
@@ -656,6 +693,57 @@ footer h2{font-size:clamp(40px,7vw,84px)}
   </div>
 </section>
 
+
+<!-- KILLED -->
+<section id="killed" aria-labelledby="kill-h">
+  <div class="wrap">
+    <span class="label">What I cut</span>
+    <h2 id="kill-h" style="margin-top:14px;max-width:20ch">Saying no was half the design.</h2>
+    <div class="kills">
+      <div class="kill rise"><s>Spoken directions</s><p>Built, then removed. The helmet mic records the ride; a voice in it ruins the clip, and the screen is enough.</p></div>
+      <div class="kill rise"><s>Auto-start when you ride off</s><p>Parked. Every errand would become a ride, with battery and storage to match.</p></div>
+      <div class="kill rise"><s>MapTiler place search</s><p>Replaced after a test: it couldn't find a lot of local places. Google's search went in, with your places saved on the phone.</p></div>
+      <div class="kill rise"><s>Speed and lean records</s><p>Removed from achievements. An app that rewards riding faster shouldn't exist.</p></div>
+      <div class="kill rise"><s>Cloud descriptions for every clip</s><p>Swapped for the free on-phone labeller. Seventy requests a ride for "Road, Sky" wasn't worth it.</p></div>
+      <div class="kill rise"><s>A paid route server</s><p>₹1,500–3,000 a month, kept as a plan until real rides prove Google misses side roads.</p></div>
+      <div class="kill rise"><s>Friends and WhatsApp alerts</s><p>Parked and skipped. A ride app for one rider had to be excellent before it became social.</p></div>
+      <div class="kill rise"><s>"1 MIC", guessed by the app</s><p>The app used to decide which mic was which and flip its labels. Now the rider sets it once, and the app only warns.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ECONOMICS -->
+<section id="economics" aria-labelledby="eco-h">
+  <div class="wrap">
+    <span class="label">The business underneath</span>
+    <h2 id="eco-h" style="margin-top:14px;max-width:22ch">A feature that cost ₹1,300 a rider, redesigned to about ₹140.</h2>
+    <p class="lede" style="margin-top:20px">The first plan for Keep moving re-checked traffic every minute. At Google's list price, a rider using it an hour a day would cost more than a subscription brings in. The fix was design, not engineering.</p>
+    <div class="eco">
+      <div class="ecoCard rise">
+        <span class="label">Keep moving, a daily rider, per month</span>
+        <div class="ecoBars" aria-label="Before: about 1,300 rupees. After: about 140 rupees.">
+          <div><span class="mono small">Re-check every minute</span><div class="eb"><i style="width:100%;background:var(--err)"></i></div><b class="tnum">≈ ₹1,300</b></div>
+          <div><span class="mono small">Free warnings, paid switch last</span><div class="eb"><i style="width:11%;background:var(--teal)"></i></div><b class="tnum">≈ ₹140</b></div>
+        </div>
+        <ul class="ecoList">
+          <li>Watching traffic uses what's already on screen: free.</li>
+          <li>Leaving Google's route is free; Google re-plans at no charge.</li>
+          <li>Per ride, a destination (≈ ₹2.2), a couple of route looks (≈ ₹1.3 each) and the odd switch (≈ ₹3.5).</li>
+        </ul>
+        <p class="small">Estimates at Google's list price, before monthly free allowances; 22 rides a month.</p>
+      </div>
+      <div class="ecoCard rise">
+        <span class="label">Pro pays for the AI, and the AI is capped</span>
+        <div class="ecoRow"><span>Pro</span><b class="tnum">₹249 / month · ₹1,999 / year</b></div>
+        <div class="ecoRow"><span>Gemini, a rider who uses everything</span><b class="tnum">≈ $1–3 / month</b></div>
+        <div class="ecoRow"><span>Cap on AI spend</span><b>35% of what the rider pays</b></div>
+        <div class="ecoRow"><span>Crash alerts</span><b>₹0 to us: an SMS from the rider's own plan</b></div>
+        <p style="color:var(--body);font-size:15px;margin-top:6px">Cheaper models first for anything that only needs to hear words; at the cap, "You've made a lot today, more tomorrow". Free riders get one Reel a week, with no AI cost in the background.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- REDESIGN -->
 <section id="redesign" aria-labelledby="dir-h">
   <div class="wrap split">
@@ -673,13 +761,25 @@ footer h2{font-size:clamp(40px,7vw,84px)}
     <div class="sticky">
       <div class="ba" id="ba" style="--cut:50%">
         <img src="img/directions-before.webp" alt="Before: the first directions screen, with an oversized HUD and stacked bars">
-        <div class="after"><div class="ph" style="border-radius:0;align-items:flex-end;text-align:right;padding-left:55%"><b>After · shot 17</b><span>The new directions dock.</span></div></div>
-        <span class="tag" style="left:14px">BEFORE</span><span class="tag" style="right:14px;color:var(--teal)">AFTER</span>
+        <div class="after"><img src="img/opt-c2.webp" alt="After: the C2 dock, everything at a glance, with Google's banner on top and the map clear"></div>
+        <span class="tag" style="left:14px">BEFORE</span><span class="tag" style="right:14px;color:var(--teal)">AFTER · C2</span>
         <div class="handle" aria-hidden="true"><span>↔</span></div>
       </div>
       <label class="label" for="baRange" style="display:block;text-align:center;margin-top:16px">Drag to compare</label>
       <input id="baRange" type="range" min="0" max="100" value="50" style="max-width:380px;display:block;margin:8px auto 0">
     </div>
+  </div>
+
+  <div class="wrap" style="margin-top:56px">
+    <span class="label">Five options, one afternoon</span>
+    <div class="opts" role="list">
+      <figure class="opt" role="listitem"><img src="img/opt-a.webp" alt="Option A: an instrument strip along the bottom" loading="lazy"><figcaption><b>A · Instrument strip</b><span>Most map. The HUD shrank to a strip, and lost the mics.</span></figcaption></figure>
+      <figure class="opt" role="listitem"><img src="img/opt-b.webp" alt="Option B: a corner tile with speed" loading="lazy"><figcaption><b>B · Corner tile</b><span>Quiet, but recording hid behind a dot.</span></figcaption></figure>
+      <figure class="opt" role="listitem"><img src="img/opt-c.webp" alt="Option C: one dock at the bottom" loading="lazy"><figcaption><b>C · One dock</b><span>Right idea: one place for everything.</span></figcaption></figure>
+      <figure class="opt won" role="listitem"><img src="img/opt-c2.webp" alt="Option C2: the dock with status, three mic bars, riding numbers and the trip" loading="lazy"><figcaption><b>C2 · Everything at a glance</b><span>Chosen, after I asked for all three mic bars.</span></figcaption></figure>
+      <figure class="opt" role="listitem"><img src="img/opt-c3.webp" alt="Option C3: the HUD card stretched across the bottom" loading="lazy"><figcaption><b>C3 · HUD style</b><span>Familiar, but the trip had no room.</span></figcaption></figure>
+    </div>
+    <p class="small" style="margin-top:12px">Rendered from the clickable prototypes. Each played the same ride: riding, jam warning, a clearer road in 5 s, switched.</p>
   </div>
 </section>
 
@@ -776,6 +876,16 @@ footer h2{font-size:clamp(40px,7vw,84px)}
       <div class="num rise"><b data-count="622">622</b><span>automated tests, run before every commit</span></div>
       <div class="num rise"><b data-count="149">149</b><span>logged questions, bugs, ideas and decisions</span></div>
     </div>
+
+    <div class="beta rise">
+      <div><span class="label" style="color:var(--teal)">In beta</span><h3 style="margin-top:8px">4 riders testing it on real roads.</h3><p style="color:var(--body);margin-top:6px">Every build goes to my own bike first, then to the testers.</p></div>
+      <div class="betaNums">
+        <div><b class="tnum" data-stat="rides">—</b><span>rides recorded</span></div>
+        <div><b class="tnum" data-stat="km">—</b><span>km ridden</span></div>
+        <div><b class="tnum" data-stat="hours">—</b><span>hours on the road</span></div>
+        <div><b class="tnum" data-stat="moments">—</b><span>moments filmed by themselves</span></div>
+      </div>
+    </div>
     <div class="roles">
       <div class="panel"><span class="label">I did</span><p style="color:var(--body)">The idea and scope · every flow and screen · the design system · prototypes · what to build and in what order · every trade-off on cost, privacy and safety · testing every build on my own bike in Delhi traffic.</p></div>
       <div class="panel"><span class="label">The AI did</span><p style="color:var(--body)">Kotlin and Compose · research into Google's terms, pricing and Android's rules · 622 tests · lint · signed test builds · a numbered log of every question, bug and decision, so any session could pick up where the last stopped.</p></div>
@@ -868,7 +978,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
   hud(4000);
 
   // One ride: the chapter in view drives the phone.
-  var caps = ['Rendered from the app’s code with sample data.', 'The floating HUD, riding and filming.', 'A moment’s share overlay, drawn by the app.', 'Drawn from the shipped design.', 'Drawn from the shipped design.', 'Drawn from the shipped design.', 'Placeholder for shot 4.', 'Rendered from the app’s code.', 'Rendered from the app’s code.'];
+  var caps = ['Rendered from the app’s code with sample data.', 'The floating HUD, riding and filming.', 'A moment’s share overlay, drawn by the app.', 'Drawn from the shipped design.', 'The approved directions prototype.', 'Drawn from the shipped design.', 'Placeholder for shot 4.', 'Rendered from the app’s code.', 'Rendered from the app’s code.'];
   var chs = document.querySelectorAll('.ch'), layers = document.querySelectorAll('#ridePhone .layer'), cur = -1;
   function setCh(i) {
     if (i === cur) return; cur = i;
