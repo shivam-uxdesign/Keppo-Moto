@@ -35,14 +35,26 @@ enum class KeepMode(
     LESS_TRAFFIC("Less traffic", 0.2, 2.0, 0.7, 150.0, 150.0, 0.0),
     NO_FOOT_DOWN("No foot down", 0.55, 3.0, 0.8, 75.0, 75.0, 60.0);
 
+    /**
+     * The chance yellow means stopping, for this rider: their own number once their rides have
+     * taught it (step 4), else 1 in 5; No foot down adds its margin on top.
+     */
+    val yellowChance: Double get() = when (this) {
+        NO_FOOT_DOWN -> minOf(0.9, (personalYellow ?: 0.2) + (yellowJamChance - 0.2))
+        else -> personalYellow ?: yellowJamChance
+    }
+
     /** Yellow's cost per metre: a share of a jam plus a crawl for the rest. */
-    val slowPerM: Double get() = yellowJamChance * RouteScore.JAM_PER_M + (1 - yellowJamChance) * RouteScore.CRAWL_PER_M
+    val slowPerM: Double get() = yellowChance * RouteScore.JAM_PER_M + (1 - yellowChance) * RouteScore.CRAWL_PER_M
 
     /** Keppo plans this mode's route itself (Normal leaves it to Google). */
     val scored: Boolean get() = this != NORMAL
 
     companion object {
         fun of(name: String?) = entries.firstOrNull { it.name == name } ?: LESS_TRAFFIC
+
+        /** The rider's own yellow, learned from their rides ([TrafficMemory]); null until it has some. */
+        @Volatile var personalYellow: Double? = null
     }
 }
 
@@ -79,13 +91,20 @@ object RouteScore {
      * [routes] ranked clearest first; routes over the length cap come last, marked. The first
      * route that isn't too long is the one to ride. Index is the route's place in Google's answer.
      */
-    fun rank(routes: List<TrafficRoute>, mode: KeepMode = KeepMode.LESS_TRAFFIC, signals: (TrafficRoute) -> Int = { 0 }, shortestM: Int? = null): List<Ranked> {
+    fun rank(
+        routes: List<TrafficRoute>,
+        mode: KeepMode = KeepMode.LESS_TRAFFIC,
+        signals: (TrafficRoute) -> Int = { 0 },
+        shortestM: Int? = null,
+        /** Your own record's change to a route's cost (step 4, [Memory.adjust]). */
+        adjust: (TrafficRoute) -> Double = { 0.0 },
+    ): List<Ranked> {
         if (routes.isEmpty()) return emptyList()
         val shortest = (shortestM ?: routes.minOf { it.distanceM }).coerceAtLeast(1)
         val all = routes.mapIndexed { i, r ->
             val c = colours(r)
             val n = signals(r)
-            Ranked(i, r, c, cost(c, mode, n), tooLong = r.distanceM > shortest * mode.lengthCap, signals = n)
+            Ranked(i, r, c, cost(c, mode, n) + adjust(r), tooLong = r.distanceM > shortest * mode.lengthCap, signals = n)
         }
         return all.sortedWith(compareBy<Ranked> { it.tooLong }.thenBy { it.cost })
     }

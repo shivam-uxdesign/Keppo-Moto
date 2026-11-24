@@ -42,6 +42,8 @@ class KeepMovingGuide(
     private val session: RideSessionManager,
     private val log: TrafficLogger,
     private val scope: CoroutineScope,
+    /** Step 4: the rider's own traffic memory. */
+    private val memory: () -> Map<Memory.Cell, Memory.Stat> = { emptyMap() },
 ) {
     /** A clearer road on offer; switched to at [atMs] unless the rider keeps theirs. */
     data class Offer(val route: Ranked, val atMs: Long, val savedJamM: Int, val savedSlowM: Int, val declined: Reroute.Declined)
@@ -140,7 +142,9 @@ class KeepMovingGuide(
         _warning.value = null
         _offer.value = null
         watch?.cancel()
-        if (mode.scored) watch = scope.launch { watchAhead() }
+        // Every mode is watched for free warnings and suggestions; only Less traffic and No foot
+        // down ever pay for a look (Normal is purely Google's route).
+        watch = scope.launch { watchAhead() }
         return null
     }
 
@@ -227,7 +231,12 @@ class KeepMovingGuide(
             val (line, stretches) = withContext(Dispatchers.Main) { currentRoad(nav) } ?: continue
             val f = session.frame.value
             val here = f?.latitude?.let { lat -> f.longitude?.let { LatLon(lat, it) } } ?: line.first()
-            val trouble = RideWatch.firstTrouble(stretches, line, mode)
+            val mem = memory()
+            val bucket = Memory.bucket(System.currentTimeMillis())
+            val google = RideWatch.firstTrouble(stretches, line, mode)
+            // Google shows nothing yet, but your own rides say it's usually slow here at this hour.
+            val usual = if (google == null) Memory.troubleAhead(mem, line, bucket) else null
+            val trouble = google ?: usual
             val justTurned = turned
             turned = false
             if (trouble == null) {
@@ -237,12 +246,20 @@ class KeepMovingGuide(
             }
             val key = RideWatch.key(trouble)
             val stage = RideWatch.stage(trouble.inM)
-            val way = RideWatch.wayRound(trouble, line, here, ways)
-            _warning.value = Warning(RideWatch.title(trouble), RideWatch.detail(trouble, way), stage)
+            // Known ways round: the plan's other detours, and roads where you move well at this hour.
+            val way = RideWatch.wayRound(trouble, line, here, ways + Memory.goodPoints(mem, bucket))
+            val (title, detail, voice) = when {
+                !mode.scored && way != null -> Triple(RideWatch.title(trouble), RideWatch.smootherDetail(way), RideWatch.smootherVoice(way))
+                usual != null -> Triple(RideWatch.usualTitle(trouble), RideWatch.usualDetail(trouble, way), RideWatch.usualVoice(way))
+                else -> Triple(RideWatch.title(trouble), RideWatch.detail(trouble, way), RideWatch.voice(trouble, stage, way))
+            }
+            _warning.value = Warning(title, detail, stage)
             if ((warned[key] ?: 0) < stage) {
                 warned[key] = stage
-                say(RideWatch.voice(trouble, stage, way))
+                say(voice)
             }
+            // Normal never pays: Google re-plans for free if you take the suggestion.
+            if (!mode.scored) continue
             // The backstop: the jam is near and the rider hasn't turned off, or Google's re-plan after
             // their turn heads straight back into it.
             val backInto = justTurned && trouble.inM <= RideWatch.FAR_M

@@ -34,6 +34,8 @@ class RideTrackApp : Application() {
         MapLibre.getInstance(this)
         createNotificationChannel()
         container.hud.start()
+        // Keep moving (test builds): learn past rides once, then each new one.
+        if (BuildConfig.TEST_BUILD) container.trafficMemory.start()
         com.ridetrack.app.widget.HomeWidgets.watch(this, container, container.appScope)
         container.routines.watch(container.appScope)
         container.obd.watch()

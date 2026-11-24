@@ -90,4 +90,13 @@ object RideWatch {
     }
 
     const val SWITCH_VOICE = "Traffic ahead. Taking a clearer road."
+
+    /** Your own record says it's usually slow ahead at this hour (Google shows nothing yet). */
+    fun usualTitle(t: Trouble) = "Usually slow in ${Planner.km(t.inM)}"
+    fun usualDetail(t: Trouble, way: String?) = "At this hour, by your own rides" + (way?.let { " · a way round on your $it" } ?: "")
+    fun usualVoice(way: String?) = "Usually slow ahead at this hour." + (way?.let { " A way round on your $it." } ?: "")
+
+    /** Normal mode's free suggestion: a road the rider has ridden that's smoother at this hour. */
+    fun smootherDetail(way: String) = "Turn $way: you've ridden here before, a smoother road"
+    fun smootherVoice(way: String) = "Traffic ahead. Turn $way: you've ridden there before, a smoother road."
 }

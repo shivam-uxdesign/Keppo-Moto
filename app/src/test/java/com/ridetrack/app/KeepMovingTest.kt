@@ -4,6 +4,7 @@ import com.ridetrack.app.keepmoving.Destinations
 import com.ridetrack.app.keepmoving.LatLon
 import com.ridetrack.app.keepmoving.PlaceSearch
 import com.ridetrack.app.keepmoving.KeepMode
+import com.ridetrack.app.keepmoving.Memory
 import com.ridetrack.app.keepmoving.Planner
 import com.ridetrack.app.keepmoving.RideWatch
 import com.ridetrack.app.keepmoving.SavedPlaces
@@ -287,6 +288,82 @@ class KeepMovingTest {
         assertEquals("left", way)
         assertEquals("Jam in one and a half kilometres. A way round on your left.", RideWatch.voice(t, 1, way))
         assertTrue(RideWatch.title(t).startsWith("Jam in 1.2 km"))
+    }
+
+    /** A ride north along lon 77.0 at [speeds] (m/s, one fix a second, ~1 m per m/s), from [t0]. */
+    private fun ride(t0: Long, speeds: List<Double>): List<Memory.Fix> {
+        var lat = 28.0
+        return speeds.mapIndexed { i, v ->
+            val f = Memory.Fix(t0 + i * 1000L, LatLon(lat, 77.0), v, 0.0)
+            lat += v / 111_320.0
+            f
+        }
+    }
+
+    private val utc = java.util.TimeZone.getTimeZone("UTC")
+    /** Monday 24 Nov 2026, 09:00 UTC. */
+    private val monday9 = 1_795_510_800_000L
+
+    @Test
+    fun `a ride is learned per cell and hour, without the parking minutes or rest stops`() {
+        // 2 min parking, 5 min at 10 m/s, a 6-minute rest stop, 3 min creeping at 1 m/s (a jam), 2 min parking.
+        val speeds = List(120) { 0.0 } + List(300) { 10.0 } + List(360) { 0.0 } + List(180) { 1.0 } + List(120) { 0.0 }
+        val m = Memory.learn(ride(monday9, speeds), utc)
+        val total = m.values.fold(Memory.Stat.EMPTY) { a, s -> a + s }
+        // The moving 5 min and the 3 min at 1 m/s: the rest stop and both ends are left out.
+        assertTrue(total.secs in 470.0..490.0, "secs ${total.secs}")
+        assertTrue(total.stopped in 170.0..190.0, "stopped ${total.stopped}")
+        assertTrue(m.keys.all { it.bucket == 9 && it.dir == 0 })
+        assertTrue(m.values.all { it.rides == 1 })
+        assertEquals(33, Memory.bucket(monday9 - 2 * 86_400_000L, utc))
+        assertEquals(listOf(23, 0, 1), Memory.near(0))
+        assertEquals(listOf(47, 24, 25), Memory.near(24))
+    }
+
+    @Test
+    fun `your record makes Google's green where you stop cost more, and its yellow where you move cost less`() {
+        // Five rides stopped-and-going (under 5 km/h) through a stretch Google shows green.
+        val slow = (0 until 5).map { Memory.learn(ride(monday9 + it * 86_400_000L * 7, List(120) { 0.0 } + List(400) { 1.0 } + List(120) { 0.0 }), utc) }
+        val stats = HashMap<Memory.Cell, Memory.Stat>()
+        slow.forEach { r -> r.forEach { (k, v) -> stats[k] = (stats[k] ?: Memory.Stat.EMPTY) + v } }
+        val green = route(4, SpeedInterval(0, 4, Speed.NORMAL))
+        assertTrue(Memory.adjust(stats, green, KeepMode.LESS_TRAFFIC, 9) > 50, "green where you stop costs more")
+        // Five rides moving through a stretch Google shows yellow.
+        val fast = (0 until 5).map { Memory.learn(ride(monday9 + it * 86_400_000L * 7, List(120) { 0.0 } + List(60) { 12.0 } + List(120) { 0.0 }), utc) }
+        val stats2 = HashMap<Memory.Cell, Memory.Stat>()
+        fast.forEach { r -> r.forEach { (k, v) -> stats2[k] = (stats2[k] ?: Memory.Stat.EMPTY) + v } }
+        val yellow = route(4, SpeedInterval(0, 4, Speed.SLOW))
+        assertTrue(Memory.adjust(stats2, yellow, KeepMode.LESS_TRAFFIC, 9) < -20, "yellow where you move costs less")
+        // A different hour (21:00): nothing known, no change.
+        near(0.0, Memory.adjust(stats, green, KeepMode.LESS_TRAFFIC, 21))
+        // Your record warns ahead ("usually slow here") and fast cells make ways round.
+        assertTrue(Memory.troubleAhead(stats, TrafficRoutes.decodePolyline(green.polyline), 9) != null)
+        assertTrue(Memory.goodPoints(stats2, 9).isNotEmpty())
+        assertTrue(Memory.goodPoints(stats, 9).isEmpty())
+    }
+
+    @Test
+    fun `your own yellow is learned from the traffic log, starting from 1 in 5`() {
+        near(0.2, Memory.yellowChance(0, 0))
+        // 10 yellow stretches ridden, 8 of them stopped in: well above 1 in 5.
+        assertTrue(Memory.yellowChance(10, 8) > 0.45)
+        // One log check with a yellow stretch 0 to 3 (~330 m) ahead; the ride goes through it, stopping 20 s.
+        val line = (0..10).map { LatLon(28.0 + it * 0.001, 77.0) }
+        val check = org.json.JSONObject().put("type", "check").put("t", monday9)
+            .put("routes", org.json.JSONArray().put(org.json.JSONObject().put("polyline", encode(line))
+                .put("intervals", org.json.JSONArray().put(org.json.JSONArray().put(0).put(3).put("SLOW")))))
+        val through = ride(monday9, List(30) { 8.0 } + List(20) { 0.0 } + List(40) { 8.0 })
+        assertEquals(1 to 1, Memory.yellowFromLog(listOf(check.toString()), through))
+        val noStop = ride(monday9, List(60) { 8.0 })
+        assertEquals(1 to 0, Memory.yellowFromLog(listOf(check.toString()), noStop))
+        // Once learned, Less traffic uses it, and No foot down adds its margin on top.
+        try {
+            KeepMode.personalYellow = 0.5
+            near(0.5, KeepMode.LESS_TRAFFIC.yellowChance)
+            near(0.85, KeepMode.NO_FOOT_DOWN.yellowChance)
+        } finally {
+            KeepMode.personalYellow = null
+        }
     }
 
     /** A straight route north of [n] steps of about 111 m, with [intervals]; Google's distance is the line's. */

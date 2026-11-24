@@ -96,6 +96,8 @@ object Routes {
     const val KEEP_MOVING = "keep-moving?auto={auto}"
     /** Where to? then the plan; [autoSeconds]: a hands-free start rides plain if nothing is tapped. */
     fun keepMoving(autoSeconds: Int? = null) = "keep-moving" + (autoSeconds?.let { "?auto=$it" } ?: "")
+    /** Keep moving › Your roads: what your own rides taught it (step 4). */
+    const val YOUR_ROADS = "keep-moving-roads"
     /** Keep moving's directions (Google's navigation) during a ride. */
     const val KEEP_MOVING_NAV = "keep-moving-nav"
     const val SHARE = "share/{rideId}?mode={mode}&reel={reel}"
@@ -363,6 +365,9 @@ fun RideTrackNavHost(
                         onStarted = { nav.navigate(Routes.LIVE) { popUpTo(Routes.KEEP_MOVING) { inclusive = true }; launchSingleTop = true } },
                         onGuiding = { nav.navigate(Routes.KEEP_MOVING_NAV) { popUpTo(Routes.KEEP_MOVING) { inclusive = true }; launchSingleTop = true } },
                     ) }
+                }
+                composable(Routes.YOUR_ROADS) {
+                    DarkRoute { com.ridetrack.app.ui.keepmoving.YourRoadsScreen(onBack = { nav.popBackStack() }) }
                 }
                 composable(Routes.KEEP_MOVING_NAV) {
                     DarkRoute { com.ridetrack.app.ui.keepmoving.KeepMovingNavScreen(

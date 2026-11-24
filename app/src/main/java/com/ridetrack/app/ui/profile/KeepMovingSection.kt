@@ -77,6 +77,20 @@ fun KeepMovingSection() {
             color = RtColors.TextSecondary,
             modifier = Modifier.padding(bottom = 8.dp),
         )
+        // Step 4: what your own rides taught it.
+        val memory by c.trafficMemory.summary.collectAsStateWithLifecycle()
+        val navigate = com.ridetrack.app.ui.nav.LocalNavigate.current
+        Column(
+            Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Open Your roads") { navigate(com.ridetrack.app.ui.nav.Routes.YOUR_ROADS) }.padding(vertical = 10.dp),
+        ) {
+            Text("Your roads ›", style = RtType.bodyStrong, color = RtColors.Primary)
+            Text(
+                "Learned from ${memory.rides} rides · your yellow: stopped ${"%.0f".format(memory.yellowChance * 100)}% of the time" +
+                    if (memory.yellowTrips == 0) " (1 in 5 for now)" else "",
+                style = RtType.caption,
+                color = RtColors.TextSecondary,
+            )
+        }
         ToggleRow(
             "Log traffic on my rides",
             "Every 2 minutes, Google's route to where you're going, with its traffic, is saved with the ride. Nothing changes on the riding screen.",

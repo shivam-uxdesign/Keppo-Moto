@@ -13,7 +13,12 @@ import kotlin.math.sqrt
  * round it, then points from the rider's own rides, then a guessed point to either side, each
  * asked as "from here to there through this point". The clearest result wins.
  */
-class Planner(private val context: Context, private val log: TrafficLogger) {
+class Planner(
+    private val context: Context,
+    private val log: TrafficLogger,
+    /** Step 4: the rider's own traffic memory. */
+    private val memory: () -> Map<Memory.Cell, Memory.Stat> = { emptyMap() },
+) {
 
     /** One plannable route: what Google said, how it scored, and the detour points it passes. */
     data class Option(val ranked: Ranked, val via: List<LatLon>)
@@ -57,7 +62,13 @@ class Planner(private val context: Context, private val log: TrafficLogger) {
         val shortest = first.routes.minOf { it.distanceM }
         val signals = if (mode.signalCost > 0) Signals.around(context, first.routes.flatMap { TrafficRoutes.decodePolyline(it.polyline) }) else emptyList()
         fun count(r: TrafficRoute) = Signals.count(TrafficRoutes.decodePolyline(r.polyline), signals)
-        val ranked = RouteScore.rank(first.routes, mode, ::count)
+        // Your own record at this hour moves each route's cost toward how you actually ride there.
+        val mem = memory()
+        val bucket = Memory.bucket(System.currentTimeMillis())
+        fun own(r: TrafficRoute) = Memory.adjust(mem, r, mode, bucket)
+        val ranked = RouteScore.rank(first.routes, mode, ::count, adjust = ::own)
+        // Detours from roads where you're actually moving at this hour, else any road you've ridden.
+        val ownWays = Memory.goodPoints(mem, bucket).ifEmpty { ownRides }
         val google = ranked.firstOrNull { it.index == 0 }
         val options = ranked.map { Option(it, emptyList()) }.toMutableList()
         val best = options.firstOrNull { !it.ranked.tooLong }
@@ -77,7 +88,7 @@ class Planner(private val context: Context, private val log: TrafficLogger) {
         onProgress(Progress(0, budget, steps.toList()))
         for ((n, jam) in jams.withIndex()) {
             if (tried >= budget || bestSoFar.ranked.clear) break
-            val candidates = candidates(jam, bestLine, others, ownRides).take(minOf(2, budget - tried))
+            val candidates = candidates(jam, bestLine, others, ownWays).take(minOf(2, budget - tried))
             val results = coroutineScope {
                 candidates.map { c ->
                     async {
@@ -101,7 +112,7 @@ class Planner(private val context: Context, private val log: TrafficLogger) {
                     steps += Step(label, "${c.source}: goes in and comes back out, dropped", false)
                     continue
                 }
-                val r = RouteScore.rank(listOf(route), mode, ::count, shortestM = shortest).first()
+                val r = RouteScore.rank(listOf(route), mode, ::count, shortestM = shortest, adjust = ::own).first()
                 val opt = Option(r, via)
                 options += opt
                 val better = !r.tooLong && r.cost < bestSoFar.ranked.cost

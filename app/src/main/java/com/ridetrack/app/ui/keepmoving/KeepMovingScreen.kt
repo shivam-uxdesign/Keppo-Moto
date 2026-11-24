@@ -187,7 +187,8 @@ fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit, onGuiding: () ->
             if (d == null) { onStarted(); return@launch }
             // Then Google's directions; the ride goes on either way.
             val activity = context.findActivity()
-            val ways = plan?.options.orEmpty().filter { it !== option }.flatMap { it.via } + ownRides
+            // Ways round: the plan's other detours (the guide adds roads where you move well at the hour).
+            val ways = plan?.options.orEmpty().filter { it !== option }.flatMap { it.via }
             val why = if (activity != null) c.keepMoving.start(activity, d, option, mode, ways) else "Directions couldn't start here"
             if (why == null) {
                 onGuiding()

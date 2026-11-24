@@ -276,7 +276,7 @@ Prototype approved ("This looks good"): https://claude.ai/artifact/R91tYQfYRNczg
 
 "Normal is purely Google, can do suggestions like 'turn left, you've previously travelled here, smoother route'. Google will automatically recheck. Good with your other suggestions."
 
-**What it learns** (on the phone only, never uploaded): every recorded ride, cut into ~100 m road cells kept apart by direction (8), by weekday / weekend and by hour. Per cell and hour: how long you were there, how much of it **stopped** (< 5 km/h) or **crawling** (5–15 km/h), your usual speed, and how many rides. Rest stops (still for over 3 min) and the first / last 2 minutes of a ride (parking) are left out. Updated after each ride; past rides are read once.
+**What it learns** (on the phone only, never uploaded): every recorded ride, cut into ~100 m road cells kept apart by direction (8), by weekday / weekend and by hour. Per cell and hour: how long you were there, how much of it **stopped** (< 5 km/h) or **crawling** (5–15 km/h), your usual speed, and how many rides. Rest stops (standing still in one spot for over 5 min; creeping in a jam, however slowly, is kept) and the first / last 2 minutes of a ride (parking) are left out. Updated after each ride; past rides are read once.
 
 **What it does**
 1. **Scoring (Less traffic, No foot down):** where your rides disagree with Google, a route's cost moves toward your own record, by up to 60% once a cell has 5 rides at that hour (± 1 hour). Google green where you usually stop counts slow; Google yellow where you filter through counts lighter.
@@ -288,6 +288,34 @@ Prototype approved ("This looks good"): https://claude.ai/artifact/R91tYQfYRNczg
 
 **Limits:** a road helps after about 5 trips at similar hours; until then Google leads. Only roads you've ridden.
 
-## Later (after step 4): to plan, not build yet
-- **7. Our own route finder** on a server (OpenStreetMap roads + live traffic + your memory), for side-road detours Google never offers. Plan only, after step 4.
-- **8. Kotlin 2.3 and the newest Navigation SDK.** Plan only, after step 4.
+## Plan 7: our own route finder (plan only, 24 Nov; not approved for building)
+
+**Why:** Google gives at most 3 routes, and Keep moving can only bend them through detour points (each one a "stop" for the navigation). Side roads Google never offers stay out of reach. An own router can search every road for the clearest way.
+
+**How it would work**
+1. **Road map:** OpenStreetMap's roads for the area (Delhi NCR first: about 150 MB of road data, prepared once on the server and refreshed weekly). Free data, credited.
+2. **Router:** GraphHopper (open source, Apache 2.0) on a small server, with a two-wheeler profile (no expressways bikes can't use, lanes allowed).
+3. **Clearness per road, from three sources:**
+   - **Live traffic:** Google can't be used here (its terms forbid using its traffic outside its own routes and maps). A provider that sells per-road live speeds is needed: TomTom Traffic Flow or HERE (to compare on price and Delhi coverage, step 0 style).
+   - **Your own memory** (step 4): sent with the request, kept on the phone otherwise.
+   - **Signals** from OpenStreetMap.
+4. **The app** asks the server for the clearest route with No foot down's weights, gets a line back and hands it to directions.
+5. **Directions:** Google's Navigation SDK follows Google's routes, not ours. Options: (a) pass our route as up to 25 waypoints (each billed as a destination: costly, and "arrived" at each); (b) our own turn-by-turn on the MapTiler map (no Google content involved, so no conflict with its terms, but the biggest build); (c) a navigation SDK that takes outside routes (e.g. Mapbox or HERE, paid). Needs a decision.
+
+**Costs (rough):** a server about ₹1,500–3,000 a month (4 GB RAM for Delhi NCR); the live-traffic provider's per-request price on top; free for OpenStreetMap and GraphHopper.
+
+**Open questions for later:** which traffic provider; directions option a, b or c; whether it's worth it given steps 0–4 (decide after real rides with detours: if Google's routes plus detours keep you moving, skip it).
+
+## Plan 8: Kotlin 2.3 and the newest Navigation SDK (plan only, 24 Nov)
+
+**Why:** Keep moving uses Navigation SDK 7.2 because 7.3+ needs Kotlin 2.2 and 7.7+ Kotlin 2.3 (the app is on 2.1), and 8.x needs Android Gradle Plugin 9. Google supports each Navigation SDK version for a limited time, and newer ones add `setDestinationsWithToken` (no need to repeat the waypoints), better route-token handling and fixes.
+
+**Steps, each its own commit with the full test run, so any one can be undone**
+1. **Kotlin 2.1 → 2.3** with the matching KSP (Room's code generator) and Compose compiler plugin (bundled with Kotlin 2.x). Fix whatever the new compiler flags; tests and lint.
+2. **Navigation SDK 7.2 → 7.9** (needs AGP 8.13, already done; Kotlin 2.3 from step 1). Switch to `setDestinationsWithToken` where offered.
+3. **Android Gradle Plugin 8.13 → 9** and Gradle 9.1, then **Navigation SDK 8.x**. AGP 9 changes build-script APIs (Kotlin DSL details, the new DSL defaults), so this is the riskiest step; do it last and only when 8.x brings something needed.
+4. Each step: a test APK and a short ride with directions before the next.
+
+**Risk:** the whole app compiles with Kotlin, so step 1 touches everything (Studio, Moments, Room); the rest of the app's tests are what catch problems. **Effort:** step 1 about half a day plus fixes; step 2 an hour; step 3 a day.
+
+**Suggested timing:** step 1 and 2 soon (before Navigation SDK 7.2 support ends); step 3 when needed.
