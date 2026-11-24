@@ -227,6 +227,15 @@ fun HomeScreen(
                 modifier = Modifier.riseIn(1),
             )
             Spacer(Modifier.height(14.dp))
+            // Keep moving (test builds with a Routes key): plan the clearest road, then ride.
+            if (com.ridetrack.app.BuildConfig.TEST_BUILD && !s.rideState.isActive && com.ridetrack.app.ui.appContainer().trafficLog.available) {
+                val navigate = com.ridetrack.app.ui.nav.LocalNavigate.current
+                com.ridetrack.app.ui.components.RtCard(onClick = { navigate(com.ridetrack.app.ui.nav.Routes.KEEP_MOVING) }, modifier = Modifier.riseIn(1)) {
+                    Text("Keep moving ›", style = com.ridetrack.app.ui.theme.RtType.bodyStrong, color = com.ridetrack.app.ui.theme.RtColors.TextPrimary)
+                    Text("Pick where you're going: the clearest road by live traffic, then start.", style = com.ridetrack.app.ui.theme.RtType.caption, color = com.ridetrack.app.ui.theme.RtColors.TextSecondary)
+                }
+                Spacer(Modifier.height(14.dp))
+            }
             // 3. Bike care.
             BikeCareCard(bike.displayName, s.odometers[bike.id], s.care, onOpenBike, Modifier.riseIn(2))
             Spacer(Modifier.height(14.dp))

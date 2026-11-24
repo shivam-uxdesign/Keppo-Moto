@@ -30,6 +30,16 @@ import java.time.format.DateTimeFormatter
 /** Where the rider is riding to, for the traffic log. */
 data class Destination(val name: String, val at: LatLon)
 
+/** Google's answer to one routes request: [problem] in plain words when it failed. */
+data class RoutesAnswer(
+    val status: Int,
+    val body: String,
+    val mode: String,
+    val routes: List<TrafficRoute>,
+    val problem: String?,
+    val fellBack: Boolean = false,
+)
+
 /**
  * Keep moving, step 0 (test builds only): during a ride with a destination set, Google's route
  * there with live traffic is fetched every [EVERY_MS] and saved in the ride's folder
@@ -74,6 +84,44 @@ class TrafficLogger(
         }.apply()
     }
 
+    /** Two-wheeler until Google says it isn't offered here; then car routes. */
+    @Volatile private var mode = TrafficRoutes.TWO_WHEELER
+
+    /** The route picked before the ride (Keep moving, step 1): saved in the log's first line. */
+    @Volatile private var plan: TrafficRoute? = null
+
+    fun plan(route: TrafficRoute?) {
+        plan = route
+    }
+
+    /** Within today's cap: [DAILY_CAP] checks, whatever asks (the log or the Keep moving screen). */
+    val underCap: Boolean get() = todayCount() < DAILY_CAP
+
+    /**
+     * One request to Google for the routes from [from] to [to] with live traffic, counted against
+     * the month and the daily cap. Falls back to car routes once when two-wheeler isn't offered.
+     */
+    suspend fun routes(from: LatLon, to: LatLon, headingDeg: Double? = null): RoutesAnswer {
+        if (!underCap) return RoutesAnswer(0, "", mode, emptyList(), "Stopped for today: $DAILY_CAP checks (the cap that keeps the cost safe)")
+        var fellBack = false
+        while (true) {
+            val m = mode
+            val (status, body) = withContext(Dispatchers.IO) { post(TrafficRoutes.request(from, to, m, headingDeg)) }
+            // Only requests that reached Google count (they're the ones it bills).
+            if (status != -1) count()
+            if (m == TrafficRoutes.TWO_WHEELER && TrafficRoutes.modeNotOffered(status, body)) {
+                mode = TrafficRoutes.DRIVE
+                fellBack = true
+                continue
+            }
+            return if (status == 200) {
+                RoutesAnswer(status, body, m, runCatching { TrafficRoutes.parse(body) }.getOrDefault(emptyList()), null, fellBack)
+            } else {
+                RoutesAnswer(status, body, m, emptyList(), problem(status, body), fellBack)
+            }
+        }
+    }
+
     fun watch() {
         if (!BuildConfig.TEST_BUILD) return
         scope.launch {
@@ -87,7 +135,6 @@ class TrafficLogger(
     private suspend fun log(rideId: String) {
         if (!available || !_on.value) return
         val file = File(moments.dir(rideId), LOG_FILE)
-        var mode = TrafficRoutes.TWO_WHEELER
         var started = false
         while (true) {
             val dest = _destination.value ?: return
@@ -98,7 +145,12 @@ class TrafficLogger(
                 val here = LatLon(lat, lon)
                 if (!started) {
                     started = true
-                    append(file, JSONObject().put("type", "start").put("t", System.currentTimeMillis()).put("to", dest.name).put("toLat", dest.at.lat).put("toLon", dest.at.lon))
+                    append(
+                        file,
+                        JSONObject().put("type", "start").put("t", System.currentTimeMillis()).put("to", dest.name).put("toLat", dest.at.lat).put("toLon", dest.at.lon)
+                            // The route picked in Keep moving before the ride (step 1), to compare with what was ridden.
+                            .apply { plan?.let { put("plan", it.json()) }; plan = null },
+                    )
                 }
                 if (TrafficRoutes.distanceM(here, dest.at) < ARRIVED_M) {
                     append(file, JSONObject().put("type", "arrived").put("t", System.currentTimeMillis()))
@@ -111,23 +163,18 @@ class TrafficLogger(
                 }
                 val line = JSONObject().put("type", "check").put("t", System.currentTimeMillis())
                     .put("lat", lat).put("lon", lon).put("kmh", f.speedMps?.let { it * 3.6 } ?: JSONObject.NULL)
-                val (status, body) = withContext(Dispatchers.IO) { post(TrafficRoutes.request(here, dest.at, mode, f.headingDeg)) }
-                // Only requests that reached Google count (they're the ones it bills).
-                if (status != -1) count()
-                if (mode == TrafficRoutes.TWO_WHEELER && TrafficRoutes.modeNotOffered(status, body)) {
+                val a = routes(here, dest.at, f.headingDeg)
+                if (a.fellBack) {
                     // Two-wheeler isn't offered here: car routes instead, said in the log.
-                    mode = TrafficRoutes.DRIVE
-                    append(file, line.put("error", "two-wheeler not offered, using car routes"))
-                    continue
+                    append(file, JSONObject().put("type", "check").put("t", System.currentTimeMillis()).put("error", "two-wheeler not offered, using car routes"))
                 }
-                line.put("mode", mode).put("http", status)
-                if (status == 200) {
-                    val routes = runCatching { TrafficRoutes.parse(body) }.getOrDefault(emptyList())
-                    line.put("routes", JSONArray().apply { routes.forEach { put(it.json()) } })
-                    say(summary(routes))
+                line.put("mode", a.mode).put("http", a.status)
+                if (a.status == 200) {
+                    line.put("routes", JSONArray().apply { a.routes.forEach { put(it.json()) } })
+                    say(summary(a.routes))
                 } else {
-                    line.put("error", body.take(400))
-                    say(problem(status, body))
+                    line.put("error", a.body.take(400))
+                    say(a.problem ?: "${clock()} · Google said ${a.status}")
                 }
                 append(file, line)
             }

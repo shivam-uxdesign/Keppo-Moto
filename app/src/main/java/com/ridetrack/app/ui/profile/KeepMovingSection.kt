@@ -50,7 +50,7 @@ fun KeepMovingSection() {
     val status by log.status.collectAsStateWithLifecycle()
     var choosing by remember { mutableStateOf(false) }
 
-    SectionHeader("Keep moving: traffic log")
+    SectionHeader("Keep moving")
     RtCard {
         if (!log.available) {
             Text("This build has no Google Routes key", style = RtType.bodyStrong, color = RtColors.TextPrimary)
@@ -61,6 +61,12 @@ fun KeepMovingSection() {
             )
             return@RtCard
         }
+        val navigate = com.ridetrack.app.ui.nav.LocalNavigate.current
+        com.ridetrack.app.ui.components.PrimaryButton(
+            "Plan a Keep moving ride",
+            onClick = { navigate(com.ridetrack.app.ui.nav.Routes.KEEP_MOVING) },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        )
         ToggleRow(
             "Log traffic on my rides",
             "Every 2 minutes, Google's route to where you're going, with its traffic, is saved with the ride. Nothing changes on the riding screen.",
@@ -92,7 +98,7 @@ fun KeepMovingSection() {
 
 /** Where recent rides ended (tap one), or a search. */
 @Composable
-private fun DestinationPicker(onPick: (Destination) -> Unit, onClear: (() -> Unit)?, onClose: () -> Unit) {
+internal fun DestinationPicker(onPick: (Destination) -> Unit, onClear: (() -> Unit)?, onClose: () -> Unit) {
     val c = appContainer()
     var recent by remember { mutableStateOf<List<Destination>?>(null) }
     var query by remember { mutableStateOf("") }

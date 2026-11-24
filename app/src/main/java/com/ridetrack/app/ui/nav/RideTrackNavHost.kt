@@ -89,6 +89,8 @@ object Routes {
     const val RECENTLY_DELETED = "recently-deleted?rideId={rideId}"
     fun recentlyDeleted(rideId: String? = null) = if (rideId == null) "recently-deleted" else "recently-deleted?rideId=$rideId"
     const val RIDES_MAP = "rides-map"
+    /** Keep moving: plan the clearest route and start the ride (test builds). */
+    const val KEEP_MOVING = "keep-moving"
     const val SHARE = "share/{rideId}?mode={mode}&reel={reel}"
     fun share(id: String) = "share/$id"
     /** The Studio feed with this ride picked: where every "Studio" for a ride lands, as the tab does. */
@@ -323,6 +325,12 @@ fun RideTrackNavHost(
                 }
                 composable(Routes.RIDES_MAP) {
                     RidesMapScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) })
+                }
+                composable(Routes.KEEP_MOVING) {
+                    com.ridetrack.app.ui.keepmoving.KeepMovingScreen(
+                        onBack = { nav.popBackStack() },
+                        onStarted = { nav.navigate(Routes.LIVE) { popUpTo(Routes.KEEP_MOVING) { inclusive = true }; launchSingleTop = true } },
+                    )
                 }
                 composable(Routes.BIKE) {
                     BikeScreen(

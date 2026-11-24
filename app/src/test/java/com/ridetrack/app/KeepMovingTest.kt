@@ -2,6 +2,8 @@ package com.ridetrack.app
 
 import com.ridetrack.app.keepmoving.Destinations
 import com.ridetrack.app.keepmoving.LatLon
+import com.ridetrack.app.keepmoving.RouteScore
+import com.ridetrack.app.keepmoving.TrafficRoute
 import com.ridetrack.app.keepmoving.Speed
 import com.ridetrack.app.keepmoving.SpeedInterval
 import com.ridetrack.app.keepmoving.TrafficRoutes
@@ -91,6 +93,58 @@ class KeepMovingTest {
         assertEquals("Cyber Hub, Gurugram", d[0].name)
         near(28.495, d[0].at.lat)
         near(77.088, d[0].at.lon)
+    }
+
+    /** A straight route north of [n] steps of about 111 m, with [intervals]; Google's distance is the line's. */
+    private fun route(n: Int, vararg intervals: SpeedInterval, lon: Double = 77.0): TrafficRoute {
+        val pts = (0..n).map { LatLon(28.0 + it * 0.001, lon) }
+        return TrafficRoute(600, 600, (n * 111.2).toInt(), null, encode(pts), 0, 0, intervals.toList())
+    }
+
+    @Test
+    fun `yellow costs about a third of red, from the rider's 1 in 5`() {
+        near(0.32, RouteScore.SLOW_PER_M)
+        assertTrue(RouteScore.SLOW_PER_M / RouteScore.JAM_PER_M in 0.3..0.35)
+    }
+
+    @Test
+    fun `a short red stretch loses to a longer yellow one`() {
+        // 10 steps each: 3 red (~330 m) vs 8 yellow (~890 m), the rest clear.
+        val red = route(10, SpeedInterval(0, 3, Speed.JAM), SpeedInterval(3, 10, Speed.NORMAL))
+        val yellow = route(10, SpeedInterval(0, 8, Speed.SLOW), SpeedInterval(8, 10, Speed.NORMAL), lon = 77.01)
+        val ranked = RouteScore.rank(listOf(red, yellow))
+        assertEquals(1, ranked.first().index)
+    }
+
+    @Test
+    fun `a clear route up to 3x longer beats a short jammed one, but not past 3x`() {
+        val shortJam = route(10, SpeedInterval(0, 3, Speed.JAM), SpeedInterval(3, 10, Speed.NORMAL))
+        val longClear = route(29, SpeedInterval(0, 29, Speed.NORMAL), lon = 77.01)
+        assertEquals(1, RouteScore.rank(listOf(shortJam, longClear)).first().index)
+        val tooLong = route(31, SpeedInterval(0, 31, Speed.NORMAL), lon = 77.02)
+        val r = RouteScore.rank(listOf(shortJam, tooLong))
+        assertEquals(0, r.first().index)
+        assertTrue(r.last().tooLong)
+    }
+
+    @Test
+    fun `of two clear routes the shorter wins, and no data scores as slow`() {
+        val short = route(10, SpeedInterval(0, 10, Speed.NORMAL))
+        val long = route(14, SpeedInterval(0, 14, Speed.NORMAL), lon = 77.01)
+        assertEquals(1, RouteScore.rank(listOf(long, short)).first().index)
+        // No intervals at all: every metre is "no data".
+        val c = RouteScore.colours(route(10))
+        assertTrue(c.unknownM in 1050..1170, "unknown ${c.unknownM}")
+        near(RouteScore.SLOW_PER_M * c.unknownM, RouteScore.cost(c), 1e-6)
+    }
+
+    @Test
+    fun `a route is cut into one-colour stretches for the map, gaps as no data`() {
+        val s = RouteScore.stretches(route(6, SpeedInterval(0, 2, Speed.NORMAL), SpeedInterval(2, 4, Speed.JAM)))
+        assertEquals(listOf(Speed.NORMAL, Speed.JAM, Speed.UNKNOWN), s.map { it.speed })
+        // Neighbouring stretches share their joining point, so the line has no gaps.
+        assertEquals(s[0].points.last(), s[1].points.first())
+        assertEquals(7, s.sumOf { it.points.size } - (s.size - 1))
     }
 
     /** The standard polyline encoding, to make test answers. */

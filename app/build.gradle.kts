@@ -80,6 +80,8 @@ android {
         buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"\"")
         buildConfigField("Boolean", "APPCHECK_DEBUG", "false")
         buildConfigField("String", "GOOGLE_ROUTES_KEY", "\"\"")
+        // Google's map (Keep moving) reads its key from the manifest: test builds only, like the Routes key.
+        manifestPlaceholders["googleMapsKey"] = ""
         // Test builds (debug, releaseTest) show testing tools such as "Act as a free rider".
         buildConfigField("Boolean", "TEST_BUILD", "false")
         // Optional: `-PabiFilter=arm64-v8a` builds a smaller APK for modern phones only.
@@ -119,6 +121,7 @@ android {
         debug {
             buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"$appCheckDebugToken\"")
             buildConfigField("String", "GOOGLE_ROUTES_KEY", "\"$googleRoutesKey\"")
+            manifestPlaceholders["googleMapsKey"] = googleRoutesKey
             buildConfigField("Boolean", "APPCHECK_DEBUG", "true")
             buildConfigField("Boolean", "TEST_BUILD", "true")
         }
@@ -138,6 +141,7 @@ android {
             matchingFallbacks += listOf("release")
             buildConfigField("String", "APPCHECK_DEBUG_TOKEN", "\"$appCheckDebugToken\"")
             buildConfigField("String", "GOOGLE_ROUTES_KEY", "\"$googleRoutesKey\"")
+            manifestPlaceholders["googleMapsKey"] = googleRoutesKey
             buildConfigField("Boolean", "APPCHECK_DEBUG", "true")
             buildConfigField("Boolean", "TEST_BUILD", "true")
         }
@@ -195,6 +199,7 @@ dependencies {
 
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.maplibre.android)
+    implementation(libs.google.maps.compose)
     implementation(libs.androidx.camera.core)
     // Gemini transcripts through Firebase AI Logic, guarded by App Check.
     implementation(platform(libs.firebase.bom))

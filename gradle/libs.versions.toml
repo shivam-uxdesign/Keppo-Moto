@@ -22,6 +22,7 @@ junit = "4.13.2"
 playServicesAuth = "21.3.0"
 work = "2.10.0"
 orgJson = "20240303"
+mapsCompose = "6.2.1"
 
 [libraries]
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
@@ -75,6 +76,8 @@ kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-cor
 mlkit-image-labeling = { module = "com.google.mlkit:image-labeling", version = "17.0.9" }
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 org-json = { module = "org.json:json", version.ref = "orgJson" }
+# Keep moving: Google's map, which Google's terms require under its routes and traffic.
+google-maps-compose = { module = "com.google.maps.android:maps-compose", version.ref = "mapsCompose" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

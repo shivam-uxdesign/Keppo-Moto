@@ -148,3 +148,35 @@ Each step: unit tests for the logic (scoring, detour picking, switching rules, g
 ## Decided (6 Nov): Google's map on the Keep moving screen only
 
 Google routes, traffic and map for Keep moving; MapTiler everywhere else. One Google key, restricted to **Routes API** and **Maps SDK for Android**, as `GOOGLE_ROUTES_KEY`. No TomTom.
+
+## Terms check (23 Nov)
+
+Read from Google Maps Platform Terms and Service Specific Terms, and MapTiler's Cloud terms.
+
+- **MapTiler search as the destination: allowed.** MapTiler Cloud terms 6.4: "Results of the search services, such as … Geocoding API … are allowed for usage outside of the Service."
+- **Google's routes on Google's map only.** Service Terms 19.2 (Routes API): "Customer must not use Google Maps Content from the Routes API in conjunction with a non-Google map." General terms 3.2.3(e): not "with or near a non-Google Map in a Customer Application". So Keep moving has its own screen with only Google's map; MapTiler stays everywhere else.
+- **Step 3 needs a decision first.** General terms 3.2.3(d)(iv): customers will not "combine data from the Directions API, Geolocation API, and Maps SDK for Android to create real-time navigation functionality substantially similar to the functionality provided by the Google Maps for Android mobile app." Our own turn-by-turn on Google's routes and map is close to that. Options: (a) Google's Navigation SDK (the sanctioned way; billed per destination), (b) hand off to the Google Maps app, (c) another provider for the directions. Decide before step 3; steps 1–2 (plan, show, switch) aren't affected.
+- Caching: Routes API lat/lng may be cached up to 30 days (19.3); step 0's logs are deleted after the report.
+
+## Cost (Google's price list, 23 Nov; US$, about ₹88 to the dollar)
+
+| What | Google's tier | Free each month | Then |
+|---|---|---|---|
+| A route request with **two-wheeler** mode (step 0 log, step 1 plan) | Compute Routes **Enterprise** ("two-wheel routing") | 1,000 | $15 per 1,000 (≈ ₹1.3 each) |
+| A route request in car mode with traffic | Compute Routes Pro (TRAFFIC_AWARE) | 5,000 | $10 per 1,000 (≈ ₹0.9 each) |
+| Google's map on the Keep moving screen | Maps SDK (mobile) | Unlimited | Free |
+| Destination search | MapTiler (existing plan) | as today | as today |
+| Turn-by-turn via Google's Navigation SDK (step 3 option a) | Navigation Request | 1,000 | $25 per 1,000 destinations (≈ ₹2.2 each) |
+
+The free amounts are per billing account (all riders together), not per rider. Prices drop past 100,000 a month ($12, then $9 past 500,000).
+
+**You, testing:** the log is 30 requests an hour, so the 1,000 free cover about 33 hours of riding a month; planning adds a few per ride. Step 0's rides cost nothing. Past the free 1,000: about ₹40 per hour of logged riding. Limits: 300 checks a day in the app (≈ ₹390 a day at most past the free amount) and 2,000 a day on the key.
+
+**Step 2 (estimate):** 30–60 checks an hour plus a few detour lookups at each jam: about ₹40–80 per hour past the free amount.
+
+**At scale (estimate, list price):** a rider using Keep moving about an hour on 22 days a month makes about 1,000 requests: ≈ $15 (₹1,300) a month per rider. More than a typical subscription, so the cost levers matter:
+1. Two-wheeler only for the plan; live re-checks in car mode (same roads, same traffic; the Pro tier, a third cheaper, 5× the free amount).
+2. Re-check every 2–3 min when the road ahead is clear.
+3. Share recent answers between riders on the same roads (server cache).
+4. Hours of Keep moving included in Pro, more as an add-on.
+5. Own router with live traffic tiles when the numbers justify it.
