@@ -7,6 +7,10 @@ On the phone: Profile > Beta tools > Export all rides, save the ZIP, copy it to 
 
     python3 docs/case-study/ride-stats.py path/to/ridetrack-export-N-rides.zip
 
+Or, faster, straight from the phone's database (see pull-from-phone.sh):
+
+    python3 docs/case-study/ride-stats.py path/to/ridetrack.db
+
 Writes case-study-stats.json next to the ZIP. It holds totals and one showcase ride's
 speed and lean trace. Places are removed: the route is kept only as a shape, in metres from
 an anchor, with the first and last kilometre cut off so home or work can't be read from it.
@@ -29,6 +33,40 @@ def load(zpath):
                 except Exception: pass
             elif n.endswith('moments-log.txt'):
                 logs[folder] = z.read(n).decode('utf-8', 'replace')
+    return rides, moments, logs
+
+def load_db(path):
+    """The app's own Room database (ridetrack.db, with its -wal file beside it)."""
+    import sqlite3
+    con = sqlite3.connect(path)
+    con.row_factory = sqlite3.Row
+    rides, moments, logs = [], collections.defaultdict(list), collections.defaultdict(str)
+    for r in con.execute("SELECT * FROM rides WHERE status = 'COMPLETED' AND deletedAtMillis IS NULL"):
+        import datetime
+        iso = lambda ms: None if ms is None else datetime.datetime.fromtimestamp(ms / 1000, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        ride = {
+            'id': r['id'], 'name': r['name'], 'source': r['source'], 'status': r['status'],
+            'start': iso(r['startTimeMillis']), 'end': iso(r['endTimeMillis']), '_folder': r['id'],
+            'stats': {
+                'distanceM': r['distanceM'], 'durationMs': (r['endTimeMillis'] or r['lastUpdateMillis']) - r['startTimeMillis'],
+                'movingMs': r['movingMillis'], 'stoppedMs': r['stoppedMillis'], 'breakMs': r['breakMillis'],
+                'maxSpeedMps': r['maxSpeedMps'], 'maxAccelG': r['maxAccelG'], 'maxBrakeG': r['maxBrakeG'], 'peakG': r['peakG'],
+                'maxLeftLeanDeg': r['maxLeftLeanDeg'], 'maxRightLeanDeg': r['maxRightLeanDeg'], 'avgLeanDeg': r['avgLeanDeg'],
+                'stops': r['stopCount'], 'leftTurns': r['leftTurns'], 'rightTurns': r['rightTurns'],
+                'brakeEvents': r['brakeEvents'], 'accelEvents': r['accelEvents'], 'leanEvents': r['leanEvents'],
+            },
+        }
+        rides.append(ride)
+    by_id = {r['id']: r for r in rides}
+    if rides:
+        longest = max(rides, key=lambda r: r['stats']['distanceM'] or 0)
+        longest['samples'] = [
+            {'lat': x['latitude'], 'lon': x['longitude'], 'speedMps': x['speedMps'], 'leanDeg': x['leanDeg'],
+             'longG': x['longitudinalG'], 'rpm': x['rpm'], 'gear': x['gear']}
+            for x in con.execute('SELECT * FROM samples WHERE rideId = ? ORDER BY timeMillis', (longest['id'],))]
+    for m in con.execute('SELECT rideId, kind, types, source, durationMillis FROM moments WHERE deletedAtMillis IS NULL'):
+        if m['rideId'] in by_id:
+            moments[m['rideId']].append({'kind': m['kind'], 'types': (m['types'] or '').replace(',', '+') or (m['source'] or ''), 'durationMs': m['durationMillis']})
     return rides, moments, logs
 
 def hav(a, b):
@@ -64,7 +102,8 @@ def showcase(r, points=600, trim_m=1000):
 
 def main():
     if len(sys.argv) < 2: print(__doc__); sys.exit(1)
-    rides, moments, logs = load(sys.argv[1])
+    src = sys.argv[1]
+    rides, moments, logs = load_db(src) if src.endswith('.db') else load(src)
     rides = [r for r in rides if r.get('source') != 'DEMO' and r.get('status') != 'DEMO']
     if not rides: print('No rides found in the ZIP.'); sys.exit(1)
     st = lambda r, k: r['stats'].get(k) or 0

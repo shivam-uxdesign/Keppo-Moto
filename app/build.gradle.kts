@@ -144,6 +144,9 @@ android {
             manifestPlaceholders["googleMapsKey"] = googleRoutesKey
             buildConfigField("Boolean", "APPCHECK_DEBUG", "true")
             buildConfigField("Boolean", "TEST_BUILD", "true")
+            // `-PunlockData=true`: lets `adb shell run-as` read the app's rides and clips over USB
+            // (for the case study's numbers). Same key, so it installs over a test build keeping data.
+            if (providers.gradleProperty("unlockData").orNull == "true") isDebuggable = true
         }
     }
 
