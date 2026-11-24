@@ -5,6 +5,7 @@ import android.app.Application
 import android.media.AudioAttributes
 import android.speech.tts.TextToSpeech
 import com.google.android.libraries.navigation.CustomRoutesOptions
+import com.google.android.libraries.navigation.DisplayOptions
 import com.google.android.libraries.navigation.NavigationApi
 import com.google.android.libraries.navigation.NavigationRoadStretchRenderingData
 import com.google.android.libraries.navigation.NavigationUpdatesOptions
@@ -260,6 +261,10 @@ class KeepMovingGuide(
         val stops = through.mapIndexed { i, p -> Waypoint.builder().setLatLng(p.lat, p.lon).setTitle("Way round ${i + 1}").build() }
         val travel = if (log.lastMode == TrafficRoutes.DRIVE) RoutingOptions.TravelMode.DRIVING else RoutingOptions.TravelMode.TWO_WHEELER
         val token = route?.routeToken
+        // 24 Nov: a detour point showed as the destination (Google's pin and "3.6 km"). Google's
+        // destination pins are hidden; the directions screen draws the real destination itself.
+        // No foot down also shows Google's own traffic-light icons on the map.
+        val display = DisplayOptions().hideDestinationMarkers(true).showTrafficLights(mode == KeepMode.NO_FOOT_DOWN)
         val future = withContext(Dispatchers.Main) {
             val viaToken = token?.let {
                 // 24 Nov crash: Navigation SDK 7.2 refuses two-wheeler here ("Unsupported travel mode:
@@ -268,13 +273,13 @@ class KeepMovingGuide(
                 // two-wheeler route. If even that is refused, guide through the same detour points.
                 runCatching {
                     // The same waypoints the token was made with (the Navigation SDK 7.2 asks for them).
-                    nav.setDestinations(stops + target, CustomRoutesOptions.builder().setRouteToken(it).setTravelMode(RoutingOptions.TravelMode.DRIVING).build())
+                    nav.setDestinations(stops + target, CustomRoutesOptions.builder().setRouteToken(it).setTravelMode(RoutingOptions.TravelMode.DRIVING).build(), display)
                 }.onFailure { e -> android.util.Log.w("KeepMoving", "Route token refused, guiding through the detour points", e) }.getOrNull()
             }
             viaToken ?: if (stops.isEmpty()) {
-                nav.setDestination(target, RoutingOptions().travelMode(travel))
+                nav.setDestination(target, RoutingOptions().travelMode(travel), display)
             } else {
-                nav.setDestinations(stops + target, RoutingOptions().travelMode(travel))
+                nav.setDestinations(stops + target, RoutingOptions().travelMode(travel), display)
             }
         }
         return suspendCancellableCoroutine { c -> future.setOnResultListener { s -> if (c.isActive) c.resume(s) } }

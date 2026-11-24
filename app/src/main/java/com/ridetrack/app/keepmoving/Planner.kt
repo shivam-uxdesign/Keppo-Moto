@@ -112,7 +112,7 @@ class Planner(
             val r = RouteScore.rank(listOf(route), mode, ::count, shortestM = shortest, adjust = ::own).first()
             val opt = Option(r, via)
             options += opt
-            val better = !r.tooLong && r.cost < best.ranked.cost
+            val better = !r.tooLong && r.cost + VIA_PENALTY * via.size < best.ranked.cost
             steps += Step(label, "$source: " + if (r.tooLong) "too long, dropped" else if (better) describe(r) else "no clearer", better)
             if (!r.tooLong && r.cost < bestSoFar.ranked.cost) bestSoFar = opt
             return opt.takeIf { better }
@@ -130,13 +130,17 @@ class Planner(
             consider("Round ${bestPerJam.size} jams", "the best ways round together", via, log.routes(from, to, via = via))
             onProgress(Progress(results.size + 1, budget + 1, steps.toList()))
         }
-        val sorted = options.sortedWith(compareBy<Option> { it.ranked.tooLong }.thenBy { it.ranked.cost })
+        // A detour point is a stop for Google's navigation (an "arrived" on the way): only worth it
+        // when it clears clearly more than that bother.
+        val sorted = options.sortedWith(compareBy<Option> { it.ranked.tooLong }.thenBy { it.ranked.cost + VIA_PENALTY * it.via.size })
         return Plan(google, sorted, requests, signals.isNotEmpty(), car, null)
     }
 
     companion object {
         /** Jams shorter than this aren't worth a detour. */
         const val MIN_JAM_M = 200
+        /** What one detour point (a stop for the navigation) costs: about 100 m of red. */
+        const val VIA_PENALTY = 100.0
         /** The plan waits at most this long for OpenStreetMap's signals. */
         const val SIGNALS_WAIT_MS = 4_000L
 
