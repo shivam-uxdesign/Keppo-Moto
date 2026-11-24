@@ -25,6 +25,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.MyLocation
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.toArgb
+import com.google.android.gms.maps.model.MapStyleOptions
+import com.google.maps.android.compose.MapType
+import com.ridetrack.app.R
+import com.ridetrack.app.data.MapStyle
+import com.ridetrack.app.ui.components.MapStyleToggle
+import kotlinx.coroutines.flow.map
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -76,12 +85,34 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-/** Google's own traffic colours, so the map reads the way the rider already knows it. */
-private val ClearColour = Color(0xFF34A853)
-private val SlowColour = Color(0xFFFBBC04)
-private val JamColour = Color(0xFFEA4335)
-private val NoDataColour = Color(0xFF9AA0A6)
-private val OtherRouteColour = Color(0xB39AA0A6)
+/**
+ * Traffic as the app's own colours (its dark palette's ok / warning / error), on the dark Keppo
+ * style of Google's map ([R.raw.google_map_dark], the MapTiler dark map's greys), so this screen
+ * looks like the rest of the app while still reading green / yellow / red like Google Maps.
+ */
+private val ClearColour = Color(0xFF4ADE80)
+private val SlowColour = Color(0xFFFBBF24)
+private val JamColour = Color(0xFFF43F5E)
+private val NoDataColour = Color(0xFF6B6B70)
+private val OtherRouteColour = Color(0xCC3F3F44)
+/** Keppo Teal, for the destination pin and your position. */
+private val Teal = Color(0xFF69C8CB)
+
+/** A round marker: [fill] with a [ring], [sizeDp] across. */
+private fun dot(context: android.content.Context, sizeDp: Float, fill: Color, ring: Color, ringDp: Float, centre: Color? = null): com.google.android.gms.maps.model.BitmapDescriptor {
+    val d = context.resources.displayMetrics.density
+    val px = (sizeDp * d).roundToInt()
+    val bmp = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+    val cv = android.graphics.Canvas(bmp)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    val r = px / 2f
+    paint.color = ring.toArgb()
+    cv.drawCircle(r, r, r, paint)
+    paint.color = fill.toArgb()
+    cv.drawCircle(r, r, r - ringDp * d, paint)
+    centre?.let { paint.color = it.toArgb(); cv.drawCircle(r, r, r * 0.32f, paint) }
+    return com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(bmp)
+}
 
 private fun Speed.colour() = when (this) {
     Speed.NORMAL -> ClearColour
@@ -118,6 +149,7 @@ fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit) {
     var choosing by remember { mutableStateOf(false) }
     var starting by remember { mutableStateOf(false) }
     var mapLoaded by remember { mutableStateOf(false) }
+    val mapStyle by remember { c.settings.settings.map { it.mapStyle } }.collectAsStateWithLifecycle(initialValue = MapStyle.DARK)
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         allowed = MyLocation.allowed(context)
@@ -184,11 +216,17 @@ fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit) {
         }
 
         Box(Modifier.fillMaxWidth().weight(1f)) {
+            val darkStyle = remember { runCatching { MapStyleOptions.loadRawResourceStyle(context, R.raw.google_map_dark) }.getOrNull() }
             GoogleMap(
                 modifier = Modifier.fillMaxSize(),
                 cameraPositionState = cam,
-                properties = MapProperties(isMyLocationEnabled = allowed),
-                uiSettings = MapUiSettings(zoomControlsEnabled = false, mapToolbarEnabled = false, myLocationButtonEnabled = allowed),
+                // The Dark / Satellite choice is the same setting as the ride maps'.
+                properties = MapProperties(
+                    mapType = if (mapStyle == MapStyle.SATELLITE) MapType.HYBRID else MapType.NORMAL,
+                    mapStyleOptions = if (mapStyle == MapStyle.SATELLITE) null else darkStyle,
+                ),
+                // The app's own controls are drawn over the map instead of Google's.
+                uiSettings = MapUiSettings(zoomControlsEnabled = false, mapToolbarEnabled = false, myLocationButtonEnabled = false, compassEnabled = false),
                 onMapLoaded = { mapLoaded = true },
                 // Long-press anywhere: ride there.
                 onMapLongClick = { p ->
@@ -212,7 +250,23 @@ fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit) {
                         Polyline(points = s.points.map { it.g() }, color = s.speed.colour(), width = 18f, zIndex = 2f)
                     }
                 }
-                dest?.let { d -> Marker(state = MarkerState(position = d.at.g()), title = d.name) }
+                val pin = remember { dot(context, 26f, Teal, Color.White, 3f, centre = Color(0xFF0A0A0B)) }
+                val me = remember { dot(context, 18f, Color.White, Teal, 4f) }
+                dest?.let { d -> Marker(state = MarkerState(position = d.at.g()), title = d.name, icon = pin, anchor = Offset(0.5f, 0.5f), zIndex = 4f) }
+                here?.let { h -> Marker(state = MarkerState(position = h.g()), title = "You", icon = me, anchor = Offset(0.5f, 0.5f), zIndex = 3f) }
+            }
+            MapStyleToggle(
+                selected = mapStyle,
+                onSelect = { st -> scope.launch { c.settings.setMapStyle(st) } },
+                modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
+            )
+            here?.let { h ->
+                IconButton(
+                    onClick = { scope.launch { runCatching { cam.animate(CameraUpdateFactory.newLatLngZoom(h.g(), 15f)) } } },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).size(44.dp).background(RtColors.Background.copy(alpha = 0.85f), CircleShape),
+                ) {
+                    Icon(Icons.Outlined.MyLocation, contentDescription = "Show where I am", tint = RtColors.TextPrimary)
+                }
             }
             if (loading) {
                 CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 3.dp, modifier = Modifier.align(Alignment.Center).size(36.dp))

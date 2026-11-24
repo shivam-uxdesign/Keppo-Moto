@@ -327,10 +327,11 @@ fun RideTrackNavHost(
                     RidesMapScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) })
                 }
                 composable(Routes.KEEP_MOVING) {
-                    com.ridetrack.app.ui.keepmoving.KeepMovingScreen(
+                    // Dark like the other riding screens, whatever the phone's theme (its map is dark too).
+                    DarkRoute { com.ridetrack.app.ui.keepmoving.KeepMovingScreen(
                         onBack = { nav.popBackStack() },
                         onStarted = { nav.navigate(Routes.LIVE) { popUpTo(Routes.KEEP_MOVING) { inclusive = true }; launchSingleTop = true } },
-                    )
+                    ) }
                 }
                 composable(Routes.BIKE) {
                     BikeScreen(
