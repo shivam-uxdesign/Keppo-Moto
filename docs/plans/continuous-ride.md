@@ -288,23 +288,19 @@ Prototype approved ("This looks good"): https://claude.ai/artifact/R91tYQfYRNczg
 
 **Limits:** a road helps after about 5 trips at similar hours; until then Google leads. Only roads you've ridden.
 
-## Plan 7: our own route finder (plan only, 24 Nov; not approved for building)
+## Plan 7: side roads Google never offers (revised 24 Nov: no paid server)
 
-**Why:** Google gives at most 3 routes, and Keep moving can only bend them through detour points (each one a "stop" for the navigation). Side roads Google never offers stay out of reach. An own router can search every road for the clearest way.
+"I don't really want to spend that much on a server."
 
-**How it would work**
-1. **Road map:** OpenStreetMap's roads for the area (Delhi NCR first: about 150 MB of road data, prepared once on the server and refreshed weekly). Free data, credited.
-2. **Router:** GraphHopper (open source, Apache 2.0) on a small server, with a two-wheeler profile (no expressways bikes can't use, lanes allowed).
-3. **Clearness per road, from three sources:**
-   - **Live traffic:** Google can't be used here (its terms forbid using its traffic outside its own routes and maps). A provider that sells per-road live speeds is needed: TomTom Traffic Flow or HERE (to compare on price and Delhi coverage, step 0 style).
-   - **Your own memory** (step 4): sent with the request, kept on the phone otherwise.
-   - **Signals** from OpenStreetMap.
-4. **The app** asks the server for the clearest route with No foot down's weights, gets a line back and hands it to directions.
-5. **Directions:** Google's Navigation SDK follows Google's routes, not ours. Options: (a) pass our route as up to 25 waypoints (each billed as a destination: costly, and "arrived" at each); (b) our own turn-by-turn on the MapTiler map (no Google content involved, so no conflict with its terms, but the biggest build); (c) a navigation SDK that takes outside routes (e.g. Mapbox or HERE, paid). Needs a decision.
+**The gap it fills:** Google offers at most 3 routes; Keep moving bends them with detour points from Google's other routes, your own rides and a guess to either side. A side road Google never offers, that you've never ridden and the guess misses, stays out of reach. Nothing else needs a router: traffic, scoring and directions already work.
 
-**Costs (rough):** a server about ₹1,500–3,000 a month (4 GB RAM for Delhi NCR); the live-traffic provider's per-request price on top; free for OpenStreetMap and GraphHopper.
+**Decision:** no server. Ride with steps 0–4 first; only if detours keep missing side roads you know:
+- **BRouter on the phone** (open-source bike router, offline OpenStreetMap roads, a one-time ~100–200 MB download for the Delhi area; can run as its own free app that Keppo asks). It only proposes real side roads around a jam; Keep moving then asks Google for a route through that point, so Google's traffic judges it and Google's navigation guides it. ₹0 a month, no traffic provider. It's never given Google's traffic (inside Google's terms). Licence to check before building.
+- Dropped: GraphHopper on a paid server with a paid live-traffic feed (₹1,500–3,000+ a month); free cloud tiers (can be withdrawn).
 
-**Open questions for later:** which traffic provider; directions option a, b or c; whether it's worth it given steps 0–4 (decide after real rides with detours: if Google's routes plus detours keep you moving, skip it).
+## Before a public release: the Firebase relay
+
+Not a route finder: a small Firebase Function the app sends its Routes and Places requests to; it adds the key (so the key isn't in the public app), checks App Check (as Gemini's calls do) and can cap use per rider. Within Firebase's free allowance (about 2 million calls a month) at this scale: about ₹0. Needed before Keep moving goes on the Play Store, not for test builds. Plus: the Play signing SHA-1 on the key, and the Navigation SDK and Maps keys (those are meant to be in apps).
 
 ## Plan 8: Kotlin 2.3 and the newest Navigation SDK (plan only, 24 Nov)
 
