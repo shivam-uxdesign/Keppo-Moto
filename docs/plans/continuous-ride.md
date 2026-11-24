@@ -225,3 +225,20 @@ Asked: "5 second timer, no cooldown after that. Can we build a route in the firs
 
 - Modes only on the Keep moving screen, or also when starting a ride from Home's slider (then Home asks where to, too)?
 - In the same build: saved places (#114, label = the phone's area name, 20 most recent, one list with ride ends) and step 4 (learning from your own rides)?
+
+### Added 24 Nov (discussed and approved): detours before the ride, and free turns during it
+
+**Before the ride: find the clearest route, detours included** (Less traffic and No foot down)
+1. The first request as now: Google's up to 3 routes with traffic. A fully clear one: done.
+2. Every route has red: for each red stretch over ~200 m on the best route, try a detour point beside it, taken from **real roads first**: a point on one of Google's other routes where it goes round that jam, then a point from the rider's own past rides; a guessed point 0.5–1 km to the side only when neither exists.
+3. Ask "A to B through this point" for each candidate (in parallel, a few seconds), jam by jam; keep the clearest; stop as soon as a fully clear route turns up. Throw away routes that go in and come back out.
+4. Before Start, the trade-off: "Google's fastest: 42 min, 3 jams · Keppo: 48 min, no jams".
+5. The search runs when the rider taps Plan (jams move).
+- Cost past the free amounts: ≈ ₹1.3 a request, and Google's navigation bills each detour point as a destination (≈ ₹2.2 each).
+- To test: whether a detour point can pass without the navigation announcing "arrived"; if not, the app continues by itself.
+
+**During the ride: free warnings and your own turns first, the paid switch as the backstop**
+1. Trouble ahead (from the plan and the navigation's own traffic): a warning at ~1.5 km and again at ~500 m, with the jam's length, on screen and by voice. No warning for short jams with no way round.
+2. A suggested turn when one is known: a detour found before the ride, or a way round from the rider's own past rides.
+3. The rider turns (left, right, U-turn): Google re-plans for free; the app scores the new road from the navigation's traffic (free).
+4. The paid switch (a Routes look + a new destination, ≈ ₹3.5) only when the rider didn't turn and the jam is still ahead, or when Google's re-plan heads back into the jam.
