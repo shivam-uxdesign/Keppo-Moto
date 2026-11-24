@@ -13,7 +13,7 @@ the short version: how we work, what's open, and what's next.
 - Log every question, bug, idea and build as a new row in `studio-feature-plan.md`.
 - "Plan only", "don't build", "don't make changes" mean exactly that.
 - Before every commit: `./gradlew :core:telemetry:test :app:testDebugUnitTest :app:lintDebug`
-  (0 errors; 141 warnings is the baseline). It takes about 10 minutes: run it in the background.
+  (0 errors; 271 warnings is the baseline since AGP 8.13.2 on 24 Nov: its newer lint adds checks such as UseKtx; it was 141 on AGP 8.7.3). It takes about 10 minutes: run it in the background.
 - Maven Central sometimes answers 429 (Too Many Requests): stop the Gradle daemon (`./gradlew --stop`)
   and retry with `--max-workers=2`. Robolectric's Android jars download on the first test run.
 
