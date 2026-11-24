@@ -18,7 +18,7 @@ object TrafficRoutes {
 
     /** Only what the log needs (Google bills by what's asked for). */
     const val FIELD_MASK = "routes.duration,routes.staticDuration,routes.distanceMeters,routes.polyline.encodedPolyline," +
-        "routes.travelAdvisory.speedReadingIntervals,routes.description"
+        "routes.travelAdvisory.speedReadingIntervals,routes.description,routes.routeToken"
 
     const val TWO_WHEELER = "TWO_WHEELER"
     const val DRIVE = "DRIVE"
@@ -60,6 +60,8 @@ object TrafficRoutes {
                 slowM = metres(points, intervals, Speed.SLOW),
                 jamM = metres(points, intervals, Speed.JAM),
                 intervals = intervals,
+                // What Google's Navigation SDK follows to guide along exactly this route.
+                routeToken = r.optString("routeToken").takeIf { it.isNotBlank() },
             )
         }
     }
@@ -137,6 +139,8 @@ data class TrafficRoute(
     val slowM: Int,
     val jamM: Int,
     val intervals: List<SpeedInterval>,
+    /** For Google's Navigation SDK (Keep moving's directions); not saved in the log. */
+    val routeToken: String? = null,
 ) {
     /** Minutes traffic adds to this route right now. */
     val delayMin: Int get() = ((durationSec - freeFlowSec).coerceAtLeast(0) / 60.0).roundToInt()

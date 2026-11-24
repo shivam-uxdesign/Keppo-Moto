@@ -130,7 +130,7 @@ private fun LatLon.g() = LatLng(lat, lon)
  * picked route in its first line.
  */
 @Composable
-fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit) {
+fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit, onGuiding: () -> Unit = onStarted) {
     val c = appContainer()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -305,7 +305,7 @@ fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit) {
         }
         val route = ranked.firstOrNull { it.index == picked }
         PrimaryButton(
-            if (starting) "Starting…" else "Start ride on this route",
+            if (starting) "Starting…" else "Start with directions",
             enabled = route != null && dest != null && !starting,
             large = true,
             onClick = {
@@ -316,8 +316,20 @@ fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit) {
                     log.plan(route?.route)
                     val bike = QuickStart.bike(c.bikes.observeBikes().first(), c.settings.settings.first().selectedBikeId)
                     val ok = bike != null && QuickStart.start(c, bike)
-                    starting = false
-                    if (ok) onStarted() else problem = if (bike == null) "Add a bike first (Home › Add bike)" else "The ride didn't start: try again"
+                    if (!ok) {
+                        starting = false
+                        problem = if (bike == null) "Add a bike first (Home › Add bike)" else "The ride didn't start: try again"
+                        return@launch
+                    }
+                    // Then Google's directions along the picked road; the ride goes on either way.
+                    val activity = context.findActivity()
+                    val why = if (activity != null && route != null) c.keepMoving.start(activity, d, route.route) else "Directions couldn't start here"
+                    if (why == null) {
+                        onGuiding()
+                    } else {
+                        android.widget.Toast.makeText(context, "$why. Riding without directions.", android.widget.Toast.LENGTH_LONG).show()
+                        onStarted()
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth().padding(horizontal = RtDimens.screenPadding).padding(bottom = 12.dp).navigationBarsPadding(),
@@ -390,4 +402,10 @@ private fun Swatch(colour: Color, text: String) {
         Spacer(Modifier.width(5.dp))
         Text(text, style = RtType.caption, color = RtColors.TextSecondary)
     }
+}
+
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

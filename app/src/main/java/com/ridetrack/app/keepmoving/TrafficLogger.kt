@@ -85,6 +85,9 @@ class TrafficLogger(
     /** Two-wheeler until Google says it isn't offered here; then car routes. */
     @Volatile private var mode = TrafficRoutes.TWO_WHEELER
 
+    /** The travel mode Google last answered in (car routes once two-wheeler wasn't offered). */
+    val lastMode: String get() = mode
+
     /** The route picked before the ride (Keep moving, step 1): saved in the log's first line. */
     @Volatile private var plan: TrafficRoute? = null
 

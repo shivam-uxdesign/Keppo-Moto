@@ -193,6 +193,8 @@ class AppContainer(context: Context) {
     val obd = com.ridetrack.app.obd.ObdManager(appContext, settings, session, moments, errors, appScope)
     /** Keep moving, step 0: Google's traffic to a destination logged during rides (test builds). */
     val trafficLog = com.ridetrack.app.keepmoving.TrafficLogger(appContext, session, moments, appScope)
+    /** Keep moving's directions and rerouting (test builds). */
+    val keepMoving = com.ridetrack.app.keepmoving.KeepMovingGuide(appContext as android.app.Application, session, trafficLog, appScope)
 
     /** The rider's routines: when a ride starts, ends or arrives somewhere, do these. */
     val routines = com.ridetrack.app.routines.RoutineRunner(appContext, settings, session, errors)

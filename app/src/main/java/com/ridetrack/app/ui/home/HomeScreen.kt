@@ -228,11 +228,19 @@ fun HomeScreen(
             )
             Spacer(Modifier.height(14.dp))
             // Keep moving (test builds with a Routes key): plan the clearest road, then ride.
-            if (com.ridetrack.app.BuildConfig.TEST_BUILD && !s.rideState.isActive && com.ridetrack.app.ui.appContainer().trafficLog.available) {
+            val keepMoving = com.ridetrack.app.ui.appContainer().keepMoving
+            val guiding by keepMoving.active.collectAsStateWithLifecycle()
+            if (com.ridetrack.app.BuildConfig.TEST_BUILD && (guiding || !s.rideState.isActive) && com.ridetrack.app.ui.appContainer().trafficLog.available) {
                 val navigate = com.ridetrack.app.ui.nav.LocalNavigate.current
-                com.ridetrack.app.ui.components.RtCard(onClick = { navigate(com.ridetrack.app.ui.nav.Routes.KEEP_MOVING) }, modifier = Modifier.riseIn(1)) {
-                    Text("Keep moving ›", style = com.ridetrack.app.ui.theme.RtType.bodyStrong, color = com.ridetrack.app.ui.theme.RtColors.TextPrimary)
-                    Text("Pick where you're going: the clearest road by live traffic, then start.", style = com.ridetrack.app.ui.theme.RtType.caption, color = com.ridetrack.app.ui.theme.RtColors.TextSecondary)
+                val to = if (guiding) com.ridetrack.app.ui.nav.Routes.KEEP_MOVING_NAV else com.ridetrack.app.ui.nav.Routes.KEEP_MOVING
+                com.ridetrack.app.ui.components.RtCard(onClick = { navigate(to) }, modifier = Modifier.riseIn(1)) {
+                    Text(if (guiding) "Back to directions ›" else "Keep moving ›", style = com.ridetrack.app.ui.theme.RtType.bodyStrong, color = com.ridetrack.app.ui.theme.RtColors.TextPrimary)
+                    Text(
+                        if (guiding) "Keep moving is guiding you to ${keepMoving.destination?.name ?: "your destination"}."
+                        else "Pick where you're going: the clearest road by live traffic, with Google's directions.",
+                        style = com.ridetrack.app.ui.theme.RtType.caption,
+                        color = com.ridetrack.app.ui.theme.RtColors.TextSecondary,
+                    )
                 }
                 Spacer(Modifier.height(14.dp))
             }

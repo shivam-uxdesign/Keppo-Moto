@@ -148,6 +148,8 @@ android {
     }
 
     compileOptions {
+        // The Navigation SDK needs Java 8+ library desugaring.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -200,6 +202,8 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.maplibre.android)
     implementation(libs.google.maps.compose)
+    implementation(libs.google.navigation)
+    coreLibraryDesugaring(libs.desugar.jdk.libs.nio)
     implementation(libs.androidx.camera.core)
     // Gemini transcripts through Firebase AI Logic, guarded by App Check.
     implementation(platform(libs.firebase.bom))
@@ -244,4 +248,9 @@ dependencies {
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// The Navigation SDK bundles the Google Maps SDK: exclude the separate copy (maps-compose would pull it in).
+configurations.configureEach {
+    exclude(group = "com.google.android.gms", module = "play-services-maps")
 }

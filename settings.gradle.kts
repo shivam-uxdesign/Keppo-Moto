@@ -28,6 +28,8 @@ dependencyResolutionManagement {
                 includeGroupByRegex("com\\.google\\.gms.*")
                 // ML Kit (on-phone picture labels for moment keywords).
                 includeGroupByRegex("com\\.google\\.mlkit.*")
+                // Chromium's network library, which Google's Navigation SDK uses (Keep moving).
+                includeGroup("org.chromium.net")
             }
         }
         mavenCentral()

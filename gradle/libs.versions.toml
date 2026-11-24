@@ -23,6 +23,8 @@ playServicesAuth = "21.3.0"
 work = "2.10.0"
 orgJson = "20240303"
 mapsCompose = "6.2.1"
+navigationSdk = "7.2.0"
+desugarJdkLibs = "2.1.5"
 
 [libraries]
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
@@ -78,6 +80,9 @@ androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version
 org-json = { module = "org.json:json", version.ref = "orgJson" }
 # Keep moving: Google's map, which Google's terms require under its routes and traffic.
 google-maps-compose = { module = "com.google.maps.android:maps-compose", version.ref = "mapsCompose" }
+# Keep moving's turn-by-turn: Google's Navigation SDK (it bundles the Maps SDK, so play-services-maps is excluded).
+google-navigation = { module = "com.google.android.libraries.navigation:navigation", version.ref = "navigationSdk" }
+desugar-jdk-libs-nio = { module = "com.android.tools:desugar_jdk_libs_nio", version.ref = "desugarJdkLibs" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

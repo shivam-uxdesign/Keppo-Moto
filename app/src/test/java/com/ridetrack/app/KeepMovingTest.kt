@@ -3,6 +3,7 @@ package com.ridetrack.app
 import com.ridetrack.app.keepmoving.Destinations
 import com.ridetrack.app.keepmoving.LatLon
 import com.ridetrack.app.keepmoving.PlaceSearch
+import com.ridetrack.app.keepmoving.Reroute
 import com.ridetrack.app.keepmoving.RouteScore
 import com.ridetrack.app.keepmoving.TrafficRoute
 import com.ridetrack.app.keepmoving.Speed
@@ -124,6 +125,54 @@ class KeepMovingTest {
         near(28.6, r.getJSONObject("locationBias").getJSONObject("circle").getJSONObject("center").getDouble("latitude"))
         assertFalse(PlaceSearch.request("x", "tok", null).has("locationBias"))
         assertTrue("sessionToken=tok" in PlaceSearch.detailsUrl("ChIJ1", "tok"))
+    }
+
+    @Test
+    fun `the road ahead is scored from the navigation's own traffic, within 5 km`() {
+        val st = listOf(Reroute.Stretch(1_000, 300, Speed.JAM), Reroute.Stretch(4_800, 600, Speed.SLOW))
+        val ahead = Reroute.colours(st, totalM = 10_000, aheadM = Reroute.AHEAD_M)
+        assertEquals(300, ahead.jamM)
+        assertEquals(200, ahead.slowM) // only the first 200 m of the slow stretch is within 5 km
+        assertEquals(10_000 - 900, Reroute.colours(st, 10_000).clearM)
+    }
+
+    @Test
+    fun `Google is asked only with trouble ahead, and not too often`() {
+        val jam = listOf(Reroute.Stretch(500, 200, Speed.JAM))
+        val bit = listOf(Reroute.Stretch(500, 100, Speed.SLOW))
+        val now = 10_000_000L
+        assertTrue(Reroute.shouldLook(jam, 8_000, now, lastAskMs = 0, keptUntilMs = 0, lastSwitchMs = 0))
+        // A little yellow isn't worth a paid look.
+        assertFalse(Reroute.shouldLook(bit, 8_000, now, 0, 0, 0))
+        // Asked a minute ago; kept the road; just switched.
+        assertFalse(Reroute.shouldLook(jam, 8_000, now, lastAskMs = now - 60_000, keptUntilMs = 0, lastSwitchMs = 0))
+        assertFalse(Reroute.shouldLook(jam, 8_000, now, 0, keptUntilMs = now + 1, lastSwitchMs = 0))
+        assertFalse(Reroute.shouldLook(jam, 8_000, now, 0, 0, lastSwitchMs = now - 60_000))
+    }
+
+    @Test
+    fun `a clearer road is picked only when it's clearly better and not the same road`() {
+        val current = (0..20).map { LatLon(28.0 + it * 0.001, 77.0) }
+        val other = route(20, SpeedInterval(0, 20, Speed.NORMAL), lon = 77.01).copy(routeToken = "tok")
+        val sameRoad = route(20, SpeedInterval(0, 20, Speed.NORMAL)).copy(routeToken = "tok2")
+        // The current road has ~500 m of red: cost ~ 500 + clear.
+        val ranked = RouteScore.rank(listOf(other))
+        assertEquals(0, Reroute.pick(ranked, current, currentCost = 520.0)?.index)
+        // Not clearly better: stay.
+        assertEquals(null, Reroute.pick(ranked, current, currentCost = 20.0))
+        // Google's best is the road already ridden: stay.
+        assertEquals(null, Reroute.pick(RouteScore.rank(listOf(sameRoad)), current, currentCost = 520.0))
+        // No route token: can't be followed, stay.
+        assertEquals(null, Reroute.pick(RouteScore.rank(listOf(other.copy(routeToken = null))), current, 520.0))
+    }
+
+    @Test
+    fun `distance to a line and same road`() {
+        val line = listOf(LatLon(28.0, 77.0), LatLon(28.01, 77.0))
+        assertTrue(Reroute.distanceToLineM(LatLon(28.005, 77.0), line) < 1.0)
+        assertTrue(Reroute.distanceToLineM(LatLon(28.005, 77.001), line) in 90.0..110.0)
+        assertTrue(Reroute.sameRoad(line, listOf(LatLon(28.001, 77.0), LatLon(28.009, 77.0002))))
+        assertFalse(Reroute.sameRoad(line, listOf(LatLon(28.001, 77.01), LatLon(28.009, 77.01))))
     }
 
     /** A straight route north of [n] steps of about 111 m, with [intervals]; Google's distance is the line's. */
