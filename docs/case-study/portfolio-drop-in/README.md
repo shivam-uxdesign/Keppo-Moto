@@ -21,4 +21,4 @@ Home shows `PROJECTS.slice(0, 2)`, so a new card only appears if it's one of the
 ```
 `external: true` makes it a plain link (opens in a new tab), which a static page needs; a router `Link` would not load it.
 
-Before publishing: fill `[YOUR EMAIL]` and `[YOUR PORTFOLIO LINK]`, and swap the dashed placeholders for the phone captures (`capture.sh`).
+Before publishing: swap the dashed placeholders for the phone captures (`capture.sh`).
