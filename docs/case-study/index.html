@@ -1,5 +1,10 @@
 <title>Keppo Moto case study</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="How one designer took Keppo Moto, a motorcycle app, from idea to shipped Android builds with AI as the engineering team.">
+<meta property="og:title" content="Keppo Moto case study">
+<meta property="og:description" content="A motorcycle app designed and shipped by one designer, with AI as the engineering team.">
+<meta property="og:image" content="img/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500;600&display=swap">
@@ -543,13 +548,13 @@ footer{padding-block:72px 96px;border-top:1px solid var(--hair)}
   var feats = [
     { k:'Ride', t:'Ride recording and lean', kick:'Every ride', what:'Speed, distance, lean, braking, G-force and stops from the phone alone, shown live and analysed after the ride with charts, a route map and a 3D replay.',
       flow:['GPS gives position and speed; fixes worse than 25 m never add distance.','The gyroscope and accelerometer are blended into a lean angle, using how the phone sits on this bike\'s mount, learned while you ride.','Braking, hard acceleration, stops and breaks are picked out as events.','After the ride: charts with one shared cursor that moves the marker on the map.'],
-      note:'Data honesty rule: a value the app doesn\'t know shows as --, never as 0.', ph:['Shot 4 · ride detail','Charts, route map and replay.'] },
+      note:'Data honesty rule: a value the app doesn\'t know shows as --, never as 0.', ph:['Shot 5 · ride detail','Charts, route map and replay.'] },
     { k:'HUD', t:'Ride HUD', kick:'While riding', what:'A small instrument card that floats over Google Maps or your music app. Four layouts: Minimal, Touring, Sport, Telemetry.',
       flow:['Starts with the ride and hides when you open Keppo Moto.','Shows speed, lean, gear and revs, and whether it\'s filming.','Gear and revs come from an OBD adapter if the bike has one; the app works the gear out from revs and speed.','Three mic bars (MIC, VOICE, ENGINE) show that your helmet mic hears you before you need it.'],
       note:'Drag to move, position remembered. Recording controls stay on the card.', img:['img/hud.webp','The floating HUD, riding and filming'] },
     { k:'Moments', t:'Moments', kick:'Films itself', what:'Short clips and photos of the bits worth keeping, without touching the phone.',
       flow:['The camera keeps the last few seconds in memory as you ride.','Hard braking (0.5 g), a lean past your own setting, or your voice saves that buffer plus what follows.','Voice is spotted on the phone with a small speech model, from the phone, a USB-C or Bluetooth receiver, or a wired mic.','Each clip is tagged: "0–60 km/h in 4.8 s", what was seen (labelled on the phone) and whether you shouted.'],
-      note:'"Film when I speak": say something and the moment is kept.', ph:['Shot 6 · moment viewer','A clip with its speed and lean.'] },
+      note:'"Film when I speak": say something and the moment is kept.', ph:['Shot 8 · filming a moment','The HUD or viewfinder while filming.'] },
     { k:'Safety', t:'Crash detection', kick:'On by default', what:'If you go down, the people you chose get a text with where you are, unless you say you\'re OK.',
       flow:['An impact over 4 g while moving faster than 15 km/h, or the bike sliding past 60° of lean.','Then the bike stays down or doesn\'t move. A pothole followed by more riding, or a phone dropped at a standstill, doesn\'t count.','A full-screen alert over the lock screen counts down 30 seconds with a big I\'m OK.','Then an SMS with your location, tried again every 30 s if there\'s no signal. With no GPS fix, the last known place is sent with its age.'],
       note:'SMS, not internet: it works where riding often goes wrong, out of coverage.', img:['img/crash-countdown.webp','Crash alert counting down'] },
@@ -558,7 +563,7 @@ footer{padding-block:72px 96px;border-top:1px solid var(--hair)}
       note:'AI only with your consent. One free Reel a week; Pro makes the top idea for you after every ride.', img:['img/studio-feed.webp','Studio feed with Reel ideas'] },
     { k:'Share', t:'Share', kick:'Show it off', what:'Ride cards and moment videos with your stats drawn on top.',
       flow:['Pick a ride or a moment.','Swipe through 11 overlays: speed, lean, route, G-force.','Trim, then export a video or image made on the phone.'],
-      note:'Rendered on the phone; nothing is uploaded to make it.', ph:['Shot 9 · share overlays','A moment with the lean overlay.'] },
+      note:'Rendered on the phone; nothing is uploaded to make it. (Shown on a drawn backdrop, not a real clip.)', img:['img/share-hud.webp','Share overlay in the HUD layout: 72 km/h, 38° left lean, 0.21 G, a mini-map and Deep lean tag'] },
     { k:'Keep moving', t:'Keep moving', kick:'Around the jams', what:'Directions that try to keep you rolling, with three modes: Normal, Less traffic and No foot down.',
       flow:['Asks Google for routes with live traffic and scores each by its jams, slow stretches and traffic lights.','No foot down also looks for detours round long jams.','While riding, warns of jams ahead on screen and offers a clearer road.','Learns how you actually move on each road, by hour and weekday.'],
       note:'The full story is in the deep dive below.', link:'#keep-moving', ph:['R2 · recording','Keep moving end to end.'] },

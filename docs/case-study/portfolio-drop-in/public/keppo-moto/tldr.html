@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Keppo Moto TL;DR</title>
+<meta name="description" content="How one designer took Keppo Moto, a motorcycle app, from idea to shipped Android builds with AI as the engineering team.">
+<meta property="og:title" content="Keppo Moto case study">
+<meta property="og:description" content="A motorcycle app designed and shipped by one designer, with AI as the engineering team.">
+<meta property="og:image" content="img/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@500&display=swap">
+<style>
+:root{--bg:#0A0A0B;--surface:#141416;--raised:#1C1C1F;--hair:rgba(255,255,255,.08);--text:#F4F4F5;--muted:#8B8B93;--teal:#69C8CB;--teal-fill:#1E3E40;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.55 Geist,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--teal)}
+:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-radius:6px}
+.wrap{max-width:1040px;margin:0 auto;padding:56px max(20px,env(safe-area-inset-right,0px)) 72px max(20px,env(safe-area-inset-left,0px))}
+.label{font:500 11px/14px Geist,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font:700 clamp(34px,5.4vw,60px)/1 "Bricolage Grotesque",Geist,sans-serif;letter-spacing:-.035em;margin:14px 0 18px;text-wrap:balance}
+h1 em{font-style:normal;color:var(--teal)}
+.lede{font-size:18px;color:#d4d4d8;max-width:60ch;margin:0}
+.grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:40px;margin-top:40px;align-items:start}
+.nums{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.num{background:var(--surface);border-radius:20px;padding:18px}
+.num b{display:block;font:300 40px/1 Geist,sans-serif;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.num span{display:block;margin-top:8px;color:var(--muted);font-size:13px;line-height:1.4}
+ul{list-style:none;padding:0;margin:28px 0 0;display:flex;flex-direction:column;gap:14px}
+li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px}
+li i{font:500 12px/24px "Geist Mono",monospace;color:var(--teal);font-style:normal}
+li b{font-weight:600}
+li p{margin:2px 0 0;color:#c9c9cf;font-size:15px}
+.phones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.phones img{width:100%;aspect-ratio:390/844;object-fit:cover;object-position:top;border-radius:22px;border:5px solid #1a1a1d;display:block;background:#000}
+.cta{margin-top:40px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.btn{display:inline-flex;align-items:center;height:48px;padding:0 22px;border-radius:999px;background:var(--text);color:var(--bg);text-decoration:none;font-weight:600}
+.btn.ghost{background:var(--raised);color:var(--text)}
+@media (max-width:820px){.grid{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:no-preference){.phones img{animation:up .7s cubic-bezier(.2,.7,.2,1) both}.phones img:nth-child(2){animation-delay:.12s}@keyframes up{from{transform:translateY(14px)}to{transform:none}}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <span class="label">TL;DR · one minute</span>
+  <h1>A motorcycle app, designed and <em>shipped by one designer</em> with AI as the engineering team.</h1>
+  <p class="lede">The idea: the phone already on a rider's handlebar can do the jobs of a riding crew. Keppo Moto records every ride and lean angle, films the moments worth keeping by itself, texts your people if you crash, floats a HUD over Maps, turns clips and your own words into Reels, and steers you around Delhi traffic. I owned the idea, product, design and ride testing; AI wrote, tested and built the code.</p>
+
+  <div class="grid">
+    <div>
+      <div class="nums">
+        <div class="num"><b>2 mo</b><span>first commit to a full app, 30 working days</span></div>
+        <div class="num"><b>477</b><span>commits</span></div>
+        <div class="num"><b>622</b><span>automated tests on every commit</span></div>
+        <div class="num"><b>149</b><span>logged decisions, in my own words</span></div>
+      </div>
+      <ul>
+        <li><i>01</i><div><b>Problem solving with my own data.</b><p>"Yellow on Google is a 1-in-5 jam" became the scoring rule for Keep moving, a route that avoids jams. Later it learns each rider's own number.</p></div></li>
+        <li><i>02</i><div><b>Rules a riding app needs.</b><p>Nothing behind a tap, no voice, no vibration. The directions screen went from "very bad" to redesigned and shipped in a day, via five prototypes.</p></div></li>
+        <li><i>03</i><div><b>Cost and terms as design inputs.</b><p>No paid server; warnings use free data and the ₹1.3 route request is the last resort. Google's rules shaped which map each screen uses.</p></div></li>
+        <li><i>04</i><div><b>Tested on the road.</b><p>A crash found mid-ride was fixed and rebuilt the same day. I installed and rode every build myself.</p></div></li>
+      </ul>
+    </div>
+    <div class="phones">
+      <img src="img/hud.webp" alt="Ride HUD with speed, lean, gear, revs and three mic bars">
+      <img src="img/crash-countdown.webp" alt="Crash alert counting down before an SMS goes to two contacts">
+    </div>
+  </div>
+
+  <div class="cta">
+    <a class="btn" href="./">Read the full case study · 8 min</a>
+    <span class="label" style="text-transform:none;letter-spacing:0;font-size:14px">[YOUR EMAIL]</span>
+  </div>
+</main>
+</body>
+</html>

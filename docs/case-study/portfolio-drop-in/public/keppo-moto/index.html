@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Keppo Moto case study</title>
+<meta name="description" content="How one designer took Keppo Moto, a motorcycle app, from idea to shipped Android builds with AI as the engineering team.">
+<meta property="og:title" content="Keppo Moto case study">
+<meta property="og:description" content="A motorcycle app designed and shipped by one designer, with AI as the engineering team.">
+<meta property="og:image" content="img/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="icon" href="img/og.jpg">
+<style>
+/* Layout: one dark instrument panel, a narrow reading column beside a sticky phone; Keppo Moto's own tokens. */
+:root{
+  --bg:#0A0A0B; --surface:#141416; --raised:#1C1C1F; --line:#2A2A2E; --hair:rgba(255,255,255,.08);
+  --text:#F4F4F5; --muted:#8B8B93; --dim:#85858E;
+  --teal:#69C8CB; --teal-ink:#04292A; --teal-fill:#1E3E40;
+  --ok:#4ADE80; --warn:#FBBF24; --err:#F43F5E; --rose:#FB7185; --violet:#A5A1FF; --rec:#FF5A5A; --engine:#F97316;
+  --display:"Bricolage Grotesque", Geist, system-ui, sans-serif;
+  --sans:Geist, "Noto Sans Devanagari", Roboto, system-ui, sans-serif;
+  --mono:"Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --r-lg:24px; --r-xl:28px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--teal)} a:hover{color:#8fdcde}
+:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-radius:6px}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(20px, env(safe-area-inset-left,0px));padding-right:max(20px, env(safe-area-inset-right,0px))}
+.tnum{font-variant-numeric:tabular-nums}
+h1,h2,h3{text-wrap:balance;margin:0}
+h2{font:700 clamp(30px,4.4vw,48px)/1.04 var(--display);letter-spacing:-.03em}
+h3{font:600 22px/1.25 var(--sans)}
+p{margin:0}
+.lede{font-size:19px;line-height:1.55;color:#d4d4d8;max-width:62ch}
+.label{font:500 11px/14px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--mono)}
+section{padding-block:96px;border-top:1px solid var(--hair)}
+.stack{display:flex;flex-direction:column;gap:20px}
+.quote{border-left:0;margin:0;padding:18px 20px;background:var(--surface);border-radius:20px;font-size:17px;line-height:1.5}
+.quote cite{display:block;margin-top:8px;font:500 12px/1 var(--mono);color:var(--muted);font-style:normal}
+.pill{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:999px;background:var(--raised);font:500 13px/1 var(--sans);color:var(--text)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--teal);display:inline-block}
+
+/* nav */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,10,11,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--hair)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:21;background:var(--bg)}
+.top .wrap{display:flex;align-items:center;gap:16px;height:56px}
+.brand{display:flex;align-items:center;gap:10px;font:600 15px/1 var(--sans);color:var(--text);text-decoration:none}
+.top nav{margin-left:auto;display:flex;gap:18px;flex-wrap:wrap}
+.top nav a{color:var(--muted);text-decoration:none;font-size:14px}
+.top nav a:hover{color:var(--text)}
+@media (max-width:720px){.top nav a:not(.keep){display:none}}
+
+/* hero */
+.hero{padding-block:72px 56px;border-top:0}
+.hero .grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:48px;align-items:center}
+.hero h1{font:700 clamp(44px,7vw,84px)/.95 var(--display);letter-spacing:-.04em}
+.hero h1 em{font-style:normal;color:var(--teal)}
+.facts{display:flex;flex-wrap:wrap;gap:10px}
+.routeCard{position:relative;border-radius:var(--r-xl);background:#0d1117;border:1px solid var(--hair);overflow:hidden;aspect-ratio:4/5;max-width:100%}
+.routeCard svg{position:absolute;inset:0;width:100%;height:100%}
+.routeCard .chip{position:absolute;left:16px;bottom:16px;right:16px;display:flex;gap:10px;align-items:center;background:rgba(10,10,11,.88);border:1px solid var(--line);border-radius:18px;padding:12px 14px}
+.draw{stroke-dasharray:1600;stroke-dashoffset:0;animation:draw 3.2s cubic-bezier(.4,0,.2,1) both .2s}
+@keyframes draw{from{stroke-dashoffset:1600}to{stroke-dashoffset:0}}
+.jam{animation:jam 4.8s ease-in-out infinite}
+@keyframes jam{0%,40%{opacity:1}55%,100%{opacity:.08}}
+.clear{animation:clearOn 4.8s ease-in-out infinite}
+@keyframes clearOn{0%,40%{opacity:0;stroke-dashoffset:600}60%,100%{opacity:1;stroke-dashoffset:0}}
+@media (max-width:860px){.hero .grid{grid-template-columns:1fr}.routeCard{aspect-ratio:5/4}}
+
+/* numbers */
+.nums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.num{background:var(--surface);border-radius:var(--r-lg);padding:22px 20px}
+.num b{display:block;font:300 clamp(36px,5vw,56px)/1 var(--sans);letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.num span{display:block;margin-top:10px;color:var(--muted);font-size:14px;line-height:1.4}
+@media (max-width:760px){.nums{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* two column with sticky phone */
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,380px);gap:56px;align-items:start}
+.sticky{position:sticky;top:88px}
+@media (max-width:900px){.split{grid-template-columns:1fr}.sticky{position:static}}
+.phone{width:100%;max-width:360px;margin-inline:auto;aspect-ratio:390/844;border-radius:40px;border:8px solid #1a1a1d;background:#000;overflow:hidden;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.phone img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.phone .layer{position:absolute;inset:0;transition:opacity .5s ease}
+.phone .layer[aria-hidden="true"]{opacity:0}
+.cap{margin-top:12px;text-align:center;color:var(--muted);font-size:13px}
+
+/* placeholders for real-phone captures */
+.ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:24px;border:2px dashed #3a3a40;border-radius:30px;background:repeating-linear-gradient(135deg,#0e0e10 0 14px,#121215 14px 28px);color:var(--muted)}
+.ph b{font:600 13px/1.3 var(--mono);color:var(--teal)}
+.ph span{font-size:13px;line-height:1.4;max-width:24ch}
+
+/* the loop */
+.loop{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:28px}
+.loop button{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:6px;padding:14px 12px;border-radius:18px;background:var(--surface);border:1px solid transparent;min-height:84px;transition:background .2s,border-color .2s,transform .2s}
+.loop button:hover{transform:translateY(-2px)}
+.loop button[aria-pressed="true"]{background:var(--teal-fill);border-color:var(--teal)}
+.loop button .who{font:500 11px/1 var(--mono);color:var(--muted)}
+.loop button[aria-pressed="true"] .who{color:var(--teal)}
+.loop button .what{font:600 15px/1.2 var(--sans)}
+.loopDetail{margin-top:14px;background:var(--surface);border-radius:var(--r-lg);padding:22px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px}
+@media (max-width:860px){.loop{grid-template-columns:repeat(4,minmax(0,1fr))}.loopDetail{grid-template-columns:1fr}}
+@media (max-width:460px){.loop{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* steps (Keep moving) */
+.steps{display:flex;flex-direction:column;gap:14px}
+.step{all:unset;cursor:pointer;display:block;padding:20px;border-radius:var(--r-lg);background:var(--surface);border:1px solid transparent;transition:border-color .25s, background .25s}
+.step[aria-current="true"]{border-color:var(--teal);background:#11191a}
+.step .k{font:500 12px/1 var(--mono);color:var(--teal);margin-bottom:10px;display:block}
+.step h3{margin-bottom:8px}
+.step p{color:#c9c9cf}
+.step .say{margin-top:12px;font-size:15px;color:var(--text);font-style:italic}
+
+/* mini app screens drawn in HTML (Keep moving) */
+.ui{position:absolute;inset:0;background:#0A0A0B;padding:46px 14px 14px;display:flex;flex-direction:column;gap:10px;font-size:13px}
+.ui .t{font:500 18px/1.2 var(--sans)}
+.ui .s{color:var(--muted);font-size:12px}
+.ui .card{background:var(--surface);border-radius:16px;padding:12px}
+.ui .modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.ui .mode{background:var(--raised);border:2px solid transparent;border-radius:12px;padding:8px 6px;font-weight:500;font-size:12px;line-height:1.25}
+.ui .mode.on{background:var(--teal-fill);border-color:var(--teal)}
+.ui .map{position:relative;flex:1;min-height:120px;border-radius:14px;background:#0f1218;overflow:hidden}
+.ui .map svg{position:absolute;inset:0;width:100%;height:100%}
+.ui .btn{margin-top:auto;height:48px;border-radius:999px;background:var(--text);color:var(--bg);display:flex;align-items:center;justify-content:center;font-weight:600}
+.ui .row{display:flex;align-items:center;gap:8px}
+.ui .bar{height:4px;border-radius:2px;background:rgba(139,139,147,.2);position:relative;overflow:hidden}
+.ui .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:2px}
+
+/* before / after */
+.ba{position:relative;width:100%;max-width:380px;margin-inline:auto;aspect-ratio:390/868;border-radius:36px;overflow:hidden;border:8px solid #1a1a1d;background:#000;touch-action:pan-y}
+.ba img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top}
+.ba .after{position:absolute;inset:0;clip-path:inset(0 0 0 var(--cut,50%))}
+.ba .handle{position:absolute;top:0;bottom:0;left:var(--cut,50%);width:2px;background:var(--teal);transform:translateX(-1px)}
+.ba .handle span{position:absolute;top:50%;left:50%;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;background:var(--teal);color:var(--teal-ink);display:flex;align-items:center;justify-content:center;font:700 14px/1 var(--mono)}
+.ba .tag{position:absolute;top:14px;padding:5px 10px;border-radius:999px;font:600 11px/1 var(--mono);background:rgba(10,10,11,.85)}
+.baRange{width:100%;max-width:380px;display:block;margin:16px auto 0;accent-color:var(--teal)}
+.rules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.rule{background:var(--surface);border-radius:20px;padding:18px}
+.rule b{display:block;font:600 16px/1.3 var(--sans);margin-bottom:6px}
+.rule p{color:#c9c9cf;font-size:15px}
+@media (max-width:760px){.rules{grid-template-columns:1fr}}
+
+/* feature cards */
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.feat{background:var(--surface);border-radius:var(--r-xl);overflow:hidden;display:flex;flex-direction:column}
+.feat .shot{aspect-ratio:4/5;overflow:hidden;background:#000;position:relative}
+.feat .shot img{width:100%;height:100%;object-fit:cover;object-position:top;transition:transform .6s ease}
+.feat:hover .shot img{transform:scale(1.03)}
+.feat .body{padding:18px 18px 22px;display:flex;flex-direction:column;gap:8px}
+.feat p{color:#c9c9cf;font-size:15px}
+@media (max-width:900px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.cards{grid-template-columns:1fr}}
+
+/* timeline */
+.tl{position:relative;margin-top:28px}
+.tl input{width:100%;accent-color:var(--teal)}
+.tlCard{margin-top:16px;background:var(--surface);border-radius:var(--r-lg);padding:20px;display:grid;grid-template-columns:120px minmax(0,1fr);gap:18px;align-items:start}
+.tlCard .d{font:500 13px/1.3 var(--mono);color:var(--teal)}
+@media (max-width:560px){.tlCard{grid-template-columns:1fr}}
+
+/* decisions */
+.dec{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.decision{background:var(--surface);border-radius:var(--r-lg);padding:22px;display:flex;flex-direction:column;gap:10px}
+.decision .vs{display:flex;gap:8px;flex-wrap:wrap}
+.decision .vs span{font:500 12px/1 var(--mono);padding:7px 10px;border-radius:999px;background:var(--raised)}
+.decision .vs span.won{background:var(--teal-fill);color:var(--teal)}
+@media (max-width:760px){.dec{grid-template-columns:1fr}}
+
+.learn{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 40px}
+.learn div{display:flex;flex-direction:column;gap:6px}
+.learn p{color:#c9c9cf}
+@media (max-width:760px){.learn{grid-template-columns:1fr}}
+
+footer{padding-block:72px 96px;border-top:1px solid var(--hair)}
+
+
+/* idea */
+.idea{display:flex;flex-direction:column;gap:10px}
+.ideaRow{display:grid;grid-template-columns:minmax(0,1fr) 40px minmax(0,1.3fr);align-items:center;gap:12px;background:var(--surface);border-radius:20px;padding:18px 20px}
+.ideaRow p{margin-top:6px;font-size:17px;line-height:1.4}
+.ideaRow .prob p{color:#a1a1aa}
+.ideaRow .arrow{color:var(--teal);font:600 22px/1 var(--mono);text-align:center}
+@media (max-width:640px){.ideaRow{grid-template-columns:1fr}.ideaRow .arrow{text-align:left;transform:rotate(90deg);width:20px}}
+
+/* feature explorer */
+.fx{display:grid;grid-template-columns:220px minmax(0,1fr);gap:16px}
+.fxTabs{display:flex;flex-direction:column;gap:6px}
+.fxTabs button{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;color:var(--muted);font:500 15px/1.2 var(--sans);transition:background .2s,color .2s}
+.fxTabs button:hover{color:var(--text);background:var(--surface)}
+.fxTabs button[aria-selected="true"]{background:var(--teal-fill);color:var(--text)}
+.fxTabs button i{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:.5;flex:none}
+.fxTabs button[aria-selected="true"] i{background:var(--teal);opacity:1}
+.fxPanel{background:var(--surface);border-radius:var(--r-xl);padding:24px;display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:28px;align-items:start;min-height:560px}
+.phone.sm{max-width:260px;border-radius:32px;border-width:6px}
+.fxBody{display:flex;flex-direction:column;gap:12px}
+.flow{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0;counter-reset:f}
+.flow li{position:relative;padding:0 0 16px 40px;counter-increment:f;color:#d4d4d8;font-size:15px;line-height:1.45}
+.flow li::before{content:counter(f);position:absolute;left:0;top:-2px;width:26px;height:26px;border-radius:50%;background:var(--raised);color:var(--teal);font:600 12px/26px var(--mono);text-align:center}
+.flow li::after{content:"";position:absolute;left:12.5px;top:28px;bottom:2px;width:1px;background:var(--line)}
+.flow li:last-child::after{display:none}
+.fxNote{font-size:14px;color:var(--muted);border-top:1px solid var(--hair);padding-top:12px}
+.fxPanel.swap .fxBody,.fxPanel.swap .fxShot{animation:swap .45s cubic-bezier(.2,.7,.2,1) both}
+@keyframes swap{from{opacity:.0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.also{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.alsoCard{background:var(--surface);border-radius:20px;padding:18px}
+.alsoCard b{display:block;font-weight:600;margin-bottom:6px}
+.alsoCard p{color:#c9c9cf;font-size:15px}
+@media (max-width:900px){.fx{grid-template-columns:1fr}.fxTabs{flex-direction:row;overflow-x:auto;padding-bottom:4px}.fxTabs button{white-space:nowrap}.fxPanel{grid-template-columns:1fr}.also{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.also{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.fxPanel.swap .fxBody,.fxPanel.swap .fxShot{animation:none}}
+
+/* motion: everything is visible at rest; entering the view adds a short lift */
+@media (prefers-reduced-motion:no-preference){
+  .rise.in{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+  @keyframes rise{from{transform:translateY(18px)}to{transform:none}}
+}
+@media (prefers-reduced-motion:reduce){
+  .draw,.jam,.clear{animation:none}
+  .phone .layer,.feat .shot img{transition:none}
+}
+</style>
+</head>
+<body>
+
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Keppo Moto case study, back to top">
+      <svg width="26" height="26" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="128" fill="#69C8CB"/><g fill="none" stroke="#04292A" stroke-width="64" stroke-linecap="round"><line x1="184" y1="128" x2="184" y2="384"/><line x1="208" y1="296" x2="328" y2="176"/></g><circle cx="320" cy="344" r="40" fill="#04292A"/></svg>
+      Keppo Moto
+    </a>
+    <nav aria-label="Sections">
+      <a href="#idea">Idea</a>
+      <a href="#features">Features</a>
+      <a href="#role">Role</a>
+      <a href="#loop">The loop</a>
+      <a href="#keep-moving">Keep moving</a>
+      <a href="#directions">Redesign</a>
+      <a href="#decisions">Decisions</a>
+      <a class="keep" href="tldr.html">TL;DR</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap grid">
+      <div class="stack" style="gap:24px">
+        <span class="label">Case study · Android app · Sep–Nov 2026</span>
+        <h1>I designed a motorcycle app and <em>shipped it</em>, with AI as my engineering team.</h1>
+        <p class="lede">Keppo Moto keeps every ride: the route, the lean, the moments worth rewatching, and someone watching your back. I owned the product, the design and the testing on real rides in Delhi. An AI wrote the code, ran the research and built every test APK. Two months, no other team.</p>
+        <div class="facts">
+          <span class="pill tnum"><span class="dot"></span>477 commits</span>
+          <span class="pill tnum">622 automated tests</span>
+          <span class="pill tnum">149 logged decisions</span>
+          <span class="pill">10+ features, one designer</span>
+        </div>
+      </div>
+      <figure class="routeCard" aria-label="Animated map: a route turns red with a jam, then a clearer road is drawn around it" style="margin:0">
+        <svg viewBox="0 0 400 500" aria-hidden="true">
+          <g stroke="#161b24" stroke-width="10" fill="none"><path d="M0 120H400M0 250H400M0 380H400M80 0V500M200 0V500M320 0V500"/></g>
+          <g stroke="#1d2433" stroke-width="18" fill="none" stroke-linejoin="round"><path d="M60 460V380H200V250H320V60"/><path d="M200 380H320V250"/></g>
+          <path class="draw" d="M60 460V380H200V250H320V60" stroke="#4285F4" stroke-width="10" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+          <path class="jam" d="M200 360V270" stroke="#F43F5E" stroke-width="10" fill="none" stroke-linecap="round"/>
+          <path class="clear" d="M200 380H320V250" stroke="#4ADE80" stroke-width="10" fill="none" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="600"/>
+          <circle cx="60" cy="460" r="9" fill="#F4F4F5"/>
+          <circle cx="320" cy="60" r="12" fill="#69C8CB" stroke="#F4F4F5" stroke-width="3"/><circle cx="320" cy="60" r="4" fill="#04292A"/>
+        </svg>
+        <figcaption class="chip">
+          <span class="dot" style="background:var(--warn)"></span>
+          <span><b>Jam ahead.</b> <span style="color:var(--muted)">Keep moving finds the clearer road, on screen only.</span></span>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- NUMBERS -->
+  <section aria-labelledby="numbers-h" style="padding-block:56px">
+    <div class="wrap stack" style="gap:24px">
+      <h2 id="numbers-h" class="label" style="font:500 11px/14px var(--sans);letter-spacing:.08em">From the repository, not from memory</h2>
+      <div class="nums">
+        <div class="num rise"><b data-count="477">477</b><span>commits, 25 Sep → 24 Nov, over 30 working days</span></div>
+        <div class="num rise"><b data-count="77700" data-fmt="k">77.7k</b><span>lines of Kotlin in 337 files</span></div>
+        <div class="num rise"><b data-count="622">622</b><span>automated tests, run before every commit</span></div>
+        <div class="num rise"><b data-count="149">149</b><span>logged questions, bugs, ideas and decisions, each with my own words</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- THE IDEA -->
+  <section id="idea" aria-labelledby="idea-h">
+    <div class="wrap stack" style="gap:28px">
+      <span class="label">The idea</span>
+      <h2 id="idea-h">The phone on the handlebar can do more than show a map.</h2>
+      <p class="lede">A rider already mounts a phone for navigation. It has a GPS, motion sensors, cameras, mics and a radio. What if it quietly did the jobs a riding crew would: keep the stats, film the good bits, watch for a fall, and cut the video afterwards, so the rider only has to ride?</p>
+      <div class="idea">
+        <div class="ideaRow rise"><div class="prob"><span class="label">The problem</span><p>Hours of helmet footage that never gets edited.</p></div><div class="arrow" aria-hidden="true">→</div><div class="ans"><span class="label" style="color:var(--teal)">Keppo Moto</span><p>Moments films itself on hard braking, deep lean or your voice, and Studio turns them into Reels.</p></div></div>
+        <div class="ideaRow rise"><div class="prob"><span class="label">The problem</span><p>Riding alone, nobody knows if you go down.</p></div><div class="arrow" aria-hidden="true">→</div><div class="ans"><span class="label" style="color:var(--teal)">Keppo Moto</span><p>Crash detection is on by default and texts your people with your location. No account needed.</p></div></div>
+        <div class="ideaRow rise"><div class="prob"><span class="label">The problem</span><p>Tapping a phone at 60 km/h is dangerous.</p></div><div class="arrow" aria-hidden="true">→</div><div class="ans"><span class="label" style="color:var(--teal)">Keppo Moto</span><p>Glanceable, dark-first screens with 64 dp targets for gloves. Everything starts by itself or with one slide.</p></div></div>
+        <div class="ideaRow rise"><div class="prob"><span class="label">The problem</span><p>Delhi traffic: more time with a foot down than riding.</p></div><div class="arrow" aria-hidden="true">→</div><div class="ans"><span class="label" style="color:var(--teal)">Keppo Moto</span><p>Keep moving steers around jams and learns which roads are clear for you.</p></div></div>
+      </div>
+      <p style="color:#c9c9cf;max-width:62ch">It started on 25 Sep as a ride tracker: speed, lean and a route. Each layer above was added once the one below worked on real rides.</p>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" aria-labelledby="feat-h">
+    <div class="wrap stack" style="gap:28px">
+      <span class="label">The product, and how it works</span>
+      <h2 id="feat-h">Every ride, kept. Pick a feature to see what's under it.</h2>
+      <div class="fx">
+        <div class="fxTabs" role="tablist" aria-label="Features"></div>
+        <div class="fxPanel" role="tabpanel" aria-live="polite">
+          <div class="fxShot"><div class="phone sm" id="fxPhone"></div></div>
+          <div class="fxBody">
+            <span class="label" id="fxKicker"></span>
+            <h3 id="fxTitle" style="font-size:26px"></h3>
+            <p id="fxWhat" style="color:#d4d4d8"></p>
+            <span class="label" style="margin-top:6px">How it works</span>
+            <ol class="flow" id="fxFlow"></ol>
+            <p class="fxNote" id="fxNote"></p>
+          </div>
+        </div>
+      </div>
+      <div class="also">
+        <div class="alsoCard rise"><b>Start without looking</b><p>Slide to ride, a home-screen widget, a Quick Settings tile, an app shortcut or "Hey Google". A 3-second countdown with Cancel.</p></div>
+        <div class="alsoCard rise"><b>Routines</b><p>When a ride starts: open Maps or any app, resume your music, set the volume. On arrival: end and save the ride.</p></div>
+        <div class="alsoCard rise"><b>Fuel</b><p>Notices a 1–15 minute stop at a pump, asks how much you filled and works out your km per litre.</p></div>
+        <div class="alsoCard rise"><b>Bike care</b><p>Chain, oil and service due by the kilometres you actually rode, per bike.</p></div>
+        <div class="alsoCard rise"><b>Achievements</b><p>Rookie to Legend. No speed or lean records, on purpose: the app never rewards riding faster.</p></div>
+        <div class="alsoCard rise"><b>Your data stays yours</b><p>Rides live on the phone. Optional backup to your own Google Drive; export to GPX, CSV or JSON.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ROLE -->
+  <section id="role" aria-labelledby="role-h">
+    <div class="wrap split">
+      <div class="stack" style="gap:28px">
+        <span class="label">My role</span>
+        <h2 id="role-h">One designer, one AI, a product that runs on real roads.</h2>
+        <p class="lede">I worked like a one-person product team. I set the direction, designed every screen and judged every build on my own bike; the AI did the engineering at the speed I needed.</p>
+        <div class="rules" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+          <div class="rule"><b>I did</b><p>Product vision and scope · the design system · every flow and screen · prototypes · what to build and in what order · ride testing in Delhi traffic · every trade-off on cost, privacy and safety.</p></div>
+          <div class="rule"><b>The AI did</b><p>Kotlin and Compose code · research into Google's terms and pricing · 622 tests · lint · signed test APKs · a numbered log of every question, bug and decision.</p></div>
+        </div>
+        <blockquote class="quote">"Plan only", "don't build" and "don't make changes" mean exactly that.<cite>My rule for the AI, from the handover notes</cite></blockquote>
+      </div>
+      <div class="sticky">
+        <div class="phone"><img src="img/home-before-you-ride.webp" alt="Home, Before you ride: ready to ride, Moments on, Film when I speak on, Keep moving on, milestones and bike care" loading="lazy"></div>
+        <p class="cap">Home, rendered from the app's own code with sample data.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- THE LOOP -->
+  <section id="loop" aria-labelledby="loop-h">
+    <div class="wrap">
+      <span class="label">How I worked</span>
+      <h2 id="loop-h" style="margin-top:14px">The loop: from a sentence to a build on my phone, often the same day.</h2>
+      <div class="loop" role="group" aria-label="Steps of the loop">
+        <button type="button" aria-pressed="true" data-step="0"><span class="who">ME</span><span class="what">Ask</span></button>
+        <button type="button" aria-pressed="false" data-step="1"><span class="who">ME + AI</span><span class="what">Discuss</span></button>
+        <button type="button" aria-pressed="false" data-step="2"><span class="who">ME + AI</span><span class="what">Prototype</span></button>
+        <button type="button" aria-pressed="false" data-step="3"><span class="who">AI</span><span class="what">Build</span></button>
+        <button type="button" aria-pressed="false" data-step="4"><span class="who">AI</span><span class="what">Test + APK</span></button>
+        <button type="button" aria-pressed="false" data-step="5"><span class="who">ME</span><span class="what">Ride</span></button>
+        <button type="button" aria-pressed="false" data-step="6"><span class="who">ME</span><span class="what">Feedback</span></button>
+      </div>
+      <div class="loopDetail" aria-live="polite">
+        <div class="stack" style="gap:10px"><span class="label" id="loopWho">Me</span><h3 id="loopTitle">Ask in plain words</h3><p id="loopText" style="color:#c9c9cf">I describe the problem the way a rider would, not as a spec.</p></div>
+        <blockquote class="quote" id="loopQuote" style="margin:0">"A route from A to B with zero traffic. If there's traffic ahead, take another route; left, right, U-turn doesn't matter."<cite>6 Nov, the request that became Keep moving</cite></blockquote>
+      </div>
+    </div>
+  </section>
+
+  <!-- KEEP MOVING -->
+  <section id="keep-moving" aria-labelledby="km-h">
+    <div class="wrap split">
+      <div class="stack" style="gap:28px">
+        <span class="label">Deep dive · Keep moving</span>
+        <h2 id="km-h">A route that keeps you moving, from one sentence to shipped.</h2>
+        <p class="lede">Delhi traffic stops bikes constantly. I wanted the app to steer around jams as they appear. Tap a step to see it.</p>
+        <div class="steps" role="list">
+          <button class="step" role="listitem" type="button" aria-current="true" data-shot="0"><span class="k">01 · Reality check first</span><h3>Is Google's traffic even true for a bike?</h3><p>Before building routing, a logger recorded Google's slow and jammed stretches every 2 minutes on my real rides, to compare against my actual speed.</p></button>
+          <button class="step" role="listitem" type="button" aria-current="false" data-shot="1"><span class="k">02 · My experience as data</span><h3>Red is a stop. Yellow is a 1-in-5 jam.</h3><p>The scoring uses my own observation: per metre, yellow costs about a third of red. Later the app learns each rider's own number from their rides.</p><p class="say">"When Google shows red it is jammed; when it shows yellow there is a 20% chance it is jammed."</p></button>
+          <button class="step" role="listitem" type="button" aria-current="false" data-shot="2"><span class="k">03 · Three ways to ride</span><h3>Normal, Less traffic, No foot down</h3><p>Normal is Google's fastest and costs nothing extra. Less traffic picks the clearest of Google's routes. No foot down searches for detours, counts traffic lights and accepts a longer ride.</p></button>
+          <button class="step" role="listitem" type="button" aria-current="false" data-shot="3"><span class="k">04 · Free first, paid last</span><h3>Warn, let me turn, switch only if needed</h3><p>Going off Google's route is free; asking for new routes is not. So the app warns at 1.5 km and 500 m, lets me take my own left or U-turn, and pays for a switch only when I didn't.</p></button>
+          <button class="step" role="listitem" type="button" aria-current="false" data-shot="4"><span class="k">05 · Found on a ride</span><h3>A crash, a fix and a new build the same day</h3><p>"Unsupported travel mode: 3." I sent the crash log from the roadside; the cause was a two-wheeler limit in the navigation SDK, fixed with a fallback, and a new APK followed.</p></button>
+          <button class="step" role="listitem" type="button" aria-current="false" data-shot="5"><span class="k">06 · Your own traffic memory</span><h3>The app learns which roads are clear for you</h3><p>Every ride teaches it how you actually move on each 100 m of road, by hour and weekday. On a bike that's different from Google's car-based traffic.</p></button>
+        </div>
+      </div>
+      <div class="sticky">
+        <div class="phone" id="kmPhone">
+          <div class="layer" data-layer="0">
+            <div class="ph"><b>R2 · screen recording</b><span>Keep moving end to end: slide to ride, Where to?, plan, Start, directions.</span></div>
+          </div>
+          <div class="layer" data-layer="1" aria-hidden="true">
+            <div class="ui">
+              <div class="t">How much does a jam cost?</div><div class="s">Per metre, in Keppo's scoring</div>
+              <div class="card stack" style="gap:12px">
+                <div><div class="row"><span style="width:62px">Red</span><span class="tnum mono">1.00</span></div><div class="bar"><i style="width:100%;background:var(--err)"></i></div></div>
+                <div><div class="row"><span style="width:62px">Yellow</span><span class="tnum mono">0.32</span></div><div class="bar"><i style="width:32%;background:var(--warn)"></i></div></div>
+                <div><div class="row"><span style="width:62px">No data</span><span class="tnum mono">0.32</span></div><div class="bar"><i style="width:32%;background:#6B6B70"></i></div></div>
+                <div><div class="row"><span style="width:62px">Clear</span><span class="tnum mono">0.005</span></div><div class="bar"><i style="width:2%;background:var(--ok)"></i></div></div>
+              </div>
+              <div class="card s">0.2 × a jam + 0.8 × a crawl ≈ a third of red. No foot down treats yellow as 0.62 and adds a cost per traffic light.</div>
+            </div>
+          </div>
+          <div class="layer" data-layer="2" aria-hidden="true">
+            <div class="ui">
+              <div class="t">Keep moving</div><div class="s">To Cyber Hub</div>
+              <div class="modes"><div class="mode">Normal<br><span class="s">Google's fastest</span></div><div class="mode">Less traffic<br><span class="s">Fewer jams</span></div><div class="mode on">No foot down<br><span class="s">Keep rolling</span></div></div>
+              <div class="map"><svg viewBox="0 0 300 220" aria-hidden="true"><g stroke="#1b1e26" stroke-width="5" fill="none"><path d="M0 60H300M0 140H300M60 0V220M150 0V220M240 0V220"/></g><path d="M30 200V140H150V60H270V20" stroke="#3F3F44" stroke-width="7" fill="none"/><path d="M30 200H150V140H240V60H270V20" stroke="#4ADE80" stroke-width="7" fill="none" stroke-linejoin="round"/><circle cx="150" cy="140" r="5" fill="#0A0A0B" stroke="#69C8CB" stroke-width="3"/></svg></div>
+              <div class="card"><div class="row"><b class="tnum">48 min · 23 km</b><span class="s" style="margin-left:auto;color:var(--teal)">NO JAMS</span></div><div class="s">No jams · 200 m slow · 3 signals</div></div>
+              <div class="card row s"><span style="flex:1">Google's fastest: 42 min · 3 jams</span><span style="color:var(--warn)">+6 min</span></div>
+              <div class="btn">Start with directions</div>
+            </div>
+          </div>
+          <div class="layer" data-layer="3" aria-hidden="true">
+            <div class="ui" style="background:#0d1117">
+              <div class="card" style="background:#0F5132;color:#fff"><b style="font-size:20px" class="tnum">450 m</b><br>Dada Jungi Ln</div>
+              <div class="card row" style="background:var(--warn);color:#1C1300"><b>Jam in 500 m · 400 m long</b></div>
+              <div class="s" style="color:#c9c9cf">A way round on your left. Turn and Google re-plans for free.</div>
+              <div style="flex:1"></div>
+              <div class="card" style="border-top:3px solid var(--teal)"><b>A clearer road · 400 m less jam</b><div class="row" style="margin-top:10px"><span class="pill" style="flex:1;justify-content:center">Keep this road</span><span class="pill" style="flex:1;justify-content:center;background:var(--teal);color:var(--teal-ink)">Switch now</span></div></div>
+            </div>
+          </div>
+          <div class="layer" data-layer="4" aria-hidden="true">
+            <div class="ui">
+              <div class="t">Error log</div><div class="s">From the rider's phone, 24 Nov 13:16</div>
+              <div class="card mono" style="font-size:11px;line-height:1.5;color:#fca5a5">java.lang.IllegalArgumentException:<br>Unsupported travel mode: 3<br>at …navigation…setDestinations</div>
+              <div class="card s" style="color:#c9c9cf">Cause: the SDK only follows a planned route in car mode. Fix: tell it "car" (the planned route's own two-wheeler mode wins on Google's side), and fall back to guiding through the detour points instead of crashing.</div>
+              <div class="card row"><span class="dot" style="background:var(--ok)"></span><span>Fixed and rebuilt the same day</span></div>
+            </div>
+          </div>
+          <div class="layer" data-layer="5" aria-hidden="true">
+            <div class="ph"><b>Your roads · screenshot 19</b><span>The map of what the app learned from your rides, by hour.</span></div>
+          </div>
+        </div>
+        <p class="cap" id="kmCap">Placeholder for the real recording. The other steps are drawn from the shipped design.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- DIRECTIONS REDESIGN -->
+  <section id="directions" aria-labelledby="dir-h">
+    <div class="wrap split">
+      <div class="stack" style="gap:28px">
+        <span class="label">Deep dive · Redesign</span>
+        <h2 id="dir-h">The directions screen was bad. I said so, and we redesigned it in a day.</h2>
+        <p class="lede">The first build had Google's banner under the status bar, a HUD covering a third of the map, three stacked bars and a detour point shown as the destination. I marked nine problems, we prototyped five options, and I chose one with rules of my own.</p>
+        <div class="rules">
+          <div class="rule"><b>Nothing behind a tap</b><p>"A tap is both risky and not a good UI for a riding app." Every reading is visible at a glance.</p></div>
+          <div class="rule"><b>No voice</b><p>Silent navigation. Warnings are an amber banner and a thin edge on the dock.</p></div>
+          <div class="rule"><b>No vibration</b><p>"Phone will be on the mount, just subtle visual indications."</p></div>
+        </div>
+        <p style="color:#c9c9cf">The final dock keeps the HUD you already know: camera, GPS and ride time; the MIC, VOICE and ENGINE bars; speed, lean, gear and revs; recording controls always visible; the trip to the real destination.</p>
+      </div>
+      <div class="sticky">
+        <div class="ba" id="ba" style="--cut:50%">
+          <img src="img/directions-before.webp" alt="Before: the first directions screen, with an oversized HUD, a big record button and three stacked bars">
+          <div class="after">
+            <div class="ph" style="border-radius:0;align-items:flex-end;text-align:right;padding-left:55%"><b>After · shot 17</b><span>The new directions dock, from your phone. Until then, the approved prototype is linked below.</span></div>
+          </div>
+          <span class="tag" style="left:14px">BEFORE</span><span class="tag" style="right:14px;color:var(--teal)">AFTER</span>
+          <div class="handle" aria-hidden="true"><span>↔</span></div>
+        </div>
+        <label class="label" for="baRange" style="display:block;text-align:center;margin-top:16px">Drag to compare</label>
+        <input id="baRange" class="baRange" type="range" min="0" max="100" value="50" aria-label="Compare before and after">
+      </div>
+    </div>
+  </section>
+
+  <!-- TIMELINE -->
+  <section aria-labelledby="tl-h">
+    <div class="wrap">
+      <span class="label">Two months</span>
+      <h2 id="tl-h" style="margin-top:14px">Scrub through the build.</h2>
+      <div class="tl">
+        <label for="tlRange" class="label">Date</label>
+        <input id="tlRange" type="range" min="0" max="5" value="0" step="1">
+        <div class="tlCard" aria-live="polite"><span class="d" id="tlDate">25 Sep</span><div class="stack" style="gap:6px"><h3 id="tlTitle">First commit</h3><p id="tlText" style="color:#c9c9cf">Ride recording: GPS, speed, lean from the phone's sensors, and a live ride screen.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DECISIONS -->
+  <section id="decisions" aria-labelledby="dec-h">
+    <div class="wrap stack" style="gap:28px">
+      <span class="label">Decisions and trade-offs</span>
+      <h2 id="dec-h">The calls I made, and why.</h2>
+      <div class="dec">
+        <article class="decision rise"><h3>No paid server</h3><p style="color:#c9c9cf">An own route finder would cost ₹1,500–3,000 a month. I chose free: an on-phone router only if test rides show Google misses side roads.</p><div class="vs"><span>Paid router</span><span class="won">Free first, prove the need</span></div><blockquote class="quote" style="margin-top:6px">"I don't really want to spend that much on a server."<cite>25 Nov</cite></blockquote></article>
+        <article class="decision rise"><h3>Google's rules shaped the UI</h3><p style="color:#c9c9cf">Google's routes must sit on Google's map, and its directions can't be read aloud by our own voice. So Keep moving got its own Google map screen and uses Google's navigation, while the rest of the app keeps its own map.</p><div class="vs"><span>One map everywhere</span><span class="won">Right map per job</span></div></article>
+        <article class="decision rise"><h3>Pay only when it matters</h3><p style="color:#c9c9cf">Each route request costs about ₹1.3. Warnings use free traffic data, my own turns re-plan for free, and the paid switch is the last resort.</p><div class="vs"><span>Re-check every minute</span><span class="won">Free warning first</span></div></article>
+        <article class="decision rise"><h3>Start before it's perfect</h3><p style="color:#c9c9cf">No foot down's detour search took 15 seconds. I asked to start riding while it searches; the clearer road is offered when found.</p><div class="vs"><span>Wait for the best route</span><span class="won">Ride now, improve later</span></div><blockquote class="quote" style="margin-top:6px">"Allow users to start riding while Google Maps looks for a perfect route."<cite>24 Nov</cite></blockquote></article>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEARNINGS -->
+  <section aria-labelledby="learn-h">
+    <div class="wrap stack" style="gap:28px">
+      <span class="label">What I learned designing with AI</span>
+      <h2 id="learn-h">Judgement is the job. The AI gives you time to use it.</h2>
+      <div class="learn">
+        <div><h3>Write rules, not tickets</h3><p>"Nothing behind a tap" fixed a whole class of screens at once. Clear principles travelled further than feature lists.</p></div>
+        <div><h3>Prototype before every big build</h3><p>Five directions options cost an afternoon. The wrong build would have cost days of riding with a bad screen.</p></div>
+        <div><h3>Test where the product lives</h3><p>The crash and the "wrong destination" bug only showed up on a real road. Riding the build was my most valuable design tool.</p></div>
+        <div><h3>Log every decision in my own words</h3><p>149 numbered entries meant any session could pick up exactly where the last one stopped, and every choice has a reason I can show.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap stack" style="gap:18px">
+      <h2>Ideas are cheap. Shipping them is the job.</h2>
+      <p class="lede">I take a product from an idea to a build people can use, prototype fast and test on the real thing. Let's talk.</p>
+      <p class="mono" style="color:var(--muted)">[YOUR EMAIL] · [YOUR PORTFOLIO LINK]</p>
+      <p style="color:var(--muted);font-size:14px">App screens are rendered from Keppo Moto's own code with sample data. Dashed frames mark real-phone captures still to come. <a href="tldr.html">Read the one-minute version.</a></p>
+    </div>
+  </footer>
+</main>
+
+<script>
+(function () {
+  // Entering the view adds a short lift (content is already visible).
+  var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.15 }) : null;
+  document.querySelectorAll('.rise').forEach(function (el) { io && io.observe(el); });
+
+  // Counters run once from a lower number to the real one.
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function fmt(n, k) { return k ? (n / 1000).toFixed(1) + 'k' : String(Math.round(n)); }
+  document.querySelectorAll('[data-count]').forEach(function (el) {
+    if (reduce || !io) return;
+    var end = +el.dataset.count, k = el.dataset.fmt === 'k';
+    var cio = new IntersectionObserver(function (es) {
+      if (!es[0].isIntersecting) return; cio.disconnect();
+      var t0 = performance.now(), d = 1100;
+      (function tick(t) { var p = Math.min(1, (t - t0) / d); el.textContent = fmt(end * (0.6 + 0.4 * (1 - Math.pow(1 - p, 3))), k); if (p < 1) requestAnimationFrame(tick); })(t0);
+    }, { threshold: 0.6 });
+    cio.observe(el);
+  });
+
+
+  // Feature explorer.
+  var feats = [
+    { k:'Ride', t:'Ride recording and lean', kick:'Every ride', what:'Speed, distance, lean, braking, G-force and stops from the phone alone, shown live and analysed after the ride with charts, a route map and a 3D replay.',
+      flow:['GPS gives position and speed; fixes worse than 25 m never add distance.','The gyroscope and accelerometer are blended into a lean angle, using how the phone sits on this bike\'s mount, learned while you ride.','Braking, hard acceleration, stops and breaks are picked out as events.','After the ride: charts with one shared cursor that moves the marker on the map.'],
+      note:'Data honesty rule: a value the app doesn\'t know shows as --, never as 0.', ph:['Shot 5 · ride detail','Charts, route map and replay.'] },
+    { k:'HUD', t:'Ride HUD', kick:'While riding', what:'A small instrument card that floats over Google Maps or your music app. Four layouts: Minimal, Touring, Sport, Telemetry.',
+      flow:['Starts with the ride and hides when you open Keppo Moto.','Shows speed, lean, gear and revs, and whether it\'s filming.','Gear and revs come from an OBD adapter if the bike has one; the app works the gear out from revs and speed.','Three mic bars (MIC, VOICE, ENGINE) show that your helmet mic hears you before you need it.'],
+      note:'Drag to move, position remembered. Recording controls stay on the card.', img:['img/hud.webp','The floating HUD, riding and filming'] },
+    { k:'Moments', t:'Moments', kick:'Films itself', what:'Short clips and photos of the bits worth keeping, without touching the phone.',
+      flow:['The camera keeps the last few seconds in memory as you ride.','Hard braking (0.5 g), a lean past your own setting, or your voice saves that buffer plus what follows.','Voice is spotted on the phone with a small speech model, from the phone, a USB-C or Bluetooth receiver, or a wired mic.','Each clip is tagged: "0–60 km/h in 4.8 s", what was seen (labelled on the phone) and whether you shouted.'],
+      note:'"Film when I speak": say something and the moment is kept.', ph:['Shot 8 · filming a moment','The HUD or viewfinder while filming.'] },
+    { k:'Safety', t:'Crash detection', kick:'On by default', what:'If you go down, the people you chose get a text with where you are, unless you say you\'re OK.',
+      flow:['An impact over 4 g while moving faster than 15 km/h, or the bike sliding past 60° of lean.','Then the bike stays down or doesn\'t move. A pothole followed by more riding, or a phone dropped at a standstill, doesn\'t count.','A full-screen alert over the lock screen counts down 30 seconds with a big I\'m OK.','Then an SMS with your location, tried again every 30 s if there\'s no signal. With no GPS fix, the last known place is sent with its age.'],
+      note:'SMS, not internet: it works where riding often goes wrong, out of coverage.', img:['img/crash-countdown.webp','Crash alert counting down'] },
+    { k:'Studio', t:'Studio', kick:'After the ride', what:'Your clips and your own words, turned into Reel ideas you can make with one tap or edit your own way.',
+      flow:['As soon as the ride ends (or later on Wi-Fi when the battery is under half), the clips are read in the background.','If "Write down what I say" is on, Gemini writes down what you said in each clip.','It suggests Reels built on your words ("Paani Nahi Piya") with a storyboard and a voice-over line per shot.','Ask across all rides, for example "all my downshifts", and get one Reel from every ride.'],
+      note:'AI only with your consent. One free Reel a week; Pro makes the top idea for you after every ride.', img:['img/studio-feed.webp','Studio feed with Reel ideas'] },
+    { k:'Share', t:'Share', kick:'Show it off', what:'Ride cards and moment videos with your stats drawn on top.',
+      flow:['Pick a ride or a moment.','Swipe through 11 overlays: speed, lean, route, G-force.','Trim, then export a video or image made on the phone.'],
+      note:'Rendered on the phone; nothing is uploaded to make it. (Shown on a drawn backdrop, not a real clip.)', img:['img/share-hud.webp','Share overlay in the HUD layout: 72 km/h, 38° left lean, 0.21 G, a mini-map and Deep lean tag'] },
+    { k:'Keep moving', t:'Keep moving', kick:'Around the jams', what:'Directions that try to keep you rolling, with three modes: Normal, Less traffic and No foot down.',
+      flow:['Asks Google for routes with live traffic and scores each by its jams, slow stretches and traffic lights.','No foot down also looks for detours round long jams.','While riding, warns of jams ahead on screen and offers a clearer road.','Learns how you actually move on each road, by hour and weekday.'],
+      note:'The full story is in the deep dive below.', link:'#keep-moving', ph:['R2 · recording','Keep moving end to end.'] },
+    { k:'Pro', t:'Pro', kick:'The business', what:'Recording and safety are free. Pro adds Studio\'s Reels and AI features.',
+      flow:['Free: rides, Moments, crash alerts and the HUD.','Pro: ₹249 a month or ₹1,999 a year, with a 7-day trial.','Paid through Google Play; the app works offline without an account.'],
+      note:'Safety is never behind the paywall.', img:['img/paywall.webp','Keppo Pro plans'] }
+  ];
+  var tabs = document.querySelector('.fxTabs'), panel = document.querySelector('.fxPanel');
+  feats.forEach(function (f, i) {
+    var b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'tab');
+    b.innerHTML = '<i></i>'; b.appendChild(document.createTextNode(f.k));
+    b.addEventListener('click', function () { showFeat(i, true); });
+    tabs.appendChild(b);
+  });
+  function showFeat(i, anim) {
+    var f = feats[i];
+    tabs.querySelectorAll('button').forEach(function (b, k) { b.setAttribute('aria-selected', k === i ? 'true' : 'false'); });
+    document.getElementById('fxKicker').textContent = f.kick;
+    document.getElementById('fxTitle').textContent = f.t;
+    document.getElementById('fxWhat').textContent = f.what;
+    var ol = document.getElementById('fxFlow'); ol.innerHTML = '';
+    f.flow.forEach(function (x) { var li = document.createElement('li'); li.textContent = x; ol.appendChild(li); });
+    var note = document.getElementById('fxNote'); note.textContent = f.note;
+    if (f.link) { var a = document.createElement('a'); a.href = f.link; a.textContent = ' Jump there →'; note.appendChild(a); }
+    var ph = document.getElementById('fxPhone'); ph.innerHTML = '';
+    if (f.img) { var im = document.createElement('img'); im.src = f.img[0]; im.alt = f.img[1]; ph.appendChild(im); }
+    else { var d = document.createElement('div'); d.className = 'ph'; var b2 = document.createElement('b'); b2.textContent = f.ph[0]; var sp = document.createElement('span'); sp.textContent = f.ph[1]; d.appendChild(b2); d.appendChild(sp); ph.appendChild(d); }
+    if (anim) { panel.classList.remove('swap'); void panel.offsetWidth; panel.classList.add('swap'); }
+  }
+  showFeat(1, false);
+
+  // The loop.
+  var loop = [
+    ['Me', 'Ask in plain words', 'I describe the problem the way a rider would, not as a spec.', '"A route from A to B with zero traffic. If there\'s traffic ahead, take another route; left, right, U-turn doesn\'t matter."', '6 Nov, the request that became Keep moving'],
+    ['Me + AI', 'Discuss before building', 'The AI comes back with options, costs and limits; I choose. "Plan only" means nothing gets built.', '"Discuss this with me first before adding it to the plan, how it would work."', '24 Nov, on No foot down detours'],
+    ['Me + AI', 'Prototype on a canvas', 'Clickable prototypes in the Keppo Moto design system: the whole Keep moving ride, then five directions options.', '"C2 looks fine, just add all three mic bars there, adjust them somehow."', '25 Nov, choosing the directions design'],
+    ['AI', 'Build it', 'Kotlin and Jetpack Compose, Google\'s Routes, Places and Navigation SDKs, unit tests for every rule.', '"Go with whatever you think is better."', '25 Nov: I delegate the calls that don\'t need me'],
+    ['AI', 'Test, lint, sign, send', 'Every commit runs the full test suite and lint; each build is verified (version, signing key, keys built in) and sent as an APK.', '"Before every commit: tests and lint, 0 errors."', 'The handover rules'],
+    ['Me', 'Ride it', 'I install the APK and ride Delhi traffic. The road is where the real bugs are.', '"The direction I selected was different from what it shows here."', '24 Nov, a screenshot from a ride'],
+    ['Me', 'Feed it back', 'Screenshots, crash logs and a sentence. Then the loop starts again.', '"Only half a map is blue, rest is less opacity? Is this normal?"', '25 Nov']
+  ];
+  var btns = document.querySelectorAll('.loop button');
+  function showLoop(i) {
+    btns.forEach(function (b, k) { b.setAttribute('aria-pressed', k === i ? 'true' : 'false'); });
+    document.getElementById('loopWho').textContent = loop[i][0];
+    document.getElementById('loopTitle').textContent = loop[i][1];
+    document.getElementById('loopText').textContent = loop[i][2];
+    var q = document.getElementById('loopQuote');
+    q.innerHTML = '';
+    q.appendChild(document.createTextNode(loop[i][3]));
+    var c = document.createElement('cite'); c.textContent = loop[i][4]; q.appendChild(c);
+  }
+  btns.forEach(function (b) { b.addEventListener('click', function () { showLoop(+b.dataset.step); }); });
+
+  // Keep moving steps swap the phone.
+  var caps = [
+    'Placeholder for the real recording (R2).',
+    'The scoring, drawn from the shipped rules.',
+    'The plan screen in No foot down, from the approved prototype.',
+    'Riding: the warning, then the 5-second offer.',
+    'The crash, the cause and the fix.',
+    'Placeholder for Your roads (screenshot 19).'
+  ];
+  var steps = document.querySelectorAll('.step'), layers = document.querySelectorAll('#kmPhone .layer');
+  function showStep(i) {
+    steps.forEach(function (s, k) { s.setAttribute('aria-current', k === i ? 'true' : 'false'); });
+    layers.forEach(function (l, k) { l.setAttribute('aria-hidden', k === i ? 'false' : 'true'); });
+    document.getElementById('kmCap').textContent = caps[i];
+  }
+  steps.forEach(function (s) { s.addEventListener('click', function () { showStep(+s.dataset.shot); }); });
+
+  // Before / after.
+  var ba = document.getElementById('ba'), range = document.getElementById('baRange');
+  function cut(v) { ba.style.setProperty('--cut', v + '%'); range.value = v; }
+  range.addEventListener('input', function () { cut(range.value); });
+  function drag(e) { var r = ba.getBoundingClientRect(); cut(Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100))); }
+  ba.addEventListener('pointerdown', function (e) { ba.setPointerCapture(e.pointerId); drag(e); ba.addEventListener('pointermove', drag); });
+  ba.addEventListener('pointerup', function () { ba.removeEventListener('pointermove', drag); });
+
+  // Timeline.
+  var tl = [
+    ['25 Sep', 'First commit', 'Ride recording: GPS, speed, lean from the phone\'s sensors, and a live ride screen.'],
+    ['Oct', 'Moments and safety', 'Clips that film themselves on hard braking and deep lean; crash detection with an SMS to your people; the floating HUD.'],
+    ['Late Oct', 'Studio', 'Gemini reads the ride and what you said, suggests Reels, and an editor to make them your own way.'],
+    ['6 Nov', 'Keep moving, planned', 'A route that keeps you moving: research into Google\'s data, terms and costs before any code.'],
+    ['24 Nov', 'Keep moving, shipped', 'Three modes, detours, free warnings, Google\'s navigation, saved places and a traffic memory that learns from your rides. One crash found on the road and fixed the same day.'],
+    ['25 Nov', 'Directions redesign', 'Five prototype options, one chosen with three rules: nothing behind a tap, no voice, no vibration. Built and sent.']
+  ];
+  var tr = document.getElementById('tlRange');
+  tr.addEventListener('input', function () {
+    var t = tl[+tr.value];
+    document.getElementById('tlDate').textContent = t[0];
+    document.getElementById('tlTitle').textContent = t[1];
+    document.getElementById('tlText').textContent = t[2];
+  });
+})();
+</script>
+
+</body>
+</html>
