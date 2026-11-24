@@ -14,6 +14,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.ridetrack.app.hud.OverlayPermission
 import com.ridetrack.app.ui.common.BikeColors
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -80,6 +81,8 @@ import java.time.LocalTime
 @Composable
 fun HomeScreen(
     onRideStarted: () -> Unit,
+    /** Keep moving is on: slide to ride opens Where to? (the bike is selected first). */
+    onKeepMoving: () -> Unit = {},
     onReturnToRide: () -> Unit,
     onOpenProfile: () -> Unit,
     onAddBike: () -> Unit,
@@ -115,12 +118,19 @@ fun HomeScreen(
     var pendingBike by remember { mutableStateOf<Bike?>(null) }
     var permissionDenied by remember { mutableStateOf(false) }
 
+    val km = com.ridetrack.app.ui.appContainer()
+    val keepMovingOn by km.keepMovingPrefs.enabled.collectAsStateWithLifecycle()
+    val keepMovingAvailable = com.ridetrack.app.BuildConfig.TEST_BUILD && km.trafficLog.available
+    val scopeHome = androidx.compose.runtime.rememberCoroutineScope()
+
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         val bike = pendingBike
         pendingBike = null
         vm.refreshEnvironment()
         if (Permissions.hasFineLocation(context)) {
-            if (bike != null) vm.startRide(bike, onRideStarted)
+            if (bike != null && keepMovingAvailable && keepMovingOn && !s.demoMode) {
+                scopeHome.launch { km.settings.setSelectedBike(bike.id); onKeepMoving() }
+            } else if (bike != null) vm.startRide(bike, onRideStarted)
         } else {
             permissionDenied = true
         }
@@ -132,11 +142,15 @@ fun HomeScreen(
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) vm.setMoments(true)
     }
 
-    // Slide on a bike's card → (location permission, first time only) → recording.
+
+    // Slide on a bike's card → (location permission, first time only) → recording; with Keep
+    // moving on, Where to? first (24 Nov: the only way into Keep moving).
     fun go(bike: Bike) {
         if (!s.demoMode && !Permissions.hasFineLocation(context)) {
             pendingBike = bike
             permissionLauncher.launch(Permissions.rideStartPermissions())
+        } else if (keepMovingAvailable && keepMovingOn && !s.demoMode) {
+            scopeHome.launch { km.settings.setSelectedBike(bike.id); onKeepMoving() }
         } else {
             vm.startRide(bike, onRideStarted)
         }
@@ -206,6 +220,8 @@ fun HomeScreen(
                 },
                 onVoice = vm::setVoice,
                 modifier = Modifier.riseIn(0),
+                keepMoving = keepMovingOn.takeIf { keepMovingAvailable },
+                onKeepMoving = km.keepMovingPrefs::setEnabled,
             )
             Spacer(Modifier.height(14.dp))
         }
@@ -227,23 +243,6 @@ fun HomeScreen(
                 modifier = Modifier.riseIn(1),
             )
             Spacer(Modifier.height(14.dp))
-            // Keep moving (test builds with a Routes key): plan the clearest road, then ride.
-            val keepMoving = com.ridetrack.app.ui.appContainer().keepMoving
-            val guiding by keepMoving.active.collectAsStateWithLifecycle()
-            if (com.ridetrack.app.BuildConfig.TEST_BUILD && (guiding || !s.rideState.isActive) && com.ridetrack.app.ui.appContainer().trafficLog.available) {
-                val navigate = com.ridetrack.app.ui.nav.LocalNavigate.current
-                val to = if (guiding) com.ridetrack.app.ui.nav.Routes.KEEP_MOVING_NAV else com.ridetrack.app.ui.nav.Routes.KEEP_MOVING
-                com.ridetrack.app.ui.components.RtCard(onClick = { navigate(to) }, modifier = Modifier.riseIn(1)) {
-                    Text(if (guiding) "Back to directions ›" else "Keep moving ›", style = com.ridetrack.app.ui.theme.RtType.bodyStrong, color = com.ridetrack.app.ui.theme.RtColors.TextPrimary)
-                    Text(
-                        if (guiding) "Keep moving is guiding you to ${keepMoving.destination?.name ?: "your destination"}."
-                        else "Pick where you're going: the clearest road by live traffic, with Google's directions.",
-                        style = com.ridetrack.app.ui.theme.RtType.caption,
-                        color = com.ridetrack.app.ui.theme.RtColors.TextSecondary,
-                    )
-                }
-                Spacer(Modifier.height(14.dp))
-            }
             // 3. Bike care.
             BikeCareCard(bike.displayName, s.odometers[bike.id], s.care, onOpenBike, Modifier.riseIn(2))
             Spacer(Modifier.height(14.dp))

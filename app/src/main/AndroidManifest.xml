@@ -73,6 +73,10 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.RideTrack">
+        <!-- Keep moving: the Navigation SDK's turn-by-turn feed (next turn for the top bar). Not exported. -->
+        <service
+            android:name=".keepmoving.NavUpdatesService"
+            android:exported="false" />
         <!-- Google's map on the Keep moving screen: the key is empty outside test builds. -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"

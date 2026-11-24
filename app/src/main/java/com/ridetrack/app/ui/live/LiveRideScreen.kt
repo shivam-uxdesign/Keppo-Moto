@@ -13,6 +13,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Directions
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
@@ -97,7 +98,7 @@ import com.ridetrack.telemetry.state.RideError
 import com.ridetrack.telemetry.state.RideState
 
 @Composable
-fun LiveRideScreen(onRideSaved: (String) -> Unit, onExit: () -> Unit) {
+fun LiveRideScreen(onRideSaved: (String) -> Unit, onExit: () -> Unit, onDirections: (() -> Unit)? = null) {
     val vm = appViewModel { LiveRideViewModel(it) }
     val chrome by vm.chrome.collectAsStateWithLifecycle()
     val frame by vm.frame.collectAsStateWithLifecycle()
@@ -143,7 +144,7 @@ fun LiveRideScreen(onRideSaved: (String) -> Unit, onExit: () -> Unit) {
                 Column(Modifier.weight(1f).fillMaxSize(), verticalArrangement = Arrangement.Center) {
                     MetricGrid(frame, chrome)
                     Spacer(Modifier.height(20.dp))
-                    EndControl(canEnd, vm)
+                    EndControl(canEnd, vm, onDirections)
                 }
             }
         } else {
@@ -163,7 +164,7 @@ fun LiveRideScreen(onRideSaved: (String) -> Unit, onExit: () -> Unit) {
                 }
                 MetricGrid(frame, chrome)
                 Spacer(Modifier.height(24.dp))
-                EndControl(canEnd, vm)
+                EndControl(canEnd, vm, onDirections)
                 Spacer(Modifier.height(20.dp))
             }
         }
@@ -201,10 +202,25 @@ private fun Banners(chrome: LiveChrome, frame: TelemetryFrame?, vm: LiveRideView
 
 /** Pause / resume next to hold-to-end. */
 @Composable
-private fun EndControl(canEnd: Boolean, vm: LiveRideViewModel) {
+private fun EndControl(canEnd: Boolean, vm: LiveRideViewModel, onDirections: (() -> Unit)? = null) {
     val paused by vm.manuallyPaused.collectAsStateWithLifecycle()
     val haptics = rememberHaptics()
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Keep moving: directions from here (a plain ride), or back to them (24 Nov).
+        onDirections?.let { go ->
+            Box(
+                Modifier
+                    .size(RtDimens.primaryButtonHeight)
+                    .clip(CircleShape)
+                    .background(RtColors.Surface)
+                    .border(1.dp, RtColors.Hairline, CircleShape)
+                    .clickable(role = Role.Button) { haptics.tick(); go() }
+                    .semantics { contentDescription = "Directions" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(androidx.compose.material.icons.Icons.Outlined.Directions, contentDescription = null, tint = RtColors.Primary, modifier = Modifier.size(26.dp))
+            }
+        }
         Box(
             Modifier
                 .size(RtDimens.primaryButtonHeight)

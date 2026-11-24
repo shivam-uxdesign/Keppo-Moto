@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
@@ -52,6 +54,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ridetrack.app.ui.appContainer
 import com.ridetrack.app.ui.bike.BikeEditScreen
 import com.ridetrack.app.ui.bike.BikeScreen
@@ -90,7 +93,9 @@ object Routes {
     fun recentlyDeleted(rideId: String? = null) = if (rideId == null) "recently-deleted" else "recently-deleted?rideId=$rideId"
     const val RIDES_MAP = "rides-map"
     /** Keep moving: plan the clearest route and start the ride (test builds). */
-    const val KEEP_MOVING = "keep-moving"
+    const val KEEP_MOVING = "keep-moving?auto={auto}"
+    /** Where to? then the plan; [autoSeconds]: a hands-free start rides plain if nothing is tapped. */
+    fun keepMoving(autoSeconds: Int? = null) = "keep-moving" + (autoSeconds?.let { "?auto=$it" } ?: "")
     /** Keep moving's directions (Google's navigation) during a ride. */
     const val KEEP_MOVING_NAV = "keep-moving-nav"
     const val SHARE = "share/{rideId}?mode={mode}&reel={reel}"
@@ -210,7 +215,17 @@ fun RideTrackNavHost(
     }
 
     // Start a ride from the widget, shortcut, tile or the Assistant: a 3 s countdown, then the live screen.
-    if (quickStart) {
+    // With Keep moving on, a quick start asks Where to? first, riding plain after 10 s untouched.
+    val keepMovingOn by container.keepMovingPrefs.enabled.collectAsStateWithLifecycle()
+    val keepMovingQuick = quickStart && keepMovingOn && com.ridetrack.app.BuildConfig.TEST_BUILD &&
+        container.trafficLog.available
+    LaunchedEffect(keepMovingQuick) {
+        if (keepMovingQuick && !session.state.value.isActive) {
+            onQuickStartHandled()
+            nav.navigate(Routes.keepMoving(autoSeconds = 10)) { launchSingleTop = true }
+        }
+    }
+    if (quickStart && !keepMovingQuick) {
         com.ridetrack.app.ui.home.QuickStartDialog(
             onStarted = {
                 onQuickStartHandled()
@@ -254,14 +269,25 @@ fun RideTrackNavHost(
         }
     }
 
+    // Keep moving guiding: the bar to get back to the directions, on every screen but them.
+    val guiding by container.keepMoving.active.collectAsStateWithLifecycle()
+    val showGuideBar = guiding && route != Routes.KEEP_MOVING_NAV
     Scaffold(
         containerColor = RtColors.Background,
+        topBar = {
+            if (showGuideBar) com.ridetrack.app.ui.keepmoving.KeepMovingTopBar(onOpen = { nav.navigate(Routes.KEEP_MOVING_NAV) { launchSingleTop = true } })
+        },
         bottomBar = { if (showBottomBar) BottomBar(nav, route) },
     ) { padding ->
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(bottom = padding.calculateBottomPadding()),
+                .padding(bottom = padding.calculateBottomPadding())
+                // Under the bar, screens don't add the status bar's space again.
+                .then(
+                    if (showGuideBar) Modifier.padding(top = padding.calculateTopPadding()).consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.statusBars)
+                    else Modifier,
+                ),
         ) {
             androidx.compose.runtime.CompositionLocalProvider(LocalNavigate provides { r -> nav.navigate(r) }) {
             NavHost(
@@ -275,6 +301,7 @@ fun RideTrackNavHost(
                 composable(Routes.HOME) {
                     HomeScreen(
                         onRideStarted = { nav.navigate(Routes.LIVE) { launchSingleTop = true } },
+                        onKeepMoving = { nav.navigate(Routes.keepMoving()) { launchSingleTop = true } },
                         onReturnToRide = { nav.navigate(Routes.LIVE) { launchSingleTop = true } },
                         onOpenProfile = { nav.switchTab(Routes.PROFILE) },
                         onOpenSafety = { nav.navigate(Routes.profilePage(com.ridetrack.app.ui.profile.ProfilePage.SAFETY)) },
@@ -328,9 +355,10 @@ fun RideTrackNavHost(
                 composable(Routes.RIDES_MAP) {
                     RidesMapScreen(onBack = { nav.popBackStack() }, onOpenRide = { nav.navigate(Routes.detail(it)) })
                 }
-                composable(Routes.KEEP_MOVING) {
+                composable(Routes.KEEP_MOVING, arguments = listOf(navArgument("auto") { type = NavType.StringType; nullable = true; defaultValue = null })) { entry ->
                     // Dark like the other riding screens, whatever the phone's theme (its map is dark too).
                     DarkRoute { com.ridetrack.app.ui.keepmoving.KeepMovingScreen(
+                        autoStartSeconds = entry.arguments?.getString("auto")?.toIntOrNull(),
                         onBack = { nav.popBackStack() },
                         onStarted = { nav.navigate(Routes.LIVE) { popUpTo(Routes.KEEP_MOVING) { inclusive = true }; launchSingleTop = true } },
                         onGuiding = { nav.navigate(Routes.KEEP_MOVING_NAV) { popUpTo(Routes.KEEP_MOVING) { inclusive = true }; launchSingleTop = true } },
@@ -388,6 +416,10 @@ fun RideTrackNavHost(
                             nav.navigate(Routes.summary(id)) { popUpTo(Routes.HOME) }
                         },
                         onExit = { nav.navigate(Routes.HOME) { popUpTo(Routes.HOME) { inclusive = true } } },
+                        onDirections = if (com.ridetrack.app.BuildConfig.TEST_BUILD && container.trafficLog.available) ({
+                            if (container.keepMoving.active.value) nav.navigate(Routes.KEEP_MOVING_NAV) { launchSingleTop = true }
+                            else nav.navigate(Routes.keepMoving()) { launchSingleTop = true }
+                        }) else null,
                     ) }
                 }
                 composable(

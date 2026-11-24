@@ -34,7 +34,20 @@ object Destinations {
      * name for the area (Google's terms don't allow keeping its place names).
      */
     suspend fun forSaving(d: Destination, places: RidePlaces): Destination =
-        if (!d.fromGoogle) d else Destination(runCatching { places.placeAt(d.at.lat, d.at.lon) }.getOrNull() ?: "Searched place", d.at)
+        if (!d.fromGoogle) d else Destination(runCatching { places.placeAt(d.at.lat, d.at.lon) }.getOrNull() ?: "Searched place", d.at, placeId = d.placeId)
+
+    /**
+     * Points along the rider's recent rides (every ~[everyN]th fix of the last [maxRides]): roads
+     * they've ridden, used as Keep moving's detour candidates and known ways round.
+     */
+    suspend fun ridePoints(rides: RideRepository, maxRides: Int = 20, everyN: Int = 20): List<LatLon> = withContext(Dispatchers.IO) {
+        runCatching {
+            rides.observeCompleted().first().sortedByDescending { it.startTimeMillis }.take(maxRides).flatMap { r ->
+                rides.track(r.id).samples.filterIndexed { i, _ -> i % everyN == 0 }
+                    .mapNotNull { f -> f.latitude?.let { lat -> f.longitude?.let { LatLon(lat, it) } } }
+            }
+        }.getOrDefault(emptyList())
+    }
 
     /** [points] grouped into places [SAME_PLACE_M] apart, the most visited first (each place where it was first seen). */
     fun group(points: List<LatLon>): List<LatLon> {

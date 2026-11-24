@@ -89,6 +89,16 @@ class HudController(
         }
     }
 
+    /**
+     * The pop-up's data, look, camera and controls, for the fixed HUD on Keep moving's directions
+     * (the same card, in the app; the pop-up itself hides while the app is on screen).
+     */
+    val liveData: HudData? get() = overlay.data
+    val liveSettings: com.ridetrack.app.data.HudSettings get() = overlay.settings
+    val liveViewfinder: androidx.compose.ui.graphics.ImageBitmap? get() = overlay.viewfinder
+    val liveAccent: Int? get() = overlay.accent
+    val controls: HudControlActions get() = actions
+
     private val overlay: HudOverlay = HudOverlay(
         context = context,
         actions = actions,

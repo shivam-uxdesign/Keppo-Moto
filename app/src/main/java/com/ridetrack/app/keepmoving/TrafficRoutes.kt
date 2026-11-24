@@ -24,7 +24,7 @@ object TrafficRoutes {
     const val DRIVE = "DRIVE"
 
     /** The request body: from [from] (facing [headingDeg] when known) to [to], traffic on the line, up to 3 routes. */
-    fun request(from: LatLon, to: LatLon, mode: String, headingDeg: Double? = null): JSONObject = JSONObject()
+    fun request(from: LatLon, to: LatLon, mode: String, headingDeg: Double? = null, via: List<LatLon> = emptyList()): JSONObject = JSONObject()
         .put("origin", JSONObject().put("location", JSONObject().put("latLng", from.json()).apply {
             // Which way the bike faces: Google won't start the route with a U-turn.
             headingDeg?.let { put("heading", ((it % 360 + 360) % 360).roundToInt()) }
@@ -33,7 +33,10 @@ object TrafficRoutes {
         .put("travelMode", mode)
         .put("routingPreference", "TRAFFIC_AWARE")
         .put("extraComputations", JSONArray().put("TRAFFIC_ON_POLYLINE"))
-        .put("computeAlternativeRoutes", true)
+        // Detour points (Keep moving's search): passed in order, as stops (route tokens don't allow
+        // pass-through "via" points). Google gives no alternatives for a route with stops.
+        .apply { if (via.isNotEmpty()) put("intermediates", JSONArray().apply { via.forEach { put(JSONObject().put("location", JSONObject().put("latLng", it.json()))) } }) }
+        .put("computeAlternativeRoutes", via.isEmpty())
         .put("languageCode", "en-IN")
         .put("units", "METRIC")
 

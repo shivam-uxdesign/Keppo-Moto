@@ -60,7 +60,7 @@ fun KeepMovingSection() {
     var choosing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    SectionHeader("Keep moving")
+    SectionHeader("Keep moving: traffic log")
     RtCard {
         if (!log.available) {
             Text("This build has no Google Routes key", style = RtType.bodyStrong, color = RtColors.TextPrimary)
@@ -71,11 +71,11 @@ fun KeepMovingSection() {
             )
             return@RtCard
         }
-        val navigate = com.ridetrack.app.ui.nav.LocalNavigate.current
-        com.ridetrack.app.ui.components.PrimaryButton(
-            "Plan a Keep moving ride",
-            onClick = { navigate(com.ridetrack.app.ui.nav.Routes.KEEP_MOVING) },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        Text(
+            "Turn Keep moving on in Home › Before you ride: starting a ride then asks where you're going.",
+            style = RtType.caption,
+            color = RtColors.TextSecondary,
+            modifier = Modifier.padding(bottom = 8.dp),
         )
         ToggleRow(
             "Log traffic on my rides",
@@ -153,7 +153,7 @@ internal fun DestinationPicker(onPick: (Destination) -> Unit, onClear: (() -> Un
             val at = PlaceSearch.locate(context, s, session)
             locating = null
             session = PlaceSearch.newSession()
-            if (at != null) onPick(Destination(s.name, at, fromGoogle = true)) else failed = true
+            if (at != null) onPick(Destination(s.name, at, fromGoogle = true, placeId = s.placeId)) else failed = true
         }
     }
     AlertDialog(

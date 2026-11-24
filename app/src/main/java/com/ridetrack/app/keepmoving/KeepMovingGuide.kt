@@ -2,9 +2,12 @@ package com.ridetrack.app.keepmoving
 
 import android.app.Activity
 import android.app.Application
+import android.media.AudioAttributes
+import android.speech.tts.TextToSpeech
 import com.google.android.libraries.navigation.CustomRoutesOptions
 import com.google.android.libraries.navigation.NavigationApi
 import com.google.android.libraries.navigation.NavigationRoadStretchRenderingData
+import com.google.android.libraries.navigation.NavigationUpdatesOptions
 import com.google.android.libraries.navigation.Navigator
 import com.google.android.libraries.navigation.RoutingOptions
 import com.google.android.libraries.navigation.Waypoint
@@ -21,13 +24,18 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import kotlin.coroutines.resume
 
 /**
- * Keep moving, steps 2 and 3 (test builds): Google's Navigation SDK guides along the route the
- * rider picked (its route token), with Google's arrows and voice; meanwhile the road ahead is
- * watched and, when a clearly clearer road appears ([Reroute]), it's offered with a 10-second
- * "Keep this road", then switched to.
+ * Keep moving during the ride (test builds): Google's Navigation SDK guides along the planned road
+ * (its route token, through any detour points), with Google's arrows and voice. Keppo watches the
+ * road ahead with the navigation's own traffic (free) and, per the 24 Nov plan:
+ * 1. warns at ~1.5 km and ~500 m before trouble, with a way round when one is known (our own voice);
+ * 2. if the rider turns off, Google re-plans for free and the new road is watched the same way;
+ * 3. only when the rider didn't turn (or Google's re-plan heads back into the jam) does it pay to
+ *    ask Google for routes, and offers a clearly clearer one with a 5-second "Keep this road".
+ * Normal mode is Google's own route and isn't watched.
  */
 class KeepMovingGuide(
     private val app: Application,
@@ -36,7 +44,10 @@ class KeepMovingGuide(
     private val scope: CoroutineScope,
 ) {
     /** A clearer road on offer; switched to at [atMs] unless the rider keeps theirs. */
-    data class Offer(val route: Ranked, val atMs: Long, val savedJamM: Int, val savedSlowM: Int)
+    data class Offer(val route: Ranked, val atMs: Long, val savedJamM: Int, val savedSlowM: Int, val declined: Reroute.Declined)
+
+    /** A warning on screen (and said once per stage). */
+    data class Warning(val title: String, val detail: String, val stage: Int)
 
     private val _active = MutableStateFlow(false)
     /** Directions are running. */
@@ -45,18 +56,33 @@ class KeepMovingGuide(
     private val _offer = MutableStateFlow<Offer?>(null)
     val offer: StateFlow<Offer?> = _offer.asStateFlow()
 
+    private val _warning = MutableStateFlow<Warning?>(null)
+    val warning: StateFlow<Warning?> = _warning.asStateFlow()
+
     private val _note = MutableStateFlow<String?>(null)
-    /** The last thing the guide did, in plain words ("Switched to a clearer road · 0.8 km less jam"). */
+    /** The last thing the guide did, in plain words. */
     val note: StateFlow<String?> = _note.asStateFlow()
 
     var destination: Destination? = null
+        private set
+    var mode: KeepMode = KeepMode.LESS_TRAFFIC
         private set
 
     @Volatile private var navigator: Navigator? = null
     private var watch: Job? = null
     private var lastAskMs = 0L
-    private var lastSwitchMs = 0L
-    private var keptUntilMs = 0L
+    private val declined = ArrayList<Reroute.Declined>()
+    /** Detour points still ahead (the navigation stops at each; we carry on by ourselves). */
+    private val via = ArrayList<LatLon>()
+    /** Known ways round (the plan's other detour points, the rider's own rides). */
+    private var ways: List<LatLon> = emptyList()
+    /** Warnings already given: jam key → highest stage said. */
+    private val warned = HashMap<String, Int>()
+    /** The rider left Google's route (their own turn): watch the new road straight away. */
+    @Volatile private var turned = false
+    /** Paid looks already made for this jam (one per jam, unless Google re-plans back into it). */
+    private val looked = HashSet<String>()
+    private var tts: TextToSpeech? = null
 
     init {
         // The ride ended: so do its directions.
@@ -68,10 +94,11 @@ class KeepMovingGuide(
     }
 
     /**
-     * Google's terms screen (once), then directions along [route] to [dest]. Returns null when
+     * Google's terms screen (once), then directions to [dest]: along [option] (Keppo's planned road,
+     * with its detour points) or, in Normal or without a plan, Google's own route. Returns null when
      * guidance started, or what went wrong in plain words.
      */
-    suspend fun start(activity: Activity, dest: Destination, route: TrafficRoute): String? {
+    suspend fun start(activity: Activity, dest: Destination, option: Planner.Option?, mode: KeepMode, knownWays: List<LatLon> = emptyList()): String? {
         if (!NavigationApi.areTermsAccepted(app)) {
             val ok = suspendCancellableCoroutine { c ->
                 NavigationApi.showTermsAndConditionsDialog(activity, "Keppo Moto") { accepted -> if (c.isActive) c.resume(accepted) }
@@ -84,19 +111,58 @@ class KeepMovingGuide(
                 override fun onError(code: Int) { if (c.isActive) c.resume(Result.failure(IllegalStateException(errorText(code)))) }
             })
         }.getOrElse { return it.message }
+        if (navigator == null) listen(nav)
         navigator = nav
         destination = dest
-        val status = follow(nav, dest, route)
+        this.mode = mode
+        via.clear()
+        option?.via?.let { via += it }
+        ways = knownWays + (option?.via.orEmpty())
+        warned.clear()
+        looked.clear()
+        declined.clear()
+        val status = follow(nav, dest, option?.ranked?.route?.takeIf { mode.scored }, via)
         if (status != Navigator.RouteStatus.OK) return "Google couldn't start directions (${status.name.lowercase().replace('_', ' ')})"
         nav.setAudioGuidance(Navigator.AudioGuidance.VOICE_ALERTS_AND_GUIDANCE)
         nav.startGuidance()
-        nav.addArrivalListener { e -> if (e.isFinalDestination) stop("Arrived at ${dest.name}") }
+        // The next turn for the top bar on the app's other screens.
+        runCatching {
+            nav.registerServiceForNavUpdates(
+                app.packageName,
+                NavUpdatesService::class.java.name,
+                NavigationUpdatesOptions.builder().setNumNextStepsToPreview(1)
+                    .setGeneratedStepImagesType(NavigationUpdatesOptions.GeneratedStepImagesType.BITMAP)
+                    .setDisplayMetrics(app.resources.displayMetrics).build(),
+            )
+        }
         _active.value = true
         _note.value = null
-        lastSwitchMs = System.currentTimeMillis()
+        _warning.value = null
+        _offer.value = null
         watch?.cancel()
-        watch = scope.launch { watchAhead() }
+        if (mode.scored) watch = scope.launch { watchAhead() }
         return null
+    }
+
+    /** Arrivals, and the rider's own turns, from the navigator (set up once). */
+    private fun listen(nav: Navigator) {
+        nav.addArrivalListener { e ->
+            if (e.isFinalDestination) {
+                stop("Arrived at ${destination?.name ?: "your destination"}")
+            } else {
+                // A detour point: not a stop for the rider. Carry on to the next.
+                if (via.isNotEmpty()) via.removeAt(0)
+                runCatching { nav.continueToNextDestination(); nav.startGuidance() }
+            }
+        }
+        nav.addReroutingListener {
+            // The rider left the route (their own left, right or U-turn): Google re-plans for free.
+            if (_active.value) {
+                turned = true
+                _warning.value = null
+                _note.value = "Google re-planned from your turn"
+            }
+        }
     }
 
     /** Ends directions (the ride itself goes on). */
@@ -104,20 +170,24 @@ class KeepMovingGuide(
         watch?.cancel()
         watch = null
         _offer.value = null
+        _warning.value = null
         navigator?.let { n ->
             android.os.Handler(android.os.Looper.getMainLooper()).post {
+                runCatching { n.unregisterServiceForNavUpdates() }
                 runCatching { n.stopGuidance() }
                 runCatching { n.clearDestinations() }
             }
         }
+        NavUpdatesService.clear()
         _active.value = false
         _note.value = note
     }
 
-    /** The rider keeps the road they're on: no offers for a while. */
+    /** The rider keeps the road they're on. No cooldown: watching goes on, but this road isn't offered again unless it gets clearly clearer. */
     fun keepThisRoad() {
+        val o = _offer.value ?: return
         _offer.value = null
-        keptUntilMs = System.currentTimeMillis() + Reroute.KEEP_FOR_MS
+        declined += o.declined
         _note.value = "Kept your road"
     }
 
@@ -127,52 +197,78 @@ class KeepMovingGuide(
         scope.launch { switchTo(o) }
     }
 
-    /** Follows [route] by its token (exactly that road), or Google's own two-wheeler route without one. */
-    private suspend fun follow(nav: Navigator, dest: Destination, route: TrafficRoute?): Navigator.RouteStatus {
-        val waypoint = Waypoint.builder().setLatLng(dest.at.lat, dest.at.lon).setTitle(dest.name).build()
-        val mode = if (log.lastMode == TrafficRoutes.DRIVE) RoutingOptions.TravelMode.DRIVING else RoutingOptions.TravelMode.TWO_WHEELER
+    /** Follows [route] by its token (exactly that road, through [through]), or Google's own route without one. */
+    private suspend fun follow(nav: Navigator, dest: Destination, route: TrafficRoute?, through: List<LatLon>): Navigator.RouteStatus {
+        val target = Waypoint.builder().setLatLng(dest.at.lat, dest.at.lon).setTitle(dest.name).build()
+        val stops = through.mapIndexed { i, p -> Waypoint.builder().setLatLng(p.lat, p.lon).setTitle("Way round ${i + 1}").build() }
+        val travel = if (log.lastMode == TrafficRoutes.DRIVE) RoutingOptions.TravelMode.DRIVING else RoutingOptions.TravelMode.TWO_WHEELER
         val token = route?.routeToken
         val future = withContext(Dispatchers.Main) {
             if (token != null) {
-                nav.setDestinations(listOf(waypoint), CustomRoutesOptions.builder().setRouteToken(token).setTravelMode(mode).build())
+                // The same waypoints the token was made with (the Navigation SDK 7.2 asks for them).
+                nav.setDestinations(stops + target, CustomRoutesOptions.builder().setRouteToken(token).setTravelMode(travel).build())
             } else {
-                nav.setDestination(waypoint, RoutingOptions().travelMode(mode))
+                nav.setDestination(target, RoutingOptions().travelMode(travel))
             }
         }
         return suspendCancellableCoroutine { c -> future.setOnResultListener { s -> if (c.isActive) c.resume(s) } }
     }
 
-    /** While guiding: score the road ahead from the navigation's own traffic; look for better only when it's bad. */
+    /** While guiding: warn first (free), the paid look and switch only as the backstop. */
     private suspend fun watchAhead() {
         while (_active.value) {
-            delay(30_000)
+            delay(10_000)
             val nav = navigator ?: return
-            val o = _offer.value
-            if (o != null) {
-                if (System.currentTimeMillis() >= o.atMs) switchTo(o)
+            val pending = _offer.value
+            if (pending != null) {
+                if (System.currentTimeMillis() >= pending.atMs) switchTo(pending)
                 continue
             }
             val (line, stretches) = withContext(Dispatchers.Main) { currentRoad(nav) } ?: continue
-            val total = line.zipWithNext { a, b -> TrafficRoutes.distanceM(a, b) }.sum().toInt()
+            val f = session.frame.value
+            val here = f?.latitude?.let { lat -> f.longitude?.let { LatLon(lat, it) } } ?: line.first()
+            val trouble = RideWatch.firstTrouble(stretches, line, mode)
+            val justTurned = turned
+            turned = false
+            if (trouble == null) {
+                _warning.value = null
+                if (justTurned) _note.value = "Google re-planned from your turn · the new road is clear"
+                continue
+            }
+            val key = RideWatch.key(trouble)
+            val stage = RideWatch.stage(trouble.inM)
+            val way = RideWatch.wayRound(trouble, line, here, ways)
+            _warning.value = Warning(RideWatch.title(trouble), RideWatch.detail(trouble, way), stage)
+            if ((warned[key] ?: 0) < stage) {
+                warned[key] = stage
+                say(RideWatch.voice(trouble, stage, way))
+            }
+            // The backstop: the jam is near and the rider hasn't turned off, or Google's re-plan after
+            // their turn heads straight back into it.
+            val backInto = justTurned && trouble.inM <= RideWatch.FAR_M
+            val due = stage == 2 && key !in looked
+            if (!(due || backInto)) continue
             val now = System.currentTimeMillis()
-            if (!Reroute.shouldLook(stretches, total, now, lastAskMs, keptUntilMs, lastSwitchMs)) continue
-            val f = session.frame.value ?: continue
-            val lat = f.latitude ?: continue
-            val lon = f.longitude ?: continue
+            if (now - lastAskMs < Reroute.MIN_ASK_GAP_MS) continue
             val dest = destination ?: continue
+            looked += key
             lastAskMs = now
-            val answer = log.routes(LatLon(lat, lon), dest.at, f.headingDeg)
+            val answer = log.routes(here, dest.at, f?.headingDeg)
             if (answer.status != 200) continue
-            val ranked = RouteScore.rank(answer.routes)
+            val total = line.zipWithNext { a, b -> TrafficRoutes.distanceM(a, b) }.sum().toInt()
             val current = Reroute.colours(stretches, total)
-            val pick = Reroute.pick(ranked, line, RouteScore.cost(current)) ?: continue
+            val currentCost = RouteScore.cost(current, mode)
+            val ranked = RouteScore.rank(answer.routes, mode)
+            val pick = Reroute.pick(ranked, line, currentCost, mode, declined) ?: continue
+            _warning.value = null
             _offer.value = Offer(
                 pick,
                 atMs = System.currentTimeMillis() + Reroute.COUNTDOWN_MS,
                 savedJamM = (current.jamM - pick.colours.jamM).coerceAtLeast(0),
                 savedSlowM = (current.slowM - pick.colours.slowM).coerceAtLeast(0),
+                declined = Reroute.Declined(TrafficRoutes.decodePolyline(pick.route.polyline), pick.cost),
             )
-            // Check back right after the countdown.
+            say(RideWatch.SWITCH_VOICE)
             delay(Reroute.COUNTDOWN_MS)
             _offer.value?.let { if (System.currentTimeMillis() >= it.atMs) switchTo(it) }
         }
@@ -183,12 +279,12 @@ class KeepMovingGuide(
         _offer.value = null
         val nav = navigator ?: return
         val dest = destination ?: return
-        val status = follow(nav, dest, o.route.route)
-        lastSwitchMs = System.currentTimeMillis()
+        via.clear()
+        val status = follow(nav, dest, o.route.route, emptyList())
         _note.value = if (status == Navigator.RouteStatus.OK) {
             "Switched to a clearer road" + listOfNotNull(
-                km(o.savedJamM).takeIf { o.savedJamM > 0 }?.let { "$it less jam" },
-                km(o.savedSlowM).takeIf { o.savedSlowM > 0 }?.let { "$it less slow" },
+                Planner.km(o.savedJamM).takeIf { o.savedJamM > 0 }?.let { "$it less jam" },
+                Planner.km(o.savedSlowM).takeIf { o.savedSlowM > 0 }?.let { "$it less slow" },
             ).joinToString(" · ").let { if (it.isEmpty()) "" else " · $it" }
         } else {
             "Couldn't switch roads (${status.name.lowercase().replace('_', ' ')})"
@@ -215,7 +311,24 @@ class KeepMovingGuide(
         line to stretches
     }.getOrNull()
 
-    private fun km(m: Int) = if (m >= 1000) "%.1f km".format(m / 1000.0) else "${(m / 10) * 10} m"
+    /** Our own voice line, through the same audio route as navigation guidance (the headset). */
+    private fun say(text: String) {
+        val t = tts
+        if (t != null) {
+            t.speak(text, TextToSpeech.QUEUE_ADD, null, "keep-moving-${System.nanoTime()}")
+            return
+        }
+        tts = TextToSpeech(app) { ok ->
+            if (ok == TextToSpeech.SUCCESS) {
+                tts?.language = Locale("en", "IN")
+                tts?.setAudioAttributes(
+                    AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build(),
+                )
+                tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "keep-moving-first")
+            }
+        }
+    }
 
     private fun errorText(code: Int) = when (code) {
         NavigationApi.ErrorCode.NOT_AUTHORIZED -> "The key isn't allowed to use the Navigation SDK: check it's ticked on the key"

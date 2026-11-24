@@ -11,6 +11,41 @@ package com.ridetrack.app.keepmoving
  * distance don't matter, it only breaks ties. Routes over [LENGTH_CAP] × the shortest are out.
  * Step 0's rides check these numbers against the rider's real speed.
  */
+/**
+ * How the rider wants to ride (picked before Start, remembered): Normal is Google's own fastest
+ * route (Keppo doesn't score it); Less traffic and No foot down score Google's routes with their
+ * own weights and switch rules. No foot down treats yellow as likely feet-down and counts signals.
+ */
+enum class KeepMode(
+    val label: String,
+    /** Chance a yellow stretch makes you stop. */
+    val yellowJamChance: Double,
+    /** Longest detour, × the shortest route. */
+    val lengthCap: Double,
+    /** A new road must cost at most this share of the current one... */
+    val betterShare: Double,
+    /** ...and save at least this much. */
+    val minGain: Double,
+    /** Trouble ahead worth a look (or a warning). */
+    val lookCost: Double,
+    /** What one traffic signal costs (about this many metres of red). */
+    val signalCost: Double,
+) {
+    NORMAL("Normal", 0.2, 3.0, 0.7, 150.0, 150.0, 0.0),
+    LESS_TRAFFIC("Less traffic", 0.2, 2.0, 0.7, 150.0, 150.0, 0.0),
+    NO_FOOT_DOWN("No foot down", 0.55, 3.0, 0.8, 75.0, 75.0, 60.0);
+
+    /** Yellow's cost per metre: a share of a jam plus a crawl for the rest. */
+    val slowPerM: Double get() = yellowJamChance * RouteScore.JAM_PER_M + (1 - yellowJamChance) * RouteScore.CRAWL_PER_M
+
+    /** Keppo plans this mode's route itself (Normal leaves it to Google). */
+    val scored: Boolean get() = this != NORMAL
+
+    companion object {
+        fun of(name: String?) = entries.firstOrNull { it.name == name } ?: LESS_TRAFFIC
+    }
+}
+
 object RouteScore {
     const val JAM_PER_M = 1.0
     /** Chance a yellow stretch is really jammed (the rider: "a 20% chance"). */
@@ -37,18 +72,20 @@ object RouteScore {
         return Colours(clear, slow, jam, unknown)
     }
 
-    fun cost(c: Colours): Double = c.jamM * JAM_PER_M + c.slowM * SLOW_PER_M + c.unknownM * UNKNOWN_PER_M + c.clearM * CLEAR_PER_M
+    fun cost(c: Colours, mode: KeepMode = KeepMode.LESS_TRAFFIC, signals: Int = 0): Double =
+        c.jamM * JAM_PER_M + (c.slowM + c.unknownM) * mode.slowPerM + c.clearM * CLEAR_PER_M + signals * mode.signalCost
 
     /**
      * [routes] ranked clearest first; routes over the length cap come last, marked. The first
      * route that isn't too long is the one to ride. Index is the route's place in Google's answer.
      */
-    fun rank(routes: List<TrafficRoute>): List<Ranked> {
+    fun rank(routes: List<TrafficRoute>, mode: KeepMode = KeepMode.LESS_TRAFFIC, signals: (TrafficRoute) -> Int = { 0 }, shortestM: Int? = null): List<Ranked> {
         if (routes.isEmpty()) return emptyList()
-        val shortest = routes.minOf { it.distanceM }.coerceAtLeast(1)
+        val shortest = (shortestM ?: routes.minOf { it.distanceM }).coerceAtLeast(1)
         val all = routes.mapIndexed { i, r ->
             val c = colours(r)
-            Ranked(i, r, c, cost(c), tooLong = r.distanceM > shortest * LENGTH_CAP)
+            val n = signals(r)
+            Ranked(i, r, c, cost(c, mode, n), tooLong = r.distanceM > shortest * mode.lengthCap, signals = n)
         }
         return all.sortedWith(compareBy<Ranked> { it.tooLong }.thenBy { it.cost })
     }
@@ -77,7 +114,10 @@ object RouteScore {
 data class Colours(val clearM: Int, val slowM: Int, val jamM: Int, val unknownM: Int)
 
 /** One route, scored. Lower [cost] is clearer. */
-data class Ranked(val index: Int, val route: TrafficRoute, val colours: Colours, val cost: Double, val tooLong: Boolean)
+data class Ranked(val index: Int, val route: TrafficRoute, val colours: Colours, val cost: Double, val tooLong: Boolean, val signals: Int = 0) {
+    /** Nothing red and under 100 m of yellow / no data: as clear as it gets. */
+    val clear: Boolean get() = colours.jamM == 0 && colours.slowM + colours.unknownM < 100
+}
 
 /** Consecutive points of a route at one speed. */
 data class Stretch(val points: List<LatLon>, val speed: Speed)

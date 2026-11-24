@@ -76,8 +76,12 @@ object PlaceSearch {
     }
 
     /** Where [s] is (ends the [session]); null when Google couldn't answer. */
-    suspend fun locate(context: Context, s: Suggestion, session: String, key: String = BuildConfig.GOOGLE_ROUTES_KEY): LatLon? = withContext(Dispatchers.IO) {
-        val (status, body) = GoogleApi.call(context, key, detailsUrl(s.placeId, session), null, DETAILS_FIELDS)
+    suspend fun locate(context: Context, s: Suggestion, session: String, key: String = BuildConfig.GOOGLE_ROUTES_KEY): LatLon? =
+        locateId(context, s.placeId, session, key)
+
+    /** Where the place [placeId] is (a saved place whose kept location is over 30 days old). */
+    suspend fun locateId(context: Context, placeId: String, session: String = newSession(), key: String = BuildConfig.GOOGLE_ROUTES_KEY): LatLon? = withContext(Dispatchers.IO) {
+        val (status, body) = GoogleApi.call(context, key, detailsUrl(placeId, session), null, DETAILS_FIELDS)
         if (status == 200) parseLocation(body) else null
     }
 }

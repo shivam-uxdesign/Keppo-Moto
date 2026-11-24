@@ -3,6 +3,12 @@ package com.ridetrack.app
 import com.ridetrack.app.keepmoving.Destinations
 import com.ridetrack.app.keepmoving.LatLon
 import com.ridetrack.app.keepmoving.PlaceSearch
+import com.ridetrack.app.keepmoving.KeepMode
+import com.ridetrack.app.keepmoving.Planner
+import com.ridetrack.app.keepmoving.RideWatch
+import com.ridetrack.app.keepmoving.SavedPlaces
+import com.ridetrack.app.keepmoving.Signals
+import com.ridetrack.app.keepmoving.Destination
 import com.ridetrack.app.keepmoving.Reroute
 import com.ridetrack.app.keepmoving.RouteScore
 import com.ridetrack.app.keepmoving.TrafficRoute
@@ -137,17 +143,33 @@ class KeepMovingTest {
     }
 
     @Test
-    fun `Google is asked only with trouble ahead, and not too often`() {
+    fun `Google is asked only with trouble ahead, and not too often, never in Normal`() {
         val jam = listOf(Reroute.Stretch(500, 200, Speed.JAM))
         val bit = listOf(Reroute.Stretch(500, 100, Speed.SLOW))
         val now = 10_000_000L
-        assertTrue(Reroute.shouldLook(jam, 8_000, now, lastAskMs = 0, keptUntilMs = 0, lastSwitchMs = 0))
+        assertTrue(Reroute.shouldLook(jam, 8_000, now, lastAskMs = 0, mode = KeepMode.LESS_TRAFFIC))
         // A little yellow isn't worth a paid look.
-        assertFalse(Reroute.shouldLook(bit, 8_000, now, 0, 0, 0))
-        // Asked a minute ago; kept the road; just switched.
-        assertFalse(Reroute.shouldLook(jam, 8_000, now, lastAskMs = now - 60_000, keptUntilMs = 0, lastSwitchMs = 0))
-        assertFalse(Reroute.shouldLook(jam, 8_000, now, 0, keptUntilMs = now + 1, lastSwitchMs = 0))
-        assertFalse(Reroute.shouldLook(jam, 8_000, now, 0, 0, lastSwitchMs = now - 60_000))
+        assertFalse(Reroute.shouldLook(bit, 8_000, now, 0, KeepMode.LESS_TRAFFIC))
+        // Asked a minute ago.
+        assertFalse(Reroute.shouldLook(jam, 8_000, now, lastAskMs = now - 60_000, mode = KeepMode.LESS_TRAFFIC))
+        // Normal is Google's own route: never.
+        assertFalse(Reroute.shouldLook(jam, 8_000, now, 0, KeepMode.NORMAL))
+        // No foot down looks at less trouble (75): 130 m of yellow at 0.62.
+        assertTrue(Reroute.shouldLook(listOf(Reroute.Stretch(500, 130, Speed.SLOW)), 8_000, now, 0, KeepMode.NO_FOOT_DOWN))
+    }
+
+    @Test
+    fun `a declined road isn't offered again unless clearly clearer, and the countdown is 5 s`() {
+        assertEquals(5_000L, Reroute.COUNTDOWN_MS)
+        val current = (0..20).map { LatLon(28.0 + it * 0.001, 77.0) }
+        val other = route(20, SpeedInterval(0, 20, Speed.NORMAL), lon = 77.01).copy(routeToken = "tok")
+        val ranked = RouteScore.rank(listOf(other))
+        val line = TrafficRoutes.decodePolyline(other.polyline)
+        val declined = listOf(Reroute.Declined(line, ranked.first().cost))
+        assertEquals(null, Reroute.pick(ranked, current, 520.0, KeepMode.LESS_TRAFFIC, declined))
+        // It was much worse when declined: now it's clearly clearer, so it's offered.
+        val wasWorse = listOf(Reroute.Declined(line, ranked.first().cost * 3))
+        assertEquals(0, Reroute.pick(ranked, current, 520.0, KeepMode.LESS_TRAFFIC, wasWorse)?.index)
     }
 
     @Test
@@ -175,6 +197,98 @@ class KeepMovingTest {
         assertFalse(Reroute.sameRoad(line, listOf(LatLon(28.001, 77.01), LatLon(28.009, 77.01))))
     }
 
+    @Test
+    fun `OpenStreetMap signals are read, and a junction on the route counts once`() {
+        val sig = Signals.parse("""{"elements":[{"type":"node","id":1,"lat":28.005,"lon":77.0001},{"type":"node","id":2,"lat":28.0051,"lon":77.0002},{"type":"node","id":3,"lat":28.005,"lon":77.01},{"type":"way"}]}""")
+        assertEquals(3, sig.size)
+        val line = listOf(LatLon(28.0, 77.0), LatLon(28.01, 77.0))
+        // Nodes 1 and 2 are one junction beside the route; node 3 is 1 km away.
+        assertEquals(1, Signals.count(line, sig))
+        assertEquals(0, Signals.count(line, emptyList()))
+        // Tiles: a 20 km plan is a handful; a country-wide box is refused.
+        assertTrue(Signals.tiles(listOf(LatLon(28.40, 77.00), LatLon(28.55, 77.15))).size in 9..25)
+        assertEquals(emptyList(), Signals.tiles(listOf(LatLon(20.0, 70.0), LatLon(30.0, 80.0))))
+        assertTrue("traffic_signals" in Signals.query(0, 1, 0, 1))
+    }
+
+    @Test
+    fun `jams on a route are found in order, with ways round from other routes first`() {
+        // 30 steps north; red from 5 to 9 (~440 m) and a short red 20 to 21 (~110 m, skipped).
+        val r = route(30, SpeedInterval(0, 5, Speed.NORMAL), SpeedInterval(5, 9, Speed.JAM), SpeedInterval(20, 21, Speed.JAM))
+        val jams = Planner.jams(r, Planner.MIN_JAM_M)
+        assertEquals(1, jams.size)
+        assertTrue(jams[0].lengthM in 420..460)
+        val line = TrafficRoutes.decodePolyline(r.polyline)
+        // Another Google route ~500 m east around the jam.
+        val other = (0..30).map { LatLon(28.0 + it * 0.001, 77.005) }
+        val cands = Planner.candidates(jams[0], line, listOf(other), own = listOf(LatLon(28.007, 76.996)))
+        assertEquals("Google's other route", cands.first().source)
+        assertTrue(cands.any { it.source == "Your own ride" })
+        assertTrue(cands.count { it.source == "A side road" } == 2)
+        // Side points are ~700 m off the road, one each side.
+        val sides = Planner.side(jams[0])
+        assertTrue(sides.all { Reroute.distanceToLineM(it, line) in 650.0..750.0 })
+        // Ordered along the route.
+        val ordered = Planner.order(listOf(LatLon(28.02, 77.0), LatLon(28.005, 77.0)), line)
+        near(28.005, ordered.first().lat)
+    }
+
+    @Test
+    fun `a route that goes into a lane and back out at a detour point is caught, a U-turn elsewhere isn't`() {
+        val via = LatLon(28.005, 77.004)
+        // Out east to the point and back along the same lane, then on north.
+        val spur = listOf(LatLon(28.005, 77.0)) + (1..8).map { LatLon(28.005, 77.0 + it * 0.0005) } +
+            (7 downTo 0).map { LatLon(28.005, 77.0 + it * 0.0005) } + (1..10).map { LatLon(28.005 + it * 0.001, 77.0) }
+        assertTrue(Planner.hasSpur(spur, listOf(via)))
+        val straight = (0..30).map { LatLon(28.0 + it * 0.001, 77.0) }
+        assertFalse(Planner.hasSpur(straight, listOf(via)))
+        // The same doubling-back far from any detour point (a U-turn under a flyover): fine.
+        assertFalse(Planner.hasSpur(spur, listOf(LatLon(28.1, 77.1))))
+    }
+
+    @Test
+    fun `saved places are used again, newest first, 20 kept, Google locations expire`() {
+        var list = emptyList<SavedPlaces.Place>()
+        list = SavedPlaces.remember(list, Destination("Office", LatLon(28.495, 77.088)), "DLF Cyber City", now = 1_000)
+        list = SavedPlaces.remember(list, Destination("Home", LatLon(28.459, 77.026)), "Sector 29", now = 2_000)
+        // Within 150 m of Office: the same place, used again.
+        list = SavedPlaces.remember(list, Destination("x", LatLon(28.4955, 77.0882)), "ignored", now = 3_000)
+        assertEquals(2, list.size)
+        assertEquals("DLF Cyber City", list.first().label)
+        assertEquals(2, list.first().uses)
+        repeat(25) { i -> list = SavedPlaces.remember(list, Destination("p$i", LatLon(27.0 + i * 0.01, 77.0)), "P$i", now = 10_000L + i) }
+        assertEquals(SavedPlaces.MAX, list.size)
+        // A Google place keeps its ID; its location goes after 30 days.
+        val g = SavedPlaces.remember(emptyList(), Destination("Cyber Hub", LatLon(28.495, 77.088), placeId = "ChIJ1"), "DLF Cyber City", now = 0)
+        val later = SavedPlaces.expire(g, now = SavedPlaces.GOOGLE_KEEP_MS + 1)
+        assertEquals(null, later.first().at)
+        assertEquals("ChIJ1", later.first().placeId)
+        // A dropped pin (no Google ID) is the rider's own: kept.
+        val own = SavedPlaces.remember(emptyList(), Destination("Pin", LatLon(28.0, 77.0)), "Pin", now = 0)
+        assertEquals(LatLon(28.0, 77.0), SavedPlaces.expire(own, SavedPlaces.GOOGLE_KEEP_MS * 2).first().at)
+    }
+
+    @Test
+    fun `ride warnings come at 1_5 km and 500 m, with the way round's side`() {
+        val line = (0..30).map { LatLon(28.0 + it * 0.001, 77.0) }
+        val st = listOf(Reroute.Stretch(1_200, 400, Speed.JAM))
+        val t = RideWatch.firstTrouble(st, line, KeepMode.LESS_TRAFFIC)!!
+        assertEquals(1, RideWatch.stage(t.inM))
+        assertEquals(2, RideWatch.stage(500))
+        assertEquals(0, RideWatch.stage(3_000))
+        // Yellow only counts in No foot down.
+        val slow = listOf(Reroute.Stretch(800, 500, Speed.SLOW))
+        assertEquals(null, RideWatch.firstTrouble(slow, line, KeepMode.LESS_TRAFFIC))
+        assertTrue(RideWatch.firstTrouble(slow, line, KeepMode.NO_FOOT_DOWN) != null)
+        // Heading north, a point to the west is on the left.
+        assertEquals("left", RideWatch.side(LatLon(28.0, 77.0), LatLon(28.01, 77.0), LatLon(28.005, 76.995)))
+        assertEquals("right", RideWatch.side(LatLon(28.0, 77.0), LatLon(28.01, 77.0), LatLon(28.005, 77.005)))
+        val way = RideWatch.wayRound(t, line, line.first(), listOf(LatLon(28.012, 76.994)))
+        assertEquals("left", way)
+        assertEquals("Jam in one and a half kilometres. A way round on your left.", RideWatch.voice(t, 1, way))
+        assertTrue(RideWatch.title(t).startsWith("Jam in 1.2 km"))
+    }
+
     /** A straight route north of [n] steps of about 111 m, with [intervals]; Google's distance is the line's. */
     private fun route(n: Int, vararg intervals: SpeedInterval, lon: Double = 77.0): TrafficRoute {
         val pts = (0..n).map { LatLon(28.0 + it * 0.001, lon) }
@@ -197,14 +311,29 @@ class KeepMovingTest {
     }
 
     @Test
-    fun `a clear route up to 3x longer beats a short jammed one, but not past 3x`() {
+    fun `No foot down takes a clear route up to 3x longer, Less traffic up to 2x`() {
         val shortJam = route(10, SpeedInterval(0, 3, Speed.JAM), SpeedInterval(3, 10, Speed.NORMAL))
         val longClear = route(29, SpeedInterval(0, 29, Speed.NORMAL), lon = 77.01)
-        assertEquals(1, RouteScore.rank(listOf(shortJam, longClear)).first().index)
+        assertEquals(1, RouteScore.rank(listOf(shortJam, longClear), KeepMode.NO_FOOT_DOWN).first().index)
+        // 2.9x is too long for Less traffic.
+        val less = RouteScore.rank(listOf(shortJam, longClear), KeepMode.LESS_TRAFFIC)
+        assertEquals(0, less.first().index)
+        assertTrue(less.last().tooLong)
         val tooLong = route(31, SpeedInterval(0, 31, Speed.NORMAL), lon = 77.02)
-        val r = RouteScore.rank(listOf(shortJam, tooLong))
+        val r = RouteScore.rank(listOf(shortJam, tooLong), KeepMode.NO_FOOT_DOWN)
         assertEquals(0, r.first().index)
         assertTrue(r.last().tooLong)
+    }
+
+    @Test
+    fun `No foot down counts yellow as likely feet down, and signals`() {
+        near(0.6175, KeepMode.NO_FOOT_DOWN.slowPerM, 1e-4)
+        near(RouteScore.SLOW_PER_M, KeepMode.LESS_TRAFFIC.slowPerM)
+        val c = com.ridetrack.app.keepmoving.Colours(clearM = 1000, slowM = 0, jamM = 0, unknownM = 0)
+        near(5.0 + 3 * 60.0, RouteScore.cost(c, KeepMode.NO_FOOT_DOWN, signals = 3), 1e-6)
+        near(5.0, RouteScore.cost(c, KeepMode.LESS_TRAFFIC, signals = 3), 1e-6)
+        assertFalse(KeepMode.NORMAL.scored)
+        assertEquals(KeepMode.LESS_TRAFFIC, KeepMode.of("nonsense"))
     }
 
     @Test

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material.icons.outlined.Directions
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Star
@@ -173,10 +174,20 @@ fun FuelPromptCard(prompt: com.ridetrack.app.fuel.FuelPrompt, onAdd: () -> Unit,
 /** Quick switches above Start: Moments, and "Film when I speak" while Moments is on. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun MomentsToggles(moments: Boolean, voice: Boolean, onMoments: (Boolean) -> Unit, onVoice: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun MomentsToggles(
+    moments: Boolean,
+    voice: Boolean,
+    onMoments: (Boolean) -> Unit,
+    onVoice: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    /** Keep moving (test builds with the Google key): on, starting a ride asks Where to? first. Null hides it. */
+    keepMoving: Boolean? = null,
+    onKeepMoving: (Boolean) -> Unit = {},
+) {
     FlowRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ToggleChip("Moments", moments, Icons.Outlined.Videocam) { onMoments(!moments) }
         if (moments) ToggleChip("Film when I speak", voice, Icons.Outlined.Mic) { onVoice(!voice) }
+        keepMoving?.let { on -> ToggleChip("Keep moving", on, Icons.Outlined.Directions) { onKeepMoving(!on) } }
     }
 }
 

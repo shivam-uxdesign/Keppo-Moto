@@ -195,6 +195,9 @@ class AppContainer(context: Context) {
     val trafficLog = com.ridetrack.app.keepmoving.TrafficLogger(appContext, session, moments, appScope)
     /** Keep moving's directions and rerouting (test builds). */
     val keepMoving = com.ridetrack.app.keepmoving.KeepMovingGuide(appContext as android.app.Application, session, trafficLog, appScope)
+    val keepMovingPrefs = com.ridetrack.app.keepmoving.KeepMovingPrefs(appContext)
+    val savedPlaces = com.ridetrack.app.keepmoving.SavedPlaces(appContext)
+    val planner = com.ridetrack.app.keepmoving.Planner(appContext, trafficLog)
 
     /** The rider's routines: when a ride starts, ends or arrives somewhere, do these. */
     val routines = com.ridetrack.app.routines.RoutineRunner(appContext, settings, session, errors)

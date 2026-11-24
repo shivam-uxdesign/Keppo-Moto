@@ -26,7 +26,7 @@ import java.time.format.DateTimeFormatter
  * Where the rider is riding to, for the traffic log. [fromGoogle]: found with Google's search, so
  * [name] is Google's and is only shown, never saved ([Destinations.forSaving]).
  */
-data class Destination(val name: String, val at: LatLon, val fromGoogle: Boolean = false)
+data class Destination(val name: String, val at: LatLon, val fromGoogle: Boolean = false, val placeId: String? = null)
 
 /** Google's answer to one routes request: [problem] in plain words when it failed. */
 data class RoutesAnswer(
@@ -102,12 +102,12 @@ class TrafficLogger(
      * One request to Google for the routes from [from] to [to] with live traffic, counted against
      * the month and the daily cap. Falls back to car routes once when two-wheeler isn't offered.
      */
-    suspend fun routes(from: LatLon, to: LatLon, headingDeg: Double? = null): RoutesAnswer {
+    suspend fun routes(from: LatLon, to: LatLon, headingDeg: Double? = null, via: List<LatLon> = emptyList()): RoutesAnswer {
         if (!underCap) return RoutesAnswer(0, "", mode, emptyList(), "Stopped for today: $DAILY_CAP checks (the cap that keeps the cost safe)")
         var fellBack = false
         while (true) {
             val m = mode
-            val (status, body) = withContext(Dispatchers.IO) { post(TrafficRoutes.request(from, to, m, headingDeg)) }
+            val (status, body) = withContext(Dispatchers.IO) { post(TrafficRoutes.request(from, to, m, headingDeg, via)) }
             // Only requests that reached Google count (they're the ones it bills).
             if (status != -1) count()
             if (m == TrafficRoutes.TWO_WHEELER && TrafficRoutes.modeNotOffered(status, body)) {
