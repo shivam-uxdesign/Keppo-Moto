@@ -271,3 +271,23 @@ Prototype approved ("This looks good"): https://claude.ai/artifact/R91tYQfYRNczg
 15. **Saved places** (#114): saved when you tap Start; labelled with the phone's area name (renamable); the 20 most recent; one list with ride ends; Google's location refreshed after 30 days; long-press to rename or remove.
 
 **Not in this build:** step 4's full traffic memory (which roads are clear for you at which hour). Only its first use is in: your own past rides as detour roads.
+
+## Step 4: your own traffic memory (approved 24 Nov)
+
+"Normal is purely Google, can do suggestions like 'turn left, you've previously travelled here, smoother route'. Google will automatically recheck. Good with your other suggestions."
+
+**What it learns** (on the phone only, never uploaded): every recorded ride, cut into ~100 m road cells kept apart by direction (8), by weekday / weekend and by hour. Per cell and hour: how long you were there, how much of it **stopped** (< 5 km/h) or **crawling** (5–15 km/h), your usual speed, and how many rides. Rest stops (still for over 3 min) and the first / last 2 minutes of a ride (parking) are left out. Updated after each ride; past rides are read once.
+
+**What it does**
+1. **Scoring (Less traffic, No foot down):** where your rides disagree with Google, a route's cost moves toward your own record, by up to 60% once a cell has 5 rides at that hour (± 1 hour). Google green where you usually stop counts slow; Google yellow where you filter through counts lighter.
+2. **Your own yellow:** from rides with a traffic log, how often Google's yellow really meant stopping for you. "1 in 5" becomes your own number (starting from 1 in 5, moving as rides add up); Less traffic uses it, No foot down adds its margin on top. Shown in Profile.
+3. **Detours:** ways round from cells where you're actually moving at this hour (not just any road you've ridden).
+4. **Free heads-up:** "Usually slow here at this hour" before Google shows anything, when your record says so.
+5. **Normal mode suggestions (free):** Normal stays Google's route; when there's trouble ahead (Google's or your record's) and your rides know a smoother way: "Turn left: you've ridden here before, a smoother road". You turn, Google re-plans for free. Normal never makes a paid request.
+6. **Your roads** in Profile: a map of what it has learned, coloured by how you usually move at the hour you pick (your own data, drawn on the app's MapTiler map).
+
+**Limits:** a road helps after about 5 trips at similar hours; until then Google leads. Only roads you've ridden.
+
+## Later (after step 4): to plan, not build yet
+- **7. Our own route finder** on a server (OpenStreetMap roads + live traffic + your memory), for side-road detours Google never offers. Plan only, after step 4.
+- **8. Kotlin 2.3 and the newest Navigation SDK.** Plan only, after step 4.
