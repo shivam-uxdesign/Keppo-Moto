@@ -2,8 +2,6 @@ package com.ridetrack.app.keepmoving
 
 import android.app.Activity
 import android.app.Application
-import android.media.AudioAttributes
-import android.speech.tts.TextToSpeech
 import com.google.android.libraries.navigation.CustomRoutesOptions
 import com.google.android.libraries.navigation.DisplayOptions
 import com.google.android.libraries.navigation.NavigationApi
@@ -25,14 +23,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import java.util.Locale
 import kotlin.coroutines.resume
 
 /**
  * Keep moving during the ride (test builds): Google's Navigation SDK guides along the planned road
- * (its route token, through any detour points), with Google's arrows and voice. Keppo watches the
+ * (its route token, through any detour points), with Google's arrows, silent (no voice, 25 Nov). Keppo watches the
  * road ahead with the navigation's own traffic (free) and, per the 24 Nov plan:
- * 1. warns at ~1.5 km and ~500 m before trouble, with a way round when one is known (our own voice);
+ * 1. warns at ~1.5 km and ~500 m before trouble, with a way round when one is known (on screen only);
  * 2. if the rider turns off, Google re-plans for free and the new road is watched the same way;
  * 3. only when the rider didn't turn (or Google's re-plan heads back into the jam) does it pay to
  *    ask Google for routes, and offers a clearly clearer one with a 5-second "Keep this road".
@@ -99,7 +96,6 @@ class KeepMovingGuide(
     @Volatile private var turned = false
     /** Paid looks already made for this jam (one per jam, unless Google re-plans back into it). */
     private val looked = HashSet<String>()
-    private var tts: TextToSpeech? = null
 
     init {
         // The ride ended: so do its directions.
@@ -147,7 +143,8 @@ class KeepMovingGuide(
             .getOrElse { e -> return "Directions couldn't start (${e.message ?: e.javaClass.simpleName})" }
         if (status != Navigator.RouteStatus.OK) return "Google couldn't start directions (${status.name.lowercase().replace('_', ' ')})"
         runCatching {
-            nav.setAudioGuidance(Navigator.AudioGuidance.VOICE_ALERTS_AND_GUIDANCE)
+            // 25 Nov: "I don't want voice at all": Google's navigation is silent (no turns, no "arrived").
+            nav.setAudioGuidance(Navigator.AudioGuidance.SILENT)
             nav.startGuidance()
         }.onFailure { e -> return "Directions couldn't start (${e.message ?: e.javaClass.simpleName})" }
         // The next turn for the top bar on the app's other screens.
@@ -196,7 +193,6 @@ class KeepMovingGuide(
                 declined = Reroute.Declined(TrafficRoutes.decodePolyline(best.ranked.route.polyline), best.ranked.cost),
                 via = best.via,
             )
-            say(RideWatch.SWITCH_VOICE)
             delay(Reroute.COUNTDOWN_MS)
             _offer.value?.let { if (System.currentTimeMillis() >= it.atMs) switchTo(it) }
         }
@@ -315,16 +311,14 @@ class KeepMovingGuide(
             val stage = RideWatch.stage(trouble.inM)
             // Known ways round: the plan's other detours, and roads where you move well at this hour.
             val way = RideWatch.wayRound(trouble, line, here, ways + Memory.goodPoints(mem, bucket))
-            val (title, detail, voice) = when {
+            // Shown only: no voice (25 Nov), the third part is unused.
+            val (title, detail, _) = when {
                 !mode.scored && way != null -> Triple(RideWatch.title(trouble), RideWatch.smootherDetail(way), RideWatch.smootherVoice(way))
                 usual != null -> Triple(RideWatch.usualTitle(trouble), RideWatch.usualDetail(trouble, way), RideWatch.usualVoice(way))
                 else -> Triple(RideWatch.title(trouble), RideWatch.detail(trouble, way), RideWatch.voice(trouble, stage, way))
             }
             _warning.value = Warning(title, detail, stage)
-            if ((warned[key] ?: 0) < stage) {
-                warned[key] = stage
-                say(voice)
-            }
+            if ((warned[key] ?: 0) < stage) warned[key] = stage
             // Normal never pays: Google re-plans for free if you take the suggestion.
             if (!mode.scored) continue
             // The backstop: the jam is near and the rider hasn't turned off, or Google's re-plan after
@@ -352,7 +346,6 @@ class KeepMovingGuide(
                 savedSlowM = (current.slowM - pick.colours.slowM).coerceAtLeast(0),
                 declined = Reroute.Declined(TrafficRoutes.decodePolyline(pick.route.polyline), pick.cost),
             )
-            say(RideWatch.SWITCH_VOICE)
             delay(Reroute.COUNTDOWN_MS)
             _offer.value?.let { if (System.currentTimeMillis() >= it.atMs) switchTo(it) }
         }
@@ -395,25 +388,6 @@ class KeepMovingGuide(
         }
         line to stretches
     }.getOrNull()
-
-    /** Our own voice line, through the same audio route as navigation guidance (the headset). */
-    private fun say(text: String) {
-        val t = tts
-        if (t != null) {
-            t.speak(text, TextToSpeech.QUEUE_ADD, null, "keep-moving-${System.nanoTime()}")
-            return
-        }
-        tts = TextToSpeech(app) { ok ->
-            if (ok == TextToSpeech.SUCCESS) {
-                tts?.language = Locale("en", "IN")
-                tts?.setAudioAttributes(
-                    AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build(),
-                )
-                tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "keep-moving-first")
-            }
-        }
-    }
 
     private fun errorText(code: Int) = when (code) {
         NavigationApi.ErrorCode.NOT_AUTHORIZED -> "The key isn't allowed to use the Navigation SDK: check it's ticked on the key"

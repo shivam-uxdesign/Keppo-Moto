@@ -78,7 +78,10 @@ class Planner(
         val google = ranked.firstOrNull { it.index == 0 }
         val options = ranked.map { Option(it, emptyList()) }.toMutableList()
         val best = options.firstOrNull { !it.ranked.tooLong }
-        if (best == null || best.ranked.clear) {
+        // 25 Nov: detour points are stops for Google's navigation (a dimmed route after the first,
+        // a grey marker, an "arrived"). Only look for ways round when the best of Google's own
+        // routes still has a real jam on it.
+        if (best == null || best.ranked.clear || best.ranked.colours.jamM < DETOUR_MIN_JAM_M) {
             return Plan(google, options, requests, signals.isNotEmpty(), car, null)
         }
 
@@ -139,8 +142,10 @@ class Planner(
     companion object {
         /** Jams shorter than this aren't worth a detour. */
         const val MIN_JAM_M = 200
-        /** What one detour point (a stop for the navigation) costs: about 100 m of red. */
-        const val VIA_PENALTY = 100.0
+        /** What one detour point (a stop for the navigation) costs: about 250 m of red (25 Nov: much higher bar). */
+        const val VIA_PENALTY = 250.0
+        /** Detours are only tried when Google's best own route still has this much red. */
+        const val DETOUR_MIN_JAM_M = 400
         /** The plan waits at most this long for OpenStreetMap's signals. */
         const val SIGNALS_WAIT_MS = 4_000L
 
