@@ -3,7 +3,7 @@
 Asked: "A full on interactive case study with motions and clean transitions, and a quick TL;DR version of it" for the rider's design portfolio, "as an AI-first hands-on designer who can deliver products".
 
 ## Decided
-- **Audience:** a founding product designer role at a startup: someone who works independently without a big team, creative, a problem solver.
+- **Audience:** startup product roles (never named on the page; rider, 25 Nov: "Don't mention founding designer"): someone who works independently without a big team, creative, a problem solver.
 - **Angle:** AI-first, up front. The designer owns vision, design, decisions and ride testing; the AI builds, researches, tests and ships builds.
 - **Look:** Keppo Moto's design system (dark, teal, Geist / Bricolage, "instrument cluster at night").
 - **Length:** full case study about 8–10 minutes; TL;DR about 1 minute (one screen, plus a one-page PDF).

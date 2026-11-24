@@ -168,6 +168,42 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 
 footer{padding-block:72px 96px;border-top:1px solid var(--hair)}
 
+
+/* idea */
+.idea{display:flex;flex-direction:column;gap:10px}
+.ideaRow{display:grid;grid-template-columns:minmax(0,1fr) 40px minmax(0,1.3fr);align-items:center;gap:12px;background:var(--surface);border-radius:20px;padding:18px 20px}
+.ideaRow p{margin-top:6px;font-size:17px;line-height:1.4}
+.ideaRow .prob p{color:#a1a1aa}
+.ideaRow .arrow{color:var(--teal);font:600 22px/1 var(--mono);text-align:center}
+@media (max-width:640px){.ideaRow{grid-template-columns:1fr}.ideaRow .arrow{text-align:left;transform:rotate(90deg);width:20px}}
+
+/* feature explorer */
+.fx{display:grid;grid-template-columns:220px minmax(0,1fr);gap:16px}
+.fxTabs{display:flex;flex-direction:column;gap:6px}
+.fxTabs button{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;color:var(--muted);font:500 15px/1.2 var(--sans);transition:background .2s,color .2s}
+.fxTabs button:hover{color:var(--text);background:var(--surface)}
+.fxTabs button[aria-selected="true"]{background:var(--teal-fill);color:var(--text)}
+.fxTabs button i{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:.5;flex:none}
+.fxTabs button[aria-selected="true"] i{background:var(--teal);opacity:1}
+.fxPanel{background:var(--surface);border-radius:var(--r-xl);padding:24px;display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:28px;align-items:start;min-height:560px}
+.phone.sm{max-width:260px;border-radius:32px;border-width:6px}
+.fxBody{display:flex;flex-direction:column;gap:12px}
+.flow{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0;counter-reset:f}
+.flow li{position:relative;padding:0 0 16px 40px;counter-increment:f;color:#d4d4d8;font-size:15px;line-height:1.45}
+.flow li::before{content:counter(f);position:absolute;left:0;top:-2px;width:26px;height:26px;border-radius:50%;background:var(--raised);color:var(--teal);font:600 12px/26px var(--mono);text-align:center}
+.flow li::after{content:"";position:absolute;left:12.5px;top:28px;bottom:2px;width:1px;background:var(--line)}
+.flow li:last-child::after{display:none}
+.fxNote{font-size:14px;color:var(--muted);border-top:1px solid var(--hair);padding-top:12px}
+.fxPanel.swap .fxBody,.fxPanel.swap .fxShot{animation:swap .45s cubic-bezier(.2,.7,.2,1) both}
+@keyframes swap{from{opacity:.0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.also{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.alsoCard{background:var(--surface);border-radius:20px;padding:18px}
+.alsoCard b{display:block;font-weight:600;margin-bottom:6px}
+.alsoCard p{color:#c9c9cf;font-size:15px}
+@media (max-width:900px){.fx{grid-template-columns:1fr}.fxTabs{flex-direction:row;overflow-x:auto;padding-bottom:4px}.fxTabs button{white-space:nowrap}.fxPanel{grid-template-columns:1fr}.also{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.also{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.fxPanel.swap .fxBody,.fxPanel.swap .fxShot{animation:none}}
+
 /* motion: everything is visible at rest; entering the view adds a short lift */
 @media (prefers-reduced-motion:no-preference){
   .rise.in{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
@@ -186,6 +222,8 @@ footer{padding-block:72px 96px;border-top:1px solid var(--hair)}
       Keppo Moto
     </a>
     <nav aria-label="Sections">
+      <a href="#idea">Idea</a>
+      <a href="#features">Features</a>
       <a href="#role">Role</a>
       <a href="#loop">The loop</a>
       <a href="#keep-moving">Keep moving</a>
@@ -208,7 +246,7 @@ footer{padding-block:72px 96px;border-top:1px solid var(--hair)}
           <span class="pill tnum"><span class="dot"></span>477 commits</span>
           <span class="pill tnum">622 automated tests</span>
           <span class="pill tnum">149 logged decisions</span>
-          <span class="pill">Founding-designer scope</span>
+          <span class="pill">10+ features, one designer</span>
         </div>
       </div>
       <figure class="routeCard" aria-label="Animated map: a route turns red with a jam, then a clearer road is drawn around it" style="margin:0">
@@ -242,25 +280,48 @@ footer{padding-block:72px 96px;border-top:1px solid var(--hair)}
     </div>
   </section>
 
-  <!-- PRODUCT -->
-  <section aria-labelledby="product-h">
+  <!-- THE IDEA -->
+  <section id="idea" aria-labelledby="idea-h">
     <div class="wrap stack" style="gap:28px">
-      <span class="label">The product</span>
-      <h2 id="product-h">Every ride, kept. Built for riders who'd rather ride than fiddle with a phone.</h2>
-      <p class="lede">It runs on a handlebar at 5 a.m., so it's dark-first, glanceable and hands-off. Moments film themselves on hard braking and deep lean. A crash texts your people. After the ride, Studio turns your clips and your own words into Reels.</p>
-      <div class="cards">
-        <article class="feat rise">
-          <div class="shot"><img src="img/hud.webp" alt="The floating ride HUD: speed 59 km/h, gear 3 at 6,200 rpm, lean 15 degrees right, three mic bars, and a second card filming with the back camera" loading="lazy"></div>
-          <div class="body"><span class="label">Ride HUD</span><h3>An instrument, not a dashboard</h3><p>Speed, lean, gear and revs, plus three live mic bars so you can see the helmet mic hears you. Floats over Maps or music.</p></div>
-        </article>
-        <article class="feat rise">
-          <div class="shot"><img src="img/crash-countdown.webp" alt="Crash alert: Are you OK? A 21-second countdown before location goes to two contacts by SMS, with a large I'm OK, Cancel button" loading="lazy"></div>
-          <div class="body"><span class="label">Safety, on by default</span><h3>Calm copy when it matters</h3><p>A 30-second cancel window, then an SMS with your location. Works with no signal and no account. Never alarmist.</p></div>
-        </article>
-        <article class="feat rise">
-          <div class="shot"><img src="img/studio-feed.webp" alt="Studio feed: ride Sunday at Nahan, 71 clips, 24 with your voice, and an idea card for a Reel called Paani Nahi Piya" loading="lazy"></div>
-          <div class="body"><span class="label">Studio</span><h3>Your ride, edited for you</h3><p>Gemini reads what you said on the ride and suggests Reels. Ask across all rides, or edit it your own way.</p></div>
-        </article>
+      <span class="label">The idea</span>
+      <h2 id="idea-h">The phone on the handlebar can do more than show a map.</h2>
+      <p class="lede">A rider already mounts a phone for navigation. It has a GPS, motion sensors, cameras, mics and a radio. What if it quietly did the jobs a riding crew would: keep the stats, film the good bits, watch for a fall, and cut the video afterwards, so the rider only has to ride?</p>
+      <div class="idea">
+        <div class="ideaRow rise"><div class="prob"><span class="label">The problem</span><p>Hours of helmet footage that never gets edited.</p></div><div class="arrow" aria-hidden="true">→</div><div class="ans"><span class="label" style="color:var(--teal)">Keppo Moto</span><p>Moments films itself on hard braking, deep lean or your voice, and Studio turns them into Reels.</p></div></div>
+        <div class="ideaRow rise"><div class="prob"><span class="label">The problem</span><p>Riding alone, nobody knows if you go down.</p></div><div class="arrow" aria-hidden="true">→</div><div class="ans"><span class="label" style="color:var(--teal)">Keppo Moto</span><p>Crash detection is on by default and texts your people with your location. No account needed.</p></div></div>
+        <div class="ideaRow rise"><div class="prob"><span class="label">The problem</span><p>Tapping a phone at 60 km/h is dangerous.</p></div><div class="arrow" aria-hidden="true">→</div><div class="ans"><span class="label" style="color:var(--teal)">Keppo Moto</span><p>Glanceable, dark-first screens with 64 dp targets for gloves. Everything starts by itself or with one slide.</p></div></div>
+        <div class="ideaRow rise"><div class="prob"><span class="label">The problem</span><p>Delhi traffic: more time with a foot down than riding.</p></div><div class="arrow" aria-hidden="true">→</div><div class="ans"><span class="label" style="color:var(--teal)">Keppo Moto</span><p>Keep moving steers around jams and learns which roads are clear for you.</p></div></div>
+      </div>
+      <p style="color:#c9c9cf;max-width:62ch">It started on 25 Sep as a ride tracker: speed, lean and a route. Each layer above was added once the one below worked on real rides.</p>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" aria-labelledby="feat-h">
+    <div class="wrap stack" style="gap:28px">
+      <span class="label">The product, and how it works</span>
+      <h2 id="feat-h">Every ride, kept. Pick a feature to see what's under it.</h2>
+      <div class="fx">
+        <div class="fxTabs" role="tablist" aria-label="Features"></div>
+        <div class="fxPanel" role="tabpanel" aria-live="polite">
+          <div class="fxShot"><div class="phone sm" id="fxPhone"></div></div>
+          <div class="fxBody">
+            <span class="label" id="fxKicker"></span>
+            <h3 id="fxTitle" style="font-size:26px"></h3>
+            <p id="fxWhat" style="color:#d4d4d8"></p>
+            <span class="label" style="margin-top:6px">How it works</span>
+            <ol class="flow" id="fxFlow"></ol>
+            <p class="fxNote" id="fxNote"></p>
+          </div>
+        </div>
+      </div>
+      <div class="also">
+        <div class="alsoCard rise"><b>Start without looking</b><p>Slide to ride, a home-screen widget, a Quick Settings tile, an app shortcut or "Hey Google". A 3-second countdown with Cancel.</p></div>
+        <div class="alsoCard rise"><b>Routines</b><p>When a ride starts: open Maps or any app, resume your music, set the volume. On arrival: end and save the ride.</p></div>
+        <div class="alsoCard rise"><b>Fuel</b><p>Notices a 1–15 minute stop at a pump, asks how much you filled and works out your km per litre.</p></div>
+        <div class="alsoCard rise"><b>Bike care</b><p>Chain, oil and service due by the kilometres you actually rode, per bike.</p></div>
+        <div class="alsoCard rise"><b>Achievements</b><p>Rookie to Legend. No speed or lean records, on purpose: the app never rewards riding faster.</p></div>
+        <div class="alsoCard rise"><b>Your data stays yours</b><p>Rides live on the phone. Optional backup to your own Google Drive; export to GPX, CSV or JSON.</p></div>
       </div>
     </div>
   </section>
@@ -271,7 +332,7 @@ footer{padding-block:72px 96px;border-top:1px solid var(--hair)}
       <div class="stack" style="gap:28px">
         <span class="label">My role</span>
         <h2 id="role-h">One designer, one AI, a product that runs on real roads.</h2>
-        <p class="lede">A founding designer has to decide, design and get it built without waiting for a team. I worked that way: I set direction and judged every build on my own bike; the AI did the engineering at the speed I needed.</p>
+        <p class="lede">I worked like a one-person product team. I set the direction, designed every screen and judged every build on my own bike; the AI did the engineering at the speed I needed.</p>
         <div class="rules" style="grid-template-columns:repeat(2,minmax(0,1fr))">
           <div class="rule"><b>I did</b><p>Product vision and scope · the design system · every flow and screen · prototypes · what to build and in what order · ride testing in Delhi traffic · every trade-off on cost, privacy and safety.</p></div>
           <div class="rule"><b>The AI did</b><p>Kotlin and Compose code · research into Google's terms and pricing · 622 tests · lint · signed test APKs · a numbered log of every question, bug and decision.</p></div>
@@ -421,7 +482,7 @@ footer{padding-block:72px 96px;border-top:1px solid var(--hair)}
   <section id="decisions" aria-labelledby="dec-h">
     <div class="wrap stack" style="gap:28px">
       <span class="label">Decisions and trade-offs</span>
-      <h2 id="dec-h">The calls only a founding designer makes.</h2>
+      <h2 id="dec-h">The calls I made, and why.</h2>
       <div class="dec">
         <article class="decision rise"><h3>No paid server</h3><p style="color:#c9c9cf">An own route finder would cost ₹1,500–3,000 a month. I chose free: an on-phone router only if test rides show Google misses side roads.</p><div class="vs"><span>Paid router</span><span class="won">Free first, prove the need</span></div><blockquote class="quote" style="margin-top:6px">"I don't really want to spend that much on a server."<cite>25 Nov</cite></blockquote></article>
         <article class="decision rise"><h3>Google's rules shaped the UI</h3><p style="color:#c9c9cf">Google's routes must sit on Google's map, and its directions can't be read aloud by our own voice. So Keep moving got its own Google map screen and uses Google's navigation, while the rest of the app keeps its own map.</p><div class="vs"><span>One map everywhere</span><span class="won">Right map per job</span></div></article>
@@ -447,8 +508,8 @@ footer{padding-block:72px 96px;border-top:1px solid var(--hair)}
 
   <footer>
     <div class="wrap stack" style="gap:18px">
-      <h2>Looking for a founding product designer who ships?</h2>
-      <p class="lede">I work independently, prototype fast and test on the real thing. Let's talk.</p>
+      <h2>Ideas are cheap. Shipping them is the job.</h2>
+      <p class="lede">I take a product from an idea to a build people can use, prototype fast and test on the real thing. Let's talk.</p>
       <p class="mono" style="color:var(--muted)">[YOUR EMAIL] · [YOUR PORTFOLIO LINK]</p>
       <p style="color:var(--muted);font-size:14px">App screens are rendered from Keppo Moto's own code with sample data. Dashed frames mark real-phone captures still to come. <a href="tldr.html">Read the one-minute version.</a></p>
     </div>
@@ -476,6 +537,58 @@ footer{padding-block:72px 96px;border-top:1px solid var(--hair)}
     }, { threshold: 0.6 });
     cio.observe(el);
   });
+
+
+  // Feature explorer.
+  var feats = [
+    { k:'Ride', t:'Ride recording and lean', kick:'Every ride', what:'Speed, distance, lean, braking, G-force and stops from the phone alone, shown live and analysed after the ride with charts, a route map and a 3D replay.',
+      flow:['GPS gives position and speed; fixes worse than 25 m never add distance.','The gyroscope and accelerometer are blended into a lean angle, using how the phone sits on this bike\'s mount, learned while you ride.','Braking, hard acceleration, stops and breaks are picked out as events.','After the ride: charts with one shared cursor that moves the marker on the map.'],
+      note:'Data honesty rule: a value the app doesn\'t know shows as --, never as 0.', ph:['Shot 4 · ride detail','Charts, route map and replay.'] },
+    { k:'HUD', t:'Ride HUD', kick:'While riding', what:'A small instrument card that floats over Google Maps or your music app. Four layouts: Minimal, Touring, Sport, Telemetry.',
+      flow:['Starts with the ride and hides when you open Keppo Moto.','Shows speed, lean, gear and revs, and whether it\'s filming.','Gear and revs come from an OBD adapter if the bike has one; the app works the gear out from revs and speed.','Three mic bars (MIC, VOICE, ENGINE) show that your helmet mic hears you before you need it.'],
+      note:'Drag to move, position remembered. Recording controls stay on the card.', img:['img/hud.webp','The floating HUD, riding and filming'] },
+    { k:'Moments', t:'Moments', kick:'Films itself', what:'Short clips and photos of the bits worth keeping, without touching the phone.',
+      flow:['The camera keeps the last few seconds in memory as you ride.','Hard braking (0.5 g), a lean past your own setting, or your voice saves that buffer plus what follows.','Voice is spotted on the phone with a small speech model, from the phone, a USB-C or Bluetooth receiver, or a wired mic.','Each clip is tagged: "0–60 km/h in 4.8 s", what was seen (labelled on the phone) and whether you shouted.'],
+      note:'"Film when I speak": say something and the moment is kept.', ph:['Shot 6 · moment viewer','A clip with its speed and lean.'] },
+    { k:'Safety', t:'Crash detection', kick:'On by default', what:'If you go down, the people you chose get a text with where you are, unless you say you\'re OK.',
+      flow:['An impact over 4 g while moving faster than 15 km/h, or the bike sliding past 60° of lean.','Then the bike stays down or doesn\'t move. A pothole followed by more riding, or a phone dropped at a standstill, doesn\'t count.','A full-screen alert over the lock screen counts down 30 seconds with a big I\'m OK.','Then an SMS with your location, tried again every 30 s if there\'s no signal. With no GPS fix, the last known place is sent with its age.'],
+      note:'SMS, not internet: it works where riding often goes wrong, out of coverage.', img:['img/crash-countdown.webp','Crash alert counting down'] },
+    { k:'Studio', t:'Studio', kick:'After the ride', what:'Your clips and your own words, turned into Reel ideas you can make with one tap or edit your own way.',
+      flow:['As soon as the ride ends (or later on Wi-Fi when the battery is under half), the clips are read in the background.','If "Write down what I say" is on, Gemini writes down what you said in each clip.','It suggests Reels built on your words ("Paani Nahi Piya") with a storyboard and a voice-over line per shot.','Ask across all rides, for example "all my downshifts", and get one Reel from every ride.'],
+      note:'AI only with your consent. One free Reel a week; Pro makes the top idea for you after every ride.', img:['img/studio-feed.webp','Studio feed with Reel ideas'] },
+    { k:'Share', t:'Share', kick:'Show it off', what:'Ride cards and moment videos with your stats drawn on top.',
+      flow:['Pick a ride or a moment.','Swipe through 11 overlays: speed, lean, route, G-force.','Trim, then export a video or image made on the phone.'],
+      note:'Rendered on the phone; nothing is uploaded to make it.', ph:['Shot 9 · share overlays','A moment with the lean overlay.'] },
+    { k:'Keep moving', t:'Keep moving', kick:'Around the jams', what:'Directions that try to keep you rolling, with three modes: Normal, Less traffic and No foot down.',
+      flow:['Asks Google for routes with live traffic and scores each by its jams, slow stretches and traffic lights.','No foot down also looks for detours round long jams.','While riding, warns of jams ahead on screen and offers a clearer road.','Learns how you actually move on each road, by hour and weekday.'],
+      note:'The full story is in the deep dive below.', link:'#keep-moving', ph:['R2 · recording','Keep moving end to end.'] },
+    { k:'Pro', t:'Pro', kick:'The business', what:'Recording and safety are free. Pro adds Studio\'s Reels and AI features.',
+      flow:['Free: rides, Moments, crash alerts and the HUD.','Pro: ₹249 a month or ₹1,999 a year, with a 7-day trial.','Paid through Google Play; the app works offline without an account.'],
+      note:'Safety is never behind the paywall.', img:['img/paywall.webp','Keppo Pro plans'] }
+  ];
+  var tabs = document.querySelector('.fxTabs'), panel = document.querySelector('.fxPanel');
+  feats.forEach(function (f, i) {
+    var b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'tab');
+    b.innerHTML = '<i></i>'; b.appendChild(document.createTextNode(f.k));
+    b.addEventListener('click', function () { showFeat(i, true); });
+    tabs.appendChild(b);
+  });
+  function showFeat(i, anim) {
+    var f = feats[i];
+    tabs.querySelectorAll('button').forEach(function (b, k) { b.setAttribute('aria-selected', k === i ? 'true' : 'false'); });
+    document.getElementById('fxKicker').textContent = f.kick;
+    document.getElementById('fxTitle').textContent = f.t;
+    document.getElementById('fxWhat').textContent = f.what;
+    var ol = document.getElementById('fxFlow'); ol.innerHTML = '';
+    f.flow.forEach(function (x) { var li = document.createElement('li'); li.textContent = x; ol.appendChild(li); });
+    var note = document.getElementById('fxNote'); note.textContent = f.note;
+    if (f.link) { var a = document.createElement('a'); a.href = f.link; a.textContent = ' Jump there →'; note.appendChild(a); }
+    var ph = document.getElementById('fxPhone'); ph.innerHTML = '';
+    if (f.img) { var im = document.createElement('img'); im.src = f.img[0]; im.alt = f.img[1]; ph.appendChild(im); }
+    else { var d = document.createElement('div'); d.className = 'ph'; var b2 = document.createElement('b'); b2.textContent = f.ph[0]; var sp = document.createElement('span'); sp.textContent = f.ph[1]; d.appendChild(b2); d.appendChild(sp); ph.appendChild(d); }
+    if (anim) { panel.classList.remove('swap'); void panel.offsetWidth; panel.classList.add('swap'); }
+  }
+  showFeat(1, false);
 
   // The loop.
   var loop = [
