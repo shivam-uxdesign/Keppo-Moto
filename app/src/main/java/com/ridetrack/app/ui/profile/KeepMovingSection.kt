@@ -1,6 +1,15 @@
 package com.ridetrack.app.ui.profile
 
 import androidx.compose.foundation.clickable
+import kotlinx.coroutines.launch
+import com.ridetrack.app.keepmoving.Suggestion
+import com.ridetrack.app.keepmoving.PlaceSearch
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -49,6 +58,7 @@ fun KeepMovingSection() {
     val dest by log.destination.collectAsStateWithLifecycle()
     val status by log.status.collectAsStateWithLifecycle()
     var choosing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     SectionHeader("Keep moving")
     RtCard {
@@ -89,29 +99,62 @@ fun KeepMovingSection() {
     }
     if (choosing) {
         DestinationPicker(
-            onPick = { log.setDestination(it); choosing = false },
+            onPick = { d -> choosing = false; scope.launch { log.setDestination(Destinations.forSaving(d, c.places)) } },
             onClear = if (dest != null) ({ log.setDestination(null); choosing = false }) else null,
             onClose = { choosing = false },
         )
     }
 }
 
-/** Where recent rides ended (tap one), or a search. */
+@Composable
+private fun PlaceRow(name: String, area: String?, busy: Boolean = false, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(name, style = RtType.body, color = RtColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            area?.let { Text(it, style = RtType.caption, color = RtColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        }
+        if (busy) CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** Where recent rides ended (tap one), or a search: Google's places first, MapTiler's when Google can't answer. */
 @Composable
 internal fun DestinationPicker(onPick: (Destination) -> Unit, onClear: (() -> Unit)?, onClose: () -> Unit) {
     val c = appContainer()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var recent by remember { mutableStateOf<List<Destination>?>(null) }
     var query by remember { mutableStateOf("") }
+    var google by remember { mutableStateOf<List<Suggestion>?>(null) }
     var found by remember { mutableStateOf<List<Destination>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
+    var locating by remember { mutableStateOf<String?>(null) }
+    var failed by remember { mutableStateOf(false) }
+    // One search session from the first letter to the pick (Google bills the suggestions with the pick).
+    var session by remember { mutableStateOf(PlaceSearch.newSession()) }
     LaunchedEffect(Unit) { recent = runCatching { Destinations.recentEnds(c.rides, c.places) }.getOrDefault(emptyList()) }
     LaunchedEffect(query) {
-        if (query.trim().length < 2) { found = emptyList(); return@LaunchedEffect }
+        failed = false
+        if (query.trim().length < 3) { google = null; found = emptyList(); return@LaunchedEffect }
         delay(400)
         searching = true
         val near = c.session.frame.value?.let { f -> f.latitude?.let { lat -> f.longitude?.let { LatLon(lat, it) } } } ?: recent?.firstOrNull()?.at
-        found = Destinations.search(query, near)
+        google = PlaceSearch.suggest(context, query, session, near)
+        found = if (google == null) Destinations.search(query, near) else emptyList()
         searching = false
+    }
+    fun pickGoogle(s: Suggestion) {
+        if (locating != null) return
+        locating = s.placeId
+        scope.launch {
+            val at = PlaceSearch.locate(context, s, session)
+            locating = null
+            session = PlaceSearch.newSession()
+            if (at != null) onPick(Destination(s.name, at, fromGoogle = true)) else failed = true
+        }
     }
     AlertDialog(
         onDismissRequest = onClose,
@@ -129,21 +172,21 @@ internal fun DestinationPicker(onPick: (Destination) -> Unit, onClear: (() -> Un
                 )
                 Spacer(Modifier.height(8.dp))
                 if (searching) CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp, modifier = Modifier.padding(8.dp).height(20.dp))
-                val list = if (query.trim().length >= 2) found else recent.orEmpty()
-                if (query.trim().length < 2) {
+                if (failed) Text("Couldn't get that place from Google: try again.", style = RtType.caption, color = RtColors.Warning)
+                val typing = query.trim().length >= 3
+                if (!typing) {
                     Text("WHERE YOUR RIDES ENDED", style = RtType.label, color = RtColors.TextSecondary, modifier = Modifier.padding(vertical = 6.dp))
                     if (recent == null) CircularProgressIndicator(color = RtColors.Primary, strokeWidth = 2.dp, modifier = Modifier.padding(8.dp).height(20.dp))
                     else if (recent!!.isEmpty()) Text("No rides yet: search a place above.", style = RtType.caption, color = RtColors.TextSecondary)
-                } else if (!searching && found.isEmpty()) {
+                    recent.orEmpty().forEach { d -> PlaceRow(d.name, null, onClick = { onPick(d) }) }
+                } else if (!searching && google.orEmpty().isEmpty() && found.isEmpty()) {
                     Text("Nothing found", style = RtType.caption, color = RtColors.TextSecondary)
                 }
-                list.forEach { d ->
-                    Text(
-                        d.name,
-                        style = RtType.body,
-                        color = RtColors.TextPrimary,
-                        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { onPick(d) }.padding(vertical = 10.dp),
-                    )
+                if (typing) {
+                    google?.forEach { s -> PlaceRow(s.name, s.area, busy = locating == s.placeId, onClick = { pickGoogle(s) }) }
+                    found.forEach { d -> PlaceRow(d.name, null, onClick = { onPick(d) }) }
+                    // Google's terms: its results carry its name when shown without its map.
+                    if (!google.isNullOrEmpty()) Text("Results from Google Maps", style = RtType.caption, color = RtColors.TextTertiary, modifier = Modifier.padding(top = 4.dp))
                 }
                 onClear?.let { clear ->
                     Spacer(Modifier.height(8.dp))

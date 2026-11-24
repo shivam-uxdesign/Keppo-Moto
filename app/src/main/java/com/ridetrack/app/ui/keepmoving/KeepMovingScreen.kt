@@ -258,7 +258,7 @@ fun KeepMovingScreen(onBack: () -> Unit, onStarted: () -> Unit) {
                 val d = dest ?: return@PrimaryButton
                 starting = true
                 scope.launch {
-                    log.setDestination(d)
+                    log.setDestination(com.ridetrack.app.keepmoving.Destinations.forSaving(d, c.places))
                     log.plan(route?.route)
                     val bike = QuickStart.bike(c.bikes.observeBikes().first(), c.settings.settings.first().selectedBikeId)
                     val ok = bike != null && QuickStart.start(c, bike)

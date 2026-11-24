@@ -1,8 +1,6 @@
 package com.ridetrack.app.keepmoving
 
 import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
 import com.ridetrack.app.BuildConfig
 import com.ridetrack.app.moments.MomentRepository
 import com.ridetrack.app.ride.RideSessionManager
@@ -20,15 +18,15 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-/** Where the rider is riding to, for the traffic log. */
-data class Destination(val name: String, val at: LatLon)
+/**
+ * Where the rider is riding to, for the traffic log. [fromGoogle]: found with Google's search, so
+ * [name] is Google's and is only shown, never saved ([Destinations.forSaving]).
+ */
+data class Destination(val name: String, val at: LatLon, val fromGoogle: Boolean = false)
 
 /** Google's answer to one routes request: [problem] in plain words when it failed. */
 data class RoutesAnswer(
@@ -206,40 +204,8 @@ class TrafficLogger(
         prefs.edit().putString(STATUS, s).apply()
     }
 
-    /** POSTs [body]; the HTTP status and answer (status -1 when Google can't be reached). */
-    private fun post(body: JSONObject): Pair<Int, String> = runCatching {
-        val c = URL(TrafficRoutes.URL).openConnection() as HttpURLConnection
-        try {
-            c.requestMethod = "POST"
-            c.connectTimeout = 15_000
-            c.readTimeout = 20_000
-            c.doOutput = true
-            c.setRequestProperty("Content-Type", "application/json")
-            c.setRequestProperty("X-Goog-Api-Key", key)
-            c.setRequestProperty("X-Goog-FieldMask", TrafficRoutes.FIELD_MASK)
-            // A key restricted to this Android app is checked against these two.
-            c.setRequestProperty("X-Android-Package", context.packageName)
-            certSha1()?.let { c.setRequestProperty("X-Android-Cert", it) }
-            c.outputStream.use { it.write(body.toString().toByteArray()) }
-            val code = c.responseCode
-            val text = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-            code to text
-        } finally {
-            c.disconnect()
-        }
-    }.getOrElse { -1 to (it.message ?: it.javaClass.simpleName) }
-
-    /** The SHA-1 of the key this app is signed with, as Google's key restrictions want it. */
-    private fun certSha1(): String? = runCatching {
-        val pm = context.packageManager
-        val sig = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES).signingInfo?.apkContentsSigners?.firstOrNull()
-        } else {
-            @Suppress("DEPRECATION")
-            pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES).signatures?.firstOrNull()
-        } ?: return null
-        MessageDigest.getInstance("SHA-1").digest(sig.toByteArray()).joinToString("") { "%02X".format(it) }
-    }.getOrNull()
+    /** POSTs [body] to Google's Routes API (status -1 when Google can't be reached). */
+    private fun post(body: JSONObject): Pair<Int, String> = GoogleApi.call(context, key, TrafficRoutes.URL, body.toString(), TrafficRoutes.FIELD_MASK)
 
     private fun append(file: File, line: JSONObject) {
         runCatching { file.appendText(line.toString() + "\n") }

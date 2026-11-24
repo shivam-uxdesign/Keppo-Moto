@@ -29,6 +29,13 @@ object Destinations {
         }
     }
 
+    /**
+     * [d] as it may be saved: a place found with Google's search is saved under the phone's own
+     * name for the area (Google's terms don't allow keeping its place names).
+     */
+    suspend fun forSaving(d: Destination, places: RidePlaces): Destination =
+        if (!d.fromGoogle) d else Destination(runCatching { places.placeAt(d.at.lat, d.at.lon) }.getOrNull() ?: "Searched place", d.at)
+
     /** [points] grouped into places [SAME_PLACE_M] apart, the most visited first (each place where it was first seen). */
     fun group(points: List<LatLon>): List<LatLon> {
         val groups = ArrayList<Pair<LatLon, Int>>()

@@ -2,6 +2,7 @@ package com.ridetrack.app
 
 import com.ridetrack.app.keepmoving.Destinations
 import com.ridetrack.app.keepmoving.LatLon
+import com.ridetrack.app.keepmoving.PlaceSearch
 import com.ridetrack.app.keepmoving.RouteScore
 import com.ridetrack.app.keepmoving.TrafficRoute
 import com.ridetrack.app.keepmoving.Speed
@@ -93,6 +94,36 @@ class KeepMovingTest {
         assertEquals("Cyber Hub, Gurugram", d[0].name)
         near(28.495, d[0].at.lat)
         near(77.088, d[0].at.lon)
+    }
+
+    @Test
+    fun `Google's place suggestions are read with their name and area`() {
+        val body = """{"suggestions":[
+            {"placePrediction":{"placeId":"ChIJ1","text":{"text":"Cyber Hub, DLF Cyber City, Gurugram"},
+              "structuredFormat":{"mainText":{"text":"Cyber Hub"},"secondaryText":{"text":"DLF Cyber City, Gurugram"}}}},
+            {"queryPrediction":{"text":{"text":"cyber cafe"}}},
+            {"placePrediction":{"placeId":"ChIJ2","text":{"text":"Sector 29"}}},
+            {"placePrediction":{"text":{"text":"no id"}}}]}"""
+        val s = PlaceSearch.parseSuggestions(body)
+        assertEquals(listOf("ChIJ1", "ChIJ2"), s.map { it.placeId })
+        assertEquals("Cyber Hub", s[0].name)
+        assertEquals("DLF Cyber City, Gurugram", s[0].area)
+        assertEquals("Sector 29", s[1].name)
+        assertEquals(null, s[1].area)
+        assertEquals(emptyList(), PlaceSearch.parseSuggestions("{}"))
+    }
+
+    @Test
+    fun `a picked place's location is read, and the search asks near you in India`() {
+        val at = PlaceSearch.parseLocation("""{"location":{"latitude":28.495,"longitude":77.088}}""")!!
+        near(28.495, at.lat); near(77.088, at.lon)
+        assertEquals(null, PlaceSearch.parseLocation("{}"))
+        val r = PlaceSearch.request("cyber hub", "tok", LatLon(28.6, 77.2))
+        assertEquals("tok", r.getString("sessionToken"))
+        assertEquals("in", r.getJSONArray("includedRegionCodes").getString(0))
+        near(28.6, r.getJSONObject("locationBias").getJSONObject("circle").getJSONObject("center").getDouble("latitude"))
+        assertFalse(PlaceSearch.request("x", "tok", null).has("locationBias"))
+        assertTrue("sessionToken=tok" in PlaceSearch.detailsUrl("ChIJ1", "tok"))
     }
 
     /** A straight route north of [n] steps of about 111 m, with [intervals]; Google's distance is the line's. */
