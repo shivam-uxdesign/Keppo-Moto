@@ -19,7 +19,7 @@ the short version: how we work, what's open, and what's next.
 
 ## Builds
 
-- `git fetch --unshallow` first: the version code counts commits (last sent: 452, 8cf7050).
+- `git fetch --unshallow` first: the version code counts commits (last sent: 458, 45a5933).
 - `./gradlew :app:assembleReleaseTest -PabiFilter=arm64-v8a`
 - Verify before sending: versionCode above the last; signing cert SHA-256 starts `140f5eab`
   (test builds use the committed `app/signing/debug.keystore`; its SHA-1 is
