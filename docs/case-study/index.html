@@ -128,6 +128,24 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .betaQuote .ph{position:static;flex-direction:row;justify-content:flex-start;border-radius:18px;padding:16px 18px;text-align:left}
 .betaQuote .ph span{max-width:none}
 @media (max-width:900px){.why2{grid-template-columns:1fr}}
+
+/* Studio */
+.reelHero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,320px);gap:48px;align-items:center;margin-top:36px}
+.reelHero .phone{max-width:320px}
+.stNums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:22px}
+.stNums div{background:var(--surface);border-radius:20px;padding:18px}
+.stNums b{display:block;font:300 clamp(30px,4vw,44px)/1 var(--sans);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.stNums span{display:block;margin-top:8px;color:var(--muted);font-size:13px;line-height:1.35}
+#studio .split{margin-top:56px}
+@media (max-width:900px){.reelHero{grid-template-columns:1fr}.stNums{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Tour of the rest of the app */
+.tour{display:grid;grid-auto-flow:column;grid-auto-columns:220px;gap:18px;overflow-x:auto;scroll-snap-type:x mandatory;padding:8px 2px 18px;margin-top:32px}
+.tour figure{margin:0;scroll-snap-align:start}
+.tour .phone{max-width:220px;border-width:6px;border-radius:30px}
+.tour figcaption{margin-top:10px;font-size:13px;color:var(--muted);line-height:1.4}
+.tour figcaption b{display:block;color:var(--text);font-weight:600;font-size:14px;margin-bottom:2px}
+.tour .ph b{font-size:12px}.tour .ph span{font-size:12px}
 .phone .layer{position:absolute;inset:0;transition:opacity .45s ease}
 .phone .layer[aria-hidden="true"]{opacity:0}
 .cap{margin-top:12px;text-align:center;color:var(--muted);font-size:13px;min-height:2.6em}
@@ -312,6 +330,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
     </a>
     <nav aria-label="Sections">
       <a href="#ride">One ride</a>
+      <a href="#studio">Studio</a>
       <a href="#problems">Hard problems</a>
       <a href="#decisions">Decisions</a>
       <a href="#economics">Business</a>
@@ -541,6 +560,63 @@ footer h2{font-size:clamp(40px,7vw,84px)}
           <div class="layer" aria-hidden="true"><img src="img/crash-countdown.webp" alt="Crash alert counting down 21 seconds"></div>
         </div>
         <p class="cap" id="rideCap">Rendered from the app's code with sample data.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STUDIO -->
+<section id="studio" aria-labelledby="st-h">
+  <div class="wrap">
+    <span class="label">Deep dive · Studio</span>
+    <div class="reelHero">
+      <div class="stack" style="gap:22px">
+        <h2 id="st-h" style="max-width:16ch">The ride edits itself, in your own words.</h2>
+        <p class="lede">Riders film hours and post nothing, because editing a ride takes longer than riding it. Studio reads every clip: what you said, what the camera saw, where you braked, every downshift. By the time you're home, Reels built on your own lines are waiting, and the best one is already made.</p>
+        <div class="scale">
+          <span class="pill"><span class="dot"></span>Ideas after every ride</span>
+          <span class="pill">A full editor</span>
+          <span class="pill">Storyboard before you film</span>
+          <span class="pill">Series and posting</span>
+        </div>
+      </div>
+      <div>
+        <div class="phone"><div class="ph"><b>R4 · a finished Reel</b><span>One Reel Studio made from a ride, playing, muted, looping. Cut from the app screen recording.</span></div></div>
+        <p class="cap">A Reel made by Studio from one of my rides.</p>
+      </div>
+    </div>
+
+    <div class="stNums">
+      <div><b>735</b><span>moments filmed on my bike, 517 minutes of footage</span></div>
+      <div><b>401</b><span>started by my voice, so they carry what I said</span></div>
+      <div><b>217</b><span>started by the engine: a hard rev or a downshift</span></div>
+      <div><b>22<span style="display:inline;font-size:.5em;color:var(--muted)"> / 35</span></b><span>clips with my voice in them, on one evening ride</span></div>
+    </div>
+
+    <div class="split">
+      <div class="stack" style="gap:26px">
+        <div class="steps" id="stSteps">
+          <button class="step" type="button" aria-current="true" data-shot="0"><span class="k">01 · After the ride</span><h3>Ideas are waiting when you park</h3><p>The ride ends, and Studio starts reading it if the battery is above half; otherwise it waits for Wi-Fi. Each card is one moment told a few ways, swipe up for the next. A long Reel of the whole ride always gets its own card.</p></button>
+          <button class="step" type="button" aria-current="false" data-shot="1"><span class="k">02 · Your words lead</span><h3>Built on what you said, Hinglish and all</h3><p>"Paani nahi piya" becomes the hook, not a stock "epic ride" caption. Long pauses, umms and false starts are cut so your voice runs on, and captions follow your words as you said them.</p></button>
+          <button class="step" type="button" aria-current="false" data-shot="2"><span class="k">03 · Ask across all rides</span><h3>"All my downshifts." "Every rainy bit from October."</h3><p>Ask in plain words. Only the ask goes to Gemini, which turns it into a filter; the phone searches its own notes on every clip and finds the moments itself. Themes that keep coming back, a phrase or the traffic police, become compilations.</p></button>
+          <button class="step" type="button" aria-current="false" data-shot="3"><span class="k">04 · The engine is a soundtrack</span><h3>Downshifts found from the sound itself</h3><p>The engine's pitch tracks its revs, so downshifts are found on the phone from sound and speed, no OBD needed. Horns are notched out of the engine track without touching the engine around them, and the song dips when you talk.</p></button>
+          <button class="step" type="button" aria-current="false" data-shot="4"><span class="k">05 · A real editor</span><h3>Timeline, sound desk, styles, 4K</h3><p>Rows that never hide each other, speed ramps, freeze, reverse, reframe, transitions per cut, a fader per sound, and styles that carry a look, a font and the camera's moves. What the preview shows is what gets made.</p></button>
+          <button class="step" type="button" aria-current="false" data-shot="5"><span class="k">06 · Storyboard</span><h3>Plan the shots before the ride</h3><p>Chat an idea into a script and a shot list that knows your gear: which camera, which mount, where the tripod goes. The app checks the board itself (lines too long, shots your gear can't film) and puts "Tripod at the tunnel exit: shots 03, 11" on the ride screen.</p></button>
+          <button class="step" type="button" aria-current="false" data-shot="6"><span class="k">07 · Series and posting</span><h3>One post a day, and it learns what worked</h3><p>A series like "Delhi Commute Diaries" gets a brief, a look and episode numbers, and new rides are checked for moments that fit. Posts line up one a day at your usual time, the first 3 seconds get a hook check, and a day later: "How did it do?"</p></button>
+        </div>
+        <p class="why" style="font-size:15px"><b style="color:var(--teal)">Decision:</b> the AI listens, describes and plans; everything else happens on the phone. Cutting, colour, sound and the video itself are made there, downshifts and horns are found there, and nothing goes to Gemini without the rider's OK.</p>
+      </div>
+      <div class="sticky">
+        <div class="phone" id="stPhone">
+          <div class="layer"><img src="img/studio-feed.webp" alt="Studio: ride tabs, a Reel idea called Paani Nahi Piya, and the ask box"></div>
+          <div class="layer" aria-hidden="true"><div class="ph"><b>S2 · an idea playing</b><span>A Reel idea open and playing, captions in your words.</span></div></div>
+          <div class="layer" aria-hidden="true"><div class="ph"><b>S3 · search</b><span>Ask across all rides, with the clips it found.</span></div></div>
+          <div class="layer" aria-hidden="true"><div class="ph"><b>S4 · sound</b><span>The editor's sound desk, or a clip's downshift marks.</span></div></div>
+          <div class="layer" aria-hidden="true"><div class="ph"><b>S5 · editor</b><span>The timeline editor with rows, a clip selected.</span></div></div>
+          <div class="layer" aria-hidden="true"><div class="ph"><b>S6 · Storyboard</b><span>A board: the script, shots and gear.</span></div></div>
+          <div class="layer" aria-hidden="true"><div class="ph"><b>S7 · series or post</b><span>A series, or a Reel ready to post with its caption.</span></div></div>
+        </div>
+        <p class="cap" id="stCap">Studio's feed, drawn from the shipped design.</p>
       </div>
     </div>
   </div>
@@ -781,6 +857,10 @@ footer h2{font-size:clamp(40px,7vw,84px)}
         <div class="ecoRow"><span>Cap on AI spend</span><b>35% of what the rider pays</b></div>
         <div class="ecoRow"><span>Crash alerts</span><b>₹0 to us: an SMS from the rider's own plan</b></div>
         <p style="color:var(--body);font-size:15px;margin-top:6px">Cheaper models first for anything that only needs to hear words; at the cap, "You've made a lot today, more tomorrow". Free riders get one Reel a week, with no AI cost in the background.</p>
+        <div class="row" style="gap:18px;align-items:center;margin-top:6px">
+          <div class="phone sm" style="max-width:170px;border-width:6px;border-radius:26px;flex:none"><img src="img/paywall.webp" alt="The Pro paywall: turn every ride into a Reel, 7 days free, then 1,999 rupees a year" loading="lazy"></div>
+          <p style="color:var(--body);font-size:15px">The paywall sells Reels, captions and the fuel price. Crash alerts and ride stats are never on it.</p>
+        </div>
       </div>
     </div>
   </div>
@@ -838,6 +918,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
         <button class="step" type="button" aria-current="false" data-shot="2"><span class="k">03 · Three ways to ride</span><h3>Normal, Less traffic, No foot down</h3><p>Normal is Google's fastest at no extra cost. Less traffic picks the clearest of Google's routes. No foot down searches detours, counts traffic lights and accepts a longer ride.</p></button>
         <button class="step" type="button" aria-current="false" data-shot="3"><span class="k">04 · Found on the road</span><h3>A crash, a fix and a build the same day</h3><p>"Unsupported travel mode: 3", sent from the roadside. The navigation SDK only follows a planned route in car mode; a fallback went in and a new build followed.</p></button>
         <button class="step" type="button" aria-current="false" data-shot="4"><span class="k">05 · Your own traffic</span><h3>It learns which roads are clear for you</h3><p>Every ride records how you move on each 100 m, by hour and weekday. On a bike that differs from Google's car-based picture.</p></button>
+        <button class="step" type="button" aria-current="false" data-shot="5"><span class="k">06 · The offer</span><h3>A clearer road, for 5 seconds, no tap needed</h3><p>When a clearer road is worth it, the dock offers it with how much jam it saves and what it costs in time. Do nothing and you keep your road; the countdown means a gloved hand never has to dismiss it.</p></button>
       </div>
     </div>
     <div class="sticky">
@@ -856,7 +937,32 @@ footer h2{font-size:clamp(40px,7vw,84px)}
           <div class="card s" style="color:var(--body)">Fix: ask for car mode (the planned route's two-wheeler mode wins on Google's side), and fall back to guiding through the detour points.</div>
           <div class="card row"><span class="dot" style="background:var(--ok)"></span>Rebuilt the same day</div></div></div>
         <div class="layer" aria-hidden="true"><div class="ph"><b>Shot 19 · Your roads</b><span>The map of what the app learned from your rides.</span></div></div>
+        <div class="layer" aria-hidden="true"><img src="img/c2-offer.webp" alt="Directions with a clearer-road offer: 400 m less jam, plus 1 minute, keep this road or switch now, 5-second countdown"></div>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- TOUR -->
+<section id="tour" aria-labelledby="tour-h">
+  <div class="wrap">
+    <span class="label">The rest of the app</span>
+    <h2 id="tour-h" style="margin-top:14px;max-width:20ch">Thirty-odd screens, each built for one glance.</h2>
+    <p class="lede" style="margin-top:20px">Scroll sideways. Solid frames are captured on the phone or drawn from the shipped design; dashed ones are still to come from the screen recording.</p>
+    <div class="tour" role="list">
+      <figure role="listitem"><div class="phone"><img src="img/home-before-you-ride.webp" alt="Home before a ride" loading="lazy"></div><figcaption><b>Home</b>Checks before you ride, one slide to start.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><div class="ph"><b>T1 · Rides</b><span>The list of every ride.</span></div></div><figcaption><b>Rides</b>Every ride, with its distance and moments.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="media/05-ride-detail.webp" alt="Ride detail with map, speed chart and ride dynamics" loading="lazy"></div><figcaption><b>Ride detail</b>Map, speed chart, lean and braking. Captured on a demo ride.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="img/c2-filming.webp" alt="Directions while filming: the dock shows recording, mic bars, speed, lean and gear" loading="lazy"></div><figcaption><b>Directions, filming</b>The dock while a moment records.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="img/share-strip.webp" alt="A shared moment with speed, lean and braking drawn on it" loading="lazy"></div><figcaption><b>Share a moment</b>One of 11 overlays drawn by the app.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><div class="ph"><b>T2 · Bike</b><span>The bike, fuel and care.</span></div></div><figcaption><b>Bike</b>Odometer, km per litre, what's due.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><div class="ph"><b>T3 · Fuel</b><span>Fills logged from pump stops.</span></div></div><figcaption><b>Fuel</b>Every fill, saved from the stop and the card SMS.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><div class="ph"><b>T4 · Profile</b><span>Totals and achievements.</span></div></div><figcaption><b>Profile</b>Totals, badges and every setting.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><div class="ph"><b>T5 · Pop-up HUD</b><span>Choosing the HUD's layout.</span></div></div><figcaption><b>Pop-up HUD</b>Four layouts, over any app.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><div class="ph"><b>T6 · Moments</b><span>What starts filming.</span></div></div><figcaption><b>Moments</b>Braking, lean, voice: what starts filming.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><div class="ph"><b>T7 · Safety</b><span>Crash alert settings, contacts hidden.</span></div></div><figcaption><b>Safety</b>On by default, free, no account.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><div class="ph"><b>T8 · Routines</b><span>On start, on arrival.</span></div></div><figcaption><b>Routines</b>What happens when a ride starts or ends.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="img/paywall.webp" alt="The Pro paywall" loading="lazy"></div><figcaption><b>Pro</b>Reels and captions; safety stays free.</figcaption></figure>
     </div>
   </div>
 </section>
@@ -1108,11 +1214,19 @@ footer h2{font-size:clamp(40px,7vw,84px)}
   ba.addEventListener('pointerdown', function (e) { ba.setPointerCapture(e.pointerId); drag(e); ba.addEventListener('pointermove', drag); });
   ba.addEventListener('pointerup', function () { ba.removeEventListener('pointermove', drag); });
 
-  // Keep moving steps.
-  var steps = document.querySelectorAll('.step'), kl = document.querySelectorAll('#kmPhone .layer');
-  steps.forEach(function (s) { s.addEventListener('click', function () { var i = +s.dataset.shot;
-    steps.forEach(function (x, k) { x.setAttribute('aria-current', k === i ? 'true' : 'false'); });
-    kl.forEach(function (l, k) { l.setAttribute('aria-hidden', k === i ? 'false' : 'true'); }); }); });
+  // Step lists that drive a phone: Keep moving and Studio.
+  function stepper(stepSel, layerSel, capId, caps) {
+    var steps = document.querySelectorAll(stepSel), kl = document.querySelectorAll(layerSel);
+    steps.forEach(function (s) { s.addEventListener('click', function () { var i = +s.dataset.shot;
+      steps.forEach(function (x, k) { x.setAttribute('aria-current', k === i ? 'true' : 'false'); });
+      kl.forEach(function (l, k) {
+        l.setAttribute('aria-hidden', k === i ? 'false' : 'true');
+        var v = l.querySelector('video'); if (v) { if (k === i && !reduce) v.play().catch(function () {}); else v.pause(); }
+      });
+      if (capId && caps) $(capId).textContent = caps[i] || ''; }); });
+  }
+  stepper('#keep-moving .step', '#kmPhone .layer');
+  stepper('#studio .step', '#stPhone .layer', 'stCap', ['Studio’s feed, drawn from the shipped design.', 'Still to come: cut from the app screen recording.', 'Still to come: cut from the app screen recording.', 'Still to come: cut from the app screen recording.', 'Still to come: cut from the app screen recording.', 'Still to come: cut from the app screen recording.', 'Still to come: cut from the app screen recording.']);
 
   // Counters.
   document.querySelectorAll('[data-count]').forEach(function (el) {
