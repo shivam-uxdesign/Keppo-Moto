@@ -242,3 +242,32 @@ Asked: "5 second timer, no cooldown after that. Can we build a route in the firs
 2. A suggested turn when one is known: a detour found before the ride, or a way round from the rider's own past rides.
 3. The rider turns (left, right, U-turn): Google re-plans for free; the app scores the new road from the navigation's traffic (free).
 4. The paid switch (a Routes look + a new destination, ≈ ₹3.5) only when the rider didn't turn and the jam is still ahead, or when Google's re-plan heads back into the jam.
+
+## Build list (approved 24 Nov): one APK when all of it is done
+
+Prototype approved ("This looks good"): https://claude.ai/artifact/R91tYQfYRNczgH2z4Rejge. Entry points, top bar and HUD discussed and decided the same day; "do what you think is best for any other confusions".
+
+**Entry points**
+1. **Keep moving toggle** in Home › Before you ride, beside Moments and Voice ("Asks where you're going, then guides you on the clearest road"). Off by default, remembered. Test builds only for now.
+2. **Slide to ride on the bike card** with the toggle on → **Where to?** (saved places and ride ends first, search below, **Just ride** for a plain ride this once) → the plan screen (mode picker, route, trade-off) → **Start with directions**. Toggle off: starts at once as today.
+3. **Quick starts** (widget, shortcut, Quick Settings tile, "Hey Google", voice start) with the toggle on → Where to? with "Starting without directions in 10 s" (hands-free starts never get stuck).
+4. **Continuing an unfinished ride** just continues (no Where to?).
+5. **Ride screen › Directions button:** on a plain ride it opens Where to? (directions from here, the recording goes on); during a Keep moving ride it returns to the directions.
+6. **Top bar** on every app screen but the directions while Keep moving guides: the next turn ("↰ Left in 450 m · Golf Course Rd · Tap for directions"), amber for a jam warning or a switch offer; 64 dp, under the status bar. Tap: back to directions.
+7. **Removed:** the Home Keep moving card and Profile › Plan a Keep moving ride (the traffic log's settings stay in Profile).
+
+**The directions screen**
+8. **Fixed HUD** in the Navigation SDK's custom-control slot (Google lays its arrows and ETA out around it, so it never covers them): the same HUD as the floating pop-up, with all its functions (speed, lean, REC and the video controls, moments, mic state, the trail and layouts it has today), **plus gear and RPM** from OBD. Google's speedometer off (no two speeds), its speed-limit sign kept. The floating HUD hides on the directions screen and works everywhere else as today.
+
+**Modes, planning and rerouting** (from the plan above)
+9. Normal / Less traffic / No foot down with their own weights, caps and switch rules; Normal uses Google's own route (no Routes request, no preview line).
+10. Detours before the ride: points from Google's other routes and the rider's own rides first, guessed last; parallel; stop at the first clear route; drop in-and-out routes; the trade-off card.
+11. During the ride: warnings at 1.5 km and 500 m with a suggested turn; the rider's own turn re-planned free; the paid switch only as the backstop (didn't turn, or Google's re-plan heads back into the jam).
+12. The switch: a 5-second countdown, no cooldown; a declined road isn't offered again unless clearly better; paid looks ≥ 90 s apart.
+13. Our own voice lines (warnings, the switch) through the headset.
+14. Traffic signals for No foot down from OpenStreetMap, bundled for Delhi NCR, credited.
+
+**Also in this build**
+15. **Saved places** (#114): saved when you tap Start; labelled with the phone's area name (renamable); the 20 most recent; one list with ride ends; Google's location refreshed after 30 days; long-press to rename or remove.
+
+**Not in this build:** step 4's full traffic memory (which roads are clear for you at which hour). Only its first use is in: your own past rides as detour roads.
