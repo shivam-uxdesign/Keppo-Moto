@@ -180,3 +180,48 @@ The free amounts are per billing account (all riders together), not per rider. P
 3. Share recent answers between riders on the same roads (server cache).
 4. Hours of Keep moving included in Pro, more as an add-on.
 5. Own router with live traffic tiles when the numbers justify it.
+
+## Next build plan (24 Nov, after the first directions build): plan only, waiting for approval
+
+Asked: "5 second timer, no cooldown after that. Can we build a route in the first go without traffic? What if I go different than the map, would it again cost me? While starting a ride, need 3 modes: Normal, Less traffic and No foot down. Will build the full features before any new APK."
+
+### Answers
+
+- **Going off Google's route costs nothing.** Google's billing page: "there are no additional charges for route changes after a destination has already been fetched … due to traffic updates, closed roads, or deviation from the planned route." Google re-plans by itself, free. Keep moving's own watch then scores the new road from the navigation's traffic (also free) and asks the Routes API only if it has trouble ahead.
+- **What does cost:** setting a destination (≈ ₹2.2 past 1,000 a month) and each Routes API look (≈ ₹1.3 past 1,000). A Keep moving switch is both: ≈ ₹3.5.
+- **A first route without traffic:** yes, that's the Normal mode below: Google's navigation plans it itself, no Routes API request. A Routes request "without traffic" wouldn't help the other modes: it has no traffic to score and can't give a route token to follow.
+
+### The three modes (picked on the Keep moving screen before Start; the last choice is remembered)
+
+| | Normal | Less traffic | No foot down |
+|---|---|---|---|
+| What it's for | Google's usual fastest route | Fewer jams; a bit longer is fine | Keep rolling: avoid every stop you can |
+| Route at the start | Google's own (no Routes request) | Keppo's clearest of Google's 3 | Keppo's clearest, stricter |
+| Red (jammed) per metre | – | 1.0 | 1.0 |
+| Yellow (slow) per metre | – | 0.32 (1 in 5 jams) | 0.6 (slow often means feet down) |
+| No data | – | as yellow | as yellow |
+| Traffic signals | – | none | a penalty per signal (OpenStreetMap's signals, see below) |
+| Longest detour | – | 2× the shortest | 3× |
+| While riding | Google re-plans by time (free) | switch when ≥ 30% clearer, saving ≥ 150 | switch when ≥ 20% clearer, saving ≥ 75 |
+| Cost per ride (past the free amounts) | ≈ ₹2.2 | ≈ ₹3.5, + ₹1.3 a look, + ₹3.5 a switch | the same, more looks and switches |
+
+### Changes asked for
+
+1. **5-second "Keep this road" countdown** (was 10).
+2. **No cooldown:** after a switch or "Keep this road", watching goes on straight away. Two guards stay: a road you just declined isn't offered again unless it gets clearly better, and paid looks stay at least 90 s apart (each costs).
+3. **Three modes** as above, with their own weights, length caps and switch rules (`RouteScore` and `Reroute` take a mode).
+
+### Also in the same build
+
+4. **Traffic signals for No foot down:** OpenStreetMap's mapped traffic lights for Delhi NCR, bundled in the app (free data, "© OpenStreetMap contributors" credited), counted along each route within 25 m. India's mapping is incomplete, so it's a nudge, not a guarantee.
+5. **Our own voice line for a switch:** "Traffic ahead. Taking a clearer road." through the headset (our words, not Google's, so the text-to-speech rule doesn't apply), then Google's voice gives the turns.
+6. **Normal mode skips the route preview** (no Routes request): the destination pin, then Google plans the route when you tap Start.
+
+### Not possible this way
+
+- **Forcing a detour down a side road** Google didn't offer: route tokens don't allow pass-through points, and a stopover would make the navigation "arrive" there. Left for later (own router, step 5).
+
+### Open questions for the rider
+
+- Modes only on the Keep moving screen, or also when starting a ride from Home's slider (then Home asks where to, too)?
+- In the same build: saved places (#114, label = the phone's area name, 20 most recent, one list with ride ends) and step 4 (learning from your own rides)?
