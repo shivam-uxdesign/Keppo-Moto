@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Keppo Moto case study</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="Keppo Moto, a motorcycle app that keeps every ride: the hard problems, the decisions and the work running underneath, designed and shipped by one designer with AI as the engineering team.">
@@ -115,7 +116,18 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 
 .phone{width:100%;max-width:360px;margin-inline:auto;aspect-ratio:390/844;border-radius:40px;border:8px solid #1a1a1d;background:#000;overflow:hidden;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.6)}
 .phone.sm{max-width:280px}
-.phone img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.phone img,.phone video{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.why2{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px;align-items:stretch;margin-top:8px}
+.why2 .quote{font:400 clamp(19px,2.2vw,24px)/1.5 var(--sans);padding:26px 28px;color:var(--text)}
+.why2 .facts{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.photos{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.photo{position:relative;border-radius:22px;overflow:hidden;min-height:220px}
+.photo img{width:100%;height:100%;object-fit:cover;display:block}
+.photo .ph{border-radius:22px}
+.betaQuote{grid-column:1/-1;position:relative;min-height:84px}
+.betaQuote .ph{position:static;flex-direction:row;justify-content:flex-start;border-radius:18px;padding:16px 18px;text-align:left}
+.betaQuote .ph span{max-width:none}
+@media (max-width:900px){.why2{grid-template-columns:1fr}}
 .phone .layer{position:absolute;inset:0;transition:opacity .45s ease}
 .phone .layer[aria-hidden="true"]{opacity:0}
 .cap{margin-top:12px;text-align:center;color:var(--muted);font-size:13px;min-height:2.6em}
@@ -358,6 +370,22 @@ footer h2{font-size:clamp(40px,7vw,84px)}
       <div class="ideaCard rise"><span class="label">The one watching your back</span><p class="pb">Riding alone, nobody knows if you go down.</p><p class="ans">Crash detection, on by default, texts your people where you are.</p></div>
       <div class="ideaCard rise"><span class="label">The editor</span><p class="pb">Hours of footage nobody cuts.</p><p class="ans">Studio turns your clips and your own words into Reels, waiting when you get home.</p></div>
     </div>
+
+    <span class="label" style="margin-top:28px">Why I built it</span>
+    <div class="why2">
+      <div>
+        <blockquote class="quote rise">I ride because a motorcycle never lets you pretend. Summer cooks you, winter bites, the rain finds every gap in your jacket, and the first time you lean into a corner every instinct tells you to stay upright. You lean anyway, and on the day it goes wrong, you get back on. I built Keppo Moto because riding was the best part of my week and my phone remembered none of it: not how far I leaned, not the moment I wanted to keep, and nobody would know if I didn't get back up.<cite>Inspired by words from my favourite rider, [name / link to the video]</cite></blockquote>
+        <div class="facts">
+          <span class="pill tnum"><span class="dot"></span>Bajaj Pulsar NS 200</span>
+          <span class="pill tnum">49 rides · 536 km on my bike</span>
+          <span class="pill tnum">0 false crash alerts</span>
+        </div>
+      </div>
+      <div class="photos">
+        <div class="photo"><div class="ph"><b>P2 · the bike</b><span>A photo of the Pulsar, with the phone on its mount.</span></div></div>
+        <div class="photo"><div class="ph"><b>P3 · riding</b><span>A photo of me riding.</span></div></div>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -393,7 +421,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
             <li>Gear worked out from an OBD adapter's revs and the GPS speed; revs read fast, everything else slowly.</li>
           </ul></div>
           <p class="why"><b>Decision:</b> the HUD shows mic levels, not just "recording". If the mic is dead you find out at the start of the ride, not after it.</p>
-          <div class="chPhoneInline"><div class="phone sm"><img src="img/hud.webp" alt="The floating HUD, riding and filming" loading="lazy"></div></div>
+          <div class="chPhoneInline"><div class="phone sm"><video src="media/R5-hud-over-app.mp4" poster="img/hud.webp" autoplay muted loop playsinline preload="metadata" aria-label="The floating HUD over Google Maps during a demo ride"></video></div></div>
         </article>
 
         <article class="ch" data-layer="2">
@@ -456,10 +484,22 @@ footer h2{font-size:clamp(40px,7vw,84px)}
             <li>GPS fixes worse than 25 m never add distance; jumps faster than 90 m/s are thrown out.</li>
           </ul></div>
           <p class="why"><b>Decision:</b> auto-pause never ends a ride by itself. Losing the end of a ride is worse than a long one.</p>
-          <div class="chPhoneInline"><div class="phone sm"><div class="ph"><b>Shot 4 · ride summary</b><span>Right after the ride ends.</span></div></div></div>
+          <div class="chPhoneInline"><div class="phone sm"><img src="media/04-ride-summary.webp" alt="Ride saved: the summary with distance, time, speeds, the route map and ride dynamics" loading="lazy"></div></div>
         </article>
 
         <article class="ch" data-layer="7">
+          <div class="time">08:20 · Replay<span class="watch" style="color:var(--muted)"><span class="dot" style="background:var(--muted)"></span>Ride saved</span></div>
+          <h3>Ride it again, in 3D.</h3>
+          <p>Open the ride and the route plays back over a 3D city: the bike leans into each turn, and the speed chart and every brake, lean and acceleration follow along underneath. Tap a moment on the chart and the map jumps there.</p>
+          <div class="under"><span class="label">Underneath</span><ul>
+            <li>The replay is drawn from the samples saved every 2 s, not from video, so it works for every ride, filmed or not.</li>
+            <li>Lean and g-force come from the phone's own sensors; the page says so, because they're estimates, not certified measurements.</li>
+          </ul></div>
+          <p class="why"><b>Decision:</b> the replay is the summary, not a bonus feature. Numbers are easier to trust when you can watch the bike do them.</p>
+          <div class="chPhoneInline"><div class="phone sm"><video src="media/05b-replay.mp4" poster="media/05-ride-detail.webp" autoplay muted loop playsinline preload="metadata" aria-label="The ride replaying in 3D with the speed chart underneath"></video></div></div>
+        </article>
+
+        <article class="ch" data-layer="8">
           <div class="time">19:30 · At home<span class="watch" style="color:var(--muted)"><span class="dot" style="background:var(--muted)"></span>Ride saved</span></div>
           <h3>A Reel is waiting.</h3>
           <p>While you had dinner, Studio read the ride: what you said, where you braked, every downshift. It suggests Reels built on your own words, and has already made the best one.</p>
@@ -472,7 +512,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
           <div class="chPhoneInline"><div class="phone sm"><img src="img/studio-feed.webp" alt="Studio feed with a Reel idea" loading="lazy"></div></div>
         </article>
 
-        <article class="ch" data-layer="8" style="border-color:rgba(244,63,94,.35)">
+        <article class="ch" data-layer="9" style="border-color:rgba(244,63,94,.35)">
           <div class="time" style="color:var(--err)">If it had gone wrong<span class="watch" style="color:var(--err)"><span class="dot" style="background:var(--err)"></span>Crash detected</span></div>
           <h3>"Are you OK?" Then your people know where you are.</h3>
           <p>A full-screen alert over the lock screen counts down 30 seconds with one big I'm OK. If you don't answer, your contacts get an SMS with your location.</p>
@@ -482,6 +522,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
             <li>No GPS fix yet? The last known place goes out, with how old it is.</li>
           </ul></div>
           <p class="why"><b>Decision:</b> free, on by default, no account. Safety is never behind the paywall.</p>
+          <p class="why"><b>On my bike:</b> 49 rides and 536 km so far, and not one false alarm.</p>
           <div class="chPhoneInline"><div class="phone sm"><img src="img/crash-countdown.webp" alt="Crash alert counting down" loading="lazy"></div></div>
         </article>
       </div>
@@ -489,12 +530,13 @@ footer h2{font-size:clamp(40px,7vw,84px)}
       <div class="rideSticky">
         <div class="phone" id="ridePhone">
           <div class="layer"><img src="img/home-before-you-ride.webp" alt="Home: Before you ride, ready to ride, Moments, Film when I speak and Keep moving on"></div>
-          <div class="layer" aria-hidden="true"><img src="img/hud.webp" alt="The floating HUD, riding and filming"></div>
+          <div class="layer" aria-hidden="true"><video src="media/R5-hud-over-app.mp4" poster="img/hud.webp" muted loop playsinline preload="metadata" aria-label="The floating HUD over Google Maps during a demo ride"></video></div>
           <div class="layer" aria-hidden="true"><img src="img/share-hud.webp" alt="A moment with the HUD overlay: 72 km/h, 38 degrees lean"></div>
           <div class="layer" aria-hidden="true"><div class="ui" data-ui="voice"></div></div>
           <div class="layer" aria-hidden="true"><img src="img/c2-jam.webp" alt="Directions with the amber jam warning under Google's turn banner"></div>
           <div class="layer" aria-hidden="true"><div class="ui" data-ui="fuel"></div></div>
-          <div class="layer" aria-hidden="true"><div class="ph"><b>Shot 4 · ride summary</b><span>Right after the ride ends.</span></div></div>
+          <div class="layer" aria-hidden="true"><img src="media/04-ride-summary.webp" alt="Ride saved: the summary with distance, time, speeds, the route map and ride dynamics"></div>
+          <div class="layer" aria-hidden="true"><video src="media/05b-replay.mp4" poster="media/05-ride-detail.webp" muted loop playsinline preload="metadata" aria-label="The ride replaying in 3D with the speed chart underneath"></video></div>
           <div class="layer" aria-hidden="true"><img src="img/studio-feed.webp" alt="Studio feed with Reel ideas"></div>
           <div class="layer" aria-hidden="true"><img src="img/crash-countdown.webp" alt="Crash alert counting down 21 seconds"></div>
         </div>
@@ -880,11 +922,12 @@ footer h2{font-size:clamp(40px,7vw,84px)}
     <div class="beta rise">
       <div><span class="label" style="color:var(--teal)">In beta</span><h3 style="margin-top:8px">4 riders testing it on real roads.</h3><p style="color:var(--body);margin-top:6px">Every build goes to my own bike first, then to the testers.</p></div>
       <div class="betaNums">
-        <div><b class="tnum" data-stat="rides">—</b><span>rides recorded</span></div>
-        <div><b class="tnum" data-stat="km">—</b><span>km ridden</span></div>
-        <div><b class="tnum" data-stat="hours">—</b><span>hours on the road</span></div>
-        <div><b class="tnum" data-stat="moments">—</b><span>moments filmed by themselves</span></div>
+        <div><b class="tnum" data-stat="rides">49</b><span>rides recorded on my bike</span></div>
+        <div><b class="tnum" data-stat="km">536</b><span>km ridden, 3 Oct → 24 Nov</span></div>
+        <div><b class="tnum" data-stat="hours">19.6</b><span>hours on the road</span></div>
+        <div><b class="tnum" data-stat="moments">591</b><span>moments filmed by themselves, of 735</span></div>
       </div>
+      <div class="betaQuote"><div class="ph"><b>Beta quote</b><span>[One line from a beta rider, in their own words, with a first name or initials if they agree.]</span></div></div>
     </div>
     <div class="roles">
       <div class="panel"><span class="label">I did</span><p style="color:var(--body)">The idea and scope · every flow and screen · the design system · prototypes · what to build and in what order · every trade-off on cost, privacy and safety · testing every build on my own bike in Delhi traffic.</p></div>
@@ -917,7 +960,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
     <h2>Every ride, kept.</h2>
     <p class="lede">I take products from an idea to something people can use, and test them where they're used. Let's talk.</p>
     <p class="mono" style="color:var(--muted)"><a href="mailto:shivam.uxd@gmail.com">shivam.uxd@gmail.com</a> · <a href="https://www.shivamdesign.in">shivamdesign.in</a></p>
-    <p style="color:var(--muted);font-size:14px">App screens are rendered from Keppo Moto's own code with sample data; dashed frames are real-phone captures still to come. <a href="tldr.html">The one-minute version.</a></p>
+    <p style="color:var(--muted);font-size:14px">App screens are rendered from Keppo Moto's own code with sample data, except where a caption says they were captured on the phone; demo rides run on a simulated route. Ride numbers are from my own bike. Dashed frames are still to come. <a href="tldr.html">The one-minute version.</a></p>
   </div>
 </footer>
 </main>
@@ -978,12 +1021,17 @@ footer h2{font-size:clamp(40px,7vw,84px)}
   hud(4000);
 
   // One ride: the chapter in view drives the phone.
-  var caps = ['Rendered from the app’s code with sample data.', 'The floating HUD, riding and filming.', 'A moment’s share overlay, drawn by the app.', 'Drawn from the shipped design.', 'The approved directions prototype.', 'Drawn from the shipped design.', 'Placeholder for shot 4.', 'Rendered from the app’s code.', 'Rendered from the app’s code.'];
+  var caps = ['Rendered from the app’s code with sample data.', 'The floating HUD, riding and filming.', 'A moment’s share overlay, drawn by the app.', 'Drawn from the shipped design.', 'The approved directions prototype.', 'Drawn from the shipped design.', 'Captured on the phone, on a demo ride.', 'Captured on the phone: the 3D replay of a demo ride.', 'Rendered from the app’s code.', 'Rendered from the app’s code.'];
+  caps[1] = 'Captured on the phone: the HUD over Google Maps, on a demo ride.';
   var chs = document.querySelectorAll('.ch'), layers = document.querySelectorAll('#ridePhone .layer'), cur = -1;
   function setCh(i) {
     if (i === cur) return; cur = i;
     chs.forEach(function (c, k) { c.classList.toggle('active', k === i); });
-    layers.forEach(function (l, k) { l.setAttribute('aria-hidden', k === i ? 'false' : 'true'); });
+    layers.forEach(function (l, k) {
+      l.setAttribute('aria-hidden', k === i ? 'false' : 'true');
+      var v = l.querySelector('video');
+      if (v) { if (k === i && !reduce) { v.currentTime = 0; v.play().catch(function () {}); } else v.pause(); }
+    });
     $('rideCap').textContent = caps[i];
   }
   if (hasIO) {
