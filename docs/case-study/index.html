@@ -116,7 +116,10 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .chPhoneInline{display:none;margin-top:18px}
 @media (max-width:960px){.ride{grid-template-columns:1fr}.rideSticky{display:none}.chPhoneInline{display:block}}
 
-.phone{width:100%;max-width:360px;margin-inline:auto;aspect-ratio:390/844;border-radius:40px;border:8px solid #1a1a1d;background:#000;overflow:hidden;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+:root{--fitH:calc(100vh - 156px)}
+@supports (height:100svh){:root{--fitH:calc(100svh - 156px)}}
+/* every phone fits the window's height: width follows from the height left under the header */
+.phone{width:100%;max-width:min(360px,calc(var(--fitH) * 390 / 844));margin-inline:auto;aspect-ratio:390/844;border-radius:40px;border:8px solid #1a1a1d;background:#000;overflow:hidden;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.6)}
 .phone.sm{max-width:280px}
 .phone img,.phone video{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
 .why2{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px;align-items:stretch;margin-top:8px}
@@ -133,7 +136,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 
 /* Studio */
 .reelHero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,320px);gap:48px;align-items:center;margin-top:36px}
-.reelHero .phone{max-width:320px}
+.reelHero .phone{max-width:min(320px,calc(var(--fitH) * 390 / 844))}
 .stNums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:22px}
 .stNums div{background:var(--surface);border-radius:20px;padding:18px}
 .stNums b{display:block;font:300 clamp(30px,4vw,44px)/1 var(--sans);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
@@ -156,7 +159,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 /* Tour of the rest of the app */
 .tour{display:grid;grid-auto-flow:column;grid-auto-columns:220px;gap:18px;overflow-x:auto;scroll-snap-type:x mandatory;padding:8px 2px 18px;margin-top:32px}
 .tour figure{margin:0;scroll-snap-align:start}
-.tour .phone{max-width:220px;border-width:6px;border-radius:30px}
+.tour .phone{max-width:min(220px,calc(var(--fitH) * 390 / 844));border-width:6px;border-radius:30px}
 .tour figcaption{margin-top:10px;font-size:13px;color:var(--muted);line-height:1.4}
 .tour figcaption b{display:block;color:var(--text);font-weight:600;font-size:14px;margin-bottom:2px}
 .tour .ph b{font-size:12px}.tour .ph span{font-size:12px}
@@ -244,7 +247,7 @@ input[type=range]{width:100%;accent-color:var(--teal)}
 .rule b{display:block;font-weight:600;margin-bottom:6px}
 .rule p{color:var(--body);font-size:14.5px}
 @media (max-width:760px){.rules{grid-template-columns:1fr}}
-.ba{position:relative;width:100%;max-width:380px;margin-inline:auto;aspect-ratio:390/868;border-radius:36px;overflow:hidden;border:8px solid #1a1a1d;background:#000;touch-action:pan-y}
+.ba{position:relative;width:100%;max-width:min(380px,calc(var(--fitH) * 390 / 868));margin-inline:auto;aspect-ratio:390/868;border-radius:36px;overflow:hidden;border:8px solid #1a1a1d;background:#000;touch-action:pan-y}
 .ba img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top}
 .ba .after{position:absolute;inset:0;clip-path:inset(0 0 0 var(--cut,50%))}
 .ba .handle{position:absolute;top:0;bottom:0;left:var(--cut,50%);width:2px;background:var(--teal);transform:translateX(-1px)}
