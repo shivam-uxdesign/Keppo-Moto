@@ -139,6 +139,18 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 #studio .split{margin-top:56px}
 @media (max-width:900px){.reelHero{grid-template-columns:1fr}.stNums{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+/* Audit before / after */
+.pairs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px 20px;margin-top:40px}
+.pair{margin:0;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pairPh{display:flex;flex-direction:column;gap:8px}
+.pairPh span{font:500 11px/14px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pairPh span.after{color:var(--teal)}
+.pair .phone{max-width:none;border-width:5px;border-radius:24px}
+.pair figcaption{grid-column:1/-1;font-size:14px;line-height:1.5;color:var(--muted)}
+.pair figcaption b{display:block;color:var(--text);font-size:16px;margin-bottom:2px}
+@media (max-width:1000px){.pairs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.pairs{grid-template-columns:1fr}}
+
 /* Tour of the rest of the app */
 .tour{display:grid;grid-auto-flow:column;grid-auto-columns:220px;gap:18px;overflow-x:auto;scroll-snap-type:x mandatory;padding:8px 2px 18px;margin-top:32px}
 .tour figure{margin:0;scroll-snap-align:start}
@@ -331,6 +343,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
     <nav aria-label="Sections">
       <a href="#ride">One ride</a>
       <a href="#studio">Studio</a>
+      <a href="#audit">Redesign</a>
       <a href="#problems">Hard problems</a>
       <a href="#decisions">Decisions</a>
       <a href="#economics">Business</a>
@@ -581,8 +594,8 @@ footer h2{font-size:clamp(40px,7vw,84px)}
         </div>
       </div>
       <div>
-        <div class="phone"><div class="ph"><b>R4 · a finished Reel</b><span>One Reel Studio made from a ride, playing, muted, looping. Cut from the app screen recording.</span></div></div>
-        <p class="cap">A Reel made by Studio from one of my rides.</p>
+        <div class="phone"><img src="media/screens/reel-share.webp" alt="A Reel Studio made from one of my rides, ready to share: preview, title, where it posts, cover and caption" loading="lazy"></div>
+        <p class="cap">A Reel Studio made from one of my rides, ready to share. Redesigned screen.</p>
       </div>
     </div>
 
@@ -608,15 +621,15 @@ footer h2{font-size:clamp(40px,7vw,84px)}
       </div>
       <div class="sticky">
         <div class="phone" id="stPhone">
-          <div class="layer"><img src="img/studio-feed.webp" alt="Studio: ride tabs, a Reel idea called Paani Nahi Piya, and the ask box"></div>
-          <div class="layer" aria-hidden="true"><div class="ph"><b>S2 · an idea playing</b><span>A Reel idea open and playing, captions in your words.</span></div></div>
-          <div class="layer" aria-hidden="true"><div class="ph"><b>S3 · search</b><span>Ask across all rides, with the clips it found.</span></div></div>
-          <div class="layer" aria-hidden="true"><div class="ph"><b>S4 · sound</b><span>The editor's sound desk, or a clip's downshift marks.</span></div></div>
-          <div class="layer" aria-hidden="true"><div class="ph"><b>S5 · editor</b><span>The timeline editor with rows, a clip selected.</span></div></div>
-          <div class="layer" aria-hidden="true"><div class="ph"><b>S6 · Storyboard</b><span>A board: the script, shots and gear.</span></div></div>
-          <div class="layer" aria-hidden="true"><div class="ph"><b>S7 · series or post</b><span>A series, or a Reel ready to post with its caption.</span></div></div>
+          <div class="layer"><img src="media/screens/studio.webp" alt="Studio: your Reels, ride tabs led by the route, a Reel idea with Make this Reel, Edit and Next, and the ask box"></div>
+          <div class="layer" aria-hidden="true"><img src="media/screens/moment.webp" alt="A moment: the clip, voice and engine sound, telemetry, the cleaned transcript and tags" loading="lazy"></div>
+          <div class="layer" aria-hidden="true"><img src="media/screens/studio-ask.webp" alt="Studio across all rides: a compilation of every time I said ho gaya, an older idea, and suggested asks" loading="lazy"></div>
+          <div class="layer" aria-hidden="true"><img src="media/screens/moments.webp" alt="Moments settings: hard braking, acceleration, lean, voice, and revs and exhaust pops from the engine mic" loading="lazy"></div>
+          <div class="layer" aria-hidden="true"><div class="ph"><b>Editor</b><span>The timeline editor wasn't in the screen recording. Coming with the next one.</span></div></div>
+          <div class="layer" aria-hidden="true"><div class="ph"><b>Storyboard</b><span>Storyboard wasn't in the screen recording. Coming with the next one.</span></div></div>
+          <div class="layer" aria-hidden="true"><img src="media/screens/your-reels.webp" alt="Your Reels: three ready to watch, the Testing series with its next episode, and every Reel marked ready or draft" loading="lazy"></div>
         </div>
-        <p class="cap" id="stCap">Studio's feed, drawn from the shipped design.</p>
+        <p class="cap" id="stCap">Studio, redesigned. Rebuilt from the app with my own clips.</p>
       </div>
     </div>
   </div>
@@ -943,25 +956,47 @@ footer h2{font-size:clamp(40px,7vw,84px)}
   </div>
 </section>
 
+<!-- AUDIT AND REDESIGN -->
+<section id="audit" aria-labelledby="audit-h">
+  <div class="wrap">
+    <span class="label">Audit · my own app</span>
+    <h2 id="audit-h" style="margin-top:14px;max-width:20ch">Then I audited my own app, and redesigned it.</h2>
+    <p class="lede" style="margin-top:20px">I recorded myself using the whole app, rebuilt all 28 screens from it to the app's exact colours, type and spacing, and audited them for clarity, navigation, consistency, glove-sized targets and actions hidden in gestures. Most problems came from six patterns, so the fix started with the system: four tabs instead of five, one top bar, one way to show "selected", one action bar. Home I kept: the redesign wasn't better, so only its problems-first check list stayed.</p>
+    <div class="stNums" style="margin-top:28px">
+      <div><b>28</b><span>screens rebuilt from a screen recording</span></div>
+      <div><b>26</b><span>findings: 5 critical, 12 major, 9 minor</span></div>
+      <div><b>6</b><span>patterns behind most of them, fixed once</span></div>
+      <div><b>4</b><span>tabs instead of 5: Home, Rides, Studio, You</span></div>
+    </div>
+    <div class="pairs">
+      <figure class="pair rise"><div class="pairPh"><span>Before</span><div class="phone"><img src="media/screens/before-main.webp" alt="Before: Studio, with the Storyboard button over the ask box" loading="lazy"></div></div><div class="pairPh"><span class="after">After</span><div class="phone"><img src="media/screens/studio.webp" alt="After: Studio with Make this Reel, Edit and Next buttons" loading="lazy"></div></div><figcaption><b>Studio</b>The Storyboard button covered the ask box, and ideas had no buttons, only swipes. Now: Make this Reel, Edit, Next.</figcaption></figure>
+      <figure class="pair rise"><div class="pairPh"><span>Before</span><div class="phone"><img src="media/screens/before-your-reels.webp" alt="Before: Your Reels with a minus one minus six duration" loading="lazy"></div></div><div class="pairPh"><span class="after">After</span><div class="phone"><img src="media/screens/your-reels.webp" alt="After: Your Reels with ready and draft labels and the series" loading="lazy"></div></div><figcaption><b>Your Reels</b>A "-1:-6" duration, and three tabs that all looked selected. Now: ready or draft on every Reel, and the series' next episode.</figcaption></figure>
+      <figure class="pair rise"><div class="pairPh"><span>Before</span><div class="phone"><img src="media/screens/before-reel-share.webp" alt="Before: Reel share with two cut-off headers" loading="lazy"></div></div><div class="pairPh"><span class="after">After</span><div class="phone"><img src="media/screens/reel-share.webp" alt="After: Reel share with one header and the caption visible" loading="lazy"></div></div><figcaption><b>Reel share</b>Two cut-off headers, and the caption hidden under the buttons. Now: one header, each format says where it posts.</figcaption></figure>
+      <figure class="pair rise"><div class="pairPh"><span>Before</span><div class="phone"><img src="media/screens/before-moment-details.webp" alt="Before: moment details over a red video" loading="lazy"></div></div><div class="pairPh"><span class="after">After</span><div class="phone"><img src="media/screens/moment.webp" alt="After: the moment with the video in its own frame" loading="lazy"></div></div><figcaption><b>Moment</b>Text over a red-lit video, umms in the transcript, "know" and "she's" as tags. Now: the video in its own frame, a cleaned transcript, grouped tags.</figcaption></figure>
+      <figure class="pair rise"><div class="pairPh"><span>Before</span><div class="phone"><img src="media/screens/before-profile.webp" alt="Before: Profile with stats, Pro and many settings" loading="lazy"></div></div><div class="pairPh"><span class="after">After</span><div class="phone"><img src="media/screens/you.webp" alt="After: You with the bike, safety status and settings" loading="lazy"></div></div><figcaption><b>Profile becomes You</b>Stats, badges, Pro and twelve settings in one scroll, Safety below Pro. Now: your bike, your safety status, then settings.</figcaption></figure>
+      <figure class="pair rise"><div class="pairPh"><span>Before</span><div class="phone"><img src="media/screens/before-safety.webp" alt="Before: Safety with crash detection at the bottom" loading="lazy"></div></div><div class="pairPh"><span class="after">After</span><div class="phone"><img src="media/screens/safety.webp" alt="After: Safety with the warning and crash detection first" loading="lazy"></div></div><figcaption><b>Safety</b>The switch that matters was last, after the medical fields. Now: the warning first, then crash detection, then who gets the text.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
 <!-- TOUR -->
 <section id="tour" aria-labelledby="tour-h">
   <div class="wrap">
     <span class="label">The rest of the app</span>
     <h2 id="tour-h" style="margin-top:14px;max-width:20ch">Thirty-odd screens, each built for one glance.</h2>
-    <p class="lede" style="margin-top:20px">Scroll sideways. Solid frames are captured on the phone or drawn from the shipped design; dashed ones are still to come from the screen recording.</p>
+    <p class="lede" style="margin-top:20px">Scroll sideways. Screens are rebuilt from the app with my own rides, after the redesign below; contacts' phone numbers are made up.</p>
     <div class="tour" role="list">
-      <figure role="listitem"><div class="phone"><img src="img/home-before-you-ride.webp" alt="Home before a ride" loading="lazy"></div><figcaption><b>Home</b>Checks before you ride, one slide to start.</figcaption></figure>
-      <figure role="listitem"><div class="phone"><div class="ph"><b>T1 · Rides</b><span>The list of every ride.</span></div></div><figcaption><b>Rides</b>Every ride, with its distance and moments.</figcaption></figure>
-      <figure role="listitem"><div class="phone"><img src="media/05-ride-detail.webp" alt="Ride detail with map, speed chart and ride dynamics" loading="lazy"></div><figcaption><b>Ride detail</b>Map, speed chart, lean and braking. Captured on a demo ride.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="media/screens/home.webp" alt="Home: only the one problem shown, everything else collapsed into one line, then the ride switches, the bike and bike care" loading="lazy"></div><figcaption><b>Home</b>Only what needs you, then one slide to ride.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="media/screens/rides.webp" alt="Rides: each ride led by its route, with distance, time and moments" loading="lazy"></div><figcaption><b>Rides</b>Every ride, led by where you went.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="media/screens/ride-detail.webp" alt="Ride detail: the map with replay, labelled readouts, the speed chart and ride dynamics" loading="lazy"></div><figcaption><b>Ride detail</b>Map, replay, lean and braking, and a Reel one tap away.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="media/screens/your-riding.webp" alt="Your riding: level, all-time numbers, this month, the riding year and the next badges" loading="lazy"></div><figcaption><b>Your riding</b>Statistics and badges in one place.</figcaption></figure>
       <figure role="listitem"><div class="phone"><img src="img/c2-filming.webp" alt="Directions while filming: the dock shows recording, mic bars, speed, lean and gear" loading="lazy"></div><figcaption><b>Directions, filming</b>The dock while a moment records.</figcaption></figure>
-      <figure role="listitem"><div class="phone"><img src="img/share-strip.webp" alt="A shared moment with speed, lean and braking drawn on it" loading="lazy"></div><figcaption><b>Share a moment</b>One of 11 overlays drawn by the app.</figcaption></figure>
-      <figure role="listitem"><div class="phone"><div class="ph"><b>T2 · Bike</b><span>The bike, fuel and care.</span></div></div><figcaption><b>Bike</b>Odometer, km per litre, what's due.</figcaption></figure>
-      <figure role="listitem"><div class="phone"><div class="ph"><b>T3 · Fuel</b><span>Fills logged from pump stops.</span></div></div><figcaption><b>Fuel</b>Every fill, saved from the stop and the card SMS.</figcaption></figure>
-      <figure role="listitem"><div class="phone"><div class="ph"><b>T4 · Profile</b><span>Totals and achievements.</span></div></div><figcaption><b>Profile</b>Totals, badges and every setting.</figcaption></figure>
-      <figure role="listitem"><div class="phone"><div class="ph"><b>T5 · Pop-up HUD</b><span>Choosing the HUD's layout.</span></div></div><figcaption><b>Pop-up HUD</b>Four layouts, over any app.</figcaption></figure>
-      <figure role="listitem"><div class="phone"><div class="ph"><b>T6 · Moments</b><span>What starts filming.</span></div></div><figcaption><b>Moments</b>Braking, lean, voice: what starts filming.</figcaption></figure>
-      <figure role="listitem"><div class="phone"><div class="ph"><b>T7 · Safety</b><span>Crash alert settings, contacts hidden.</span></div></div><figcaption><b>Safety</b>On by default, free, no account.</figcaption></figure>
-      <figure role="listitem"><div class="phone"><div class="ph"><b>T8 · Routines</b><span>On start, on arrival.</span></div></div><figcaption><b>Routines</b>What happens when a ride starts or ends.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="media/screens/share-video.webp" alt="Share ride as a 3D video: the part of the ride, the map speed and Create video" loading="lazy"></div><figcaption><b>Share a ride</b>A story card or a 3D video of the route.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="media/screens/you.webp" alt="You: the bike with care due, crash alerts on, and settings" loading="lazy"></div><figcaption><b>You</b>Your bike, your safety, your settings.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="media/screens/bike.webp" alt="Your bike: care items with done dates, and the fuel log" loading="lazy"></div><figcaption><b>Your bike</b>Care with done dates, and every fill.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="media/screens/safety.webp" alt="Safety: a warning first, crash detection, who gets the text, and medical info" loading="lazy"></div><figcaption><b>Safety</b>On by default, free, no account.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="media/screens/before-popup-hud.webp" alt="Pop-up HUD settings with a live preview and four layouts" loading="lazy"></div><figcaption><b>Pop-up HUD</b>Four layouts, over any app.</figcaption></figure>
+      <figure role="listitem"><div class="phone"><img src="media/screens/routines.webp" alt="Routines: ride start and ride end, each with when and what it does" loading="lazy"></div><figcaption><b>Routines</b>What happens when a ride starts or ends.</figcaption></figure>
       <figure role="listitem"><div class="phone"><img src="img/paywall.webp" alt="The Pro paywall" loading="lazy"></div><figcaption><b>Pro</b>Reels and captions; safety stays free.</figcaption></figure>
     </div>
   </div>
@@ -1066,7 +1101,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
     <h2>Every ride, kept.</h2>
     <p class="lede">I take products from an idea to something people can use, and test them where they're used. Let's talk.</p>
     <p class="mono" style="color:var(--muted)"><a href="mailto:shivam.uxd@gmail.com">shivam.uxd@gmail.com</a> · <a href="https://www.shivamdesign.in">shivamdesign.in</a></p>
-    <p style="color:var(--muted);font-size:14px">App screens are rendered from Keppo Moto's own code with sample data, except where a caption says they were captured on the phone; demo rides run on a simulated route. Ride numbers are from my own bike. Dashed frames are still to come. <a href="tldr.html">The one-minute version.</a></p>
+    <p style="color:var(--muted);font-size:14px">Screens marked redesigned are rebuilt from a screen recording of the app, with my own rides and clips; contacts' phone numbers are made up. Other screens are rendered from the app's code with sample data, or captured on a demo ride, which runs on a simulated route. Ride numbers are from my own bike. Dashed frames are still to come. <a href="tldr.html">The one-minute version.</a></p>
   </div>
 </footer>
 </main>
@@ -1226,7 +1261,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
       if (capId && caps) $(capId).textContent = caps[i] || ''; }); });
   }
   stepper('#keep-moving .step', '#kmPhone .layer');
-  stepper('#studio .step', '#stPhone .layer', 'stCap', ['Studio’s feed, drawn from the shipped design.', 'Still to come: cut from the app screen recording.', 'Still to come: cut from the app screen recording.', 'Still to come: cut from the app screen recording.', 'Still to come: cut from the app screen recording.', 'Still to come: cut from the app screen recording.', 'Still to come: cut from the app screen recording.']);
+  stepper('#studio .step', '#stPhone .layer', 'stCap', ['Studio, redesigned. Rebuilt from the app with my own clips.', 'A moment: what you said, cleaned of umms, with the engine on its own track.', 'Ask across every ride; repeated phrases become compilations.', 'Revs and exhaust pops start filming too, from the engine mic.', 'Still to come.', 'Still to come.', 'Your Reels: what is ready, what is a draft, and the series it belongs to.']);
 
   // Counters.
   document.querySelectorAll('[data-count]').forEach(function (el) {
