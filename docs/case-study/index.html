@@ -60,6 +60,8 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .heroMedia .ph{border-radius:0;border:0;background:transparent;align-items:flex-end;justify-content:flex-start;text-align:right;padding:72px max(20px,env(safe-area-inset-right,0px)) 0 20px}
 @media (max-width:900px){.heroMedia .ph span{display:none}}
 .heroRoad{position:absolute;inset:auto 0 0 0;height:55%;background:linear-gradient(180deg,transparent,#0A0A0B 85%)}
+.heroVid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 60%;opacity:.42}
+.heroMedia::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(10,10,11,.85) 0%,rgba(10,10,11,.35) 60%,rgba(10,10,11,.15) 100%)}
 .heroInner{position:relative;width:100%;padding-block:140px 72px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:40px;align-items:end}
 .hero h1{font:700 clamp(56px,10vw,132px)/.9 var(--display);letter-spacing:-.045em}
 .hero h1 em{font-style:normal;color:var(--teal)}
@@ -359,7 +361,7 @@ footer h2{font-size:clamp(40px,7vw,84px)}
 <!-- HERO -->
 <section class="hero" aria-labelledby="hero-h">
   <div class="heroMedia" aria-hidden="true">
-    <div class="ph"><b>P1 · hero video</b><span>Phone on the bike mount at dawn. Full-bleed, muted, looping, behind this text.</span></div>
+    <video class="heroVid" id="heroVid" src="media/P1-hero.mp4" poster="media/P1-hero-poster.webp" autoplay muted loop playsinline preload="auto"></video>
     <div class="heroRoad"></div>
   </div>
   <div class="wrap heroInner">
@@ -414,8 +416,8 @@ footer h2{font-size:clamp(40px,7vw,84px)}
         </div>
       </div>
       <div class="photos">
-        <div class="photo"><div class="ph"><b>P2 · the bike</b><span>A photo of the Pulsar, with the phone on its mount.</span></div></div>
-        <div class="photo"><div class="ph"><b>P3 · riding</b><span>A photo of me riding.</span></div></div>
+        <div class="photo"><img src="media/P2-bike.webp" alt="My helmet resting on the tank of the white and red Pulsar NS 200, against a green hedge" loading="lazy"></div>
+        <div class="photo"><img src="media/P3-riding.webp" alt="Me in riding gear and helmet, strapping a tail bag onto the Pulsar outside a cafe" loading="lazy"></div>
       </div>
     </div>
   </div>
@@ -1109,6 +1111,8 @@ footer h2{font-size:clamp(40px,7vw,84px)}
 <script>
 (function () {
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var heroVid = document.getElementById('heroVid');
+  if (heroVid && reduce) { heroVid.removeAttribute('autoplay'); heroVid.pause(); }
   var hasIO = 'IntersectionObserver' in window;
   function $(id) { return document.getElementById(id); }
 
